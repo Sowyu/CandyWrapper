@@ -334,6 +334,33 @@ public enum ComposerLogic {
         return steerByDefault != alternate ? .steer : .queue
     }
 
+    /// While a queued message is edited a submit updates it. Only the opposite action (⌘-click or the alternate
+    /// shortcut) that resolves to a steer also steers it into the running turn after the save
+    /// (ChatComposer.tsx:2226-2240 and useQueuedRunEdit.ts:350-374, 457-461 at 4928, #37507).
+    public static func queuedEditSteers(running: Bool, alternate: Bool, steerByDefault: Bool, canSteer: Bool = true) -> Bool {
+        alternate && sendMode(running: running, alternate: true, steerByDefault: steerByDefault, canSteer: canSteer) == .steer
+    }
+
+    /// `compactionBlocksSteering` (client-runtime composerDispatch.ts:18-41 at 4928, #24138). An explicit
+    /// `/compact` always blocks a steer. Automatic compaction blocks it unless the provider session says a
+    /// steer leaves the compaction running (`activeSteeringDuringCompaction`, Codex only at 4928).
+    public static func compactionBlocksSteering(_ p: ThreadProjection?, compactCommandActive: Bool) -> Bool {
+        if compactCommandActive { return true }
+        guard let p else { return false }
+        let active: Set<ThreadStatus> = [.preparing, .starting, .running, .waiting]
+        guard let run = p.runs.last(where: { active.contains($0.status) }) else { return false }
+        let compactionRunning = p.visibleTurnItems.contains {
+            $0.item.type == .compaction && $0.item.runId == run.id && $0.item.status == .running
+        }
+        guard compactionRunning else { return false }
+        let turns = QueueState.providerSession(p)?["capabilities"]?["turns"]
+        guard turns?["activeSteeringDuringCompaction"] == .bool(true) else { return true }
+        guard let message = p.messages.first(where: { $0.id == run.userMessageId }) else { return false }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let compactCommand = text.hasPrefix("/compact") && text.dropFirst(8).first.map(\.isWhitespace) != false
+        return (message.attachments ?? []).isEmpty && compactCommand
+    }
+
     /// `ComposerPrimaryActions.tsx:267-289`. While a queued message is being edited the button
     /// is the check, even with a run active (`isQueuing` is false while editing).
     /// `stopHeld`: Stop was clicked and the run hasn't stopped yet (`StopTracker.holdsStop`).
@@ -380,9 +407,13 @@ public enum ComposerLogic {
             public var message: ChatMessage?
             /// The owner can cancel a guest's queued message, but cannot rewrite it.
             public var guestName: String?
+            /// Starts its own turn (`run.freshContext`), so it cannot steer into the running one.
+            public var freshContext = false
             public var isEditable: Bool { guestName == nil }
-            public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil, message: ChatMessage? = nil) {
+            public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil, message: ChatMessage? = nil,
+                        freshContext: Bool = false) {
                 self.runId = runId; self.messageId = messageId; self.text = text; self.guestName = guestName; self.message = message
+                self.freshContext = freshContext
             }
         }
         public var items: [Item] = []
@@ -427,7 +458,8 @@ public enum ComposerLogic {
                     createdAt: message.createdAt, createdBy: message.createdBy, creationSource: message.creationSource,
                     senderThreadId: message.senderThreadId, scheduledTaskId: message.scheduledTaskId, context: message.context, attachments: message.attachments ?? []) }
                 return Item(runId: run.id, messageId: run.userMessageId,
-                            text: original.map { UserMessagePresentation.resolve($0).text } ?? "Queued message", guestName: guest?.name, message: original)
+                            text: original.map { UserMessagePresentation.resolve($0).text } ?? "Queued message", guestName: guest?.name, message: original,
+                            freshContext: run.freshContext == true)
             }
             // Optimistic queued sends the projection doesn't list yet go last.
             items += saving.filter { texts[$0.id] == nil }.map { Item(runId: nil, messageId: $0.id, text: $0.text) }
@@ -445,6 +477,11 @@ public enum ComposerLogic {
             // A run still preparing its worktree takes the steer once it is ready (threadWorkflows.ts:184-189 at 4928, #34581).
             let preparing = activeRun?.status == .preparing || activeRun?.status == .starting
             canPromoteToSteer = promoteSkipsCompaction || preparing && (turns == nil || steers) || steerable && steers
+        }
+
+        /// `canSendRun` (QueuedRunsControl.tsx:123-127 at 4928): a fresh message may skip compaction, but not steer into a turn.
+        public func canSend(_ item: Item) -> Bool {
+            canSendNow || canPromoteToSteer && (!item.freshContext || promoteSkipsCompaction)
         }
 
         /// CandyWrapper's own themes keep the queue's manual reorder behavior.

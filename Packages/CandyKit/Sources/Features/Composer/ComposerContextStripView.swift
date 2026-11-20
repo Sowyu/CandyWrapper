@@ -116,15 +116,22 @@ public final class ComposerContextStripView: DSView {
     public override func updateLayer() {
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        surface.layer?.backgroundColor = Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         // Dither (after Capy's machine and worktree row): the controls sit plain under the composer, no strip card.
         let capy = ThemeRuntime.isDither(dark: dark)
-        surface.isHidden = capy || floatsAsPills || ComposerDesign.uses3814(dark: dark)
-        blur.isHidden = capy || floatsAsPills || ComposerDesign.uses3814(dark: dark)
+        // The default themes' row is page-coloured glass with no outline, so chat text scrolling behind it stays hidden
+        // (`surface-glass`, ComposerSurface.tsx:71-77 at 4928, #34846).
+        let pageGlass = ComposerDesign.uses3814(dark: dark) && !floatsAsPills
+        surface.layer?.backgroundColor = pageGlass ? Themed.color(\.background, 0.8).cgColor(in: self)
+            : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
+        surface.isHidden = capy || floatsAsPills
+        blur.isHidden = capy || floatsAsPills
+        surface.layer?.cornerRadius = pageGlass ? 0 : 16
+        blur.cornerRadius = pageGlass ? 0 : 16
+        surface.layer?.borderWidth = pageGlass ? 0 : 1
         surface.layer?.borderColor = (dark ? Themed.white(0.07) : Themed.black(0.08)).cgColor
         // Dark only: rgb(0 0 0 / 18%) at the seam fading out over 10px, over a 1% white fill.
-        seam.isHidden = !dark
-        tint.isHidden = !dark
+        seam.isHidden = !dark || pageGlass
+        tint.isHidden = !dark || pageGlass
         seam.colors = [Themed.black(0.18).cgColor, Themed.black(0).cgColor]
         tint.backgroundColor = Themed.white(0.01).cgColor
         CATransaction.commit()

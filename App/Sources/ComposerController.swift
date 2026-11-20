@@ -260,6 +260,12 @@ final class ComposerController {
     private var serverConfigs: [String: ServerProviderConfig] { get { shared.serverConfigs } _modify { yield &shared.serverConfigs } }
     private var workspaceSnapshots: [String: ProviderWorkspaceSnapshots] { get { shared.workspaceSnapshots } _modify { yield &shared.workspaceSnapshots } }
     private var configSubscriptions: [String: (shell: ShellSession, task: Task<Void, Never>)] = [:]
+    /// The project's default model, unless the user hid it in its environment's picker (#23615).
+    private func visibleProjectDefault(_ project: ProjectShell) -> ModelSelection? {
+        let settings = (project.id.environmentId.flatMap { serverConfigs[$0] } ?? serverConfig).settings.raw
+        return ComposerSelectionContext.visibleProjectDefault(project.defaultModelSelection, settings: settings)
+    }
+
     private var serverConfig: ServerProviderConfig {
         targetEnvironmentId.flatMap { serverConfigs[$0] } ?? ServerProviderConfig(providers: [])
     }
@@ -993,7 +999,7 @@ final class ComposerController {
         shortcuts.on("thread.steerQueuedMessage") { [weak self] call in
             guard let self, self.isActive, case .thread = self.target else { return false }
             let queue = self.panel.queue.state
-            guard let first = queue.items.first?.runId, queue.canSendNow || queue.canPromoteToSteer else { return false }
+            guard let item = queue.items.first, let first = item.runId, queue.canSend(item) else { return false }
             if !call.isRepeat, !self.queueBusy { self.sendQueued(first) }
             return true
         }
@@ -1120,7 +1126,7 @@ final class ComposerController {
             }
             session = existing
             if empty { pickers.store.seedNewDraft(existing.draftId, carry: carry, carriedFromSameDraft: alreadyOpen,
-                                       projectDefault: project.defaultModelSelection, alreadyOpen: alreadyOpen) }
+                                       projectDefault: visibleProjectDefault(project), alreadyOpen: alreadyOpen) }
         } else {
             let threadId = ThreadId(UUID().uuidString.lowercased()).scoped(to: project.id.environmentId ?? "")
             session = DraftSession(draftId: UUID().uuidString.lowercased(), threadId: threadId.rawValue,
@@ -1128,7 +1134,7 @@ final class ComposerController {
                                    branch: workspace?.branch, worktreePath: workspace?.worktreePath, startFromOrigin: workspace?.startFromOrigin)
             sessions[key] = session
             pickers.store.seedNewDraft(session.draftId, carry: carry, carriedFromSameDraft: false,
-                                       projectDefault: project.defaultModelSelection, alreadyOpen: false)
+                                       projectDefault: visibleProjectDefault(project), alreadyOpen: false)
         }
         flushPrompt()
         questionRequestId = nil
@@ -1776,10 +1782,10 @@ final class ComposerController {
         if let thread = shellThread, thread.status == .failed, thread.lastErrorClass == .usageLimit {
             runState.resumableRunId = thread.latestRunId
         }
-        composer.isCompacting = projection.map {
+        composer.isCompacting = ComposerLogic.compactionBlocksSteering(projection, compactCommandActive: projection.map {
             let state = TimelineRunState(projection: $0)
             return state.isWorking && TimelineRunState.compactRequestActive($0, latestRun: state.latestRun)
-        } ?? false
+        } ?? false)
         composer.runState = runState
         composer.isDraftRoute = panel.isDraft
         // A rewind is no busy spinner in T3: the arrow stays, disabled with "Rewinding conversation".
@@ -1803,7 +1809,6 @@ final class ComposerController {
         syncAttachmentViews()
         composer.editingQueued = queuedEdit != nil
         panel.model.optimisticMessages = optimistic
-        panel.queue.threadId = panel.isDraft ? nil : openThreadId
         panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,
                                        canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false,
@@ -2017,7 +2022,7 @@ final class ComposerController {
         let context = ComposerSelectionContext(
             catalog: ProviderCatalog(serverConfig.providers.map { $0.resolved(cwd: menuCwd) }, settings: ServerSettingsValues(serverConfig.settings.raw),
                                      projectId: projectId?.localId.rawValue),
-            thread: thread, projectDefaultModel: project?.defaultModelSelection,
+            thread: thread, projectDefaultModel: project.flatMap(visibleProjectDefault),
             serverDefaults: serverConfig.settings,
             hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
             supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection))
@@ -2040,7 +2045,7 @@ final class ComposerController {
         noProviderAvailable = target != nil && pickers.current.entry == nil && pickers.currentMultiple == nil
         let catalogKnown = targetEnvironmentId.map { serverConfigs[$0] != nil } == true
         let requested = [draftKey.flatMap { pickers.store.drafts[$0]?.activeInstance }, thread?.providerInstanceId,
-                         thread?.modelSelection.instanceId, project?.defaultModelSelection?.instanceId].compactMap { $0 }.first
+                         thread?.modelSelection.instanceId, project.flatMap(visibleProjectDefault)?.instanceId].compactMap { $0 }.first
         let canSetUp = requested != nil || (!context.hasStartedSession && serverConfig.providers.contains(where: ProviderStatusBannerLogic.hasSetup))
         let controls = pickers.controlsView
         controls.unavailableTitle = noProviderAvailable && catalogKnown ? (canSetUp ? "Open provider settings" : "No provider available") : nil
@@ -2197,7 +2202,7 @@ final class ComposerController {
             text = ComposerReply.prompt(text, replyingTo: reply)
         }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed) }; return }
+        if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed, steer: mode == .steer) }; return }
         let attachments = currentAttachments
         // Typed in full, `/usage-limits` is answered here from the Limits snapshot; the agent never sees it.
         if attachments.isEmpty, usageLimitsOffered, UsageLimitsLogic.isUsageLimitsCommand(trimmed) {
@@ -2812,16 +2817,30 @@ final class ComposerController {
         }
         // The text goes back to the thread or draft it was sent from, and only if that one has no newer
         // prompt; the editor follows only while it still shows it (useComposerSend.ts:1366-1390).
+        var kept = false
         if let key {
             if draftKey == key, queuedEdit == nil, questionRequestId == nil {
-                if composer.text.isEmpty { composer.text = text; remember(text) }
+                if composer.text.isEmpty { composer.text = text; remember(text) } else { kept = true }
             } else if (prompts[key] ?? "").isEmpty {
                 prompts[key] = text
                 scheduleSave()
+            } else {
+                kept = true
             }
         }
         refresh()
-        if let rpc = error as? RPCClientError, rpc.isTransport { return }
+        let transport = (error as? RPCClientError)?.isTransport == true
+        // A draft typed meanwhile keeps the composer; the toast holds the only copy of the failed text, so it
+        // stays until dismissed (useComposerSend.ts:1389-1422 at 4928, #35102).
+        if kept, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            panel.toasts.show(ToastView(title: transport ? "Message may not have been sent" : "Message not sent",
+                                        message: "Your new draft was kept. Copy the failed message to send it again.", kind: .error,
+                                        actionTitle: "Copy message", action: {
+                                            NSPasteboard.general.clearContents()
+                                            NSPasteboard.general.setString(text, forType: .string)
+                                        }), timeout: 0)
+        }
+        if transport { return }
         report(planFollowUp ? .command(Self.message(error), fallback: "Failed to send plan follow-up.") : .send(Self.message(error)), key: key)
     }
 
@@ -3184,7 +3203,9 @@ final class ComposerController {
 
     /// Steer now: the server cancels the queued run and steers the same message into the active run.
     private func promoteToSteer(_ runId: RunId) {
-        guard let active = panel.queue.state.activeRunId, panel.queue.state.canPromoteToSteer else { return }
+        let state = panel.queue.state
+        guard let active = state.activeRunId, state.canPromoteToSteer,
+              let item = state.items.first(where: { $0.runId == runId }), state.canSend(item) else { return }
         queueCommand("queued-message.promote-to-steer", ["queuedRunId": .string(runId.rawValue), "targetRunId": .string(active.rawValue)]) {
             .queueSendNow(Self.message($0))
         }
@@ -3257,7 +3278,9 @@ final class ComposerController {
     }
 
     /// Enter while editing saves with `queued-run.edit` and keeps the edit open on failure.
-    private func saveEdit(_ edit: QueuedEdit, text: String) {
+    /// `steer`: Cmd+Enter or ⌘-click resolved to a steer, so the saved run then goes into the running turn,
+    /// as its row's "Send now" would (`steerSavedRun`, useQueuedRunEdit.ts:350-374 at 4928, #37507).
+    private func saveEdit(_ edit: QueuedEdit, text: String, steer: Bool = false) {
         guard let shell, !queueBusy, let claim = queuedEdits.startSave(edit.threadId) else { return }
         var fields: [String: JSONValue] = [
             "type": .string("queued-run.edit"), "commandId": .string(UUID().uuidString.lowercased()),
@@ -3279,6 +3302,7 @@ final class ComposerController {
                     stopQueuedEditWatch(edit.threadId)
                     if target == .thread(edit.threadId) { loadPrompt() }
                 }
+                if steer, target == .thread(edit.threadId), panel.queue.state.activeRunId != nil { promoteToSteer(edit.runId) }
                 refresh()
             } catch {
                 if let self {

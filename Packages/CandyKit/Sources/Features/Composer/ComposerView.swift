@@ -44,6 +44,7 @@ public final class ComposerView: DSView {
     /// The thread's runs as the primary action reads them.
     /// A draft (new thread) route: `draftThreadRoute` for the send keybindings.
     public var isDraftRoute = false { didSet { if isDraftRoute != oldValue { relayoutHeight() } } }
+    /// A compaction blocks steering, so a send queues (`canSteer`, ChatComposer.tsx at 4928, #24138).
     public var isCompacting = false { didSet { if isCompacting != oldValue { refresh() } } }
     public var runState = ComposerLogic.RunState() {
         didSet {
@@ -177,7 +178,7 @@ public final class ComposerView: DSView {
     // MARK: Outputs
 
     /// Return or the button with content: the text (untrimmed) and how to deliver it. While
-    /// `editingQueued`, the send saves the edit; the mode doesn't matter. `background` is the
+    /// `editingQueued`, the send saves the edit, and `.steer` then steers it in (#37507). `background` is the
     /// `background` submission intent: start the draft in the background, or send and open a new
     /// thread.
     public var onSend: ((_ text: String, _ mode: ComposerLogic.SendMode, _ background: Bool) -> Void)?
@@ -840,7 +841,8 @@ public final class ComposerView: DSView {
             if !isBusy, !environmentUnavailable, sendDisabledReason == nil, !stopTracker.swallowsClick { onResume?() }
             return true
         }
-        let mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault, canSteer: !isCompacting)
+        var mode = ComposerLogic.sendMode(running: runState.canInterrupt, alternate: intent == .alternate, steerByDefault: steerByDefault, canSteer: !isCompacting)
+        if editingQueued { mode = queuedEditMode(alternate: intent == .alternate) }
         send(mode, background: intent == .background)
         // A send key never inserts a newline, even when nothing was sent.
         return true
@@ -858,7 +860,8 @@ public final class ComposerView: DSView {
             refresh()
         case .resume: onResume?()
         case .busy: break
-        case .update: send(.queue)
+        case .update:
+            send(queuedEditMode(alternate: NSApp.currentEvent.map { !$0.modifierFlags.intersection([.command, .control]).isEmpty } ?? false))
         case .send, .queue, .steer:
             let held = NSApp.currentEvent.map { !$0.modifierFlags.intersection([.command, .control]).isEmpty } ?? false
             send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: held, steerByDefault: steerByDefault, canSteer: !isCompacting))
@@ -891,6 +894,12 @@ public final class ComposerView: DSView {
 
     /// Sends the prompt as the primary button would without a modifier (`submitCitationAndSend`, ChatComposer.tsx:4305-4314).
     public func submit() { send(ComposerLogic.sendMode(running: runState.canInterrupt, alternate: false, steerByDefault: steerByDefault, canSteer: !isCompacting)) }
+
+    /// `.steer` saves the edited queued message and then steers it in; `.queue` only saves it.
+    private func queuedEditMode(alternate: Bool) -> ComposerLogic.SendMode {
+        ComposerLogic.queuedEditSteers(running: runState.canInterrupt, alternate: alternate, steerByDefault: steerByDefault, canSteer: !isCompacting)
+            ? .steer : .queue
+    }
 
     private func send(_ mode: ComposerLogic.SendMode, background: Bool = false) {
         guard !isBusy, sendDisabledReason == nil, !editorDisabled, hasContent || planFollowUp,

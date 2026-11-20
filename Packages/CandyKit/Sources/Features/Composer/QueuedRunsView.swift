@@ -20,10 +20,6 @@ public final class QueuedRunsView: ComposerBannerView {
     public var isBusy = false { didSet { if isBusy != oldValue { rebuild() } } }
     public var editBlockedReason: String? { didSet { if editBlockedReason != oldValue { rebuild() } } }
     public private(set) var expanded = true
-    /// The thread the queue belongs to. Redesign's panel closes when another thread opens, like the subagent card
-    /// (b14cf8f5), and opens only from its pill. T3's queue has no closed state (QueuedRunsControl.tsx:109, 250-251).
-    public var threadId: ThreadId? { didSet { if threadId != oldValue, redesign, expanded { toggle() } } }
-    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
     public var attachmentMediaURL: (@Sendable (String) async -> URL?)?
     /// A queued image thumbnail was clicked: its message's images and the clicked one (#33298, QueuedRunsControl.tsx at 4928).
@@ -38,7 +34,7 @@ public final class QueuedRunsView: ComposerBannerView {
     public var onSteer: ((RunId) -> Void)?
     public var onRemove: ((RunId) -> Void)?
     public var onReorder: ((RunId, RunId?) -> Void)?
-    /// The height or the count changed (Redesign's pill shows the count while the list is closed).
+    /// The height or the count changed.
     public var onHeightChange: (() -> Void)?
     /// `thread.editQueuedMessage` and `thread.steerQueuedMessage` labels for the last row's Edit and
     /// the first row's Steer tooltips (ChatView.tsx:11638-11647, QueuedRunsControl.tsx:442, :468).
@@ -74,7 +70,8 @@ public final class QueuedRunsView: ComposerBannerView {
     private let scroll = NSScrollView()
     private let list = DSView()
     private var rows: [DSView] = []
-    private var modern: Bool { !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: effectiveAppearance.isDark) }
+    /// T3's queue (QueuedRunsControl.tsx at 4928): the default themes and Redesign (the user, 2026-11-21). Glass keeps the list card.
+    private var modern: Bool { !ThemeRuntime.isGlass(dark: effectiveAppearance.isDark) }
     private var drag: (index: Int, insert: Int?)?
     private let insertLine = DSView()
 
@@ -99,7 +96,7 @@ public final class QueuedRunsView: ComposerBannerView {
     /// `setExpanded(true)` before editing the latest queued message.
     public func expand() { if modern { showAllQueue = true; needsLayout = true; onHeightChange?() } else if !expanded { toggle() } }
 
-    /// Redesign shows the list as a panel over its Queued pill: open while expanded, the pill and the header toggle it.
+    /// Glass folds its list from the header; T3's queue shows two of more than three until "Show all".
     public func toggle() {
         if modern { showAllQueue.toggle(); needsLayout = true; onHeightChange?(); return }
         expanded.toggle()
@@ -113,9 +110,6 @@ public final class QueuedRunsView: ComposerBannerView {
 
     private func rebuild() {
         let before = preferredHeight, count = rows.count
-        // Redesign's panel starts closed each time the queue fills; the pill shows the count (the user, 2026-10-22).
-        // The theme, not `placement`: the dock sets `.floating` only once it lays out, after the first queue arrives.
-        if rows.isEmpty, !state.items.isEmpty, redesign, expanded { toggle() }
         header.count = state.items.count
         setAccessibilityLabel("\(state.items.count) queued message\(state.items.count == 1 ? "" : "s")")
         if let row = rows.first, (row is ModernQueuedRowView) != modern {
@@ -135,7 +129,7 @@ public final class QueuedRunsView: ComposerBannerView {
             row.index = i
             row.configure(item, editing: item.runId != nil && item.runId == editingRunId,
                           busy: isBusy || item.runId == nil,
-                          canSend: state.canSendNow || state.canPromoteToSteer,
+                          canSend: state.canSend(item),
                           editBlocked: editBlockedReason != nil,
                           editTip: editBlockedReason ?? "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
                           steerTip: (state.canSendNow ? "Start a turn with this message" : state.promoteSkipsCompaction ? "Skip compaction and send this message" : "Send into the current turn")
@@ -159,7 +153,7 @@ public final class QueuedRunsView: ComposerBannerView {
             row.index = i
             row.configure(item, editing: item.runId != nil && item.runId == editingRunId,
                           canReorder: state.canReorder && item.runId != nil, busy: isBusy || item.runId == nil,
-                          canSend: state.canSendNow || state.canPromoteToSteer, sendNow: state.canSendNow,
+                          canSend: state.canSend(item), sendNow: state.canSendNow,
                           editBlocked: editBlockedReason != nil,
                           editTip: editBlockedReason ?? "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
                           steerTip: (state.canSendNow ? "Start a turn with this message" : "Send as a steer instead")
@@ -445,7 +439,9 @@ private final class ModernQueuedRowView: DSView {
         let size = bubbleSize(bounds.width), top: CGFloat = sender.isHidden ? 0 : 20
         bubble.frame = NSRect(x: bounds.width - size.width, y: top, width: size.width, height: size.height)
         outline.frame = bubble.bounds
-        outline.path = CGPath(roundedRect: bubble.bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 15.5, cornerHeight: 15.5, transform: nil)
+        // Redesign keeps its own card corner (RedesignTokens.Radius.card) on T3's dashed bubble.
+        let radius = (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? RedesignTokens.Radius.card : 16) - 0.5
+        outline.path = CGPath(roundedRect: bubble.bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: radius, cornerHeight: radius, transform: nil)
         fold.frame = NSRect(x: 1, y: 1, width: max(0, size.width - 2), height: 36)
         var shelfHeight: CGFloat = 0
         let columns = max(1, Int(floor((size.width - 26 + 4) / 36)))
