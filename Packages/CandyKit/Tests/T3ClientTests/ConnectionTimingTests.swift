@@ -155,8 +155,9 @@ struct ConnectionTimingTests {
                 var samples: [[String: Double]] = []
                 for _ in 0..<Self.runs {
                     let t0 = ContinuousClock.now
+                    // The path asks for deferred work since thread-3; the plain case drops it.
                     var path = ThreadHistoryRequest.boundedSnapshotPath(ThreadId(rawValue: id))
-                    if deferWork { path += "&deferWork=1" }
+                    if !deferWork { path = path.replacingOccurrences(of: "&deferWork=1", with: "") }
                     let (body, wire) = try await Self.rawGet(path)
                     let httpMs = (ContinuousClock.now - t0).milliseconds
                     let snapshot = try JSONDecoder().decode(JSONValue.self, from: body)
@@ -165,6 +166,7 @@ struct ConnectionTimingTests {
                                                       "acceptBoundedSnapshot": .bool(true), "acceptCompactTurnItems": .bool(true),
                                                       "acceptDedupedBodies": .bool(true), "acceptCompactIds": .bool(true)]
                     if let sequence { input["afterSequence"] = .number(sequence) }
+                    if deferWork { input["acceptDeferredWork"] = .bool(true) }
                     let before = socket.received
                     for try await item in await connection.stream("orchestration.subscribeThread", payload: .object(input)) {
                         if item["kind"]?.stringValue == "synchronized" { break }

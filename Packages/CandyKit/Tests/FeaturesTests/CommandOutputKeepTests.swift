@@ -25,7 +25,8 @@ struct CommandOutputKeepTests {
         model.finishedOutputTTL = .milliseconds(20)
         model.receiveCommandOutput("done", .success(frame("ok", running: false)))
         model.forgetCommandOutput("done")
-        try await Task.sleep(for: .milliseconds(150))
-        #expect(!model.holdsFinishedCommandOutput("done"))
+        // The eviction runs on the main actor, which a loaded test run can keep busy for seconds.
+        for _ in 0..<100 where model.holdsCommandOutput("done") { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(!model.holdsCommandOutput("done"))
     }
 }

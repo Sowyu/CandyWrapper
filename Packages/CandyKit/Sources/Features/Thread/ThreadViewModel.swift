@@ -317,6 +317,8 @@ public final class ThreadViewModel {
         finishedOutputEvictions.removeValue(forKey: id)?.cancel()
         return true
     }
+    /// Whether output for `id` is still held, without keeping it (tests).
+    func holdsCommandOutput(_ id: String) -> Bool { commandBuffers[id] != nil }
     private var finishedOutputEvictions: [String: Task<Void, Never>] = [:]
     var finishedOutputTTL: Duration = .seconds(300)
 
