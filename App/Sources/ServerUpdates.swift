@@ -195,6 +195,17 @@ final class ServerUpdates {
 
     /// `updateServer(server, { quiet: true })` for "Update everything": no toasts. A server that can't update now,
     /// or already is, is skipped rather than joined (ServerUpdateAction.tsx:84-87).
+    /// Downloads and preflights a server's update without restarting it, while provider installs run
+    /// (useUpdateEverything.ts `stageServers`, #35346). Only a server that advertises `serverUpdateStaging`
+    /// gets `stageOnly`; a failed stage only means the update downloads later.
+    func stage(_ environmentId: String) -> Task<Void, Never>? {
+        let caps = capabilities(environmentId)
+        guard caps.staging, tasks[environmentId] == nil, canUpdate(environmentId), let shell = environments.session(environmentId),
+              let target = mismatch(environmentId)?.client else { return nil }
+        let input = ServerUpdateLogic.input(targetVersion: target, continueRunningThreads: false, stageOnly: true)
+        return Task { _ = try? await shell.supervisor.request("server.updateServer", payload: input) }
+    }
+
     func updateQuietly(_ environmentId: String, serverLabel: String) async -> QuietOutcome {
         guard tasks[environmentId] == nil else { return .skipped }
         quietFailures[environmentId] = nil

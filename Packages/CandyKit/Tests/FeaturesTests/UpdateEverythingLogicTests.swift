@@ -12,6 +12,15 @@ struct UpdateEverythingLogicTests {
                   capabilities: ServerUpdateCapabilities(selfUpdate: path, desktopAppUpdate: path == .desktopManaged), ownServer: own)
     }
 
+    /// #37490: a Stable desktop app is not offered a Nightly server; a Nightly desktop host still takes Stable.
+    @Test func desktopTrackSkips() {
+        let target = "0.0.51-nightly.20261101.4"
+        let (targets, skipped) = L.serverTargets([Self.machine("stable-desktop", "0.0.40", .desktopManaged),
+                                                  Self.machine("nightly-desktop", "0.0.49-nightly.20261001.3", .desktopManaged)], target: target)
+        #expect(targets.map(\.label) == ["nightly-desktop"])
+        #expect(skipped.map(\.reason) == ["on the stable channel"])
+    }
+
     @Test func targetsAndSkips() {
         let (targets, skipped) = L.serverTargets([
             Self.machine("service", "0.0.40", .bootService),

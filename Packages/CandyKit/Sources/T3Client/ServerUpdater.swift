@@ -29,6 +29,13 @@ public enum ServerUpdater {
         // Without a session a lost unary call would pass for the handoff.
         guard let connection = await supervisor.currentConnection else { throw Failure("The server is not connected.") }
         await onStage(.downloading, requested)
+        // Only launcher updates carry an updateId. Read the accepting process's ready before the request, so a
+        // ready from after it can never pose as that process; it counts only if the request rides the same socket.
+        var acceptedAt: String?
+        if capabilities.selfUpdate == .bootService {
+            let at = await acceptingReadyAt(supervisor)
+            if await supervisor.currentConnection === connection { acceptedAt = at }
+        }
         let result = try await handoff(connection, input: input, targetVersion: requested, capabilities: capabilities, onStage: onStage)
 
         var commitLostTransport = false
@@ -62,7 +69,7 @@ public enum ServerUpdater {
         }
 
         guard result.needsDesktopCommit, let token = result.desktopUpdateToken else {
-            let ready = try await nextReady(supervisor, result, timeout: resumeTimeout)
+            let ready = try await nextReady(supervisor, result, acceptedAt: acceptedAt, timeout: resumeTimeout)
             if let failure = ServerUpdateLogic.failure(result, ready) { throw Failure(failure) }
             return result
         }
@@ -177,12 +184,12 @@ public enum ServerUpdater {
     }
 
     /// The first `ready` event that matches the update, on this or any later session.
-    private static func nextReady(_ supervisor: ConnectionSupervisor, _ result: ServerSelfUpdateResult,
+    private static func nextReady(_ supervisor: ConnectionSupervisor, _ result: ServerSelfUpdateResult, acceptedAt: String? = nil,
                                   timeout: Duration) async throws -> ServerLifecycleReady {
         let (stream, continuation) = AsyncStream<ServerLifecycleReady>.makeStream()
         let subscription = supervisor.subscribe("subscribeServerLifecycle", payload: { .object([:]) }) { event in
             guard case .value(let json) = event, let ready = ServerLifecycleReady(json),
-                  ServerUpdateLogic.matchesResume(result, ready) else { return }
+                  ServerUpdateLogic.matchesResume(result, ready, acceptedAt: acceptedAt) else { return }
             continuation.yield(ready)
         }
         defer { subscription.cancel(); continuation.finish() }
@@ -193,6 +200,21 @@ public enum ServerUpdater {
         try Task.checkCancellation()
         guard let ready = ready ?? nil else { throw Failure(ServerUpdateLogic.resumeTimeoutMessage(result.targetVersion)) }
         return ready
+    }
+
+    /// The `ready.at` the host replays on subscribe, or nil after `acceptingReadyTimeout`.
+    private static func acceptingReadyAt(_ supervisor: ConnectionSupervisor) async -> String? {
+        let (stream, continuation) = AsyncStream<String?>.makeStream()
+        let subscription = supervisor.subscribe("subscribeServerLifecycle", payload: { .object([:]) }) { event in
+            guard case .value(let json) = event, let ready = ServerLifecycleReady(json) else { return }
+            continuation.yield(ready.at)
+        }
+        defer { subscription.cancel(); continuation.finish() }
+        let at = try? await withTimeout(ServerUpdateLogic.acceptingReadyTimeout) {
+            var iterator = stream.makeAsyncIterator()
+            return await iterator.next()
+        }
+        return (at ?? nil) ?? nil
     }
 
     /// `isLegacyUpdateHandoffLoss`: the socket went away, or only interrupts.

@@ -12,26 +12,47 @@ public enum DiagnosticsFormat {
         return f.string(from: NSNumber(value: value)) ?? "\(Int(value))"
     }
 
-    /// `formatDuration`: ms under a second, else seconds with 2 (or 1 from 10 s) decimals.
+    /// `formatDiagnosticsDuration` (#29377, #27316): whole ms under a second after rounding, else seconds with 2 (or 1
+    /// from 10 s) decimals and no trailing zeros, so 999.6 ms reads "1 s", not "1000 ms".
     public static func duration(_ ms: Double) -> String {
-        ms < 1000 ? "\(Int(ms.rounded())) ms" : String(format: ms >= 10_000 ? "%.1f s" : "%.2f s", ms / 1000)
+        let rounded = Int(ms.rounded())
+        if rounded < 1000 { return "\(rounded) ms" }
+        return trimZeros(String(format: ms >= 10_000 ? "%.1f" : "%.2f", ms / 1000)) + " s"
     }
 
-    /// `formatBytes`.
+    /// `.replace(/\.0+$/, "")`: "2.00" reads "2", "2.50" stays.
+    static func trimZeros(_ s: String) -> String {
+        s.range(of: #"\.0+$"#, options: .regularExpression).map { String(s[..<$0.lowerBound]) } ?? s
+    }
+
+    /// `formatBytes` (lib/formatBytes.ts at 4928, #28300, #30330): the unit is picked after rounding, so 1023.6 KB reads
+    /// "1.00 MB", not "1024 KB"; 0 decimals from 100, 1 from 10, else 2.
     public static func bytes(_ value: Double) -> String {
-        if value < 1024 { return "\(Int(value)) B" }
-        let units = ["KB", "MB", "GB"]
-        var next = value, i = -1
-        repeat { next /= 1024; i += 1 } while next >= 1024 && i < units.count - 1
-        return String(format: next >= 10 ? "%.1f %@" : "%.2f %@", next, units[i])
+        if Int(value.rounded()) < 1024 { return "\(Int(value.rounded())) B" }
+        let units = ["KB", "MB", "GB", "TB"]
+        func scaled(_ v: Double) -> String { String(format: v >= 100 ? "%.0f" : v >= 10 ? "%.1f" : "%.2f", v) }
+        var next = value / 1024, i = 0
+        while (Double(scaled(next)) ?? 0) >= 1024 && i < units.count - 1 { next /= 1024; i += 1 }
+        return scaled(next) + " " + units[i]
     }
 
-    /// `formatCpuTime`.
+    /// `formatCpuTime` (#29395): the unit is picked after rounding, so 59.996 s reads "1m", not "60s".
     public static func cpuTime(_ seconds: Double) -> String {
-        if seconds < 60 { return String(format: seconds >= 10 ? "%.1fs" : "%.2fs", seconds) }
-        let minutes = seconds / 60
-        if minutes < 60 { return String(format: minutes >= 10 ? "%.1fm" : "%.2fm", minutes) }
-        return String(format: "%.2fh", minutes / 60)
+        func format(_ v: Double) -> String { trimZeros(String(format: v >= 10 ? "%.1f" : "%.2f", v)) }
+        let s = format(seconds)
+        if (Double(s) ?? 0) < 60 { return s + "s" }
+        let m = format(seconds / 60)
+        if (Double(m) ?? 0) < 60 { return m + "m" }
+        return trimZeros(String(format: "%.2f", seconds / 3600)) + "h"
+    }
+
+    /// `formatSamplingStatus` (ResourceTelemetryDiagnostics.logic.ts:86-100, #29749): 0 means the monitor samples on request.
+    public static func samplingStatus(_ intervalMs: Double) -> String {
+        if intervalMs <= 0 { return "Sampling on demand" }
+        if intervalMs < 1000 { return "Sampling every \(Int(intervalMs.rounded())) ms" }
+        let seconds = intervalMs / 1000
+        let text = trimZeros(String(format: "%.1f", seconds))
+        return "Sampling every \(text) \(seconds == 1 ? "second" : "seconds")"
     }
 
     /// `formatProcessName`: the command's first token without quotes, last path segment.

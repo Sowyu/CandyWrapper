@@ -309,6 +309,11 @@ final class UpdateEverything {
             let error = DesktopUpdateLogic.actionError(accepted: result.accepted, completed: result.completed, state: updater.state)
             return (result.completed, error.map { "Could not download update: \($0)" })
         } : nil
+        // Servers stage while providers install; each server's update waits only on its own stage.
+        var staged: [String: Task<Void, Never>] = [:]
+        if !plan.providerMachines.isEmpty {
+            for s in plan.servers { if let task = serverUpdates.stage(s.environmentId) { staged[s.environmentId] = task } }
+        }
         // Providers first, so no install is cut off by a server restart.
         var providerOutcomes: [(updated: Bool, line: String?)] = []
         var failedProviderMachines: Set<String> = []
@@ -340,8 +345,10 @@ final class UpdateEverything {
         var serverOutcomes: [(updated: Bool, line: String?)] = []
         await withTaskGroup(of: (String, String, ServerUpdates.QuietOutcome).self) { group in
             for s in plan.servers {
+                let stage = staged[s.environmentId]
                 group.addTask { [serverUpdates] in
-                    (s.environmentId, s.label, await serverUpdates.updateQuietly(s.environmentId, serverLabel: s.label))
+                    await stage?.value
+                    return (s.environmentId, s.label, await serverUpdates.updateQuietly(s.environmentId, serverLabel: s.label))
                 }
             }
             for await (env, label, outcome) in group {
