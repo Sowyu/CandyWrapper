@@ -24,6 +24,8 @@ final class Environments {
         /// The session's supervisor state, nil while no session runs.
         var state: ConnectionState?
         var watch: Task<Void, Never>?
+        /// The saved route this session uses, for the route checks.
+        var route: URL?
     }
 
     private weak var sidebar: SidebarContentView?
@@ -60,6 +62,11 @@ final class Environments {
     private(set) var removing: Set<String> = []
     /// Ids whose `connectSaved` is reading its route and token.
     private var connecting: Set<String> = []
+    /// Route checks: one at a time per environment, silent routes backed off, and the route a switch went to until
+    /// its session connects.
+    private var routeChecking: Set<String> = []
+    private var routeBackoff: [String: RouteBackoff] = [:]
+    private var switchedRoute: [String: URL] = [:]
     private var shellSearchGeneration = 0
     /// Each T3 Connect machine's relay address by environment id, from the account's last discovery. Link dialogs offer it.
     var connectEndpoints: [String: String] = [:]
@@ -81,6 +88,17 @@ final class Environments {
             // ponytail: T3's supervisor prepares the SSH route again on its retry ladder; this drops the session and the
             // row's switch reconnects. Re-run `connectSaved` on the retry ladder if tunnels drop often.
             self.onSshFailure?("SSH connection closed", "The tunnel to \(target.display) closed. Turn the environment off and on in Settings → Connections to reconnect.")
+        }
+        // T3 looks for a better route every 60 s while on a fallback (supervisor.ts:800-822). These signals do it
+        // without an idle timer: coming back to the app, another network, and input after a quiet socket.
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkRoutes() }
+        }
+        InputQuietGate.shared.observeQuietInput { [weak self] in self?.checkRoutes() }
+        InputQuietGate.shared.observePathChanges { [weak self] in
+            guard let self else { return }
+            for id in routeBackoff.keys { routeBackoff[id]?.networkChanged() }
+            checkRoutes()
         }
         let routes = iconRoutes
         ProjectIconStore.shared.loader = { env, cwd, path in
@@ -280,6 +298,7 @@ final class Environments {
                 addRemote(environmentId: id, label: registration.label, machine: registration.machine, cached: cached) {
                     ShellSession(environmentId: id, relayBaseURL: route, authorizer: authorizer, cached: $0)
                 }
+                entries[id]?.route = route
                 return
             }
             guard let token else {
@@ -290,16 +309,86 @@ final class Environments {
         }
     }
 
-    /// The first route whose descriptor answers within T3's 2.5 s route check with the saved id.
-    // ponytail: picked once per connect; T3 also rechecks every 60 s for a better route while on a fallback
+    /// The first route whose descriptor answers within T3's 2.5 s route check with the saved id, all checked at once
+    /// (driver.ts:83-130). The tunnel isn't checked: T3 has no descriptor to read there and tries it in its turn.
     nonisolated static func pickRoute(_ registration: EnvironmentRegistration) async -> URL {
         guard registration.routes.count > 1 else { return registration.httpBaseURL }
-        for route in registration.routes {
-            var http = EnvironmentHTTP(baseURL: route)
+        return await RouteCheck.check(registration.routes, check: routeAnswers(registration)).first ?? registration.httpBaseURL
+    }
+
+    nonisolated static func routeAnswers(_ registration: EnvironmentRegistration) -> @Sendable (URL) async -> Bool {
+        { route in
+            if registration.isRelayRoute(route) { return true }
+            // Its own session: a pooled connection on the network the device just left would wait out the timeout.
+            let session = URLSession(configuration: EnvironmentHTTP.defaultSession.configuration)
+            defer { session.finishTasksAndInvalidate() }
+            var http = EnvironmentHTTP(baseURL: route, session: session)
             http.timeout = 2.5
-            if let d = try? await http.descriptor(), d.environmentId == registration.environmentId { return route }
+            guard let d = try? await http.descriptor() else { return false }
+            return d.environmentId == registration.environmentId
         }
-        return registration.httpBaseURL
+    }
+
+    /// Route checks for every connected machine with more than one route.
+    func checkRoutes() {
+        for id in entries.keys { checkRoutes(id, lost: false) }
+    }
+
+    /// `lost`: the session's route just failed an attempt, so every route is a candidate, as T3 walks them all on each
+    /// attempt (driver.ts:83-130). Otherwise, only a connected session on a fallback looks for a better route
+    /// (supervisor.ts:414-475). A route that answers replaces the session with one on that route.
+    private func checkRoutes(_ id: String, lost: Bool) {
+        guard let registration = saved.first(where: { $0.environmentId == id }), registration.enabled,
+              registration.sshTarget == nil, registration.routes.count > 1,
+              let session = entries[id]?.session, let current = entries[id]?.route,
+              lost || entries[id]?.state?.phase == .connected,
+              !routeChecking.contains(id), !connecting.contains(id), !removing.contains(id) else { return }
+        let backoff = routeBackoff[id] ?? RouteBackoff()
+        let candidates = lost ? registration.routes.filter { $0 == current || !backoff.skips($0) }
+            : RouteCheck.better(than: current, in: registration.routes, skipping: { backoff.skips($0) })
+        guard !candidates.isEmpty, candidates != [current] else { return }
+        routeChecking.insert(id)
+        Task {
+            let outcome = await RouteCheck.check(candidates, check: Self.routeAnswers(registration))
+            routeChecking.remove(id)
+            for route in outcome.silent { routeBackoff[id, default: RouteBackoff()].silent(route) }
+            if let first = outcome.first { routeBackoff[id]?.answered(first) }
+            guard let route = outcome.first, EnvironmentRoute.origin(route) != EnvironmentRoute.origin(current),
+                  entries[id]?.session === session, entries[id]?.route == current,
+                  let latest = saved.first(where: { $0.environmentId == id }), latest.enabled, latest.routes == registration.routes
+            else { return }
+            await switchRoute(id, latest, to: route)
+        }
+    }
+
+    /// Replaces the session with one on `route`, keeping the shell on screen, as re-pairing the route in use does.
+    private func switchRoute(_ id: String, _ registration: EnvironmentRegistration, to route: URL) async {
+        let catalog = self.catalog
+        let relay = registration.isRelayRoute(route)
+        let token = relay ? nil : await Task.detached { try? catalog.token(environmentId: id, route: route) }.value
+        guard entries[id] != nil, !removing.contains(id) else { return }
+        if relay {
+            guard let authorizer = t3Connect else { return }
+            addRemote(environmentId: id, label: registration.label, machine: registration.machine, cached: nil) {
+                ShellSession(environmentId: id, relayBaseURL: route, authorizer: authorizer, cached: $0)
+            }
+        } else {
+            guard let token else { return }
+            addRemote(environmentId: id, label: registration.label, machine: registration.machine, baseURL: route, token: token, cached: nil)
+        }
+        entries[id]?.route = route
+        switchedRoute[id] = route
+    }
+
+    /// Follows a session's phases for the route checks: a failed attempt looks at every route, and a route switched to
+    /// that fails before it connects is skipped for 5 minutes (supervisor.ts:1050-1060). A blocked attempt counts: a
+    /// saved LAN address that now answers as another machine blocks on the mismatch, where T3 moves on to the next route.
+    private func routePhaseChanged(_ id: String, from old: ConnectionState.Phase?, to new: ConnectionState.Phase) {
+        if new == .connected { switchedRoute[id] = nil; return }
+        let failed: Bool = switch new { case .backoff, .blocked: true; default: false }
+        guard failed, old != new else { return }
+        if let route = switchedRoute.removeValue(forKey: id) { routeBackoff[id, default: RouteBackoff()].switchFailed(route) }
+        checkRoutes(id, lost: true)
     }
 
     /// Add Environment: pairs over host and code, saves the route and its token, and connects
@@ -389,6 +478,8 @@ final class Environments {
     /// The thread banner's "Reconnect" (`retryEnvironment`).
     func reconnect(_ environmentId: String) {
         guard let supervisor = entries[environmentId]?.session?.supervisor else { return }
+        // A retry walks every route, as T3's attempt does (driver.ts:83-130).
+        checkRoutes(environmentId, lost: entries[environmentId]?.state?.phase != .connected)
         Task { await supervisor.retryNow() }
     }
 
@@ -430,6 +521,7 @@ final class Environments {
         addRemote(environmentId: id, label: label, machine: machine, cached: cached) {
             ShellSession(environmentId: id, baseURL: baseURL, token: token, cached: $0)
         }
+        entries[id]?.route = baseURL
     }
 
     private func addRemote(environmentId id: String, label: String, machine: String?, cached: ShellSnapshot?,
@@ -544,7 +636,9 @@ final class Environments {
                 guard let stream = await session?.supervisor.states() else { return }
                 for await state in stream {
                     guard let self, let session, self.entries[id]?.session === session else { return }
+                    let old = self.entries[id]?.state?.phase
                     self.entries[id]?.state = state
+                    if old != state.phase { self.routePhaseChanged(id, from: old, to: state.phase) }
                     self.changed()
                 }
             }
