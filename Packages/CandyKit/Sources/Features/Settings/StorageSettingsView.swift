@@ -137,14 +137,30 @@ public final class StorageSettingsView: ScopedSettingsPage {
             databaseTasks[id] = context.subscribe?(id, "server.getDatabaseStorage", .object([:])) { [weak self] value in
                 guard let self, self.databaseTasks[id] != nil else { return }
                 if let status = try? value.decode(as: DatabaseStorageStatus.self), status.recommendsCompaction {
-                    let copy = ButtonView("Copy command", variant: .outline, size: .xs)
-                    copy.action = { [weak copy] in
-                        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(status.compactCommand, forType: .string)
-                        copy?.title = "Copied"
+                    let amount = String(format: "%.1f GiB", status.reclaimableBytes / 1_073_741_824)
+                    let row: SettingsRowView
+                    if status.canReclaim == true {
+                        // ReclaimRow (DatabaseStorageNotice.tsx:125-205): a failed repair reports back after the restart.
+                        if status.reclaimFailure != nil { self.reclaiming.remove(id) }
+                        let restarting = self.reclaiming.contains(id)
+                        let reclaim = ButtonView(restarting ? "Restarting…" : "Reclaim", variant: .outline, size: .xs)
+                        reclaim.isEnabled = !restarting
+                        reclaim.action = { [weak self] in self?.confirmReclaim(id, label: label, amount: amount, minutes: status.reclaimMinutes) }
+                        row = self.row(nil, title: "\(amount) on \(label)",
+                                       detail: status.reclaimFailure.map { "The last attempt failed: \($0)" }
+                                           ?? "Restarts T3 Code there. It will be offline for about \(status.reclaimMinutes) min.",
+                                       control: reclaim)
+                        self.reclaimable.insert(id)
+                    } else {
+                        let copy = ButtonView("Copy command", variant: .outline, size: .xs)
+                        copy.action = { [weak copy] in
+                            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(status.compactCommand, forType: .string)
+                            copy?.title = "Copied"
+                        }
+                        // ponytail: the command shows as plain detail text, not a mono `code` block; add a mono detail view if it reads wrong
+                        row = self.row(nil, title: "\(amount) on \(label)", detail: status.compactCommand, control: copy)
+                        self.reclaimable.remove(id)
                     }
-                    // ponytail: the command shows as plain detail text, not a mono `code` block; add a mono detail view if it reads wrong
-                    let row = self.row(nil, title: String(format: "%.1f GiB on %@", status.reclaimableBytes / 1_073_741_824, label),
-                                       detail: status.compactCommand, control: copy)
                     let dismiss = ButtonView("Dismiss", variant: .ghost, size: .xs)
                     dismiss.action = { [weak self] in
                         UserDefaults.standard.set((UserDefaults.standard.stringArray(forKey: Self.dismissedKey) ?? []) + [id], forKey: Self.dismissedKey)
@@ -160,12 +176,53 @@ public final class StorageSettingsView: ScopedSettingsPage {
         rebuildDatabaseBody()
     }
 
+    private var reclaimable: Set<String> = []
+    /// Machines asked to reclaim, waiting for the restart (`requested`).
+    private var reclaiming: Set<String> = []
+
+    /// The confirm and `server.reclaimDatabaseSpace` (DatabaseStorageNotice.tsx:140-204).
+    private func confirmReclaim(_ id: String, label: String, amount: String, minutes: Int) {
+        let dialog = DialogView(kind: .alertDialog, title: "Reclaim \(amount) on \(label)?",
+                                message: "T3 Code on \(label) stops, rebuilds its database, and starts again. It will be offline for about \(minutes) min. Running agents stop when it restarts.")
+        let cancel = ButtonView("Cancel", variant: .outline)
+        let run = ButtonView("Restart and reclaim")
+        dialog.footerButtons = [cancel, run]
+        guard let host = context.presentDialog?(dialog) else { return }
+        cancel.action = { [weak host] in host?.close() }
+        run.action = { [weak self, weak host] in
+            host?.close()
+            guard let self, let request = context.request else { return }
+            reclaiming.insert(id)
+            syncDatabaseRow(id)
+            Task { [weak self] in
+                do {
+                    _ = try await request(id, DatabaseStorageStatus.reclaimMethod, .object([:]))
+                    self?.context.toast?("Reclaiming \(amount) on \(label)", "T3 Code there restarts and is back in about \(minutes) min.", .success)
+                } catch {
+                    guard let self else { return }
+                    reclaiming.remove(id)
+                    syncDatabaseRow(id)
+                    context.toast?("Could not reclaim space on \(label)", (error as? LocalizedError)?.errorDescription ?? "\(error)", .error)
+                }
+            }
+        }
+    }
+
+    /// Reads the machine's status again so its row shows the new state.
+    private func syncDatabaseRow(_ id: String) {
+        databaseTasks.removeValue(forKey: id)?.cancel()
+        syncDatabases()
+    }
+
     private func rebuildDatabaseBody() {
         // DatabaseStorageNotice.tsx:34-80: one Database section, a header row, then a row per machine.
         let rows = databaseOrder.compactMap { databaseRows[$0] }
         if rows.isEmpty { databaseSection = nil } else {
+            // DatabaseStorageNotice.tsx:62-71 at 4928.
+            let all = databaseOrder.filter { databaseRows[$0] != nil }.allSatisfy(reclaimable.contains)
             let header = row(nil, title: "Reclaim freed database space",
-                             detail: "Old history is cleaned up automatically, but these databases still hold the freed space. Run the command on each machine to return it to disk; it pauses and restarts the background service. Quit the desktop app first if it hosts the environment.")
+                             detail: all ? "These databases still hold space freed by history cleanup."
+                                 : "These databases still hold space freed by history cleanup. Run the command on each machine to reclaim it. It restarts the background service. Quit the desktop app first if it hosts the environment.")
             databaseSection = section("storage-database", "Database", [header] + rows)
         }
         body = [notice] + (databaseSection.map { [$0] } ?? []) + [worktrees, artifacts, cleanup]

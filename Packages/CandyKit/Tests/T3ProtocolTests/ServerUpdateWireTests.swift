@@ -97,4 +97,13 @@ struct ServerUpdateWireTests {
         #expect(ServerUpdateLogic.input(targetVersion: "1", continueRunningThreads: false, channel: "nightly", targetDatabaseMigration: 3, stageOnly: true)
                 == .object(["targetVersion": .string("1"), "channel": .string("nightly"), "targetDatabaseMigration": .number(3), "stageOnly": .bool(true)]))
     }
+
+    /// #32941: the repair's status and its offline estimate (contracts settings.ts:1274-1309).
+    @Test func databaseReclaim() throws {
+        let status = try JSONValue.object(["databaseBytes": .number(6 * 1_073_741_824), "reclaimableBytes": .number(1.5 * 1_073_741_824),
+                                           "incrementalVacuumEnabled": .bool(false), "compactCommand": .string("t3 doctor"),
+                                           "canReclaim": .bool(true)]).decode(as: DatabaseStorageStatus.self)
+        #expect(status.recommendsCompaction && status.canReclaim == true && status.reclaimFailure == nil)
+        #expect(status.reclaimMinutes == 3)
+    }
 }

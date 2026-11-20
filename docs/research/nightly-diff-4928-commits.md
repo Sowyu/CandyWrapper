@@ -606,7 +606,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 8969e1d8d0 | #32941 | settings | feat: Settings reclaims freed database space in one click | port; needs wire: database vacuum RPC |
+| 8969e1d8d0 | #32941 | settings | feat: Settings reclaims freed database space in one click | ported (settings-3): Storage Database rows offer Reclaim with the confirm, Restarting… and the last failure when the server can reclaim (StorageSettingsView, DatabaseStorageStatus); the environment:maintain check is left to the server |
 
 ## New feature prompt-suggestions (2)
 
