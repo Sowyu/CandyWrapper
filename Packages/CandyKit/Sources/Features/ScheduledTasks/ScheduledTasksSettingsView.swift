@@ -70,7 +70,7 @@ public final class ScheduledTasksSettingsView: ScopedSettingsPage {
                                 openEditor(environmentId: env.id, task: t)
                             }
                         } else {
-                            rows.append(SettingsRowView(title: "Task unavailable", detail: "This task no longer exists or is outside the selected project scope."))
+                            rows.append(SettingsRowView(title: "Task unavailable", detail: "This task was deleted or belongs to a different project. Check your project filter."))
                         }
                     }
                     if tasks.isEmpty {
@@ -328,8 +328,14 @@ public struct ScheduledTaskThreadOption: Equatable, Sendable {
     public var title: String
     /// ISO, compared as text as T3 does (`localeCompare`).
     public var updatedAt: String
-    public init(id: String, projectId: String, title: String, updatedAt: String) {
-        self.id = id; self.projectId = projectId; self.title = title; self.updatedAt = updatedAt
+    /// The thread's current model, which a bound task's runs use (#36628).
+    public var model: (instanceId: String, model: String)?
+    public init(id: String, projectId: String, title: String, updatedAt: String, model: (instanceId: String, model: String)? = nil) {
+        self.id = id; self.projectId = projectId; self.title = title; self.updatedAt = updatedAt; self.model = model
+    }
+    public static func == (a: Self, b: Self) -> Bool {
+        a.id == b.id && a.projectId == b.projectId && a.title == b.title && a.updatedAt == b.updatedAt
+            && a.model?.instanceId == b.model?.instanceId && a.model?.model == b.model?.model
     }
 }
 
@@ -736,14 +742,16 @@ final class ScheduledTaskFormView: DSView {
             rows.append((filters, filters.height(forWidth: 528)))
             let replay = InputView(placeholder: "{{headers.delivery-id}}", text: d.replayKey)
             replay.onChange = { [weak e] t in e?.draft.replayKey = t }
-            rows.append(field("Replay key", hint: "template, optional", replay, height: 32))
+            rows.append(field("Duplicate request key", hint: "template, optional", replay, height: 32))
+            // ScheduledTasksSettings.tsx (#24149).
+            rows.append(text("Requests with the same key run only once within 7 days.", color: Themed.color(\.mutedForeground), size: 12))
             let coalesce = InputView(placeholder: "{{body.id}}", text: d.coalesceKey)
             coalesce.onChange = { [weak e] t in e?.draft.coalesceKey = t }
             rows.append(field("Coalesce key", hint: "template, optional", coalesce, height: 32))
             let window = InputView(placeholder: "120", text: d.coalesceWindowSeconds)
             window.onChange = { [weak e] t in e?.draft.coalesceWindowSeconds = t }
             rows.append(field("Coalesce window", hint: "seconds, 10–3600", window, height: 32))
-            rows.append(text("Replay keys suppress repeat deliveries for 7 days. Coalescing runs the latest payload once when the window from the first delivery closes. Empty keys run normally.",
+            rows.append(text("Coalescing runs the latest payload once when the window from the first delivery closes. Empty keys run normally.",
                              color: Themed.color(\.mutedForeground), size: 12))
             let sig = SwitchView(isOn: d.signatureEnabled)
             sig.onChange = { [weak e] on in e?.draft.signatureEnabled = on; e?.changed() }
@@ -1250,14 +1258,18 @@ final class ScheduledTaskModelPicker: DSView {
 
     func refresh() {
         guard let editor else { return }
-        if let sel = editor.activeSelection, let entry = catalog.entry(ProviderInstanceId(rawValue: sel.instanceId)) {
+        // ScheduledTasksSettings.tsx (#36628): a bound task's runs use the thread's current model, so the locked picker shows it.
+        let bound = !editor.draft.threadId.isEmpty
+        let shown = bound ? editor.context.schedulableThreads?(editor.environmentId).first { $0.id == editor.draft.threadId }?.model
+            : editor.activeSelection
+        if let sel = shown, let entry = catalog.entry(ProviderInstanceId(rawValue: sel.instanceId)) {
             button.title = entry.models.first { $0.slug == sel.model }.map { ModelNames.trigger($0, driver: entry.driver) } ?? sel.model
             button.icon = ProviderIcon.make(driver: entry.driver, displayName: entry.displayName, size: 16, color: Themed.color(\.contrastMutedForeground))
         } else {
             button.title = "No providers available"
             button.icon = nil
         }
-        button.isEnabled = editor.connected
+        button.isEnabled = editor.connected && !bound
         invalidateIntrinsicContentSize()
     }
 

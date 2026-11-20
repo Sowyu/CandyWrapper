@@ -367,7 +367,7 @@ public enum ScheduledTaskLogic {
         guard d.scheduleMode == .webhook else { return [] }
         if parseMaxDeliveryAge(d.maxDeliveryAgeMinutes) == nil { return [.invalidAge] }
         var errors: [ValidationError] = []
-        for (label, value) in [("Replay key", d.replayKey), ("Coalesce key", d.coalesceKey)] {
+        for (label, value) in [("Duplicate request key", d.replayKey), ("Coalesce key", d.coalesceKey)] {
             let t = value.trimmingCharacters(in: .whitespacesAndNewlines)
             if !t.isEmpty, !isDedupeTemplate(t) { errors.append(.invalidWebhook("\(label) must contain a valid request placeholder.")) }
         }
@@ -432,7 +432,7 @@ public enum ScheduledTaskLogic {
         case .interval:
             return .object(["type": .string("interval"), "everyMs": intervalMs(d.intervalMinutes).map(JSONValue.number) ?? .number(.nan)])
         case .fixed:
-            var o: [String: JSONValue] = ["type": .string("fixed_time"), "timeOfDay": .string(d.timeOfDay.isEmpty ? "09:00" : d.timeOfDay)]
+            var o: [String: JSONValue] = ["type": .string("fixed_time"), "timeOfDay": .string(d.timeOfDay)]
             if !(d.weekdays.isEmpty || d.weekdays.count == 7) { o["weekdays"] = .array(d.weekdays.sorted().map { .number(Double($0)) }) }
             return .object(o)
         }
@@ -452,7 +452,8 @@ public enum ScheduledTaskLogic {
             d.weekdays = Set(0...6)
         case .fixedTime(let time, let days):
             d.scheduleMode = .fixed
-            d.timeOfDay = time
+            // #29851: an agent may save an unpadded hour such as 9:05.
+            d.timeOfDay = String(repeating: "0", count: max(0, 5 - time.count)) + time
             d.weekdays = days.map { $0.isEmpty ? Set(0...6) : Set($0) } ?? Set(0...6)
         case .webhook(let signature, let age, let dedupe, let filters):
             d.scheduleMode = .webhook
@@ -630,6 +631,8 @@ public enum ScheduledTaskLogic {
         guard !title.isEmpty, !prompt.isEmpty, projectExists, let selection else { return .failure(.incomplete) }
         if d.scheduleMode == .webhook, case .failure(let e) = parseFilterDrafts(d.filters) { return .failure(.invalidFilter(e.message)) }
         if d.scheduleMode == .once, let problem = onceError(d) { return .failure(.invalidRunTime(problem)) }
+        // scheduledTasksSettings.logic.ts (#36789): a cleared run time is a problem, not 09:00.
+        if d.scheduleMode == .fixed, d.timeOfDay.isEmpty { return .failure(.invalidRunTime("Pick a time.")) }
         guard let schedule = schedulePayload(d) else {
             let errors = webhookDraftErrors(d)
             return .failure(errors.count > 1 ? .several(errors) : errors.first ?? .invalidAge)

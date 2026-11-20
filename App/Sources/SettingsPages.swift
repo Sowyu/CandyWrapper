@@ -80,7 +80,8 @@ extension SettingsController {
         c.openThread = { [weak self] env, id in self?.onOpenThread?(ThreadId(EnvironmentScope.key(env, id))) }
         c.schedulableThreads = { [weak self] env in
             (self?.environments.snapshot(env)?.threads ?? []).filter { $0.archivedAt == nil && $0.lineage.isListed }.map {
-                ScheduledTaskThreadOption(id: $0.id.rawValue, projectId: $0.projectId.rawValue, title: $0.title, updatedAt: $0.updatedAt.raw)
+                ScheduledTaskThreadOption(id: $0.id.rawValue, projectId: $0.projectId.rawValue, title: $0.title, updatedAt: $0.updatedAt.raw,
+                                          model: ($0.modelSelection.instanceId.rawValue, $0.modelSelection.model))
             }
         }
         c.subscribeProviderAuth = { [weak self] env, instance, receive in
@@ -596,7 +597,7 @@ extension SettingsController {
                                       ("fontFamilyCode", "fontSizeCode", "Code font"), ("fontFamilyTerminal", "fontSizeTerminal", "Terminal font")]
         where !c.isDefault(family) || !c.isDefault(size) { labels.append(label) }
         labels += client("diffFilesCollapsed", "Default diff file state") + client("diffIgnoreWhitespace", "Diff whitespace changes")
-        labels += client("diffLayout", "Diff layout") + client("proactivePanelsEnabled", "Proactive panels")
+        labels += client("diffLayout", "Diff layout") + client("proactivePanelsEnabled", "Open pull requests and changes panels proactively")
         labels += client("showSkillsInSlashMenu", "Show skills in slash menu") + client("composerCollapseOnScroll", "Collapse composer on scroll")
         labels += client("composerRichTextEnabled", "Rich text composer") + client("sendShortcut", "Send shortcut")
         labels += client("followUpBehavior", "Follow-up behavior") + client("toolCallVisibility", "Tool calls in chat")
@@ -664,9 +665,13 @@ extension SettingsController {
         shortcuts.onKey { [weak self] event in
             guard let self, self.isOpen, self.modal == nil else { return false }
             let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
-            let chars = event.charactersIgnoringModifiers?.lowercased()
-            let find = flags == [.command] && chars == "f"
-            let slash = flags.isDisjoint(with: [.command, .control, .option]) && event.charactersIgnoringModifiers == "/"
+            // SettingsSidebarNav.tsx (#33395): the layout's key or the physical one, so Cmd+F works on a Cyrillic layout and
+            // German Shift+7 types `/`. Shift on the physical slash key types `?` and stays out.
+            let stroke = KeyStroke(event)
+            let keys = Set([stroke?.key, stroke?.physicalKey].compactMap { $0?.lowercased() })
+            let find = flags == [.command] && keys.contains("f")
+            let slash = flags.isDisjoint(with: [.command, .control, .option]) && keys.contains("/")
+                && (event.charactersIgnoringModifiers == "/" || !flags.contains(.shift))
                 && !Shortcuts.editableFocused(in: self.window)
             guard find || slash else { return false }
             if self.window?.firstResponder is ShortcutCaptureResponder { return false }

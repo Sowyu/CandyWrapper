@@ -87,6 +87,11 @@ public struct SettingsScopeState: Equatable, Sendable {
     public var environments: [SettingsScopeEnvironment]
     public var primaryId: String?
     public var projects: [SettingsScopeProject]
+    /// `projectScopeMenuGroups` (settingsScopeAxis.ts:75-84, #36856): the project menu follows the chosen environment.
+    public var projectMenu: [SettingsScopeProject] {
+        guard let machine = selection.machine else { return projects }
+        return projects.filter { $0.members.contains { $0.environmentId == machine } }
+    }
     /// Each member's decoded t3.json by `physicalKey` (SettingsScopeContext.tsx `useMemberProjectFiles`): absent
     /// until its read settles, nil for a missing, truncated or invalid file.
     public var projectFiles: [String: T3ProjectFile?]

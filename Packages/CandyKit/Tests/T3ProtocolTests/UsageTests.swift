@@ -339,7 +339,7 @@ struct ScheduledTaskLogicTests {
         d.replayKey = "delivery"
         d.coalesceKey = "{{body.id}}"
         d.coalesceWindowSeconds = "5"
-        #expect(upsert() == .failure(.several([.invalidWebhook("Replay key must contain a valid request placeholder."),
+        #expect(upsert() == .failure(.several([.invalidWebhook("Duplicate request key must contain a valid request placeholder."),
                                                .invalidWebhook("Coalesce window must be whole seconds from 10 to 3600.")])))
         #expect(ScheduledTaskLogic.isDedupeTemplate("{{ request }}") && ScheduledTaskLogic.isDedupeTemplate("gh-{{headers.x-id}}"))
         #expect(!ScheduledTaskLogic.isDedupeTemplate("{{body}} }}") && !ScheduledTaskLogic.isDedupeTemplate("{{ query..a }}"))
