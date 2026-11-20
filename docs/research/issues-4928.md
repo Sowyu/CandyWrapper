@@ -86,7 +86,7 @@ T3 4928 has no "start a thread from an issue" action on the web. The agent tools
 
 ## Not in this pass
 
-- Issue tracker settings (`IssueTrackerSettings.tsx`): connecting Linear and binding projects through `issueTrackers.*`. The wire types are decoded but the page is left.
+- Issue tracker settings (`IssueTrackerSettings.tsx`): done in settings-4, Features/Settings/IssueTrackerSettingsView.swift under Source control.
 - Creating issues and reading templates (`issues.create`, `issues.templates`). No 4928 web surface calls either, so CandyWrapper has nothing to copy.
 - Hover preview cards for issue links in messages (#38294) and opening Linear links in messages in the panel (#38854).
 - Dictation in the comment composer. CandyWrapper has no voice input.
@@ -105,7 +105,7 @@ Done, with the commits:
 
 Left, each with what it needs:
 
-- Issue tracker settings (`IssueTrackerSettings.tsx`, `issueTrackers.*`): a Settings section under Source control. The wire decodes.
+- Issue tracker settings (`IssueTrackerSettings.tsx`, `issueTrackers.*`): done in settings-4 under Source control.
 - Linking from the Issues page: T3 opens `ThreadLinkPicker` in a dialog. CandyWrapper has no thread picker dialog yet, so the link button shows only beside a thread.
 - The issue link hover card (`IssueLinkPreview.tsx`, #38294) and Linear links in messages opening the panel (#38854): MarkdownView's link handler needs an issue branch.
 - Thread details issue rows (`ThreadDetailsIssueRows.tsx`, #38160, #38995): the details card lives in Features/Thread.
