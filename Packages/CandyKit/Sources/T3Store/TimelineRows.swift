@@ -155,6 +155,8 @@ public struct TimelineRowsInput: Sendable {
     /// "Tool calls in chat" is Zen: entries were filtered to final answers (`filteringToolCalls`), so turns
     /// don't fold and the working row leaves once the answer lands (MessagesTimeline.logic.ts:1574, 1669-1671, 1872-1877).
     public var zen = false
+    /// Zen's live answer line for the Thinking row, read before the filter (`liveAnswerPreview`, MessagesTimeline.tsx:1188-1189 at 4928).
+    public var liveAnswerPreview: String?
 
     public init(
         entries: [TimelineEntry], latestRun: TimelineLatestRun? = nil, runningRunId: RunId? = nil,
@@ -386,6 +388,22 @@ public enum TimelineRows {
 
     static func lastResponseBoundaryIndex(_ entries: [TimelineEntry]) -> Int {
         entries.lastIndex(where: startsResponse) ?? -1
+    }
+
+    /// `liveAnswerPreview` (MessagesTimeline.logic.ts:1485-1498 at 4928): the first sentence of the newest assistant
+    /// text or thought since the response began, which Zen's Thinking row shows in place of "Thinking".
+    public static func liveAnswerPreview(_ entries: [TimelineEntry]) -> String? {
+        let boundary = lastResponseBoundaryIndex(entries)
+        var index = entries.count - 1
+        while index > boundary {
+            let entry = entries[index]
+            let text = entry.message.map { $0.role == .assistant ? $0.text : "" }
+                ?? (entry.work?.itemType == .reasoning ? entry.work?.detail ?? "" : "")
+            let line = liveThoughtLine(text)
+            if !line.isEmpty { return line }
+            index -= 1
+        }
+        return nil
     }
 
     /// `deriveActiveVisualResponseRunIds` (L:900-927).
@@ -1088,7 +1106,7 @@ public enum TimelineRows {
                 let groupId = workGroupId(anchor.id)
                 let expanded = input.expandedWorkGroupIds.contains(groupId)
                 rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
-                                        kind: .thinking(groupId: groupId, expanded: expanded, compacting: compacting)))
+                                        kind: .thinking(groupId: groupId, expanded: expanded, compacting: compacting, label: input.liveAnswerPreview)))
                 if expanded { rows.append(expandedBody(groupId, anchor.createdAt, visibleActive.map { $0.work! })) }
                 appendViewedImages(groupId, anchor.createdAt, visibleActive.map { $0.work! })
             } else {
@@ -1104,7 +1122,7 @@ public enum TimelineRows {
                 }
                 rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
                                         kind: .thinking(groupId: nil, expanded: nil, compacting: compacting,
-                                                        label: waitingOn == 0 ? nil : waitingOn == 1 ? "Waiting on a subagent" : "Waiting on \(waitingOn) subagents")))
+                                                        label: waitingOn == 0 ? input.liveAnswerPreview : waitingOn == 1 ? "Waiting on a subagent" : "Waiting on \(waitingOn) subagents")))
             }
         }
 

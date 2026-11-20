@@ -600,7 +600,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | ported (settings-4928): Show all, Hide successful and Hide all filter the timeline; Zen shows the prompts, each ended turn's final answer, steer answers and errors, with no folds and no working row once the answer lands (thread-2, TimelineRows `filteringToolCalls`). Left: Zen's live answer line in the working row (`liveAnswerPreview`) |
+| 3d78e915e3 | #30000 | settings | feat(web): a Labs setting hides tool calls so threads read like a chat | ported (settings-4928): Show all, Hide successful and Hide all filter the timeline; Zen shows the prompts, each ended turn's final answer, steer answers and errors, with no folds and no working row once the answer lands (thread-2, TimelineRows `filteringToolCalls`). Zen's Thinking row reads the live answer line (thread-4, TimelineRows.liveAnswerPreview from the unfiltered entries in TimelinePipeline) |
 
 ## New feature reclaim-db (1)
 
