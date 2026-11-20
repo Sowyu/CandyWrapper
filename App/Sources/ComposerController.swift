@@ -479,6 +479,7 @@ final class ComposerController {
         panel.errorBanner.onOpenURL = { url in NSWorkspace.shared.open(url) }
         composer.historyMessages = { [weak self] in self?.historyMessages() ?? [] }
         pickers.onChange = { [weak self] _ in
+            self?.updateStripPermissions()
             self?.composer.needsLayout = true
             self?.onTargetChange?()
             self?.onModelChange?()
@@ -1996,6 +1997,16 @@ final class ComposerController {
     }
 
     /// The pickers follow the draft key, the server config and the open thread.
+    /// The new-thread strip's access chip. A model pick changes it too: a Codex draft is never Unrestricted.
+    private func updateStripPermissions() {
+        let unrestricted = pickers.isUnrestricted
+        let mode = unrestricted ? ComposerPickers.unrestrictedMode
+            : ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
+        let strip = panel.contextStrip
+        strip.permissions.text = mode.label
+        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
+    }
+
     private func updatePickers() {
         dropUsageLimitsIfStale(instance: pickers.current.instanceId?.rawValue)
         let snapshot = sidebar?.snapshot
@@ -2021,11 +2032,7 @@ final class ComposerController {
         let strip = panel.contextStrip
         let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
         strip.showsPermissions = modern && thread == nil
-        let unrestricted = pickers.isUnrestricted
-        let mode = unrestricted ? ComposerPickers.unrestrictedMode
-            : ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
-        strip.permissions.text = mode.label
-        strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
+        updateStripPermissions()
         strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }
         panel.model.providers = serverConfig.providers
         onModelChange?()
