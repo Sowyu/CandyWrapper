@@ -123,13 +123,17 @@ public enum ThemePalette {
         return !t.isEmpty && t.count <= 48
     }
 
-    /// `themeIdFromName` (1144-1152).
+    /// `themeIdFromName` (themePalette.ts:1220-1237). A name with no ASCII letters or digits gets a stable
+    /// FNV-1a id over its UTF-16 units (#23162), so two such names don't share "custom-theme".
     public static func themeId(fromName name: String) -> String {
-        var s = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            .replacing(#/[^a-z0-9]+/#, with: "-")
+        let label = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var s = label.replacing(#/[^a-z0-9]+/#, with: "-")
         s = s.replacing(#/^-+|-+$/#, with: "")
         s = String(s.prefix(48))
-        return s.isEmpty ? "custom-theme" : s
+        if !s.isEmpty || label.isEmpty { return s.isEmpty ? "custom-theme" : s }
+        var hash: UInt32 = 2_166_136_261
+        for unit in label.utf16 { hash = (hash ^ UInt32(unit)) &* 16_777_619 }
+        return "theme-" + String(hash, radix: 36)
     }
 
     // MARK: Colors (363-468)
@@ -515,8 +519,17 @@ public enum ThemePalette {
                 variants[a] = defaultColors(a).merging(try overrides(value)) { $1 }
             }
         }
+        // themePalette.ts:1580-1587 (#37982): a file with top-level canvas and accent seeds its palette from them.
+        var fallback = defaultColors(appearance)
+        if r["canvas"] != nil, r["accent"] != nil {
+            func seed(_ key: String) throws -> String {
+                guard let v = r[key] as? String, canonical(v) != nil else { throw FileError(message: "The theme's \"\(key)\" must be a literal CSS color.") }
+                return v
+            }
+            fallback = vividColors(appearance, background: try seed("canvas"), accent: try seed("accent"))
+        }
         return ThemeDefinition(id: id, label: name.trimmingCharacters(in: .whitespacesAndNewlines), appearance: appearance,
-                               colors: defaultColors(appearance).merging(colors) { $1 }, variants: variants, collection: coll,
+                               colors: fallback.merging(colors) { $1 }, variants: variants, collection: coll,
                                managed: r["managed"] as? Bool == true)
     }
 
