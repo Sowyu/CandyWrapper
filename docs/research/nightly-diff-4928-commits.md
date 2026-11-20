@@ -1354,7 +1354,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 04572419e4 | #36785 | sidebar | fix(clients): a one-hour snooze no longer reads "2h left" | ported 9a0153d1 |
 | 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | skip: Add project folder search, outside the sidebar |
 | 9888694f80 | #36909 | sidebar | fix(client): refresh open archive when threads are archived elsewhere | skip: Settings archive list, outside the sidebar |
-| 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | left: needs delegatedFrom; the delete fallback skips nested threads already |
+| 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | ported (sidebar-2): delegatedFrom decodes; a task from a listed parent leaves lists, the delete fallback and project opening (lineage.isListed) |
 | 26bf047d5e | #30597 | sidebar | fix(client-runtime): a disconnected machine's scratch folder no longer lists as a second "No project" | already in CandyWrapper: ThreadSession.swift keeps the last scratch folder while a machine is away |
 | fe59fa44d0 | #31009 | sidebar | fix(web): renaming a sidebar thread no longer shifts the row or covers it with the hover card | ported 0166b1ef |
 | 81df733306 | #31894 | sidebar | fix(web): opening a project from the command palette skips settled and snoozed threads | skip: palette, outside the sidebar |
@@ -1363,7 +1363,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1b04bab05d | #33053 | sidebar | fix(web): settle check lines up with row timestamps | ported 0166b1ef |
 | 40f63b468f | #37067 | sidebar | fix(assets): align app icons and retain a folder placeholder while loading | skip: Markdown file links and server icons, outside the sidebar |
 | 40dcbc5f6a | #37475 | sidebar | fix(web): a stopped run no longer shows the green Done badge in the sidebar | ported 9a0153d1 |
-| 45dedf2955 | #37500 | sidebar | fix(web): an open delegated task selects its parent's sidebar row | left: needs delegatedFrom |
+| 45dedf2955 | #37500 | sidebar | fix(web): an open delegated task selects its parent's sidebar row | ported (sidebar-2): SidebarModel.resolveListedAncestorThreadId picks the row |
 | 1d1489d0b8 | #37727 | sidebar | fix(web): keyboard-opened sidebar menus select their first item | skip: CW opens native menus, where AppKit handles keyboard selection |
 | d405bd94ac | #29520 | sidebar | fix(web): sidebar width recovers when the window widens after a narrow start | skip: sidebar width lives in App/Sources |
 | 55c134a346 | #37925 | sidebar | fix(client-runtime): Tab completes a folder name when the list shows fuzzy matches | skip: Add project folder completion, outside the sidebar |

@@ -142,10 +142,24 @@ public final class SidebarContentView: DSView {
         didSet {
             // Inline, so the fix-up does not run this observer again.
             if showsNoRoute { state.activeThreadId = nil; state.activeDraftId = nil }
+            if state.activeThreadId != oldValue.activeThreadId, !resolvingRoute {
+                routeThreadId = state.activeThreadId
+                state.activeThreadId = listedRowId(for: routeThreadId)
+            }
             if state.hiddenThreadIds != oldValue.hiddenThreadIds || state.hiddenThreadTags != oldValue.hiddenThreadTags { refreshListSnapshot() }
             if state != oldValue { rebuild(animated: true) }
         }
     }
+    /// The thread the route opened. `state.activeThreadId` holds the row standing for it: a subagent, side chat or
+    /// task delegated from a listed parent selects its nearest listed ancestor (#37500, threadShell.ts:74-110).
+    private var routeThreadId: ThreadId?
+    private var resolvingRoute = false
+
+    private func listedRowId(for id: ThreadId?) -> ThreadId? {
+        guard let id, let threads = snapshot?.threads else { return id }
+        return SidebarModel.resolveListedAncestorThreadId(id, threads: threads)
+    }
+
     /// The snapshot the list draws: `snapshot` without the threads `state.hiddenThreadIds` names, nor those a
     /// hidden tag hides (`SidebarModel.hidesForTags`).
     private var listSnapshot: ShellSnapshot?
@@ -454,6 +468,12 @@ public final class SidebarContentView: DSView {
     /// knows; without it every thread is compared.
     public func setSnapshot(_ snapshot: ShellSnapshot?, animated: Bool = true, changedThreadIds: Set<ThreadId>? = nil) {
         self.snapshot = snapshot
+        let row = listedRowId(for: routeThreadId)
+        if row != state.activeThreadId {
+            resolvingRoute = true
+            state.activeThreadId = row
+            resolvingRoute = false
+        }
         refreshListSnapshot()
         listCache?.noteChanges(changedThreadIds)
         rebuild(animated: animated)
