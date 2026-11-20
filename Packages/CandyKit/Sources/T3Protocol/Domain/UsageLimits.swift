@@ -248,11 +248,26 @@ public enum UsageLimitsLogic {
     public static let cursorWindows: [(id: String, label: String, description: String)] = [
         ("totalPercentUsed", "Overall", "All usage on your plan this billing cycle."),
         ("autoPercentUsed", "Cursor Models", "Grok, Composer, and Auto use this allowance."),
-        ("apiPercentUsed", "Other Models", "Claude, GPT, and Gemini use this pool. Grok and Composer fall back here."),
+        ("apiPercentUsed", "Other Models", "Usage allowance for third-party models such as Claude, GPT, and Gemini."),
     ]
 
-    public static func cursorWindowDetails(_ id: String) -> (label: String, description: String)? {
-        cursorWindows.first { $0.id == id }.map { ($0.label, $0.description) }
+    /// `cursorUsageWindowDetails(id, pool)` (4928 usageLimits.ts, #34421): a lone total, or the auto pool
+    /// standing in for an identical total, shows no title or description (`label: nil`).
+    public static func cursorWindowDetails(_ id: String, pool: UsageLimitPool) -> (label: String?, description: String?)? {
+        guard let d = cursorWindows.first(where: { $0.id == id }) else { return nil }
+        let untitled = (pool.windows.count == 1 && id == "totalPercentUsed") || hasDuplicateCursorTotal(pool)
+        return untitled ? (nil, nil) : (d.label, d.description)
+    }
+
+    /// `hasDuplicateCursorTotal`: a pool of the total and the auto window where every account reports the two alike.
+    static func hasDuplicateCursorTotal(_ pool: UsageLimitPool) -> Bool {
+        guard pool.windows.count == 2, let total = pool.windows.first(where: { $0.id == "totalPercentUsed" }),
+              let auto = pool.windows.first(where: { $0.id == "autoPercentUsed" }) else { return false }
+        let totals = total.columns.compactMap { c in c.window.map { (c.account, $0) } }
+        let autos = auto.columns.filter { $0.window != nil }
+        return totals.count == autos.count && totals.allSatisfy { account, w in
+            account.limits.windows.contains { $0.id == auto.id && $0.kind == auto.kind && $0.usedPercent == w.usedPercent && $0.resetsAt == w.resetsAt }
+        }
     }
 
     static let kindOrder = ["session": 0, "weekly": 1, "monthly": 2, "other": 3]
@@ -597,7 +612,8 @@ public enum UsageLimitsLogic {
     /// `displayLimitWindows`: Cursor's two pools instead of the combined figure when both are there.
     public static func displayWindows(_ pool: UsageLimitPool) -> [UsageLimitPoolWindow] {
         guard pool.driver == "cursor" else { return pool.windows }
-        let both = pool.windows.contains { $0.id == "autoPercentUsed" } && pool.windows.contains { $0.id == "apiPercentUsed" }
+        let both = (pool.windows.contains { $0.id == "autoPercentUsed" } && pool.windows.contains { $0.id == "apiPercentUsed" })
+            || hasDuplicateCursorTotal(pool)
         func rank(_ id: String) -> Int { cursorWindows.firstIndex { $0.id == id } ?? cursorWindows.count }
         return pool.windows.filter { !both || $0.id != "totalPercentUsed" }.enumerated()
             .sorted { (rank($0.element.id), $0.offset) < (rank($1.element.id), $1.offset) }.map(\.element)

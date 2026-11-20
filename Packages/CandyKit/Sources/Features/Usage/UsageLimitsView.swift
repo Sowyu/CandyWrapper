@@ -363,12 +363,12 @@ final class UsagePoolSectionView: DSView, SettingsGroupRow {
         addSubview(title)
         let color = UsageStyle.barColor(driver: pool.driver)
         cards = UsageLimitsLogic.displayWindows(pool).map { w in
-            let details = pool.driver == "cursor" ? UsageLimitsLogic.cursorWindowDetails(w.id) : nil
+            let details = pool.driver == "cursor" ? UsageLimitsLogic.cursorWindowDetails(w.id, pool: pool) : nil
             let status = owner.model.resetStatus.flatMap { s -> (UsageLimitAccount, String)? in
                 w.columns.first { $0.account.key == s.accountKey }.map { ($0.account, s.text) }
             }
             let card = UsagePoolCardView(window: w, color: color, nowMs: nowMs, label: details?.label, description: details?.description,
-                                         resetStatus: status)
+                                         hidesLabel: details != nil && details?.label == nil, resetStatus: status)
             card.onUseReset = { [weak owner] a, c in owner?.onUseReset?(a, c) }
             return card
         }
@@ -423,9 +423,13 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     private let resetStatus: TextBlockView?
     var onUseReset: ((UsageLimitAccount, UsageLimitsLogic.ResetChoice?) -> Void)?
 
-    init(window w: UsageLimitPoolWindow, color: NSColor, nowMs: Int64, label: String?, description: String?,
+    /// No title row (`label === null`, UsageLimitsPooled.tsx:609-611 at 4928): the percent leads the card.
+    private let hidesLabel: Bool
+
+    init(window w: UsageLimitPoolWindow, color: NSColor, nowMs: Int64, label: String?, description: String?, hidesLabel: Bool = false,
          resetStatus status: (account: UsageLimitAccount, text: String)? = nil) {
         pool = w
+        self.hidesLabel = hidesLabel
         resetStatus = status.map { s in
             let name = s.account.displayName ?? UsageProviderLabels.driverLabel(s.account.driver)
             let t = TextBlockView()
@@ -449,6 +453,8 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         s.border = Themed.color(\.border, 0.6)
         boxStyle = s
         for v in [title, big, left] as [NSView] { addSubview(v) }
+        title.isHidden = hidesLabel
+        title.setAccessibilityElement(!hidesLabel)
         pace.map(addSubview)
         refill.map(addSubview)
         note.map(addSubview)
@@ -474,7 +480,9 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     private func barWidth(_ width: CGFloat) -> CGFloat { twoColumns(width) ? width - 32 - 176 - 24 : width - 32 }
     /// `@2xl/pool`: labeled segments from a 672pt bar.
     private func wide(_ width: CGFloat) -> Bool { barWidth(width) >= 672 }
-    private var leftHeight: CGFloat { 20 + 4 + 36 + (refill == nil ? 0 : 4 + 16) }
+    /// The title row and its `gap-1`, none without a title.
+    private var titleRow: CGFloat { hidesLabel ? 0 : 24 }
+    private var leftHeight: CGFloat { titleRow + 36 + (refill == nil ? 0 : 4 + 16) }
 
     private func barHeight(_ width: CGFloat) -> CGFloat {
         (wide(width) ? 32 : 20 + CGFloat(legend.count) * (28 + 4)) + statusHeight(width)
@@ -500,10 +508,11 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         let leftY: CGFloat = 16 + (two ? (rowH - leftHeight) / 2 : 0)
         title.frame = NSRect(x: 16, y: leftY, width: min(176, ceil(title.textWidth) + 1), height: 20)
         let bw = ceil(big.textWidth) + 1
-        big.frame = NSRect(x: 16, y: leftY + 24, width: bw, height: 36)
-        left.frame = NSRect(x: 16 + bw + 8, y: leftY + 24 + 12, width: ceil(left.textWidth) + 1, height: 20)
-        pace?.frame = NSRect(x: left.frame.maxX + 8, y: leftY + 24 + 15, width: 14, height: 14)
-        refill?.frame = NSRect(x: 16, y: leftY + 64, width: ceil(refill!.textWidth) + 1, height: 16)
+        let top = leftY + titleRow
+        big.frame = NSRect(x: 16, y: top, width: bw, height: 36)
+        left.frame = NSRect(x: 16 + bw + 8, y: top + 12, width: ceil(left.textWidth) + 1, height: 20)
+        pace?.frame = NSRect(x: left.frame.maxX + 8, y: top + 15, width: 14, height: 14)
+        refill?.frame = NSRect(x: 16, y: top + 40, width: ceil(refill!.textWidth) + 1, height: 16)
         let bx: CGFloat = two ? 16 + 176 + 24 : 16
         let by: CGFloat = two ? 16 + (rowH - bh) / 2 : 16 + leftHeight + 12
         let bwidth = barWidth(width)
