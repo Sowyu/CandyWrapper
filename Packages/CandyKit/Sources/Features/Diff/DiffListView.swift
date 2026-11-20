@@ -163,7 +163,9 @@ public final class DiffListView: DSView {
 
     private func updateFileHover(_ point: NSPoint?) {
         var file: Int?
-        if let point, visibleRect.contains(point), !rowLayout.rows.isEmpty {
+        // The list fills the viewport and `rowIndex` clamps, so the space under the last file is no file
+        // (index.css:1312-1316 shows Copy path only over the file).
+        if let point, visibleRect.contains(point), point.y >= 0, point.y < rowLayout.height, !rowLayout.rows.isEmpty {
             let index = rowLayout.rowIndex(at: point.y)
             if rowLayout.rows.indices.contains(index) { file = Int(rowLayout.rows[index].file) }
         }

@@ -18,7 +18,10 @@ public final class DiffPanelView: DSView {
         didSet {
             guard threadId != oldValue else { return }
             closeToolCall()
+            // A cancelled load returns without clearing `loadTask`, and `setSummaries` waits for it to be nil,
+            // so the next thread's git diff never loaded until Refresh.
             loadTask?.cancel()
+            loadTask = nil
             summaries = []
             selectedRunId = nil
             requestedRunId = nil

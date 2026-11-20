@@ -504,6 +504,8 @@ public final class ComposerPickers {
         .auto: ModeInfo(label: "Auto", description: "Supported providers approve routine actions; others still ask.", icon: .sparkles),
         .fullAccess: ModeInfo(label: "Full access", description: "Allow commands and edits without prompts.", icon: .lockOpen),
     ]
+    /// Full access with `UnrestrictedAccess` on, for the new-thread strip and other labels outside the picker.
+    public static let unrestrictedMode = ModeInfo(label: UnrestrictedAccess.label, description: UnrestrictedAccess.description, icon: .triangleAlert)
 
     /// `composer.mode`: opens the access select, or the overflow menu while access sits there.
     public func openAccessMode() {
