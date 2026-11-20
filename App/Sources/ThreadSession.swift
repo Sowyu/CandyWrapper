@@ -18,6 +18,9 @@ final class ThreadSession {
     private weak var panel: ThreadPanelView?
     private weak var sidebar: SidebarContentView?
     private var shell: ShellSession?
+    /// `getThreadLinkMetadata` answers by `<environment>/<thread>`; nil inside means the server doesn't know the thread.
+    fileprivate var linkMetadata: [String: ThreadLinkMetadata?] = [:]
+    fileprivate var linkMetadataLoading: Set<String> = []
     private var subscription: Task<Void, Never>?
     private var historyLoad: Task<Void, Never>?
     private var citation: (messageId: String, pages: Int)?
@@ -620,9 +623,11 @@ final class ThreadController {
             return .init(label: label, machine: environments.machine(id) ?? "server")
         }
         panel.model.linkedThread = { [weak self, weak sidebar] local in
-            guard let env = self?.openThreadId?.environmentId, let snapshot = sidebar?.snapshot else { return nil }
-            guard let link = ThreadLink(href: local.rawValue) ?? ThreadLink(href: "t3-thread://v1/\(local.rawValue)"),
-                  let shell = ThreadLinkResolution.resolve(link, messageEnvironmentId: env, threads: snapshot.threads + snapshot.archivedThreads) else { return nil }
+            guard let self, let env = self.openThreadId?.environmentId, let snapshot = sidebar?.snapshot else { return nil }
+            guard let link = ThreadLink(href: local.rawValue) ?? ThreadLink(href: "t3-thread://v1/\(local.rawValue)") else { return nil }
+            guard let shell = ThreadLinkResolution.resolve(link, messageEnvironmentId: env, threads: snapshot.threads + snapshot.archivedThreads) else {
+                return self.linkMetadataThread(link, env: env, projects: snapshot.projects)
+            }
             let project = snapshot.projects.first { $0.id == shell.projectId }
             let destination = "t3-thread://v2/\(shell.id.environmentId ?? env)/\(shell.id.localId.rawValue)"
             return MarkdownContextChips.LinkedThread(title: shell.title, project: project.map(ProjectIconSource.init), destination: destination)
@@ -1735,5 +1740,36 @@ extension ThreadController {
                     return choice.machine?.label
                 })
         }
+    }
+}
+
+extension ThreadSession {
+    /// `MarkdownThreadLink` (4928 chat/MarkdownThreadLink.tsx:20-71): a link to a thread this client hasn't loaded
+    /// asks its server for the title and project with `orchestration.getThreadLinkMetadata`, once per thread, where
+    /// the server sets `threadLinkMetadata`. Until the answer lands the chip shows the link's own text.
+    func linkMetadataThread(_ link: ThreadLink, env: String, projects: [ProjectShell]) -> MarkdownContextChips.LinkedThread? {
+        let owner = link.environmentId ?? env
+        let ids = [link.threadId, link.percentDecoded?.threadId].compactMap { $0 }
+        for id in ids {
+            guard let found = linkMetadata[owner + "/" + id], let meta = found else { continue }
+            let project = meta.projectId.flatMap { local in projects.first { $0.id.rawValue == EnvironmentScope.key(owner, local.rawValue) } }
+            return MarkdownContextChips.LinkedThread(title: meta.title, project: project.map(ProjectIconSource.init),
+                                                     destination: "t3-thread://v2/\(owner)/\(id)")
+        }
+        let key = owner + "/" + ids[0]
+        guard linkMetadata[key] == nil, !linkMetadataLoading.contains(key),
+              composer.config(owner)?.capabilities.contains(ThreadLinkMetadata.configFlag) == true else { return nil }
+        linkMetadataLoading.insert(key)
+        Task { [weak self] in
+            let answer = try? await self?.environments.request(owner, ThreadLinkMetadata.method,
+                                                               ThreadLinkMetadata.input(threadIds: ids.map { ThreadId($0) }))
+            guard let self else { return }
+            linkMetadataLoading.remove(key)
+            let found = ThreadLinkMetadata.decode(answer)
+            // A failed lookup is remembered as missing too, so relayouts don't ask again.
+            for id in ids { linkMetadata[owner + "/" + id] = .some(found[ThreadId(id)]) }
+            if !found.isEmpty { panel.model.linkedThreadsChanged() }
+        }
+        return nil
     }
 }

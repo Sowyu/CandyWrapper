@@ -13,6 +13,8 @@ struct ThreadCompletionTests {
     @Test func progressiveCapabilityIsTopLevel() throws {
         let config = try json(#"{"providers":[],"threadFind":true,"threadFindProgressive":true}"#).decode(as: ServerProviderConfig.self)
         #expect(config.capabilities.contains("threadFind"))
+        let links = try json(#"{"providers":[],"threadLinkMetadata":true}"#).decode(as: ServerProviderConfig.self)
+        #expect(links.capabilities.contains(ThreadLinkMetadata.configFlag) && !config.capabilities.contains(ThreadLinkMetadata.configFlag))
         #expect(config.capabilities.contains("threadFindProgressive"))
         let older = try json(#"{"providers":[]}"#).decode(as: ServerProviderConfig.self)
         #expect(!older.capabilities.contains("threadFind"))

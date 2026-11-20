@@ -472,6 +472,9 @@ public final class ThreadViewModel {
     }
 
     /// The UI state changed but the rows did not.
+    /// The answer to `linkedThread` changed, such as a thread link's metadata arriving: rows draw their chips again.
+    public func linkedThreadsChanged() { refreshItems() }
+
     private func refreshItems() {
         // The shown rows are the last thread's until the new ones derive; those pick up this state then (audit TH-2).
         guard !threadRowsPending else { return }

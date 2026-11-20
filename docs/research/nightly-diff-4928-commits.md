@@ -312,7 +312,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 23e3465ec6 | #32830 | thread | fix(clients): unloaded thread links show their title and project icon | port |
+| 23e3465ec6 | #32830 | thread | fix(clients): unloaded thread links show their title and project icon | ported: a thread chip this client hasn't loaded asks `orchestration.getThreadLinkMetadata` once where the server sets `threadLinkMetadata`, then shows the title and project icon (thread-2, App ThreadSession `linkMetadataThread`) |
 | f558007b20 | #30709 | thread | fix(clients): parse angle-bracketed thread link destinations | port |
 
 ## Port group labs-cleanup (1)
