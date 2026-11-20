@@ -134,9 +134,10 @@ public struct TimelineEntry: Sendable, Hashable, Identifiable {
 
 /// The workflow script a coordinator's thread opens with (client-runtime state/subagentRuntime.ts:294-376).
 public enum WorkflowOpening {
-    /// `WORKFLOW_SCRIPT_START` (:295): the `meta` export, after any leading comments.
+    /// `WORKFLOW_SCRIPT_START` (subagentRuntime.ts:295-297 at 4928, #38368): the `meta` export, after any leading
+    /// comments. Each comment matches one way, so a prompt of `////` divider lines cannot backtrack.
     nonisolated(unsafe) private static let scriptStart = try! NSRegularExpression(
-        pattern: #"^\s*(?:(?://[^\n]*|/\*[\s\S]*?\*/)\s*)*export\s+const\s+meta\b"#)
+        pattern: #"^\s*(?:(?://[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|/\*(?:[^*]|\*(?!/))*\*/)\s*)*export\s+const\s+meta\b"#)
 
     /// `isWorkflowScriptMessage` (:301-311): servers mark the script; older threads fall back to the text.
     public static func isScript(role: String, text: String, workflowScript: Bool?) -> Bool {

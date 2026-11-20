@@ -75,6 +75,21 @@ struct SubagentCardPresentation {
         detail = plain?.isEmpty == false ? plain : nil
     }
 
+    /// `subagentPreviewText` (subagentDisplay.ts at 4928, #21277): whitespace runs become one space, cut at 280 with
+    /// an ellipsis. It reads only as far as the cut, so a long result costs no more than a short one.
+    static func hoverPreview(_ text: String) -> String {
+        var compact = ""
+        var gap = false
+        for character in text {
+            if character.isWhitespace { gap = true; continue }
+            if gap, !compact.isEmpty { compact.append(" ") }
+            gap = false
+            compact.append(character)
+            if compact.count > 280 { return String(compact.prefix(280)).trimmingCharacters(in: .whitespaces) + "…" }
+        }
+        return compact
+    }
+
     private init(title raw: String?, fallbackStatus: String, driver: String?, child: String?, event: Event?, _ string: (String) -> String?) {
         title = ThreadRelationships.subagentDisplayTitle(raw ?? "Subagent")
         liveStatus = string("status") ?? fallbackStatus
@@ -92,8 +107,7 @@ struct SubagentCardPresentation {
         }
         let settled = ["completed", "failed", "cancelled", "interrupted"].contains(status ?? liveStatus)
         let raw = settled ? trimmed("result") ?? trimmed("progress") : trimmed("progress") ?? trimmed("result")
-        let compact = raw?.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        hoverDetail = compact.map { $0.count > 280 ? String($0.prefix(280)).trimmingCharacters(in: .whitespaces) + "…" : $0 }
+        hoverDetail = raw.map(Self.hoverPreview)
         detail = raw.flatMap { value in
             guard value.range(of: #"^Child task ended with status\b"#, options: [.regularExpression, .caseInsensitive]) == nil else { return nil }
             let plain = value.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]*\)"#, with: "$1", options: .regularExpression)

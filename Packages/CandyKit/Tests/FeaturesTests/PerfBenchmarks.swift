@@ -197,10 +197,66 @@ func syntheticThreadFrame(copies: Int, window: Int, reply: String? = nil) throws
     return (frame, threadId)
 }
 
+/// The bounded window of `syntheticThreadFrame(copies: 300, window: 3)` with one settled run that did `work` commands
+/// in a row, as a 4928 server sends it: every row (`deferred` false), or with `deferWork=1`, where a group over 150 rows
+/// is its first row with a `deferredWork` cursor (`deferWorkHistoryRows`, threadHistoryPaging.ts:224-262 at 4928).
+func longWorkFrame(work: Int, deferred: Bool) throws -> (frame: Data, threadId: String) {
+    let (base, threadId) = try syntheticThreadFrame(copies: 300, window: 3)
+    guard case .chunk(_, let values)? = try RPCFrame.decodeServer(base).first, case .object(var snapshot) = values[0],
+          case .object(var projection)? = snapshot["projection"], case .array(var rows)? = projection["visibleTurnItems"],
+          let at = rows.firstIndex(where: { $0["item"]?["type"]?.stringValue == "command_execution" }),
+          case .object(let template) = rows[at], case .object(let item)? = template["item"]
+    else { throw CancellationError() }
+    let ordinal = item["ordinal"]?.doubleValue ?? 0
+    // Later rows move up to make room for the group's ordinals.
+    for i in rows.indices where i > at {
+        guard case .object(var row) = rows[i], case .object(var later)? = row["item"] else { continue }
+        later["ordinal"] = .number((later["ordinal"]?.doubleValue ?? 0) + Double(work))
+        row["item"] = .object(later)
+        rows[i] = .object(row)
+    }
+    var group: [JSONValue] = []
+    for k in 1...work {
+        var clone = item
+        clone["id"] = .string("\(item["id"]?.stringValue ?? "w")-lw\(k)")
+        clone["ordinal"] = .number(ordinal + Double(k))
+        clone["input"] = .string("rg --files Sources/Module\(k) | head -50")
+        clone["output"] = .string((0..<12).map { "Sources/Module\(k)/File\($0).swift" }.joined(separator: "\n"))
+        var row = template
+        row["item"] = .object(clone)
+        row["sourceItemId"] = clone["id"]
+        group.append(.object(row))
+    }
+    if deferred {
+        var anchorItem = item
+        anchorItem["deferredWork"] = .object([
+            "cursor": .string("deferred-cursor"), "itemCount": .number(Double(work + 1)), "lastOrdinal": .number(ordinal + Double(work)),
+        ])
+        var anchor = template
+        anchor["item"] = .object(anchorItem)
+        rows[at] = .object(anchor)
+    } else {
+        rows.insert(contentsOf: group, at: at + 1)
+    }
+    rows = rows.enumerated().map { i, row in
+        guard case .object(var o) = row else { return row }
+        o["position"] = .number(Double(i))
+        return .object(o)
+    }
+    projection["visibleTurnItems"] = .array(rows)
+    snapshot["projection"] = .object(projection)
+    return (try RPCFrame.encode(RPCServerMessage.chunk(requestId: .string("1"), values: [.object(snapshot)])), threadId)
+}
+
 /// Every stage of opening a thread from the frame to the laid-out panel, each timed on its own.
 @MainActor
 private func measureThreadOpen(_ name: String, copies: Int, window: Int, reply: String? = nil) throws {
     let (frame, threadId) = try syntheticThreadFrame(copies: copies, window: window, reply: reply)
+    try measureFrameOpen(name, frame: frame, threadId: threadId)
+}
+
+@MainActor
+private func measureFrameOpen(_ name: String, frame: Data, threadId: String) throws {
     var value: JSONValue = .null
     try measure("\(name)_parse", runs: 5, extra: ["bytes": frame.count]) {
         guard case .chunk(_, let values)? = try RPCFrame.decodeServer(frame).first else { return }
@@ -403,6 +459,45 @@ struct PerfBenchmarks {
         try measureThreadOpen("huge_full", copies: 300, window: 300)
         // The bounded window again, every reply 6 KB of markdown with code and tables.
         try measureThreadOpen("huge_open_long", copies: 300, window: 3, reply: longReply(sections: 12))
+    }
+
+    /// The huge thread's window with one settled run of 600 commands, opened as a server sends it without and
+    /// with deferred work (#26240).
+    @Test func longWorkOpen() throws {
+        for deferred in [false, true] {
+            let (frame, threadId) = try longWorkFrame(work: 600, deferred: deferred)
+            try measureFrameOpen(deferred ? "long_work_deferred" : "long_work_full", frame: frame, threadId: threadId)
+        }
+    }
+
+    /// The first line of a streaming thought, which the live row draws on every update (`liveThoughtLine`).
+    @Test func thoughtLine() {
+        var text = "**Planning the change**\n\n"
+        while text.utf8.count < 64_000 { text += "I need to check `Sources/App/Main.swift` and [the docs](https://example.com) before I *edit* it. " }
+        let plain = String(text.dropFirst(26))
+        var line = ""
+        measure("thought_line_heading_64k", inner: 3, extra: ["bytes": text.utf8.count]) { line = liveThoughtLine(text) }
+        measure("thought_line_64k", inner: 3, extra: ["bytes": plain.utf8.count]) { line = liveThoughtLine(plain) }
+        #expect(!line.isEmpty)
+    }
+
+    /// A message that links 800 files of the same name, each told apart by its package folder (#34340).
+    @Test func fileLinkLabels() {
+        let paths = (0..<800).map { "/repo/packages/p\($0)/src/index.ts" }
+        var suffixes: [String: String] = [:]
+        measure("file_link_labels_800", runs: 5, extra: ["paths": paths.count]) { suffixes = FileLinks.parentSuffixes(paths) }
+        #expect(suffixes[paths[3]] == "p3/src")
+    }
+
+    /// A subagent prompt that opens with comment divider lines but is no workflow script (#38368).
+    @Test func workflowScriptCheck() {
+        // The old pattern doubles its time about every 2 more slashes: 24 took 59 ms, 28 took 773 ms.
+        let prompt = String(repeating: "/", count: 24) + "\nSummarize the release notes."
+        var script = true
+        measure("workflow_script_dividers", runs: 5, extra: ["bytes": prompt.utf8.count]) {
+            script = WorkflowOpening.isScript(role: "user", text: prompt, workflowScript: nil)
+        }
+        #expect(!script)
     }
 
     /// The huge thread's bounded window through the disk cache: `write` encodes, compresses and

@@ -102,9 +102,14 @@ public func shouldCollapseUserMessage(_ text: String) -> Bool {
 
 /// `liveThoughtLine` (work-log/presentation.ts:763-776): the first sentence of a reasoning
 /// text, or its leading bold heading.
+///
+/// The live row draws it on every update of a streaming thought, and five regex passes over a 64 KB thought took
+/// milliseconds each time (T3 fixed the same growth in its thought preview, #30038). The line shows one truncated
+/// line, so only the first 4,096 characters, cut at a space, are read.
+// ponytail: a first sentence longer than 4,096 characters ends at the cut; read more if a tooltip ever shows the whole line
 public func liveThoughtLine(_ markdown: String) -> String {
     let heading = markdown.prefixMatch(of: /\s*\*\*([^*\r\n]+)\*\*[ \t]*\r?(?:\n|$)/).map { String($0.1) }
-    var text = heading ?? markdown
+    var text = heading ?? thoughtPrefix(markdown)
     text = text.replacing(/!?\[([^\]]*)\]\([^)]*\)/) { String($0.1) }
     text = text.replacing(/(?m)^[ \t]*(?:#{1,6}|[-*+]|\d+\.)[ \t]+/, with: "")
     text = text.replacing(/`+|\*\*|~~/, with: "")
@@ -113,6 +118,13 @@ public func liveThoughtLine(_ markdown: String) -> String {
     if heading != nil { return text }
     if let end = text.firstMatch(of: /[.?!]["'”’)]?(?=\s)/) { return String(text[..<end.range.upperBound]) }
     return text
+}
+
+/// The first 4,096 characters of `text`, ending at the last whitespace inside them when there is one.
+func thoughtPrefix(_ text: String, limit: Int = 4_096) -> String {
+    guard let end = text.index(text.startIndex, offsetBy: limit, limitedBy: text.endIndex), end < text.endIndex else { return text }
+    let cut = text[..<end].lastIndex(where: \.isWhitespace) ?? end
+    return String(text[..<cut])
 }
 
 // MARK: - Tool activity (packages/shared/src/toolActivity.ts)
