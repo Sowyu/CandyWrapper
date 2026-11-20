@@ -232,6 +232,9 @@ public enum ThreadReduction {
                 // Read state: no updatedAt bump (4928 orchestrationV2Projection.ts:329-333).
                 next.updatedAt = projection.updatedAt
                 if let thread = next.thread.applyingVisit(payload) { next.thread = thread }
+            case .threadPullRequestLinkUpdated:
+                // `thread.pull-request-link-updated` (orchestrationV2Projection.ts:297-301).
+                if let thread = next.thread.applyingPullRequestLink(payload) { next.thread = thread }
             default: break // checkpoint.rollback-requested only bumps updatedAt.
             }
         }

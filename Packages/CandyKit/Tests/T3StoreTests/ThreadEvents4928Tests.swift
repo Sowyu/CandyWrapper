@@ -45,6 +45,16 @@ struct ThreadEvents4928Tests {
         #expect(again.thread.raw["lastVisitedAt"]?.stringValue == "2026-02-02T00:00:00.000Z")
     }
 
+    /// `thread.pull-request-link-updated` replaces the link with the same key (orchestrationV2Projection.ts:297-301).
+    @Test func pullRequestLinkUpdateReplacesItsLink() throws {
+        var p = try Self.projection()
+        p.thread = try JSONValue(parsing: Data(#"{"id":"thread-1","title":"T","pullRequests":[{"host":"github.com","repository":"a/b","number":1,"url":"u1","source":"manual","linkedAt":"2026-01-01T00:00:00.000Z","snapshot":null,"stack":null},{"host":"github.com","repository":"a/b","number":2,"url":"u2","source":"manual","linkedAt":"2026-01-01T00:00:00.000Z","snapshot":null,"stack":null}]}"#.utf8)).decode(as: AppThread.self)
+        let update = try Self.event(Self.item("thread.pull-request-link-updated",
+            #"{"host":"GitHub.com","repository":"A/B","number":2,"url":"u2-new","source":"agent","linkedAt":"2026-02-01T00:00:00.000Z","snapshot":null,"stack":null}"#))
+        let next = try #require(ThreadReduction.apply(p, update))
+        #expect(next.thread.raw["pullRequests"]?.arrayValue?.map { $0["url"]?.stringValue } == ["u1", "u2-new"])
+    }
+
     @Test func tagsAndIssueEventsCarryTheWholeThread() throws {
         let p = try Self.projection()
         let tagged = try Self.event(Self.item("thread.tags-updated",

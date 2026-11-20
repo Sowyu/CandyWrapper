@@ -199,6 +199,8 @@ public struct ThreadEventType: OpenStringEnum {
     public static let threadTagsUpdated: Self = "thread.tags-updated"
     public static let threadIssueSynced: Self = "thread.issue-synced"
     public static let threadVisitRecorded: Self = "thread.visit-recorded"
+    /// One `ThreadPullRequestLink` of the thread changed (4928 orchestrationV2.ts:2026-2030).
+    public static let threadPullRequestLinkUpdated: Self = "thread.pull-request-link-updated"
 
     /// Every `thread.*` event carries the whole `AppThread`.
     static let threadPayloadTypes: Set<String> = [
@@ -220,7 +222,7 @@ public struct ThreadEventType: OpenStringEnum {
         "plan.updated", "checkpoint-scope.created", "checkpoint.captured", "checkpoint.rollback-requested",
         "context-handoff.updated", "context-transfer.created", "context-transfer.updated",
         // 4928: `{lastVisitedAt, opens}` in place of a whole-thread `thread.visited` (orchestrationV2.ts:2980).
-        "thread.visit-recorded",
+        "thread.visit-recorded", "thread.pull-request-link-updated",
     ])
 
     public var isKnown: Bool { Self.known.contains(rawValue) }
