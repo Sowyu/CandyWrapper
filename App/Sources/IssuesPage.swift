@@ -37,6 +37,8 @@ final class IssuesPageController {
     private var loading = false
     private var loadingMore: String?
     private var generation = 0
+    /// Hosts still answering the current generation's `issues.list`; `loading` clears at zero.
+    private var pendingLoads = 0
     private var searchTask: Task<Void, Never>?
     private var liveTimer: Timer?
     private var occlusionObserver: NSObjectProtocol?
@@ -256,27 +258,24 @@ final class IssuesPageController {
         loading = true
         render()
         let payload = input(refresh: refresh).json
-        Task { [weak self] in
-            await withTaskGroup(of: (String, Result<IssueListResult, Error>).self) { group in
-                for env in envs {
-                    group.addTask { @MainActor [weak self] in
-                        guard let self else { return (env, .failure(CancellationError())) }
-                        do { return (env, .success(try await self.environments.request(env, "issues.list", payload).decode(as: IssueListResult.self))) }
-                        catch { return (env, .failure(error)) }
-                    }
+        // One main-actor task per host instead of a task group. Swift 6.3's region-based isolation
+        // checker gives up on a @MainActor addTask that captures self, and the build fails.
+        pendingLoads = envs.count
+        let environments = self.environments
+        for env in envs {
+            Task { [weak self] in
+                let result: Result<IssueListResult, Error>
+                do { result = .success(try await environments.request(env, "issues.list", payload).decode(as: IssueListResult.self)) }
+                catch { result = .failure(error) }
+                guard let self, self.generation == gen else { return }
+                switch result {
+                case .success(let r): self.pages[env] = IssueListLogic.HeldPage(answer: r); self.failures[env] = nil
+                case .failure(let e): self.failures[env] = IssueDetailBinding.message(e)
                 }
-                for await (env, result) in group {
-                    guard let self, self.generation == gen else { continue }
-                    switch result {
-                    case .success(let r): self.pages[env] = IssueListLogic.HeldPage(answer: r); self.failures[env] = nil
-                    case .failure(let e): self.failures[env] = IssueDetailBinding.message(e)
-                    }
-                    self.render()
-                }
+                self.pendingLoads -= 1
+                if self.pendingLoads == 0 { self.loading = false }
+                self.render()
             }
-            guard let self, self.generation == gen else { return }
-            self.loading = false
-            self.render()
         }
     }
 
