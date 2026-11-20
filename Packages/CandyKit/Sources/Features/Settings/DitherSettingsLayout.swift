@@ -100,7 +100,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
             .init(.general, [G("behavior", "Diffs and panels", rows: ["hide-whitespace-changes", "default-diff-file-state", "diff-layout",
                                                                       "proactive-panels"]),
                              G("confirmations", nil, rows: ["unpin-confirmation", "archive-confirmation", "delete-confirmation",
-                                                            "quit-confirmation"])]),
+                                                            "terminal-close-confirmation", "quit-confirmation"])]),
         ]
         case .appearance: return [.init(.appearance)]
         case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications", "menu-bar"])])]
@@ -159,7 +159,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .about: .about
         case .general: .general
         case .appearance: .appearance
-        case .keybindings: .keyboard
+        case .keybindings, .voice: .keyboard
         case .snapShots, .integrations: .tools
         case .providers: .models
         case .scheduledTasks: .scheduledTasks
