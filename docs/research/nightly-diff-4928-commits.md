@@ -239,7 +239,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e1494ae25b | #25761 | thread | perf(pr): actions update every client from the host's reply instead of re-reads | port; needs wire: action replies carry state |
+| e1494ae25b | #25761 | thread | perf(pr): actions update every client from the host's reply instead of re-reads | ported (panels-2): `runAction` asks `replyWithSummary` and the panel shows the reply without a re-read unless it reopened or moved the head; App/Sources/PullRequestsController.swift run(), T3Protocol PullRequestSummary |
 | d5a50a1d0d | #32774 | pr/git | perf(pr): actions, title edits and labels show the moment you click, on every host | port |
 
 ## Port group pr-composer (3)
@@ -1013,7 +1013,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | port |
+| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | ported (panels-2): "Allow edits from maintainers" checkbox in the ⋯ menu, `pullRequests.update` `maintainerCanModify`; the hint is a one-line subtitle plus tooltip |
 | 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | port |
 | a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | port |
 | 1c99a55444 | #23577 | pr/git | fix(web): report invalid preview addresses | port |
@@ -1067,7 +1067,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | e4b98f9d39 | #21631 | pr/git | fix(assets): preserve the PR repository for GitHub media | port |
 | 444921eb71 | #30483 | pr/git | fix(gitlab): merge requests can edit their labels | port |
 | d929e726f2 | #31741 | pr/git | fix(pr): GitCafe attachments render in pull request bodies | port |
-| c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | port |
+| c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | ported (panels-2): the reviewer picker asks the host with `query` past a truncated page where `reviewers.searchCandidates`, with T3's four truncation notes |
 | 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | port |
 | e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | port |
 | cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | port |
@@ -1117,7 +1117,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | c00a373491 | #33903 | pr/git | fix(web): Select All then Copy in a read-only file preview copies the whole file | port |
 | c6995622d5 | #23627 | pr/git | fix(web): branch labels keep the space before a middle-truncated name | port |
 | e179cefe7a | #35677 | pr/git | fix(web): collapsed reasoning previews no longer split an emoji | port |
-| 5e18314b88 | #32738 | pr/git | fix(forgejo): fast-forward-only repositories can merge pull requests | port |
+| 5e18314b88 | #32738 | pr/git | fix(forgejo): fast-forward-only repositories can merge pull requests | ported (panels-2): `fast-forward` merge method, "Fast-forward merge" label, `mergeCapabilities["fast-forward"]` |
 | afff0d3efe | #35897 | pr/git | fix(clients): answer history no longer shows provider context from review comments | port |
 | b80531d6fb | #36056 | pr/git | fix(web): PR Code tab previews images the host sends no patch for | port |
 | 31b5549f98 | #35396 | pr/git | fix(web): pull request comment tooltips follow the Time format setting | port |
@@ -1520,7 +1520,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
 | 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | port |
 | b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | port |
-| f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | port |
+| f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | ported (panels-2): `overviewThreads` decode after the line threads and head "Overview" without a file glyph in the Timeline; Summary cards leave out the location |
 | afa617b465 | #15255 | thread | fix(web): branch picker no longer interrupts a running turn | port |
 | 3ed5fb29bd | #26311 | thread | fix(shared): Claude plugin skills no longer show their name twice | port |
 | e6afd2a24b | #22148 | thread | fix(web): render citation chips in the collapsed composer | port |

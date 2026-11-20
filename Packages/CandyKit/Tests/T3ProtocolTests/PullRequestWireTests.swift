@@ -178,3 +178,85 @@ struct PullRequestWireTests {
         #expect(ThreadPullRequests.current([Self.link(6, state: nil)])?.number == 6)
     }
 }
+
+/// The 4928 pull request fields (wire item 13, pullRequest.ts:57-62, 206-210, 282, 315-323, 347,
+/// 375, 455-459, 635-686, 706-717, 751, 813-822, 840-846, 1036-1040).
+struct PullRequestWire4928Tests {
+    @Test func decodesTheNewFieldsAndStillDecodesA3824Detail() throws {
+        var raw = try PullRequestWireTests.json("detail.json")
+        guard case .object(var o) = raw else { Issue.record("detail.json is not an object"); return }
+        let old = try raw.decode(as: PullRequestDetail.self)
+        #expect(old.mergeCapabilities.fastForward == nil && !old.mergeCapabilities.allows("fast-forward"))
+        #expect(old.maintainerCanModify == nil && old.mergedBy == nil && old.rebaseRequired == nil)
+        o["mergeCapabilities"] = .object(["merge": .bool(true), "squash": .bool(false), "rebase": .bool(false), "fast-forward": .bool(true)])
+        o["rebaseRequired"] = .bool(true)
+        o["maintainerCanModify"] = .bool(false)
+        o["mergedBy"] = .object(["login": .string("hubot")])
+        o["mergeQueueRemoval"] = .object(["id": .string("q1"), "removedAt": .string("2026-11-01T00:00:00.000Z"), "reason": .null])
+        o["reviewThreads"] = .array([])
+        o["overviewThreads"] = .array([.object(["id": .string("ov1"), "path": .null, "line": .null, "side": .string("right"),
+                                                "isResolved": .bool(false), "isOutdated": .bool(false), "comments": .array([])])])
+        raw = .object(o)
+        let d = try raw.decode(as: PullRequestDetail.self)
+        #expect(d.mergeCapabilities.allows("fast-forward") && !d.mergeCapabilities.allows("squash"))
+        #expect(d.rebaseRequired == true && d.maintainerCanModify == false && d.mergedBy?.login == "hubot")
+        #expect(d.mergeQueueRemoval?.id == "q1" && d.mergeQueueRemoval?.reason == nil)
+        #expect(d.reviewThreads.count == 1 && d.reviewThreads[0].isOverview && d.reviewThreads[0].line == nil)
+    }
+
+    @Test func activityAppendsOverviewThreadsAfterLineThreads() throws {
+        let line = #"{"id":"t1","path":"a.swift","line":3,"side":"right","isResolved":false,"isOutdated":false,"comments":[]}"#
+        let over = #"{"id":"t2","path":null,"line":null,"side":"right","isResolved":true,"isOutdated":false,"comments":[]}"#
+        let a = try PullRequestWireTests.value(#"{"comments":[],"commentCount":0,"commentsTruncated":false,"reviewThreads":[\#(line)],"overviewThreads":[\#(over)],"commits":[]}"#)
+            .decode(as: PullRequestActivity.self)
+        #expect(a.conversationThreads.map(\.id) == ["t1", "t2"])
+        #expect(!a.conversationThreads[0].isOverview && a.conversationThreads[1].isOverview)
+        let old = try PullRequestWireTests.value(#"{"comments":[],"commentCount":0,"commentsTruncated":false,"reviewThreads":[\#(line)],"commits":[]}"#)
+            .decode(as: PullRequestActivity.self)
+        #expect(old.conversationThreads.map(\.id) == ["t1"])
+    }
+
+    @Test func buildsThe4928Payloads() {
+        let ref = PullRequestRef(projectId: "p", repository: "o/r", number: 7)
+        let plain = PullRequestPayloads.action(ref, action: "merge", mergeMethod: "fast-forward")
+        #expect(plain.objectValue?["replyWithSummary"] == nil && plain.objectValue?["expectedHeadSha"] == nil)
+        let full = PullRequestPayloads.action(ref, action: "merge", expectedHeadSha: "abc", replyWithSummary: true)
+        #expect(full.objectValue?["replyWithSummary"] == .bool(true) && full.objectValue?["expectedHeadSha"] == .string("abc"))
+        #expect(PullRequestPayloads.reviewerCandidates(ref).objectValue?["query"] == nil)
+        #expect(PullRequestPayloads.reviewerCandidates(ref, query: "  ann ").objectValue?["query"] == .string("ann"))
+        #expect(PullRequestPayloads.update(ref, maintainerCanModify: true)?.objectValue?["maintainerCanModify"] == .bool(true))
+        #expect(PullRequestPayloads.diff(ref, path: "big.json").objectValue?["path"] == .string("big.json"))
+        let viewed = PullRequestPayloads.setFilesViewed(ref, files: [("a", true, "r1"), ("b", false, nil)])
+        guard case .array(let files)? = viewed.objectValue?["files"] else { Issue.record("no files"); return }
+        #expect(files[0].objectValue?["revision"] == .string("r1") && files[1].objectValue?["revision"] == nil)
+    }
+
+    @Test func repositoryWithoutProjectMessage() {
+        #expect(PullRequestErrors.message(tag: "PullRequestUnavailableError", fields: ["reason": .string("repository-without-project"), "repository": .string("o/r")])
+            == "o/r is not a project. Add it as a project to read its change requests.")
+        #expect(PullRequestErrors.message(tag: "PullRequestUnavailableError", fields: ["reason": .string("repository-without-project"), "host": .string("git.example")])
+            == "No project is on git.example. Add any git.example project to read its change requests.")
+    }
+}
+
+struct PullRequestActionReplyTests {
+    static func summary(_ extra: String) throws -> PullRequestSummary {
+        try PullRequestWireTests.value(#"{"provider":"github","projectId":"p","repository":"o/r","number":7,"title":"T","url":"u","headBranch":"h","baseBranch":"main",\#(extra)}"#)
+            .decode(as: PullRequestSummary.self)
+    }
+
+    @Test func aReplyPatchesTheDetailUnlessItIsOlder() throws {
+        var d = try PullRequestWireTests.json("detail.json").decode(as: PullRequestDetail.self)
+        d.state = "open"; d.updatedAt = "2026-11-01T00:00:00.000Z"; d.autoMergeMethod = "squash"; d.autoMergeEnabled = true
+        let older = try Self.summary(#""state":"closed","updatedAt":"2026-10-01T00:00:00.000Z""#)
+        #expect(d.isStale(older))
+        var kept = d; kept.apply(older)
+        #expect(kept.state == "open")
+        let newer = try Self.summary(#""state":"merged","updatedAt":"2026-11-02T00:00:00.000Z","autoMergeEnabled":false,"mergedAt":"2026-11-02T00:00:00.000Z""#)
+        var merged = d; merged.apply(newer)
+        #expect(merged.state == "merged" && merged.autoMergeEnabled == false && merged.autoMergeMethod == nil && merged.mergedAt != nil)
+        #expect(!d.needsReread(after: newer))
+        d.state = "closed"
+        #expect(d.needsReread(after: try Self.summary(#""state":"open","updatedAt":"2026-11-02T00:00:00.000Z""#)))
+    }
+}

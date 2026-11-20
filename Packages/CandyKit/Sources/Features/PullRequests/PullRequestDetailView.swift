@@ -61,6 +61,11 @@ public final class PullRequestDetailView: DSView {
     /// `perform(action, mergeMethod)` after its confirmation where T3 asks for one.
     public var onAction: ((_ action: String, _ mergeMethod: String?) -> Void)?
     public var onLinkThread: (() -> Void)?
+    /// `updatePullRequest` with `maintainerCanModify` (4928 PullRequestActionsMenu.tsx:187-208).
+    public var onMaintainerEdits: ((Bool) -> Void)?
+    /// The saved choice shows until a later read, and the row reads "Saving…" while it goes out.
+    public var maintainerEditsChoice: Bool?
+    public var maintainerEditsSaving = false
     /// The ⋯ menu's thread link item, nil where there is no thread to link to.
     public var linkItemTitle: String?
     public var onCheckout: ((_ worktree: Bool) -> Void)?
@@ -677,6 +682,18 @@ public final class PullRequestDetailView: DSView {
         refresh.action = { [weak self] in self?.onRefresh?() }
         items.append(refresh)
         items.append(.separator)
+        // "Allow edits from maintainers" (4928 PullRequestActionsMenu.tsx:323-351, pullRequestEditing.ts:28-40).
+        if PullRequestDetailLogic.canEditMaintainerEdits(d) {
+            var item = MenuItem.checkbox("Allow edits from maintainers", checked: (maintainerEditsChoice ?? d.maintainerCanModify) == true) { [weak self] value in
+                self?.onMaintainerEdits?(value)
+            }
+            // ponytail: one-line subtitle with the full hint as tooltip, T3 wraps it at max-w-xs; add wrapping subtitles if a reference shows it
+            let hint = "Maintainers can push to this branch. If your fork has workflows, this can also give access to its secrets."
+            item.subtitle = maintainerEditsSaving ? "Saving…" : hint
+            item.tooltip = hint
+            item.isDisabled = maintainerEditsSaving || onMaintainerEdits == nil
+            items += [item, .separator]
+        }
         let can = { (a: String) in PullRequestDetailLogic.can(d, a) }
         let allowed = PullRequestDetailLogic.allowedMergeMethods(d)
         let primaryControl = PullRequestDetailLogic.primaryControl(d)

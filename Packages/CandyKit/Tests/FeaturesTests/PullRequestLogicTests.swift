@@ -445,3 +445,28 @@ struct LinkPullRequestDialogTests {
         #expect(d.link.intrinsicContentSize.width <= d.link.frame.width)
     }
 }
+
+/// 4928 reviewer search, maintainer edits and the fast-forward label (client-runtime
+/// pullRequestReviewers.ts:7-97, pullRequestEditing.ts:28-40, pullRequestDetail.logic.ts:58-63).
+struct PullRequest4928LogicTests {
+    static func person(_ login: String, _ id: String) -> PullRequestReviewerCandidate {
+        PullRequestReviewerCandidate(login: login, name: nil, avatarUrl: nil, isBot: nil, id: id, kind: "user", isRequested: false)
+    }
+
+    @Test func reviewerSearchAsksTheHostOnlyPastATruncatedSearchablePage() {
+        #expect(PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: true, searchable: true, debouncedQuery: " ann ") == "ann")
+        #expect(PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: false, searchable: true, debouncedQuery: "ann") == nil)
+        #expect(PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: true, searchable: false, debouncedQuery: "ann") == nil)
+        let loaded = [Self.person("ann", "1"), Self.person("bob", "2")]
+        let merged = PullRequestWriteLogic.mergeReviewers(loaded, searched: [Self.person("bob", "2"), Self.person("annie@x", "3")], query: "ann")
+        #expect(merged.map(\.id) == ["1", "2", "3"])
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: true, searchable: true, query: "", searched: false, searchError: nil, searchTruncated: false)?.hasSuffix("Search to find them.") == true)
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: true, searchable: true, query: "a", searched: true, searchError: "boom", searchTruncated: false)?.hasSuffix("failed. boom") == true)
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: true, searchable: true, query: "a", searched: true, searchError: nil, searchTruncated: false) == nil)
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: false, searchable: false, query: "", searched: false, searchError: nil, searchTruncated: false) == nil)
+    }
+
+    @Test func fastForwardLabelAndMaintainerEdits() {
+        #expect(PullRequestDetailLogic.mergeMethodLabel("fast-forward") == "Fast-forward merge")
+    }
+}

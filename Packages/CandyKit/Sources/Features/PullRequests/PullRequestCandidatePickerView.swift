@@ -33,6 +33,8 @@ public final class PullRequestCandidatePickerView: DSView, PickerPopupBody {
     public var state: State = .loading { didSet { reload() } }
     public var rows: [Row] = [] { didSet { reload() } }
     public var truncated = false { didSet { reload() } }
+    /// Replaces the truncated note's words, nil keeps the kind's own (the reviewer search's notes).
+    public var truncatedText: String? { didSet { reload() } }
     /// Every row locks while one change is in flight.
     public var disabled = false { didSet { rowViews.forEach { $0.isEnabled = !disabled } } }
     public var onQuery: ((String) -> Void)?
@@ -116,7 +118,7 @@ public final class PullRequestCandidatePickerView: DSView, PickerPopupBody {
         case .loaded: note.text = rows.isEmpty ? (query.isEmpty ? words.empty : words.noMatch) : ""
         }
         note.isHidden = note.text.isEmpty
-        truncatedNote.text = words.truncated
+        truncatedNote.text = truncatedText ?? words.truncated
         truncatedNote.isHidden = !truncated
         // `autoHighlight`.
         highlighted = rowViews.isEmpty ? nil : 0

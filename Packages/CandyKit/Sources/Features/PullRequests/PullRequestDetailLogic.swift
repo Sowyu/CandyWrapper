@@ -9,8 +9,14 @@ public enum PullRequestDetailLogic {
         switch method {
         case "squash": "Squash and merge"
         case "rebase": "Rebase and merge"
+        case "fast-forward": "Fast-forward merge"
         default: "Merge"
         }
+    }
+
+    /// `canEditPullRequestMaintainerEdits` (4928 client-runtime pullRequestEditing.ts:28-40).
+    public static func canEditMaintainerEdits(_ d: PullRequestDetail) -> Bool {
+        d.state == "open" && d.capabilities.edit?.maintainerEdits == true && d.viewerPermissions.maintainerEdits == true && d.maintainerCanModify != nil
     }
 
     /// `ACTION_SUCCESS_LABELS` (PullRequestDetailPanel.tsx:203-218).
@@ -374,7 +380,7 @@ public enum PullRequestDetailLogic {
     public static func collapsed(_ c: PullRequestComment, thread: PullRequestReviewThread?) -> Collapsed? {
         let resolved = thread?.isResolved == true
         guard resolved || reviewOutcome(c.reviewState) == "dismissed" else { return nil }
-        let location = (thread?.path ?? c.path).map { path in path + (thread?.line.map { ":\($0)" } ?? "") }
+        let location = (thread.map { $0.isOverview ? nil : $0.path } ?? c.path).map { path in path + (thread?.line.map { ":\($0)" } ?? "") }
         return Collapsed(label: resolved ? "Resolved" : "Review dismissed", location: location, outdated: thread?.isOutdated == true)
     }
 

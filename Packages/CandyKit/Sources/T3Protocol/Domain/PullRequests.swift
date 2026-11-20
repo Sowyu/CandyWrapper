@@ -95,6 +95,32 @@ public struct PullRequestReviewThread: Codable, Hashable, Sendable {
     public var nextCommentsCursor: String?
     /// The host's per-thread answer, which only narrows the viewer's `resolve` (2994, pullRequest.ts:277).
     public var canResolve: Bool?
+
+    /// A thread on the change request as a whole (`PullRequestOverviewThread`, 4928 pullRequest.ts:206-210),
+    /// such as a GitLab overview thread. The wire sends `path: null`, which decodes as "".
+    public var isOverview: Bool { path.isEmpty }
+
+    public init(id: String, path: String, line: Int?, side: String, isResolved: Bool, isOutdated: Bool,
+                comments: [PullRequestThreadComment], commentCount: Int? = nil, nextCommentsCursor: String? = nil, canResolve: Bool? = nil) {
+        self.id = id; self.path = path; self.line = line; self.side = side; self.isResolved = isResolved; self.isOutdated = isOutdated
+        self.comments = comments; self.commentCount = commentCount; self.nextCommentsCursor = nextCommentsCursor; self.canResolve = canResolve
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, path, line, side, isResolved, isOutdated, comments, commentCount, nextCommentsCursor, canResolve }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
+        line = try c.decodeIfPresent(Int.self, forKey: .line)
+        side = try c.decodeIfPresent(String.self, forKey: .side) ?? "right"
+        isResolved = try c.decode(Bool.self, forKey: .isResolved)
+        isOutdated = try c.decode(Bool.self, forKey: .isOutdated)
+        comments = try c.decode([PullRequestThreadComment].self, forKey: .comments)
+        commentCount = try c.decodeIfPresent(Int.self, forKey: .commentCount)
+        nextCommentsCursor = try c.decodeIfPresent(String.self, forKey: .nextCommentsCursor)
+        canResolve = try c.decodeIfPresent(Bool.self, forKey: .canResolve)
+    }
 }
 
 /// `PullRequestReviewerCandidate` (pullRequest.ts:275).
@@ -151,10 +177,14 @@ public struct PullRequestCapabilities: Codable, Hashable, Sendable {
     public struct Reviewers: Codable, Hashable, Sendable {
         public var request: Bool
         public var listCandidates: Bool
+        /// The host answers `reviewerCandidates` with a `query` (4928 pullRequest.ts:282).
+        public var searchCandidates: Bool?
     }
     public struct Edit: Codable, Hashable, Sendable {
         public var changeRequest: Bool
         public var comment: Bool
+        /// The host can turn maintainer edits on or off (4928, #25588).
+        public var maintainerEdits: Bool?
     }
     public var diff: Bool
     public var comment: Bool
@@ -172,6 +202,12 @@ public struct PullRequestCapabilities: Codable, Hashable, Sendable {
     public var stackActions: Bool?
     public var deleteBranch: Bool?
     public var labels: Bool?
+    /// The sigils composers complete references for, `#` and `!` (4928 pullRequest.ts:315).
+    public var referenceSigils: [String]?
+    /// Every head gets a check, so a long silence means none reported (4928 pullRequest.ts:320).
+    public var checksAlwaysReport: Bool?
+    /// The diff reads one withheld file by `path` (4928 pullRequest.ts:323).
+    public var withheldFileDiff: Bool?
 }
 
 /// `PullRequestViewerPermissions` (pullRequest.ts:460): what this account may do.
@@ -186,14 +222,22 @@ public struct PullRequestViewerPermissions: Codable, Hashable, Sendable {
     public var labels: Bool?
     /// Whether the title and description can be rewritten, where the host says (2994, pullRequest.ts:506).
     public var editChangeRequest: Bool?
+    /// Whether the viewer can turn maintainer edits on or off (4928 pullRequest.ts:338, #25588).
+    public var maintainerEdits: Bool?
 }
 
 public struct PullRequestMergeCapabilities: Codable, Hashable, Sendable {
     public var merge: Bool
     public var squash: Bool
     public var rebase: Bool
+    /// 4928 (pullRequest.ts:347): absent on older servers, which means not allowed.
+    public var fastForward: Bool?
+    private enum CodingKeys: String, CodingKey { case merge, squash, rebase, fastForward = "fast-forward" }
+    public init(merge: Bool, squash: Bool, rebase: Bool, fastForward: Bool? = nil) {
+        self.merge = merge; self.squash = squash; self.rebase = rebase; self.fastForward = fastForward
+    }
     public func allows(_ method: String) -> Bool {
-        switch method { case "merge": merge; case "squash": squash; case "rebase": rebase; default: false }
+        switch method { case "merge": merge; case "squash": squash; case "rebase": rebase; case "fast-forward": fastForward == true; default: false }
     }
 }
 
@@ -222,6 +266,8 @@ public struct PullRequestListEntry: Codable, Hashable, Sendable {
     public var state: String
     public var isDraft: Bool
     public var mergeability: String
+    /// 4928 (pullRequest.ts:375): the host merges only after a rebase onto the base.
+    public var rebaseRequired: Bool?
     public var additions: Int
     public var deletions: Int
     public var createdAt: String
@@ -390,6 +436,11 @@ public struct PullRequestDetail: Codable, Hashable, Sendable {
     public var autoMergeEnabled: Bool?
     public var autoMergeMethod: String?
     public var workflowApprovalsRequired: Int?
+    /// 4928 (pullRequest.ts:658-686).
+    public var rebaseRequired: Bool?
+    public var mergedBy: PullRequestActor?
+    public var mergeQueueRemoval: PullRequestMergeQueueRemoval?
+    public var maintainerCanModify: Bool?
     // Activity (`PullRequestActivity`).
     public var comments: [PullRequestComment] = []
     public var commentCount: Int = 0
@@ -403,8 +454,11 @@ public struct PullRequestDetail: Codable, Hashable, Sendable {
         case author, state, isDraft, mergeability, additions, deletions, changedFiles, headBranch, headRepositoryNameWithOwner, headSha
         case baseBranch, createdAt, updatedAt, mergedAt, closedAt, reviewers, labels, checks, mergeCapabilities, viewer
         case baseComparison, behindBy, autoMergeEnabled, autoMergeMethod, workflowApprovalsRequired
+        case rebaseRequired, mergedBy, mergeQueueRemoval, maintainerCanModify
         case comments, commentCount, commentsTruncated, reviewThreads, commits, reactions
     }
+
+    private enum OverviewKey: String, CodingKey { case overviewThreads }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -444,10 +498,16 @@ public struct PullRequestDetail: Codable, Hashable, Sendable {
         autoMergeEnabled = try c.decodeIfPresent(Bool.self, forKey: .autoMergeEnabled)
         autoMergeMethod = try c.decodeIfPresent(String.self, forKey: .autoMergeMethod)
         workflowApprovalsRequired = try c.decodeIfPresent(Int.self, forKey: .workflowApprovalsRequired)
+        rebaseRequired = try c.decodeIfPresent(Bool.self, forKey: .rebaseRequired)
+        mergedBy = try c.decodeIfPresent(PullRequestActor.self, forKey: .mergedBy)
+        mergeQueueRemoval = try c.decodeIfPresent(PullRequestMergeQueueRemoval.self, forKey: .mergeQueueRemoval)
+        maintainerCanModify = try c.decodeIfPresent(Bool.self, forKey: .maintainerCanModify)
         comments = try c.decodeIfPresent([PullRequestComment].self, forKey: .comments) ?? []
         commentCount = try c.decodeIfPresent(Int.self, forKey: .commentCount) ?? comments.count
         commentsTruncated = try c.decodeIfPresent(Bool.self, forKey: .commentsTruncated) ?? false
-        reviewThreads = try c.decodeIfPresent([PullRequestReviewThread].self, forKey: .reviewThreads) ?? []
+        // `pullRequestConversationThreads` (4928 pullRequest.ts:712-717): overview threads follow the line ones.
+        reviewThreads = (try c.decodeIfPresent([PullRequestReviewThread].self, forKey: .reviewThreads) ?? [])
+            + (try decoder.container(keyedBy: OverviewKey.self).decodeIfPresent([PullRequestReviewThread].self, forKey: .overviewThreads) ?? [])
         commits = try c.decodeIfPresent([PullRequestCommit].self, forKey: .commits) ?? []
         reactions = try c.decodeIfPresent([PullRequestReaction].self, forKey: .reactions)
     }
@@ -460,9 +520,9 @@ public struct PullRequestDetail: Codable, Hashable, Sendable {
         comments = activity.comments
         // Never fewer than the remarks in hand: a host's count can leave out review thread replies
         // (3473 usePullRequestDetail.ts:156-165).
-        commentCount = max(activity.commentCount, Set(activity.comments.map(\.id) + activity.reviewThreads.flatMap { $0.comments.map(\.id) }).count)
+        commentCount = max(activity.commentCount, Set(activity.comments.map(\.id) + activity.conversationThreads.flatMap { $0.comments.map(\.id) }).count)
         commentsTruncated = activity.commentsTruncated
-        reviewThreads = activity.reviewThreads
+        reviewThreads = activity.conversationThreads
         commits = activity.commits
         reactions = activity.reactions
     }
@@ -483,8 +543,20 @@ public struct PullRequestActivity: Codable, Hashable, Sendable {
     public var commentsTruncated: Bool
     public var reviewThreadsTruncated: Bool?
     public var reviewThreads: [PullRequestReviewThread]
+    /// 4928 (pullRequest.ts:706): threads on the change request as a whole, apart so older clients still decode.
+    public var overviewThreads: [PullRequestReviewThread]?
     public var commits: [PullRequestCommit]
     public var reactions: [PullRequestReaction]?
+
+    /// `pullRequestConversationThreads` (4928 pullRequest.ts:712-717).
+    public var conversationThreads: [PullRequestReviewThread] { reviewThreads + (overviewThreads ?? []) }
+}
+
+/// `PullRequestMergeQueueRemoval` (4928 pullRequest.ts:635): the merge queue let go without merging.
+public struct PullRequestMergeQueueRemoval: Codable, Hashable, Sendable {
+    public var id: String
+    public var removedAt: String
+    public var reason: String?
 }
 
 /// `PullRequestChecks` (pullRequest.ts:892).
@@ -516,6 +588,8 @@ public struct PullRequestDiffResult: Codable, Hashable, Sendable {
     public var truncated: Bool
     public var nextCursor: String?
     public var omittedFileStats: [OmittedFileStat]?
+    /// On the first page: withheld files read one at a time with `path` (4928 pullRequest.ts:751).
+    public var withheldFilesReadable: Bool?
 }
 
 /// `PullRequestFilesViewedResult` (pullRequest.ts:1037). `state`: unviewed, viewed, dismissed.
@@ -548,19 +622,24 @@ public enum PullRequestPayloads {
     }
 
     /// `PullRequestDiffInput` (pullRequest.ts:950), the body of `POST /api/pull-requests/diff`.
-    public static func diff(_ ref: PullRequestRef, cursor: String? = nil, commit: String? = nil) -> JSONValue {
+    public static func diff(_ ref: PullRequestRef, cursor: String? = nil, commit: String? = nil, path: String? = nil) -> JSONValue {
         var o = ref.json
         if let cursor { o["cursor"] = .string(cursor) }
         if let commit { o["commit"] = .string(commit) }
+        if let path { o["path"] = .string(path) }
         return .object(o)
     }
 
     /// `PullRequestActionInput` (pullRequest.ts:1073). Write RPC: `pullRequests.runAction`. The stack
     /// fields go only to environments advertising `pullRequestStackActions` (PullRequestStackMenu.tsx:95-104).
     public static func action(_ ref: PullRequestRef, action: String, mergeMethod: String? = nil, updateMethod: String? = nil,
-                              stackNumber: Int? = nil, expectedStackHeads: [(number: Int, headSha: String)]? = nil) -> JSONValue {
+                              stackNumber: Int? = nil, expectedStackHeads: [(number: Int, headSha: String)]? = nil,
+                              expectedHeadSha: String? = nil, replyWithSummary: Bool = false) -> JSONValue {
         var o = ref.json
         o["action"] = .string(action)
+        // 4928 pullRequest.ts:840-846. The summary is opt-in, so a 3824 server never sees the flag.
+        if let expectedHeadSha, !expectedHeadSha.isEmpty { o["expectedHeadSha"] = .string(expectedHeadSha) }
+        if replyWithSummary { o["replyWithSummary"] = .bool(true) }
         if let mergeMethod { o["mergeMethod"] = .string(mergeMethod) }
         if let updateMethod { o["updateMethod"] = .string(updateMethod) }
         if let stackNumber { o["stackNumber"] = .number(Double(stackNumber)) }
@@ -579,8 +658,9 @@ public enum PullRequestPayloads {
     }
 
     /// `PullRequestUpdateInput` (pullRequest.ts:1112). Write RPC: `pullRequests.update`.
-    public static func update(_ ref: PullRequestRef, title: String? = nil, body: String? = nil) -> JSONValue? {
+    public static func update(_ ref: PullRequestRef, title: String? = nil, body: String? = nil, maintainerCanModify: Bool? = nil) -> JSONValue? {
         var o = ref.json
+        if let maintainerCanModify { o["maintainerCanModify"] = .bool(maintainerCanModify) }
         if let title {
             let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, trimmed.count <= 1024 else { return nil }
@@ -601,8 +681,24 @@ public enum PullRequestPayloads {
 
     /// `PullRequestSetFilesViewedInput` (pullRequest.ts:1056), at most 500 presses.
     public static func setFilesViewed(_ ref: PullRequestRef, files: [(path: String, viewed: Bool)]) -> JSONValue {
+        setFilesViewed(ref, files: files.map { ($0.path, $0.viewed, nil) })
+    }
+
+    /// With each file's `revision`, the version the reader was shown (4928 pullRequest.ts:813-822).
+    public static func setFilesViewed(_ ref: PullRequestRef, files: [(path: String, viewed: Bool, revision: String?)]) -> JSONValue {
         var o = ref.json
-        o["files"] = .array(files.prefix(500).map { .object(["path": .string($0.path), "viewed": .bool($0.viewed)]) })
+        o["files"] = .array(files.prefix(500).map { f in
+            var e: [String: JSONValue] = ["path": .string(f.path), "viewed": .bool(f.viewed)]
+            if let r = f.revision, !r.isEmpty { e["revision"] = .string(String(r.prefix(256))) }
+            return .object(e)
+        })
+        return .object(o)
+    }
+
+    /// `PullRequestReviewerCandidatesInput` (4928 pullRequest.ts:455-459): `query` asks the host past the first page.
+    public static func reviewerCandidates(_ ref: PullRequestRef, query: String? = nil) -> JSONValue {
+        var o = ref.json
+        if let q = query?.trimmingCharacters(in: .whitespacesAndNewlines), !q.isEmpty { o["query"] = .string(String(q.prefix(100))) }
         return .object(o)
     }
 
@@ -701,6 +797,12 @@ public enum PullRequestErrors {
             switch fields["reason"]?.stringValue {
             case "cli-missing": return sent ?? requirement?.missing ?? "The tool this host is read through is not installed or set up."
             case "cli-unauthenticated": return sent ?? requirement?.unauthenticated ?? "This host has no working credentials."
+            case "repository-without-project":
+                // 4928 pullRequest.ts:1036-1040.
+                if let host = fields["host"]?.stringValue {
+                    return "No project is on \(host). Add any \(host) project to read its change requests."
+                }
+                return "\(fields["repository"]?.stringValue ?? "This repository") is not a project. Add it as a project to read its change requests."
             default: return "Change requests cannot be browsed for this project's host yet."
             }
         case "PullRequestOperationError":
@@ -751,5 +853,70 @@ public struct PullRequestChangeBreakdown: Codable, Hashable, Sendable {
     public var rows: [(label: String, count: LineCount)] {
         [("Code", code), ("Tests", tests), ("Mocks", mocks), ("Generated", generated), ("Docs", docs)]
             .filter { $0.1.additions != 0 || $0.1.deletions != 0 }
+    }
+}
+
+/// `PullRequestSummary` (4928 pullRequest.ts:512-541): what `pullRequests.runAction` answers when
+/// asked with `replyWithSummary` (rpc.ts:1224-1229). Optional fields the host did not report stay nil.
+public struct PullRequestSummary: Codable, Hashable, Sendable {
+    public var provider: String
+    public var projectId: String
+    public var repository: String
+    public var number: Int
+    public var title: String
+    public var url: String
+    public var state: String
+    public var isDraft: Bool?
+    public var headBranch: String
+    public var baseBranch: String
+    public var closedAt: String?
+    public var mergedAt: String?
+    public var updatedAt: String
+    public var author: PullRequestActor?
+    public var additions: Int?
+    public var deletions: Int?
+    public var changedFiles: Int?
+    public var mergeability: String?
+    public var rebaseRequired: Bool?
+    public var headSha: String?
+    public var autoMergeEnabled: Bool?
+    public var autoMergeMethod: String?
+}
+
+extension PullRequestDetail {
+    /// `isStalePullRequestReply` (4928 client-runtime pullRequestReply.ts:10-20) without `observedAt`,
+    /// which the detail CandyWrapper keeps does not carry.
+    public func isStale(_ reply: PullRequestSummary) -> Bool {
+        if state == "merged" && reply.state != "merged" { return true }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        func parse(_ s: String) -> Date? { f.date(from: s) ?? ISO8601DateFormatter().date(from: s) }
+        if let shown = parse(updatedAt), let replied = parse(reply.updatedAt), shown != replied { return replied < shown }
+        return false
+    }
+
+    /// The detail reader's `rereads` (4928 client-runtime state/pullRequests.ts:901-905): reopening or a
+    /// new head changes branch data and permissions the reply lacks.
+    public func needsReread(after reply: PullRequestSummary) -> Bool {
+        !isStale(reply) && ((state == "closed" && reply.state == "open") || (reply.headSha != nil && reply.headSha != headSha))
+    }
+
+    /// The detail reader's `patch` (state/pullRequests.ts:906-931): the reply's reported fields over the
+    /// shown detail, and a disarmed auto-merge drops its method.
+    public mutating func apply(_ reply: PullRequestSummary) {
+        guard !isStale(reply) else { return }
+        title = reply.title; url = reply.url; state = reply.state
+        if let a = reply.author { author = a }
+        if let v = reply.isDraft { isDraft = v }
+        if let v = reply.mergeability { mergeability = v }
+        if let v = reply.additions { additions = v }
+        if let v = reply.deletions { deletions = v }
+        if let v = reply.changedFiles { changedFiles = v }
+        headBranch = reply.headBranch; baseBranch = reply.baseBranch; updatedAt = reply.updatedAt
+        if let v = reply.mergedAt { mergedAt = v }
+        if let v = reply.closedAt { closedAt = v }
+        if let v = reply.autoMergeEnabled { autoMergeEnabled = v }
+        if let v = reply.autoMergeMethod { autoMergeMethod = v }
+        if reply.autoMergeEnabled == false { autoMergeMethod = nil }
     }
 }
