@@ -4,26 +4,37 @@ import DesignSystem
 /// The model chip's details (`ModelMentionChip`'s `ContextChipPopover`, chat/ModelMentionChip.tsx:100-125 at
 /// 4928): `space-y-1 p-2 text-sm` with the model in medium, its provider muted and the source in 12px mono.
 public final class ModelMentionDetailsView: DSView {
-    private let rows: [LabelView]
+    /// Each `<p>` wraps, breaking after a hyphen as the browser does, so a long source takes another line.
+    private let rows: [TextBlockView]
 
     public init(label: String, provider: String, source: String) {
-        let title = LabelView(label, font: DSFont.ui(14, weight: .medium), color: Themed.color(\.contrastPopoverForeground))
-        let sub = LabelView(provider, font: DSFont.ui(14), color: Themed.color(\.mutedForeground))
-        let code = LabelView(source, font: DSFont.mono(12), color: Themed.color(\.mutedForeground))
-        title.lineHeight = 20; sub.lineHeight = 20; code.lineHeight = 16
-        rows = [title, sub, code]
+        func row(_ text: String, _ font: NSFont, _ color: NSColor, _ lineHeight: CGFloat) -> TextBlockView {
+            let block = TextBlockView()
+            block.text = text; block.font = font; block.color = color; block.lineHeight = lineHeight
+            return block
+        }
+        rows = [row(label, DSFont.ui(14, weight: .medium), Themed.color(\.contrastPopoverForeground), 20),
+                row(provider, DSFont.ui(14), Themed.color(\.mutedForeground), 20),
+                row(source, DSFont.mono(12), Themed.color(\.mutedForeground), 16)]
         super.init(frame: .zero)
         rows.forEach(addSubview)
         setAccessibilityLabel("Model \(label)")
     }
 
-    /// `w-96` less the compact padding, so the rows truncate inside the `lg` popover.
-    public override var intrinsicContentSize: NSSize { NSSize(width: 384 - 24, height: 8 + 20 + 4 + 20 + 4 + 16 + 8) }
+    /// The `lg` popover's content box: `w-96` less its border and the compact padding.
+    private static let width: CGFloat = 384 - 2 - 24
+
+    private func heights(_ width: CGFloat) -> [CGFloat] { rows.map { $0.height(forWidth: max(0, width - 16)) } }
+
+    public override var intrinsicContentSize: NSSize {
+        let h = heights(Self.width)
+        return NSSize(width: Self.width, height: 8 + h.reduce(0, +) + 4 * CGFloat(h.count - 1) + 8)
+    }
 
     public override func layout() {
         super.layout()
         var y: CGFloat = 8
-        for (row, height) in zip(rows, [20, 20, 16] as [CGFloat]) {
+        for (row, height) in zip(rows, heights(bounds.width)) {
             row.frame = NSRect(x: 8, y: y, width: max(0, bounds.width - 16), height: height)
             y += height + 4
         }

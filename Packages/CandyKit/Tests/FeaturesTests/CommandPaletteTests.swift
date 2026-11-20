@@ -160,6 +160,67 @@ import T3Protocol
         #expect(items[9].shortcutCommand == nil)
     }
 
+    /// #31174 (CommandPalette.browser.test.tsx at 4928): a filtered project picker numbers the rows it shows.
+    @Test func projectJumpsFollowTheFilteredRows() {
+        var none = action("new-thread-in:no-project", ["No project"])
+        none.shortcutCommand = "chat.newWithoutProject"
+        let page = PaletteGroup(value: "projects", label: "Projects",
+                                items: PaletteSearch.enumerate(["alpha", "beta", "gamma"].map { action("new-thread-in:\($0)", [$0]) }) + [none])
+        let filtered = PaletteSearch.filter([page], query: "gam", isInSubmenu: true, projectItems: [], threadItems: [])
+        let shown = PaletteSearch.renumberProjectJumps(filtered).flatMap(\.items)
+        #expect(shown.first?.value == "new-thread-in:gamma")
+        #expect(shown.first?.shortcutCommand == "thread.jump.1")
+        let all = PaletteSearch.renumberProjectJumps([page]).flatMap(\.items)
+        #expect(all.map(\.shortcutCommand) == ["thread.jump.1", "thread.jump.2", "thread.jump.3", "chat.newWithoutProject"])
+        var other = page
+        other.value = "projects-search"
+        #expect(PaletteSearch.renumberProjectJumps([other]).flatMap(\.items).map(\.shortcutCommand) == page.items.map(\.shortcutCommand))
+    }
+
+    /// #38155 (CommandPalette.browser.test.tsx at 4928): a message search that failed everywhere says so.
+    @Test func failedMessageSearchSaysSo() {
+        var failed = false
+        var source = CommandPaletteController.Source(rootGroups: { [] })
+        source.threadSearchFailed = { _ in failed }
+        let palette = CommandPaletteController(source: source)
+        func message() -> String? { if case .empty(let m, _) = palette.view.content { m } else { "not empty" } }
+        palette.view.input.onChange?("zzqx")
+        palette.flushRefresh()
+        #expect(message() == nil)
+        failed = true
+        palette.view.input.onChange?("zzqxy")
+        palette.flushRefresh()
+        #expect(message() == "Couldn't search thread messages.")
+    }
+
+    /// #37691 (projects.test.ts at 4928): a bare relative "Add project starts in" opens under home.
+    @Test func addProjectStartsUnderHomeForBareRelativeSettings() {
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: nil) == "~/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "  ") == "~/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "Desktop/dev") == "~/Desktop/dev/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "~/code") == "~/code/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "/srv/repos/") == "/srv/repos/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "./work") == "./work/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "~") == "~/")
+    }
+
+    /// #32681 (source-control definition tests at 4928): a repository page URL clones its repository.
+    @Test func repositoryPagesCloneTheirRepository() {
+        let n = PaletteAddProjectPaths.normalizePastedCloneUrl
+        #expect(n("https://github.com/acme/app/tree/main/src") == "https://github.com/acme/app")
+        #expect(n("https://github.com/acme/app/blob/main/README.md#L3") == "https://github.com/acme/app")
+        #expect(n("https://gitlab.com/group/sub/app/-/tree/main") == "https://gitlab.com/group/sub/app")
+        #expect(n("https://bitbucket.org/acme/app/src/main/") == "https://bitbucket.org/acme/app")
+        #expect(n("https://codeberg.org/acme/app/src/branch/main/x") == "https://codeberg.org/acme/app")
+        #expect(n("https://user:pw@git.example.com:8443/team/app/-/blob/main/a?x=1") == "https://user:pw@git.example.com:8443/team/app")
+        // Off a known host a Forgejo-shaped path may be a GitLab project, so it stays; so does a clone URL.
+        #expect(n("https://git.example.com/a/src/branch/main/x") == "https://git.example.com/a/src/branch/main/x")
+        #expect(n("https://git.example.com/team/app.git") == "https://git.example.com/team/app.git")
+        #expect(n("https://github.com/acme/app") == "https://github.com/acme/app")
+        #expect(n("acme/app") == "https://github.com/acme/app.git")
+        #expect(n("git@github.com:acme/app.git") == "git@github.com:acme/app.git")
+    }
+
     @Test func keyboardRouting() {
         var ran: [String] = []
         var closed = 0

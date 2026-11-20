@@ -9,9 +9,11 @@ public struct ProviderWorkspaceSnapshots: Sendable {
         var enabled: Bool
         var slashCommands: [ServerProviderSlashCommand]
         var skills: [ServerProviderSkill]
+        var models: [ServerProviderModel]
 
+        // The machine's models are part of the basis since 4928 (client-runtime state/server.ts:683, #24585).
         func matches(_ provider: ServerProvider) -> Bool {
-            enabled == provider.enabled && slashCommands == provider.slashCommands && skills == provider.skills
+            enabled == provider.enabled && slashCommands == provider.slashCommands && skills == provider.skills && models == provider.models
         }
     }
     private var entries: [Entry] = []
@@ -28,7 +30,8 @@ public struct ProviderWorkspaceSnapshots: Sendable {
                                 providers: [ServerProvider], basis: ServerProvider?) {
         entries.removeAll { $0.snapshot.cwd == cwd && (fresh || $0.instanceId == instanceId) }
         guard let basis, let snapshot = providers.first(where: { $0.instanceId == instanceId })?.workspaceSnapshot(cwd) else { return }
-        entries.append(Entry(instanceId: instanceId, snapshot: snapshot, enabled: basis.enabled, slashCommands: basis.slashCommands, skills: basis.skills))
+        entries.append(Entry(instanceId: instanceId, snapshot: snapshot, enabled: basis.enabled, slashCommands: basis.slashCommands, skills: basis.skills,
+                             models: basis.models))
         if entries.count > 32 { entries.removeFirst(entries.count - 32) }
     }
 

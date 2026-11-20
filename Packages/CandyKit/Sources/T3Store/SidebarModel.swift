@@ -65,11 +65,15 @@ public struct SidebarThread: Sendable, Equatable, Identifiable {
 
     public var id: ThreadId { shell.id }
 
-    public init(_ shell: ThreadShell, pendingSubagentRequest: PendingSubagentRequest? = nil) {
+    /// `launching`: this client is sending the thread's first message, so a run-less shell reads as preparing until
+    /// its run lands, instead of placing it twice (`asLaunchingThread`, client-runtime threadInbox.ts:33-50 at 4928, #33783).
+    public init(_ shell: ThreadShell, pendingSubagentRequest: PendingSubagentRequest? = nil, launching: Bool = false) {
         self.shell = shell
         self.pendingSubagentRequest = pendingSubagentRequest
-        runtime = SidebarModel.shellRuntime(shell)
-        latestRun = SidebarModel.presentLatestRun(shell)
+        let latestRun = SidebarModel.presentLatestRun(shell)
+        let runtime = SidebarModel.shellRuntime(shell)
+        self.runtime = launching && runtime == nil && latestRun == nil ? ThreadRuntimeSummary(status: .preparing, updatedAt: shell.updatedAt) : runtime
+        self.latestRun = latestRun
         let pending = shell.pendingRuntimeRequest
         hasPendingApprovals = pending != nil && pending?.kind != .userInput && pending?.kind != .authRefresh
         // Async questions count too, so a thread with any open question leaves Working (T3 4928 #28515).

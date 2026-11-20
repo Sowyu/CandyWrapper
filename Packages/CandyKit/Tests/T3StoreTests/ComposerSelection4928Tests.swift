@@ -146,6 +146,27 @@ import T3Protocol
     }
 }
 
+/// #37593 (useDraftEnvironmentRouting.browser.test.tsx at 4928): a draft moved to another machine starts on what a new
+/// thread there would, unless the user picked a model.
+@MainActor struct DraftMachineSwitchSeedTests {
+    @Test func reseedsFromTheTargetMachineUnlessPicked() throws {
+        let catalog = try ComposerSelection4928Tests.claudes()
+        let id = ComposerSelection4928Tests.fallback
+        let seed = ModelSelection(instanceId: id, model: "claude-opus-5-5", selections: nil)
+        let targetDefault = ModelSelection(instanceId: id, model: "claude-sonnet-4-6", selections: nil)
+        func shown(pick: Bool) -> String? {
+            let store = ComposerSelectionStore(defaults: nil)
+            store.seedNewDraft("d", carry: (seed, nil), carriedFromSameDraft: false, projectDefault: nil, alreadyOpen: false)
+            let target = ComposerSelectionContext(catalog: catalog, projectDefaultModel: targetDefault)
+            if pick { store.pickModel("d", instance: id, model: "claude-opus-5-5", target) }
+            store.seedNewDraft("d", carry: (nil, nil), carriedFromSameDraft: true, projectDefault: nil, alreadyOpen: true)
+            return store.resolve("d", target).modelSlug
+        }
+        #expect(shown(pick: false) == "claude-sonnet-4-6")
+        #expect(shown(pick: true) == "claude-opus-5-5")
+    }
+}
+
 /// #27397 (modelTraits.test.ts at 4928): Pi's thinking trigger names itself before a level is picked, without inventing one.
 struct PiThinkingTriggerTests {
     @Test(arguments: [(String?.none, String?.none, "thinking", "Thinking"), (nil, "high", "thinking", "High"), ("low", nil, "thinking", "Low"),

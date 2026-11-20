@@ -375,6 +375,10 @@ public final class SidebarListView: DSView {
         }
         if kind == .searchResult {
             view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }
+            view.onBeginSearchDrag = { [weak self] row, result, event in
+                self?.closeHoverCard()
+                SidebarThreadDrag.begin([result.id], title: result.title.trimmingCharacters(in: .whitespaces), from: row, event: event)
+            }
         }
         if kind == .card || kind == .slim {
             view.onHoverChange = { [weak self] row, hovered in self?.rowHoverChanged(row, hovered) }

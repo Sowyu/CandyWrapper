@@ -21,7 +21,7 @@ struct Composer4928SectionTests {
         }
         var plain = question
         plain.options[0].preview = nil
-        // Three lines of 16pt and the 6pt `pb-1.5`.
-        #expect(height(question) - height(plain) == 54)
+        // Markdown since tail-1: two 16pt paragraphs 0.65rem apart and the 6pt `pb-1.5`.
+        #expect(abs(height(question) - height(plain) - (16 + 10.4 + 16 + 6)) < 0.5)
     }
 }

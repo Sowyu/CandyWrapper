@@ -60,6 +60,9 @@ public final class ComposerPickers {
     /// The fan-out's models per draft key; nil is a single model.
     public private(set) var multipleSelections: [String: [ModelSelection]] = [:]
     /// The open draft's fan-out.
+    /// Set by the app while the composer's provider scans this project's workspace, so an empty list says so.
+    public var workspaceModelsScanning = false { didSet { if workspaceModelsScanning != oldValue { modelPicker?.workspaceModelsScanning = workspaceModelsScanning } } }
+
     public var currentMultiple: [ModelSelection]? { supportsMultipleModels ? multipleSelections[draftKey] : nil }
     /// The fan-out changed (models added, removed or cleared).
     public final var onMultipleChange: (@MainActor () -> Void)?
@@ -314,6 +317,7 @@ public final class ComposerPickers {
                 view?.selectedKeys = self.currentMultiple.map { Set($0.map(ModelFanout.key)) }
             }
         }
+        view.workspaceModelsScanning = workspaceModelsScanning
         view.onToggleFavorite = { [weak self, weak view] id, slug in
             guard let self else { return }
             self.toggleFavorite(id, slug)

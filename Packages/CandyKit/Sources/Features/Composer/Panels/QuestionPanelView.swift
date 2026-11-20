@@ -70,14 +70,15 @@ public final class QuestionPanelView: ComposerBannerView {
     /// The question as chat Markdown, links clickable (`ChatMarkdown` with `text-foreground/85`, T3 3105 85272eeea).
     private let questionText: MarkdownView = { let m = MarkdownView(frame: .zero); m.bodyColor = Themed.color(\.foreground, 0.85); return m }()
     /// Resolves file links in the question (`gitCwd`).
-    public var markdownCwd: String? { didSet { questionText.cwd = markdownCwd } }
+    public var markdownCwd: String? { didSet { questionText.cwd = markdownCwd; previews.forEach { $0.cwd = markdownCwd } } }
     private var questionSource = ""
     private let multiHint = glassLabel("Select one or more options.", font: DSFont.ui(12), color: Themed.color(\.secondaryLabel), lineHeight: 16)
     private var rows: [OptionRow] = []
     /// Each option's `preview` under its button, outside it so a click there never picks the option (#34784,
     /// ComposerPendingUserInputPanel.tsx at 4928: `ps-9 pe-2 pb-1.5 text-xs text-foreground/70 sm:ps-8`).
-    // ponytail: plain text with its line breaks; T3 renders ChatMarkdown at text-xs. Give MarkdownView a 12px body size if previews carry Markdown
-    private var previews: [TextBlockView] = []
+    /// ChatMarkdown with `lineBreaks` at `text-xs text-foreground/70` (ComposerPendingUserInputPanel.tsx:334-340 at 4928).
+    private var previews: [MarkdownView] = []
+    private var previewSources: [String] = []
 
     public init() {
         super.init(variant: .neutral)
@@ -252,14 +253,18 @@ public final class QuestionPanelView: ComposerBannerView {
         }
         while rows.count > question.options.count { rows.removeLast().removeFromSuperview() }
         while previews.count < question.options.count {
-            let preview = glassBlock(font: DSFont.ui(12), color: Themed.color(\.foreground, 0.7), lineHeight: 16)
+            let preview = MarkdownView(frame: .zero)
+            preview.body = .xs
+            preview.bodyColor = Themed.color(\.foreground, 0.7)
+            preview.cwd = markdownCwd
             body.addSubview(preview)
             previews.append(preview)
+            previewSources.append("")
         }
-        while previews.count > question.options.count { previews.removeLast().removeFromSuperview() }
+        while previews.count > question.options.count { previews.removeLast().removeFromSuperview(); previewSources.removeLast() }
         for (i, option) in question.options.enumerated() {
             let text = option.preview?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            previews[i].text = text
+            if text != previewSources[i] { previewSources[i] = text; previews[i].setMarkdown(text, preservesLineBreaks: true) }
             previews[i].isHidden = text.isEmpty
         }
         let customActive = !progress.customAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

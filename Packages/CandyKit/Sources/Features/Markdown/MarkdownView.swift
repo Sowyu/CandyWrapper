@@ -118,6 +118,11 @@ public final class MarkdownView: DSView {
         didSet { if bodyColor != oldValue { invalidate() } }
     }
 
+    /// The body text's size and line height; `.xs` for a question option's preview (#34784).
+    public var body = MarkdownBody.chat {
+        didSet { if body != oldValue { invalidate() } }
+    }
+
     /// How much wider the timeline lane is than this markdown (`@container/chat-lane`, MessagesTimeline.tsx:1428-1431).
     /// From a 36rem lane up an expanded table fits the lane (index.css:2164-2178). Nil outside the timeline.
     public var chatLaneInset: CGFloat? {
@@ -404,6 +409,7 @@ public final class MarkdownView: DSView {
                                                                  openIndex: streamsInOpenFence ? MarkdownLayout.codeBlockCount(document.blocks) - 1 : nil) : nil
             nonisolated(unsafe) let contexts = contextChips
             nonisolated(unsafe) let bodyColor = bodyColor
+            let body = body
             let document = document, skills = inlineSkills, wrapsCode = wrapsCode, unwrappedCode = unwrappedCode, cwd = cwd,
                 expandedTables = expandedTables, runsShell = onRunShellCommand != nil, streaming = streaming,
                 fits = chatLaneInset.map { width + $0 >= 576 } ?? false
@@ -411,7 +417,7 @@ public final class MarkdownView: DSView {
                 MarkdownLayout(document: MarkdownContextChips.modelDocument(MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: skills), hiddenContextIds: contexts?.inlineAudioContextIds ?? []), models: contexts?.models ?? [:]), width: width,
                                wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables,
                                diagrams: diagrams, contexts: contexts, runsShell: runsShell, fitsExpandedTables: fits, streaming: streaming,
-                               reusing: reuse, parallel: true)
+                               reusing: reuse, parallel: true, body: body)
             }
             return standIn(width)
         }
@@ -420,7 +426,7 @@ public final class MarkdownView: DSView {
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills), hiddenContextIds: contextChips?.inlineAudioContextIds ?? []), width: width,
                                   wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
                                   runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false,
-                                  streaming: streaming, reusing: reuse)
+                                  streaming: streaming, reusing: reuse, body: body)
         if reuse != nil { reusable = nil }
         store(made, width)
         lastLayout = made

@@ -316,6 +316,9 @@ public struct SidebarListState: Equatable, Sendable {
     public var environments = SidebarEnvironments()
     /// Scoped thread id to its terminals running a subprocess, from `subscribeTerminalMetadata`.
     public var terminalProcesses: [ThreadId: Int] = [:]
+    /// Threads a sent draft is launching into, from the send until the server owns it (`usePromotingDraftThreadKeys`,
+    /// composerDraftStore.ts:4442-4450 at 4928, #33783). They read as Setting up.
+    public var launchingThreadIds: Set<ThreadId> = []
     /// Single linked issues' live states, by `SidebarIssueBadge.stateKey` (the app reads `issues.detail`).
     public var issueStates: [String: IssueState] = [:]
     /// `useThreadSelectionStore.selectedThreadKeys`: Cmd-click and Shift-click selection.
@@ -351,7 +354,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.projectScopeKeys == b.projectScopeKeys && a.drafts == b.drafts && a.activeDraftId == b.activeDraftId
             && a.capabilities.threadSettlement == b.capabilities.threadSettlement
             && a.capabilities.threadSnooze == b.capabilities.threadSnooze && a.environments == b.environments
-            && a.terminalProcesses == b.terminalProcesses && a.issueStates == b.issueStates && a.selectedThreadIds == b.selectedThreadIds
+            && a.terminalProcesses == b.terminalProcesses && a.launchingThreadIds == b.launchingThreadIds && a.issueStates == b.issueStates && a.selectedThreadIds == b.selectedThreadIds
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
             && a.boringSidebarEnabled == b.boringSidebarEnabled && a.boringSidebarMultilineRows == b.boringSidebarMultilineRows && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
@@ -412,7 +415,7 @@ public enum SidebarListBuilder {
             self.scopedIds = scopedIds
             let requests = PendingSubagentRequests.byThread(snapshot.threads)
             let threads = snapshot.threads.filter { $0.archivedAt == nil && $0.deletedAt == nil }
-                .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id]) }
+                .map { SidebarThread($0, pendingSubagentRequest: requests[$0.id], launching: state.launchingThreadIds.contains($0.id)) }
             let returns = state.inboxReturns
             shelves = SidebarModel.buildShelves(threads, scopedProjectIds: scopedIds, capabilities: state.capabilities, nowMs: nowMs,
                                                 workingShelf: state.workingShelfEnabled && !state.usesProjectFolders,

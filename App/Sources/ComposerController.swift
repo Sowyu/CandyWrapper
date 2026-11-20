@@ -714,6 +714,12 @@ final class ComposerController {
     /// An environment's live shell: a thread draft whose model pick the thread now runs drops it, so the
     /// composer follows later changes made on other clients (composerDraftStore.ts:4152-4219, T3 2767012996).
     func liveShell(_ environmentId: String, _ snapshot: ShellSnapshot?) {
+        // The server owns a launch once its message persisted or its run started (composerDraftStore.ts:4757-4770 at 4928).
+        if let snapshot, let launching = sidebar?.state.launchingThreadIds, !launching.isEmpty {
+            let owned = snapshot.threads.filter { $0.latestRunId != nil || $0.latestUserMessageAt != nil }
+                .map { $0.id.scoped(to: environmentId) }.filter(launching.contains)
+            if !owned.isEmpty { sidebar?.state.launchingThreadIds.subtract(owned) }
+        }
         guard let snapshot, !pickers.store.drafts.isEmpty else { return }
         var models: [String: ModelSelection] = [:]
         for thread in snapshot.threads { models[thread.id.scoped(to: environmentId).rawValue] = thread.modelSelection }
@@ -1195,6 +1201,10 @@ final class ComposerController {
     private var lastRunOnInputs: RunOnInputs?
     private var loadBalanceTask: Task<Void, Never>?
 
+    /// The pre-send machine recheck in flight, and whether the send it resumes already passed it.
+    private var loadBalanceRecheckTask: Task<Void, Never>?
+    private var loadBalanceRechecked = false
+
     /// Drafts whose automatic sample ran and found no machine (`loadBalancing.failed`), so they do not poll.
     private var loadBalanceFailed: Set<String> = []
 
@@ -1294,6 +1304,8 @@ final class ComposerController {
         session.environmentSelection = "manual"; session.loadBalancedEnvironmentId = nil
         session.branch = nil; session.worktreePath = nil
         sessions[key] = session
+        // AddProjectToMachineDialog.tsx:209 at 4928 re-seeds the model too (#37593).
+        pickers.store.seedNewDraft(session.draftId, carry: (nil, nil), carriedFromSameDraft: true, projectDefault: nil, alreadyOpen: true)
         target = .draft(session)
         scheduleSave()
         refresh()
@@ -1320,29 +1332,47 @@ final class ComposerController {
 
     /// ChatView.tsx:4344-4397: samples each eligible host once and moves the draft to the best one; resolved drafts do
     /// no idle work.
-    private func sampleLoadBalance() {
-        guard case .draft(let session) = target, pendingMessageId == nil, loadBalanceTask == nil, session.loadBalancedEnvironmentId == nil,
-              let group = group(of: ProjectId(session.projectId)), let selection = pickers.current.modelSelection else { return }
-        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
+    /// `loadBalancingCandidates` (useDraftEnvironmentRouting.ts:116-149 at 4928): the group's machines that are
+    /// connected, weighted above zero, can read every attached thread and run the picked instance.
+    private func loadBalanceCandidates(_ group: SidebarModel.ProjectGroup, selection: ModelSelection) -> [(option: RunOnOption, project: ProjectShell)] {
         let weights = LoadBalancingLogic.weights(ClientSettingsStore.shared.current["loadBalancingWeights"])
-        let candidates = runOnTargets(group).filter { candidate in
-            guard environments.session(candidate.option.environmentId) != nil, (weights[candidate.option.environmentId] ?? 50) > 0 else { return false }
-            return providers(candidate.option.environmentId).contains { p in
+        let threads = ComposerContext.referencedIds(composer.text).compactMap { menuState.records[$0] }
+            .filter { $0["kind"]?.stringValue == "thread" }.compactMap { $0["environmentId"]?.stringValue }
+        return runOnTargets(group).filter { candidate in
+            let env = candidate.option.environmentId
+            guard environments.session(env) != nil, (weights[env] ?? 50) > 0, threads.allSatisfy({ $0 == env }) else { return false }
+            return providers(env).contains { p in
                 p.instanceId == selection.instanceId && p.enabled && p.installed && p.status != .error
                     && p.auth?["status"]?.stringValue != "unauthenticated" && p.availability != "unavailable"
             }
         }
+    }
+
+    /// One `server.getHostResources` read per machine, in parallel, each given up after 5 s
+    /// (`refreshSelection`, useLoadBalancedEnvironment.ts at 4928).
+    private func hostSnapshots(_ environmentIds: [String]) async -> [ProviderLoadBalanceLogic.Candidate] {
+        let weights = LoadBalancingLogic.weights(ClientSettingsStore.shared.current["loadBalancingWeights"])
+        // Started together, read in order: every machine is asked at once.
+        let reads = environmentIds.map { env in
+            (env, Task { [environments] in try await environments.request(env, "server.getHostResources", .object([:]), timeout: .seconds(5)) })
+        }
+        var out: [ProviderLoadBalanceLogic.Candidate] = []
+        for (env, read) in reads {
+            guard let value = try? await read.value else { continue }
+            out.append(.init(id: env, resources: value, receivedAt: Date().timeIntervalSince1970 * 1000, weight: Double(weights[env] ?? 50)))
+        }
+        return out
+    }
+
+    private func sampleLoadBalance() {
+        guard case .draft(let session) = target, pendingMessageId == nil, loadBalanceTask == nil, session.loadBalancedEnvironmentId == nil,
+              let group = group(of: ProjectId(session.projectId)), let selection = pickers.current.modelSelection else { return }
+        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
+        let candidates = loadBalanceCandidates(group, selection: selection)
         let draftID = session.draftId
         loadBalanceTask = Task { [weak self] in
             guard let self else { return }
-            var snapshots: [ProviderLoadBalanceLogic.Candidate] = []
-            for candidate in candidates {
-                guard !Task.isCancelled else { return }
-                let env = candidate.option.environmentId
-                if let value = try? await self.environments.request(env, "server.getHostResources", .object([:])) {
-                    snapshots.append(.init(id: env, resources: value, receivedAt: Date().timeIntervalSince1970 * 1000, weight: Double(weights[env] ?? 50)))
-                }
-            }
+            let snapshots = await self.hostSnapshots(candidates.map(\.option.environmentId))
             guard !Task.isCancelled else { return }
             self.loadBalanceTask = nil
             guard case .draft(var current) = self.target, current.draftId == draftID, current.environmentSelection != "manual" else { return }
@@ -1359,19 +1389,58 @@ final class ComposerController {
         scheduleSave(); refresh()
     }
 
-    /// `onEnvironmentChange` (ChatView.tsx:4450-4517): the open draft moves to the group's member on that
-    /// machine, keeping its prompt, picks, draft id and thread id. The pick is stored with the draft.
+    /// A machine switch still waiting on the target machine's triage session.
+    private var environmentChangeTask: Task<Void, Never>?
+
+    /// `onEnvironmentChange` (useDraftEnvironmentRouting.ts:301-392 at 4928): the open draft moves to the group's
+    /// member on that machine, keeping its prompt, draft id, thread id and multi-model pick, which is keyed by draft
+    /// id (#37208). A triage draft first asks the target machine for its own session and takes that playbook link
+    /// (#33782); a failure keeps the draft where it was.
     private func changeEnvironment(_ environmentId: String) {
-        guard case .draft(var session) = target, pendingMessageId == nil,
+        guard case .draft(let session) = target, pendingMessageId == nil,
               let group = group(of: ProjectId(session.projectId)),
               let project = runOnTargets(group).first(where: { $0.option.environmentId == environmentId })?.project,
               (project.id.rawValue != session.projectId || session.environmentSelection == "auto") else { return }
+        environmentChangeTask?.cancel(); environmentChangeTask = nil
+        // The playbook and context files exist only on the machine that prepared them. A 3824 server has no `triage`.
+        guard TriageLogic.isTriagePrompt(composer.text), config(environmentId)?.capabilities.contains("triage") == true else {
+            return retargetDraft(session, to: project, key: group.key)
+        }
+        let original = session
+        environmentChangeTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.environmentChangeTask = nil }
+            do {
+                let client = TriageLogic.clientMetadata(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
+                let reply = try await self.environments.request(environmentId, "server.prepareTriage", .object(["client": client]))
+                guard !Task.isCancelled, case .draft(let current) = self.target, current == original, self.pendingMessageId == nil else { return }
+                if let prepared = reply["prompt"]?.stringValue {
+                    // Read now, so text typed while the machine prepared the session is kept.
+                    let next = TriageLogic.replacePlaybookLink(self.composer.text, with: prepared)
+                    if next != self.composer.text { self.composer.text = next; self.remember(next) }
+                }
+                self.retargetDraft(current, to: project, key: group.key)
+            } catch is CancellationError {
+            } catch {
+                let message = (error as? RPCClientError)?.typedError?.message ?? error.localizedDescription
+                self.toast(.error, "Could not switch machine", message.isEmpty ? "An error occurred." : message)
+            }
+        }
+    }
+
+    /// The manual half of a machine switch. A draft without an explicit model pick re-seeds from what a new thread
+    /// on that machine starts with (`seedDraftModelSelection`, seedDraftModelSelection.ts:12-37 at 4928, #37593):
+    /// clearing the seed lets resolution read the new project's default, the sticky pick, the server default and its
+    /// usage fallback.
+    private func retargetDraft(_ session: DraftSession, to project: ProjectShell, key groupKey: String) {
+        var session = session
         flushPrompt()
-        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? group.key
+        let key = sessions.first { $0.value.draftId == session.draftId }?.key ?? groupKey
         loadBalanceTask?.cancel(); loadBalanceTask = nil
         session.environmentSelection = "manual"; session.loadBalancedEnvironmentId = nil
         Self.retarget(&session, to: project)
         sessions[key] = session
+        pickers.store.seedNewDraft(session.draftId, carry: (nil, nil), carriedFromSameDraft: true, projectDefault: nil, alreadyOpen: true)
         target = .draft(session)
         scheduleSave()
         refresh()
@@ -1389,10 +1458,8 @@ final class ComposerController {
         if ThemeRuntime.isDither(dark: anchor.effectiveAppearance.isDark) { return pickProjectDither(from: anchor, snapshot: snapshot, current: current) }
         let envs = sidebarEnvironments
         let currentId = ProjectId(current.projectId)
-        var groups = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
-        if let i = groups.firstIndex(where: { $0.memberProjectIds.contains(currentId) }), i > 0 {
-            groups.insert(groups.remove(at: i), at: 0)
-        }
+        // The command palette's order, manual order included (`useSortedProjectGroups`, DraftHeroHeadline.tsx:96 at 4928, #29846).
+        let groups = SidebarProjectOrder.pickerGroups(snapshot, primaryId: envs.primaryId, current: currentId)
         let active = groups.first { $0.memberProjectIds.contains(currentId) }
         // `onValueChange` (DraftHeroHeadline.tsx:282-295 in 2994): "Add project" opens the add flow, the current
         // project does nothing, another opens its draft.
@@ -1457,7 +1524,10 @@ final class ComposerController {
         pickers.prompt = composer.text
         loadComposerPeerLinks()
         refresh()
-        DispatchQueue.main.async { [weak self] in self?.composer.focus() }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !SidebarRenameFocus.isActive(in: self.composer.window) else { return }
+            self.composer.focus()
+        }
     }
 
     /// `/side` and `/btw` start a side chat with the rest as its message, ahead of an open question or a plan follow-up
@@ -1937,7 +2007,8 @@ final class ComposerController {
         }
         let project = snapshot?.projects.first { $0.id == projectId }
         let context = ComposerSelectionContext(
-            catalog: ProviderCatalog(serverConfig.providers, settings: ServerSettingsValues(serverConfig.settings.raw), projectId: projectId?.localId.rawValue),
+            catalog: ProviderCatalog(serverConfig.providers.map { $0.resolved(cwd: menuCwd) }, settings: ServerSettingsValues(serverConfig.settings.raw),
+                                     projectId: projectId?.localId.rawValue),
             thread: thread, projectDefaultModel: project?.defaultModelSelection,
             serverDefaults: serverConfig.settings,
             hasStartedSession: ComposerLogic.QueueState.hasStartedSession(projection),
@@ -1945,6 +2016,7 @@ final class ComposerController {
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
         pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip
+        pickers.workspaceModelsScanning = workspaceSkillsScanning
         pickers.update(draftKey: draftKey ?? "", context: context)
         let strip = panel.contextStrip
         let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
@@ -2024,6 +2096,47 @@ final class ComposerController {
                 toast(.warning, "Choose a machine to continue", !threads.isEmpty && !readable
                       ? "No machine can read every attached thread. Choose a machine in the composer or remove the threads."
                       : "No eligible machine has available resources. Choose a machine in the composer to override.")
+            }
+            return
+        }
+        // An automatic draft asks the machines again right before it sends and moves to the best one
+        // (`refreshBeforeSend`, useDraftEnvironmentRouting.ts:151-207, and `onSendWithRouting`, useComposerSend.ts at 4928, #35658).
+        if !loadBalanceRechecked, !redirecting, case .draft(let draft) = target, draft.loadBalancedEnvironmentId != nil,
+           currentAttachments.isEmpty, pendingMessageId == nil, environmentChangeTask == nil,
+           let group = group(of: ProjectId(draft.projectId)), isAutomatic(draft, machines: runOnTargets(group).count),
+           let selection = pickers.current.modelSelection {
+            guard loadBalanceRecheckTask == nil else { return }
+            let candidates = loadBalanceCandidates(group, selection: selection)
+            let threads = ComposerContext.referencedIds(text).compactMap { menuState.records[$0] }
+                .filter { $0["kind"]?.stringValue == "thread" }.compactMap { $0["environmentId"]?.stringValue }
+            let typed = composer.text, weights = ClientSettingsStore.shared.current["loadBalancingWeights"]
+            loadBalanceRecheckTask = Task { [weak self] in
+                guard let self else { return }
+                let snapshots = await self.hostSnapshots(candidates.map(\.option.environmentId))
+                self.loadBalanceRecheckTask = nil
+                // Anything the user changed meanwhile drops this send, as T3's comparisons do.
+                guard !Task.isCancelled, case .draft(var current) = self.target, current == draft, self.composer.text == typed,
+                      self.currentAttachments.isEmpty, self.pickers.current.modelSelection == selection,
+                      ClientSettingsStore.shared.current["loadBalancingWeights"] == weights else { return }
+                guard let chosen = ProviderLoadBalanceLogic.choose(snapshots, now: Date().timeIntervalSince1970 * 1000),
+                      let project = candidates.first(where: { $0.option.environmentId == chosen })?.project else {
+                    let readable = candidates.contains { t in threads.allSatisfy { $0 == t.option.environmentId } }
+                    self.toast(.warning, "Choose a machine to continue", !threads.isEmpty && !readable
+                               ? "No machine can read every attached thread. Choose a machine in the composer or remove the threads."
+                               : "No eligible machine has available resources. Choose a machine in the composer to override.")
+                    return
+                }
+                if chosen != ProjectId(current.projectId).environmentId {
+                    // The branch stays; the multi-model pick is keyed by draft id and follows.
+                    self.flushPrompt(); Self.retarget(&current, to: project)
+                    current.environmentSelection = "auto"; current.loadBalancedEnvironmentId = chosen
+                    let key = self.sessions.first { $0.value.draftId == current.draftId }?.key ?? group.key
+                    self.sessions[key] = current; self.target = .draft(current)
+                    self.scheduleSave(); self.refresh(); self.syncSidebarDrafts(); self.onTargetChange?()
+                }
+                self.loadBalanceRechecked = true
+                defer { self.loadBalanceRechecked = false }
+                self.send(text, mode: mode, background: background, redirecting: redirecting, compactConfirmed: compactConfirmed)
             }
             return
         }
@@ -2312,6 +2425,8 @@ final class ComposerController {
             // First send of a draft: one launchThread; the thread exists after the reply (05-composer.jsonl).
             // The launch takes a thread id of its own and the draft leaves the store (`NewThreadDraftLaunch`).
             let (session, sessionKey) = NewThreadDraftLaunch.begin(stored, in: &sessions)
+            // The sidebar shows the new thread as Setting up until the server owns the send (#33783).
+            sidebar?.state.launchingThreadIds.insert(ThreadId(session.threadId))
             self.target = .draft(session)
             scheduleSave()
             panel.setDraft(projectTitle: nil)
@@ -2350,6 +2465,7 @@ final class ComposerController {
                     }
                 } catch {
                     guard let self else { return }
+                    sidebar?.state.launchingThreadIds.remove(ThreadId(session.threadId))
                     // A fresh draft took the composer (`backgroundDraftOpened`), so the failed one comes back on its own.
                     if background, self.target != .draft(session) {
                         backgroundSendFailed(error, session: session, key: sessionKey, text: text, attachments: attachments)
@@ -2553,7 +2669,8 @@ final class ComposerController {
             }
         }
         // The project's provider switches apply to the fan-out too (ChatView.tsx:3245-3249).
-        let catalog = ProviderCatalog(serverConfig.providers, settings: ServerSettingsValues(serverConfig.settings.raw), projectId: ProjectId(session.projectId).localId.rawValue)
+        let catalog = ProviderCatalog(serverConfig.providers.map { $0.resolved(cwd: menuCwd) }, settings: ServerSettingsValues(serverConfig.settings.raw),
+                                      projectId: ProjectId(session.projectId).localId.rawValue)
         for s in selections where catalog.entry(s.instanceId)?.isReady != true {
             threadErrors.set(key, "Provider for \(s.model) is unavailable.")
             refresh()
@@ -3876,7 +3993,7 @@ extension ComposerController {
         let key = "\(env)|\(provider.instanceId.rawValue)|\(cwd)"
         let ttl: TimeInterval = 5 * 60
         if let last = menuState.workspaceRefresh[key], Date().timeIntervalSince(last) < ttl { return }
-        if let snapshot = provider.workspaceSnapshot(cwd), snapshot.slashCommandsPending != true,
+        if let snapshot = provider.workspaceSnapshot(cwd), !snapshot.isPending,
            let checked = T3Timestamp(snapshot.checkedAt).date, Date().timeIntervalSince(checked) < ttl { return }
         menuState.workspaceRefresh[key] = Date()
         menuState.workspaceScanning.insert(key)
@@ -3886,6 +4003,7 @@ extension ComposerController {
             let reply = try? await supervisor.request("server.refreshProviders", payload: payload)
             guard let self else { return }
             menuState.workspaceScanning.remove(key)
+            pickers.workspaceModelsScanning = workspaceSkillsScanning
             if panel.menus.isOpen { panel.menus.reload() }
             guard environments.session(env) === shell else { return }
             guard let providers = try? reply?["providers"]?.decode(as: [ServerProvider].self) else {
@@ -3895,6 +4013,8 @@ extension ComposerController {
             applyWorkspaceReply(providers, env: env, instance: provider.instanceId.rawValue, cwd: cwd, fresh: false, basis: provider)
             if panel.menus.isOpen { panel.menus.reload() }
             composer.refreshChips()
+            // The project's own models join the picker's catalog (#24585). The TTL stamp keeps this from rescanning.
+            refresh()
         }
     }
 

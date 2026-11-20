@@ -62,4 +62,25 @@ struct ProviderWorkspaceSnapshotsTests {
         #expect(merged.providers[0].workspaceSnapshots?.count == 32)
         #expect(merged.providers[0].workspaceSnapshot("/0") == nil)
     }
+
+    /// #24585 (providerSkills.test.ts at 4928): a cwd with its own models shows them; others keep the machine's.
+    @Test func projectModelsReplaceTheMachineCatalogOnlyForTheirCwd() throws {
+        var provider = ServerProvider(instanceId: ProviderInstanceId("opencode"), driver: "opencode")
+        provider.models = [ServerProviderModel(slug: "machine", name: "Machine")]
+        let json: JSONValue = .object(["cwd": .string("/p"), "checkedAt": .string("2026-11-11T10:00:00Z"), "slashCommands": .array([]),
+                                       "skills": .array([]), "modelsPending": .bool(true),
+                                       "models": .array([.object(["slug": .string("proj"), "name": .string("Project"), "isCustom": .bool(false)])])])
+        provider.workspaceSnapshots = [try json.decode(as: ServerProviderWorkspaceSnapshot.self)]
+        #expect(provider.resolved(cwd: "/p").models.map(\.slug) == ["proj"])
+        #expect(provider.resolved(cwd: "/other").models.map(\.slug) == ["machine"])
+        #expect(provider.resolved(cwd: nil) == provider)
+        #expect(provider.workspaceSnapshot("/p")?.isPending == true)
+        // A changed machine catalog invalidates a cached snapshot.
+        var cache = ProviderWorkspaceSnapshots()
+        cache.record(instanceId: provider.instanceId, cwd: "/p", fresh: false, providers: [provider], basis: provider)
+        var config = ServerProviderConfig(providers: [provider], capabilities: ["providerWorkspaceSnapshotsOnDemand"])
+        #expect(cache.merging(config).providers[0].workspaceSnapshot("/p") != nil)
+        config.providers[0].models.append(ServerProviderModel(slug: "new", name: "New"))
+        #expect(cache.merging(config).providers[0].workspaceSnapshots == nil)
+    }
 }

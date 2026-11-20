@@ -28,6 +28,8 @@ final class PaletteCommands {
     private var searchTask: Task<Void, Never>?
     private var triageTask: Task<Void, Never>?
     private var pendingQuery: String?
+    /// The query whose message search failed on every machine asked (#38155).
+    private var failedQuery: String?
     private var searchConnections: [String: Int] = [:]
     /// When the palette opened: titles and messages rank against it, so rows don't reorder as time passes.
     private var openedAt = 0.0
@@ -369,7 +371,7 @@ final class PaletteCommands {
 
     private func makeSource() -> CommandPaletteController.Source {
         openedAt = Double(nowMs)
-        return CommandPaletteController.Source(
+        var source = CommandPaletteController.Source(
             rootGroups: { [weak self] in self?.rootGroups() ?? [] },
             projectItems: { [weak self] in self?.projectSearchItems() ?? [] },
             threadItems: { [weak self] query in self?.threadItems(query: query) ?? [] },
@@ -377,6 +379,8 @@ final class PaletteCommands {
             settingsItems: { [weak self] query in self?.settingsItems(query) ?? [] },
             threadMessageItems: { [weak self] query in self?.threadMessageItems(query) ?? [] },
             now: openedAt)
+        source.threadSearchFailed = { [weak self] query in self?.failedQuery == query.trimmingCharacters(in: .whitespaces) }
+        return source
     }
 
     var snapshot: ShellSnapshot? { sidebar?.snapshot }
@@ -392,21 +396,7 @@ final class PaletteCommands {
     /// Project groups with the open thread's group first (`pickerProjects`).
     private func projectGroups() -> [SidebarModel.ProjectGroup] {
         guard let snapshot else { return [] }
-        // `projectGroups` in the `sidebarProjectSortOrder` order (CommandPalette.tsx:955-963), then the
-        // contextual project first (`buildSidebarProjectPickerEntries`, sidebarProjectGrouping.ts:168-175).
-        let order = SidebarProjectOrder.sortOrder
-        let built = SidebarModel.buildProjectGroups(snapshot.projects, preferredEnvironmentId: envs.primaryId)
-        // Manual reads the stored order (CommandPaletteLookups.ts:73-83).
-        var groups = order == .manual ? SidebarModel.orderProjectGroups(built, projects: snapshot.projects, preferred: SidebarProjectOrder.stored)
-            : SidebarModel.sortLogicalProjectsForSidebar(built, threads: snapshot.threads, order: order)
-        // Archived projects leave the pickers and pinned ones lead; the current project leads the unpinned ones
-        // (`pickableProjectGroups`, `buildSidebarProjectPickerEntries` at 4928, #26154).
-        groups = ProjectOrganization.pickable(groups)
-        if let current = threads.composer.activeProjectId, let i = groups.firstIndex(where: { $0.memberProjectIds.contains(current) }), !groups[i].pinned {
-            let pinned = groups.filter(\.pinned).count
-            if i > pinned { groups.insert(groups.remove(at: i), at: pinned) }
-        }
-        return groups
+        return SidebarProjectOrder.pickerGroups(snapshot, primaryId: envs.primaryId, current: threads.composer.activeProjectId)
     }
 
     /// `ProjectSearchDescription`: "<location> · <root>" for one project, the machine labels for a group.
@@ -683,8 +673,7 @@ final class PaletteCommands {
                     throw SidebarCommands.CommandMessage(errorDescription: "This machine cannot start threads without a project.")
                 }
                 try await TriageLogic.prepare(supported: supportsTriage(env), prepare: {
-                    let client: JSONValue = .object(["label": .string("CandyWrapper"), "deviceType": .string("desktop"),
-                        "os": .string("macOS"), "appVersion": .string(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")])
+                    let client = TriageLogic.clientMetadata(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")
                     let reply = try await environments.request(env, "server.prepareTriage", .object(["client": client]))
                     guard let prompt = reply["prompt"]?.stringValue else { throw SidebarCommands.CommandMessage(errorDescription: "The server returned no triage prompt.") }
                     return prompt
@@ -761,6 +750,7 @@ final class PaletteCommands {
                                      timestamp: TimestampFormat.formatRelativeTimeLabel(stamp, nowMs: ms), icon: .messageSquare,
                                      action: .run({ [weak self] in self?.pickThread(id, query: query) }, keepOpen: false))
             entry.threadSearch = subject
+            entry.dragThread = thread.id
             entry.subtitleProject = projects[thread.projectId].map(ProjectIconSource.init)
             entry.subtitleDriver = thread.id.environmentId.flatMap { ProviderCatalog(threads.composer.providers($0)).entry(thread.providerInstanceId)?.driver }
             entry.leadingStatus = SidebarModel.resolveThreadStatusPill(SidebarThread(thread), lastVisitedAt: thread.lastVisitedAt.value)
@@ -874,6 +864,7 @@ final class PaletteCommands {
             guard !Task.isCancelled, self.pendingQuery == trimmed else { return }
             // Failed reads retain the last answer; a reconnect retries it (runtime.ts:724-752, 3814).
             if let found { self.search = (trimmed, found.filter { $0.source == "user" || $0.source == "assistant" }) }
+            self.failedQuery = found == nil ? trimmed : nil
             self.pendingQuery = nil
             self.overlay?.controller.refresh()
         }

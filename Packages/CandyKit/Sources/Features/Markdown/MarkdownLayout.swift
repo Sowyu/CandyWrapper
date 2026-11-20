@@ -26,6 +26,17 @@ func onMain<T>(_ body: @MainActor () -> T) -> T {
 }
 
 /// T3's `.chat-markdown` values (`apps/web/src/index.css:1759-2073`, ChatMarkdown.tsx), research note H section 4.
+/// The body text a Markdown block sets everything else against: T3's `text-sm leading-relaxed` by default, or the
+/// `text-xs` (12/16) a question option's preview gives its ChatMarkdown (ComposerPendingUserInputPanel.tsx:334-340 at
+/// 4928, #34784). Margins and heading sizes are rem-based in T3, so they stay.
+public struct MarkdownBody: Hashable, Sendable {
+    public var size: CGFloat
+    public var lineHeight: CGFloat
+    public init(size: CGFloat, lineHeight: CGFloat) { self.size = size; self.lineHeight = lineHeight }
+    public static var chat: MarkdownBody { MarkdownBody(size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight) }
+    public static var xs: MarkdownBody { MarkdownBody(size: 12, lineHeight: 16 * FontRuntime.interfaceScale) }
+}
+
 enum MarkdownStyle {
     static let fontSize: CGFloat = 14
     static var lineHeight: CGFloat { 14 * 1.625 * FontRuntime.interfaceScale }
@@ -494,6 +505,7 @@ public final class MarkdownLayout: @unchecked Sendable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
         var fitsExpandedTables: Bool
+        var body: MarkdownBody
     }
     /// How many top-level blocks came from `reusing` instead of being laid out (tests).
     private(set) var reusedBlocks = 0
@@ -521,7 +533,8 @@ public final class MarkdownLayout: @unchecked Sendable {
 
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
                 expandedTables: Set<Int> = [], diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
-                fitsExpandedTables: Bool = false, streaming: Bool = false, reusing previous: MarkdownLayout? = nil, parallel: Bool = false) {
+                fitsExpandedTables: Bool = false, streaming: Bool = false, reusing previous: MarkdownLayout? = nil, parallel: Bool = false,
+                body: MarkdownBody = .chat) {
         self.width = width
         self.expandedTables = expandedTables
         if streaming, case .code = document.blocks.last { plainRoot = document.blocks.count - 1 }
@@ -535,8 +548,9 @@ public final class MarkdownLayout: @unchecked Sendable {
         builder.runsShell = runsShell
         builder.fitsExpandedTables = fitsExpandedTables
         builder.plainRoot = plainRoot
+        builder.body = body
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
-                           runsShell: runsShell, fitsExpandedTables: fitsExpandedTables)
+                           runsShell: runsShell, fitsExpandedTables: fitsExpandedTables, body: body)
         if let previous, previous.width == width, previous.reuseKey == key { builder.previous = previous }
         let color = bodyColor ?? MarkdownStyle.body
         if parallel, builder.previous == nil, !Thread.isMainThread, document.blocks.count >= Builder.parallelBlocks {
@@ -660,6 +674,9 @@ private struct Builder {
     /// Root boxes laid out ahead, with the code, table and display formula counts after each (`rootBoxes`).
     var precomputed: (boxes: [Box], ends: [(code: Int, table: Int, math: Int)])?
 
+    /// The body text's size and line height (`text-sm leading-relaxed`, or a caller's `text-xs`).
+    var body = MarkdownBody.chat
+
     init(unwrapped: Set<Int>, wrapsCode: Bool, files: FileChipResolver?, boxes: TextBoxCache) {
         self.unwrapped = unwrapped; self.wrapsCode = wrapsCode; self.files = files; self.boxes = boxes
     }
@@ -749,7 +766,7 @@ private struct Builder {
             case .code: code += 1
             case .table: table += 1
             // Only a formula that typesets takes a scroll index (`displayMath`); this also warms the formula cache.
-            case .math(let m): if MathRenderer.layout(m.tex, display: true, textSize: MarkdownStyle.fontSize) != nil { math += 1 }
+            case .math(let m): if MathRenderer.layout(m.tex, display: true, textSize: body.size) != nil { math += 1 }
             case .blockquote(let children), .alert(_, let children): children.forEach(count)
             case .list(let list): for item in list.items { item.blocks.forEach(count) }
             default: break
@@ -810,7 +827,7 @@ private struct Builder {
             box.top = m; box.bottom = m
             return box
         case .paragraph(let runs):
-            var box = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
+            var box = text(runs, width: width, size: body.size, lineHeight: body.lineHeight, color: context.color)
             // Tight list items hold their text inline, without a <p> and its margins.
             let m = tight ? 0 : MarkdownStyle.blockMargin
             box.top = m; box.bottom = m
@@ -856,8 +873,8 @@ private struct Builder {
             // A standalone image sits on the paragraph's baseline. Until it decodes it holds the loading slot,
             // 16:9 and at most 30rem wide, and keeps it if it fails; once its size is known it takes its own box
             // (ChatMarkdown.tsx:1386-1400). Workspace images keep a 1px frame (`rounded-lg border border-border/40`).
-            let strut = TextLine(NSAttributedString(string: " ", attributes: [.font: MarkdownStyle.font(MarkdownStyle.fontSize)]))
-            let below = MarkdownStyle.lineHeight - strut.baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
+            let strut = TextLine(NSAttributedString(string: " ", attributes: [.font: MarkdownStyle.font(body.size)]))
+            let below = body.lineHeight - strut.baseline(top: 0, lineHeight: body.lineHeight)
             let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
             if InlineAudioSource.isAudio(name: url.absoluteString) {
                 return Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: 76 + below,
@@ -889,20 +906,20 @@ private struct Builder {
     /// A display formula, centered, scrolling sideways when wider than `width` (MarkdownMath.tsx:20-58). A formula stage 1
     /// can't typeset shows its TeX as inline code, one chip per source line.
     mutating func displayMath(_ math: MarkdownMath, width: CGFloat, color: NSColor) -> Box {
-        let size = MarkdownStyle.fontSize, font = MarkdownStyle.font(size)
+        let size = body.size, font = MarkdownStyle.font(size)
         guard let layout = MathRenderer.layout(math.tex, display: true, textSize: size) else {
             var runs: [InlineRun] = []
             for (i, line) in math.copySource.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
                 if i > 0 { runs.append(InlineRun(text: "\n", isBreak: true)) }
                 if !line.isEmpty { runs.append(InlineRun(text: String(line), code: true)) }
             }
-            var box = text(runs, width: width, size: size, lineHeight: MarkdownStyle.lineHeight, color: color)
+            var box = text(runs, width: width, size: size, lineHeight: body.lineHeight, color: color)
             box.top = MarkdownStyle.blockMargin; box.bottom = MarkdownStyle.blockMargin
             return box
         }
         let index = mathIndex
         mathIndex += 1
-        let (above, below) = MarkdownMathStyle.content(layout, parent: font, lineHeight: MarkdownStyle.lineHeight)
+        let (above, below) = MarkdownMathStyle.content(layout, parent: font, lineHeight: body.lineHeight)
         let pad = MarkdownMathStyle.padX, padY = MarkdownMathStyle.padY
         // A `\tag` sits at the right edge; the formula stays centered, so the content reserves the tag's width on both sides.
         let tagRoom = layout.tag.map { $0.width + 0.5 * size * MathRenderer.scale } ?? 0
@@ -1009,7 +1026,7 @@ private struct Builder {
     mutating func list(_ list: MarkdownList, width: CGFloat, context: Context) -> Box {
         var inner = context
         if list.ordered { inner.olDepth += 1 } else { inner.ulDepth += 1 }
-        let body = MarkdownStyle.font(MarkdownStyle.fontSize)
+        let body = MarkdownStyle.font(self.body.size)
         // ChatMarkdown widens an ordered list's gutter to (digits + 2)ch when markers need two or more digits.
         var gutter = MarkdownStyle.listGutter
         if list.ordered {
@@ -1041,7 +1058,7 @@ private struct Builder {
                 out.items.append(.symbol(min(inner.ulDepth, 3) - 1, CGRect(x: gutter - 8 - size, y: top, width: size, height: size), context.color))
             } else if item.task == nil, let baseline = content.baseline {
                 let marker = NSAttributedString(string: markerText(list, index: index, number: item.number, context: inner), attributes: [
-                    .font: list.ordered ? NSFont.monospacedDigitSystemFont(ofSize: MarkdownStyle.fontSize, weight: .regular) : body,
+                    .font: list.ordered ? NSFont.monospacedDigitSystemFont(ofSize: self.body.size, weight: .regular) : body,
                     .foregroundColor: context.color])
                 out.items.append(.glyphs(marker, baselineRight: CGPoint(x: gutter, y: y + baseline)))
             }
@@ -1084,15 +1101,15 @@ private struct Builder {
     /// (`margin: 0 0.35em 0.15em calc(-1 * var(--list-gutter))`, `vertical-align: middle`), then a space.
     /// In a loose list the checkbox and text sit in a `<p>` whose margins collapse with `li + li`, as other items' do.
     mutating func taskItem(_ item: MarkdownListItem, checked: Bool, width: CGFloat, gutter: CGFloat, context: Context, tight: Bool) -> Box {
-        let body = MarkdownStyle.font(MarkdownStyle.fontSize)
+        let body = MarkdownStyle.font(self.body.size)
         let space = TextLine(NSAttributedString(string: " ", attributes: [.font: body])).width
-        let lead = -gutter + 13 + 0.35 * MarkdownStyle.fontSize + space
+        let lead = -gutter + 13 + 0.35 * self.body.size + space
         var blocks = item.blocks
         var box: Box
         if case .paragraph(let runs)? = blocks.first {
             blocks.removeFirst()
             // The first line starts after the box; the text box spans the full gutter so wrapped lines align.
-            let first = text(runs, width: width + gutter, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight,
+            let first = text(runs, width: width + gutter, size: self.body.size, lineHeight: self.body.lineHeight,
                              color: context.color, headIndent: gutter, firstLineIndent: gutter + lead)
             box = Box()
             box.add(first, at: CGPoint(x: -gutter, y: 0))
@@ -1109,8 +1126,8 @@ private struct Builder {
             box = flow(blocks, width: width, context: context, tight: tight)
         }
         // vertical-align: middle puts the margin box's middle at baseline - x-height / 2.
-        let baseline = box.baseline ?? TextLine(NSAttributedString(string: " ", attributes: [.font: body])).baseline(top: 0, lineHeight: MarkdownStyle.lineHeight)
-        let marginBox = 13 + 0.15 * MarkdownStyle.fontSize
+        let baseline = box.baseline ?? TextLine(NSAttributedString(string: " ", attributes: [.font: body])).baseline(top: 0, lineHeight: self.body.lineHeight)
+        let marginBox = 13 + 0.15 * self.body.size
         let top = baseline - body.xHeight / 2 - marginBox / 2
         box.items.insert(.checkbox(CGRect(x: -gutter, y: top, width: 13, height: 13), checked: checked), at: 0)
         return box
@@ -1132,10 +1149,10 @@ private struct Builder {
         let titleColor = Themed.base(light, dark: dark)
         // Title: a flex <p> (so 10.4px margins) with a 14px icon, a 6px gap and the medium-weight label.
         // Find skips the title (`data-thread-find-ignore`, ChatMarkdown.tsx:2837).
-        var title = text([InlineRun(text: label)], width: width - indent - 14 - 6, size: MarkdownStyle.fontSize, weight: .medium,
-                         lineHeight: MarkdownStyle.lineHeight, color: titleColor, findable: false)
+        var title = text([InlineRun(text: label)], width: width - indent - 14 - 6, size: body.size, weight: .medium,
+                         lineHeight: body.lineHeight, color: titleColor, findable: false)
         title.items = title.items.map { $0.moved(by: CGPoint(x: 14 + 6, y: 0)) }
-        title.items.append(.icon(icon, CGRect(x: 0, y: (MarkdownStyle.lineHeight - 14) / 2, width: 14, height: 14), titleColor))
+        title.items.append(.icon(icon, CGRect(x: 0, y: (body.lineHeight - 14) / 2, width: 14, height: 14), titleColor))
         title.top = MarkdownStyle.blockMargin
         title.bottom = MarkdownStyle.blockMargin
         var titleAndBody = Box()
@@ -1242,7 +1259,7 @@ private struct Builder {
             let part: Box
             switch piece {
             case .text(let runs):
-                part = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
+                part = text(runs, width: width, size: body.size, lineHeight: body.lineHeight, color: context.color)
             case .card(let citation, let url):
                 part = citationCard(citation, url: url, width: width, context: context)
             case .reply(let record, let citation, let reference):
@@ -1353,8 +1370,8 @@ private struct Builder {
         box.items.append(.link(frame, url))
         box.baseline = 6 + (titleBox?.firstBaseline ?? textBox.firstBaseline)
         if let comment = citation.comment, !comment.isEmpty {
-            let commentBox = self.text([InlineRun(text: comment)], width: width, size: MarkdownStyle.fontSize,
-                                       lineHeight: MarkdownStyle.lineHeight, color: context.color, cardCopy: copyText)
+            let commentBox = self.text([InlineRun(text: comment)], width: width, size: body.size,
+                                       lineHeight: body.lineHeight, color: context.color, cardCopy: copyText)
             box.add(commentBox, at: CGPoint(x: 0, y: cardHeight + 6))
             box.height = cardHeight + 6 + commentBox.height
         }
