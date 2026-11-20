@@ -2649,8 +2649,11 @@ final class ComposerController {
     // MARK: Reply to a response (#33124)
 
     /// A 4928 server reads `response` records; 3824 rejects an unknown kind without `payload`.
-    // ponytail: no capability names response records, so this keys on serverUpdateStaging (2026-11-14, after #33124 on 2026-11-12). Use a dedicated flag if T3 adds one
-    private var replyAvailable: Bool { serverConfig.capabilities.contains("serverUpdateStaging") }
+    /// No capability names response records. `shellThreadFamilies` (#35071) is the first one every server sends that
+    /// landed after #33124; `serverUpdateStaging` came only from boot-service installs (ServerEnvironment.ts:293), so
+    /// Reply did nothing on a plain `t3 serve`.
+    // ponytail: keyed on a neighbouring capability, use a dedicated flag if T3 adds one
+    private var replyAvailable: Bool { serverConfig.capabilities.contains("shellThreadFamilies") }
 
     /// `replyToResponse` (ChatComposer.tsx at 4928) behind `replyToResponseStable` (ChatView.tsx): an open question
     /// owns the composer and its answer would not carry the reply, so the reply waits with a toast.
