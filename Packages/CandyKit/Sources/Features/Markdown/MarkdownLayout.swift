@@ -1,5 +1,6 @@
 import AppKit
 import DesignSystem
+import T3Protocol
 
 extension NSAttributedString.Key {
     /// What find in thread matches in place of these characters, as T3 indexes the rendered page
@@ -166,6 +167,19 @@ enum MarkdownStyle {
                 i = end
                 nonisolated(unsafe) let resolver = contexts ?? MarkdownContextChips()
                 appendContextChip(onMain { resolver.threadLinkChip(threadId: threadId, label: text.isEmpty ? threadId : text) })
+                continue
+            }
+            if let url = run.link, url.scheme == "t3-model", let contexts {
+                nonisolated(unsafe) let resolver = contexts
+                let source = run.text
+                i += 1
+                if let chip = onMain({ resolver.modelChip(source: source) }) {
+                    appendContextChip(chip)
+                    // `copyMarkdown={props.source}`: the chip copies its reference.
+                    out.addAttribute(.markdownCopyText, value: source, range: NSRange(location: out.length - 1, length: 1))
+                } else {
+                    out.append(NSAttributedString(string: source, attributes: [.font: parent, .foregroundColor: color]))
+                }
                 continue
             }
             if let url = run.link, url.scheme == "t3-context", let parsed = ComposerContext.parseHref(url.absoluteString) {
@@ -782,7 +796,7 @@ private struct Builder {
 
     mutating func layout(_ block: MarkdownBlock, width: CGFloat, context: Context, tight: Bool) -> Box {
         switch block {
-        case .paragraph(let runs) where runs.contains(where: { $0.link?.scheme == "t3-citation" }):
+        case .paragraph(let runs) where runs.contains(where: { $0.link?.scheme == "t3-citation" || replyRecord($0.link) != nil }):
             var box = citationParagraph(runs, width: width, context: context)
             let m = tight ? 0 : MarkdownStyle.blockMargin
             box.top = m; box.bottom = m
@@ -1172,11 +1186,18 @@ private struct Builder {
 
     // MARK: Quote cards
 
+    /// The `response` record a `t3-context://` link names, when the message carries it.
+    func replyRecord(_ url: URL?) -> JSONValue? {
+        guard let url, url.scheme == "t3-context", let contexts, let parsed = ComposerContext.parseHref(url.absoluteString),
+              parsed.kind == "response", let record = contexts.records[parsed.contextId], record["kind"]?.stringValue == "response" else { return nil }
+        return record
+    }
+
     /// A paragraph holding `t3-citation://` links: each is a block card (`AssistantCitationEmbed`, 4928
     /// chat/AssistantCitationChip.tsx:60-154, ChatMarkdown.tsx `a`, #34181). A card that doesn't start or end its block
     /// keeps `0.65rem` from the text beside it.
     mutating func citationParagraph(_ runs: [InlineRun], width: CGFloat, context: Context) -> Box {
-        enum Piece { case text([InlineRun]), card(ThreadAssistantCitation, URL) }
+        enum Piece { case text([InlineRun]), card(ThreadAssistantCitation, URL), reply(JSONValue, ThreadAssistantCitation, URL) }
         var pieces: [Piece] = [], current: [InlineRun] = [], i = 0
         func flush() {
             var trimmed = current
@@ -1190,6 +1211,10 @@ private struct Builder {
                 flush()
                 while i < runs.count, runs[i].link == url { i += 1 }
                 pieces.append(.card(citation, url))
+            } else if let url = runs[i].link, let record = replyRecord(url), let citation = ComposerReply.citation(record) {
+                flush()
+                while i < runs.count, runs[i].link == url { i += 1 }
+                pieces.append(.reply(record, citation, url))
             } else {
                 current.append(runs[i]); i += 1
             }
@@ -1205,6 +1230,15 @@ private struct Builder {
                 part = text(runs, width: width, size: MarkdownStyle.fontSize, lineHeight: MarkdownStyle.lineHeight, color: context.color)
             case .card(let citation, let url):
                 part = citationCard(citation, url: url, width: width, context: context)
+            case .reply(let record, let citation, let reference):
+                // `ResponseReplyCard` (AssistantCitationChip.tsx:156-179): the subagents it reported on over the
+                // response's flat opening, unmarked; copying it copies the message's reference.
+                var whole = citation
+                whole.prefix = ""; whole.suffix = ""; whole.comment = nil
+                let names = record["subagents"]?.arrayValue?.compactMap { $0["title"]?.stringValue } ?? []
+                let copy = ComposerReply.reference(record).map(ComposerContext.reference) ?? reference.absoluteString
+                part = citationCard(whole, url: URL(string: citation.href) ?? reference, width: width, context: context,
+                                    title: names.isEmpty ? nil : names.joined(separator: ", "), copy: copy)
             }
             box.add(part, at: CGPoint(x: 0, y: y))
             y += part.height
@@ -1217,16 +1251,18 @@ private struct Builder {
     /// lines with the quoted part marked (`bg-foreground/12 px-0.5 text-foreground rounded-sm`), and the comment below as
     /// text (`mt-1.5 whitespace-pre-wrap`). Copying any of the card copies the quote's Markdown; find skips it.
     // ponytail: the card copies its quote without the comment and the comment copies as text; T3 copies both as one link
-    mutating func citationCard(_ citation: ThreadAssistantCitation, url: URL, width: CGFloat, context: Context) -> Box {
+    mutating func citationCard(_ citation: ThreadAssistantCitation, url: URL, width: CGFloat, context: Context,
+                               title: String? = nil, copy: String? = nil) -> Box {
         let font = MarkdownStyle.font(14), line: CGFloat = 20
         let inner = max(1, width - 20)
         var quoted = citation
         quoted.comment = nil
+        let copyText = copy ?? quoted.markdown
         // `text.replace(/\s+/g, " ")` (AssistantCitationChip.tsx:54): runs of space become one, the edges stay.
         let flat = { (text: String) in text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression) }
         let whole = citation.prefix.isEmpty && citation.suffix.isEmpty
         let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Themed.color(\.mutedForeground),
-                                                   .markdownFindText: "", .markdownCopyText: quoted.markdown]
+                                                   .markdownFindText: "", .markdownCopyText: copyText]
         // Two lines hold a few hundred characters at most, so longer passages are cut before measuring.
         let passage = String(flat(citation.text).prefix(600))
         func string(_ passage: String, ellipsis: Bool) -> (NSAttributedString, NSRange?) {
@@ -1265,20 +1301,43 @@ private struct Builder {
             (text, mark) = best
             textBox = boxes.make(text, width: inner, lineHeight: line, strut: font, wraps: true)
         }
-        let cardHeight = 6 + textBox.height + 6
+        // `block truncate text-xs font-medium text-foreground/80` over the preview.
+        var titleBox: MarkdownTextBox?
+        if let title, !title.isEmpty {
+            let titleFont = MarkdownStyle.font(12, weight: .medium)
+            let attributes: [NSAttributedString.Key: Any] = [.font: titleFont, .foregroundColor: Themed.color(\.foreground, 0.8),
+                                                             .markdownFindText: "", .markdownCopyText: copyText]
+            let flatTitle = String(flat(title).prefix(300))
+            var made = boxes.make(NSAttributedString(string: flatTitle, attributes: attributes), width: inner, lineHeight: 16, strut: titleFont, wraps: true)
+            if made.height > 16.5 {
+                var lo = 0, hi = flatTitle.count
+                while lo < hi {
+                    let mid = (lo + hi + 1) / 2
+                    let candidate = boxes.make(NSAttributedString(string: String(flatTitle.prefix(mid)) + "…", attributes: attributes),
+                                               width: inner, lineHeight: 16, strut: titleFont, wraps: true)
+                    if candidate.height <= 16.5 { lo = mid } else { hi = mid - 1 }
+                }
+                made = boxes.make(NSAttributedString(string: String(flatTitle.prefix(lo)) + "…", attributes: attributes),
+                                  width: inner, lineHeight: 16, strut: titleFont, wraps: true)
+            }
+            titleBox = made
+        }
+        let titleHeight = titleBox?.height ?? 0
+        let cardHeight = 6 + titleHeight + textBox.height + 6
         var box = Box(height: cardHeight)
         let frame = CGRect(x: 0, y: 0, width: width, height: cardHeight)
         box.items.append(.citationCard(frame, url))
+        if let titleBox { box.items.append(.text(titleBox, CGPoint(x: 10, y: 6))) }
         if let mark {
             for span in textBox.spans(mark) {
-                box.items.append(.box(CGRect(x: 10 + span.x0, y: 6 + textBox.lineTop(baseline: span.baseline), width: span.x1 - span.x0,
+                box.items.append(.box(CGRect(x: 10 + span.x0, y: 6 + titleHeight + textBox.lineTop(baseline: span.baseline), width: span.x1 - span.x0,
                                              height: textBox.lineHeight(baseline: span.baseline)),
                                       fill: Themed.color(\.foreground, 0.12), border: nil, radius: 2))
             }
         }
-        box.items.append(.text(textBox, CGPoint(x: 10, y: 6)))
+        box.items.append(.text(textBox, CGPoint(x: 10, y: 6 + titleHeight)))
         box.items.append(.link(frame, url))
-        box.baseline = 6 + textBox.firstBaseline
+        box.baseline = 6 + (titleBox?.firstBaseline ?? textBox.firstBaseline)
         if let comment = citation.comment, !comment.isEmpty {
             let commentBox = self.text([InlineRun(text: comment)], width: width, size: MarkdownStyle.fontSize,
                                        lineHeight: MarkdownStyle.lineHeight, color: context.color)

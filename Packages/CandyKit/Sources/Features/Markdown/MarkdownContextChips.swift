@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import T3Protocol
+import T3Store
 
 /// What a sent message knows about its `t3-context://` links: the records of its `context`, its
 /// attachments and the live titles of the threads it names. T3 renders each link with
@@ -17,6 +18,12 @@ public struct MarkdownContextChips: Equatable {
         public init(label: String, machine: String = "server") { self.label = label; self.machine = machine }
     }
     public var environments: [String: LinkedEnvironment] = [:]
+    /// `ModelMentionChip` (4928 chat/ModelMentionChip.tsx:85-124): the `model:<instance>/<slug>` references the
+    /// server lists, by source. An unknown one stays text.
+    public struct LinkedModel: Equatable, Sendable {
+        public var label: String, provider: String, driver: String
+    }
+    public var models: [String: LinkedModel] = [:]
 
     /// A known thread's shell title and its project's icon, nil when the project is unknown.
     public struct LinkedThread: Equatable, Sendable {
@@ -35,9 +42,11 @@ public struct MarkdownContextChips: Equatable {
     /// The message's records by context id and its attachments by id; `thread` looks up live threads
     /// by local id, nil once a thread is gone. `document` adds the threads its `t3-thread://` links name.
     public static func message(context: JSONValue?, attachments: [JSONValue], document: MarkdownDocument = MarkdownDocument(blocks: []),
-                               environmentId: String? = nil, environment: (String) -> LinkedEnvironment? = { _ in nil }, thread: (String) -> LinkedThread?) -> MarkdownContextChips {
+                               environmentId: String? = nil, environment: (String) -> LinkedEnvironment? = { _ in nil },
+                               text: String = "", providers: [ServerProvider] = [], thread: (String) -> LinkedThread?) -> MarkdownContextChips {
         var out = links(in: document, environmentId: environmentId, thread: thread) ?? MarkdownContextChips()
         out.environmentId = environmentId
+        out.models = models(in: text, providers: providers)
         if case .array(let records)? = context?["records"] {
             for record in records {
                 guard let id = record["contextId"]?.stringValue else { continue }
@@ -55,6 +64,68 @@ public struct MarkdownContextChips: Equatable {
             if let id = attachment["id"]?.stringValue { out.attachments[id] = attachment }
         }
         return out
+    }
+
+    /// `modelMentionPresentationAtom` (ModelMentionChip.tsx:35-58): the model's display name, its sub-provider or
+    /// instance name, and the instance's driver for the logo.
+    static func models(in text: String, providers: [ServerProvider]) -> [String: LinkedModel] {
+        guard !providers.isEmpty else { return [:] }
+        var out: [String: LinkedModel] = [:]
+        for o in ComposerModelMentions.collect(text) {
+            guard let provider = providers.first(where: { $0.instanceId.rawValue == o.instanceId }),
+                  let model = provider.models.first(where: { $0.slug == o.model }) else { continue }
+            out[ComposerModelMentions.format(instanceId: o.instanceId, model: o.model)] =
+                LinkedModel(label: ModelNames.display(model), provider: model.subProvider ?? provider.displayName ?? provider.driver, driver: provider.driver)
+        }
+        return out
+    }
+
+    /// `SkillInlineText` (SkillInlineText.tsx:37-50): each known model reference in plain text becomes a
+    /// `t3-model:` run the layout draws as a chip. Code and links keep literal text.
+    static func modelDocument(_ document: MarkdownDocument, models: [String: LinkedModel]) -> MarkdownDocument {
+        guard !models.isEmpty else { return document }
+        func runs(_ runs: [InlineRun]) -> [InlineRun] {
+            runs.flatMap { run -> [InlineRun] in
+                guard !run.code, run.link == nil, run.skill == nil, run.text.contains("model:") else { return [run] }
+                let ns = run.text as NSString
+                var result: [InlineRun] = [], cursor = 0
+                for o in ComposerModelMentions.collect(run.text) {
+                    let source = ComposerModelMentions.format(instanceId: o.instanceId, model: o.model)
+                    guard models[source] != nil, o.range.location >= cursor else { continue }
+                    if o.range.location > cursor { var plain = run; plain.text = ns.substring(with: NSRange(location: cursor, length: o.range.location - cursor)); result.append(plain) }
+                    var chip = run; chip.text = source; chip.link = modelURL(source); result.append(chip)
+                    cursor = o.range.upperBound
+                }
+                guard cursor > 0 else { return [run] }
+                if cursor < ns.length { var tail = run; tail.text = ns.substring(from: cursor); result.append(tail) }
+                return result
+            }
+        }
+        func block(_ b: MarkdownBlock) -> MarkdownBlock {
+            switch b {
+            case .paragraph(let r): return .paragraph(runs(r))
+            case .heading(let level, let r): return .heading(level: level, runs(r))
+            case .blockquote(let children): return .blockquote(children.map(block))
+            case .alert(let kind, let children): return .alert(kind, children.map(block))
+            case .list(var list): list.items = list.items.map { var item = $0; item.blocks = item.blocks.map(block); return item }; return .list(list)
+            case .table(var table): table.header = table.header.map(runs); table.rows = table.rows.map { $0.map(runs) }; return .table(table)
+            default: return b
+            }
+        }
+        return MarkdownDocument(blocks: document.blocks.map(block))
+    }
+
+    static func modelURL(_ source: String) -> URL? {
+        var c = URLComponents(); c.scheme = "t3-model"; c.path = source; return c.url
+    }
+
+    /// The chip for a `t3-model:` run, with the details T3's popover shows as its tooltip.
+    // ponytail: the details show as a tooltip; T3 opens a popover on click. Port the popover if people click model chips
+    @MainActor
+    func modelChip(source: String) -> MarkdownContextChip? {
+        guard let model = models[source] else { return nil }
+        return MarkdownContextChip(look: ComposerChipLook(kind: .model(driver: model.driver), label: model.label), action: .none,
+                                   tooltip: "\(model.label)\n\(model.provider)\n\(source)", accessibility: "Model \(model.label)")
     }
 
     // MARK: Thread links

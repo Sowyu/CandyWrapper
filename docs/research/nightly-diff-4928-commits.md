@@ -625,7 +625,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | ported: `@` lists up to 8 models of ready instances whose names start a word for every query word, after machines and threads (ComposerModelMentions.items); a pick writes `model:<instance>/<slug>`, and the editor chips a reference the server lists, followed by whitespace, with the provider logo and the model accent in the logo's hue (ComposerChipLook `.model`). Left: the chip's popover, chips in sent messages (ChatMarkdown, Features/Thread) and skipping `$…$` math (no composer math ranges in CW yet) |
+| 88109cea46 | #31207 | composer | feat(web,mobile): @-mention a model to name it for the agent | ported: `@` lists up to 8 models of ready instances whose names start a word for every query word, after machines and threads (ComposerModelMentions.items); a pick writes `model:<instance>/<slug>`, and the editor chips a reference the server lists, followed by whitespace, with the provider logo and the model accent in the logo's hue (ComposerChipLook `.model`). Sent messages chip known references too, copying the source (thread-2, MarkdownContextChips `modelDocument`). Left: the chip's popover (a tooltip for now), chips in assistant replies, and skipping `$…$` math (no composer math ranges in CW yet) |
 
 ## New feature mcp-client-setup (3)
 
@@ -663,7 +663,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | ported: a finished assistant message gets Reply (TimelineMessageRows `AssistantMetaContent`), the composer shows "Replying to" with the response's opening as a link and Cancel reply, and the send leads with a `response` reference and record carrying its subagents (ComposerReply, ComposerController `replyToResponse`); behind `serverUpdateStaging` since 3824 rejects the kind. Left: the sent message's reply card (`ResponseReplyCard`, Features/Thread) and the stash keeping a reply |
+| c0f85e7f79 | #33124 | thread | feat(web): reply to an assistant response from its hover actions | ported: a finished assistant message gets Reply (TimelineMessageRows `AssistantMetaContent`), the composer shows "Replying to" with the response's opening as a link and Cancel reply, and the send leads with a `response` reference and record carrying its subagents (ComposerReply, ComposerController `replyToResponse`); behind `serverUpdateStaging` since 3824 rejects the kind. The sent message draws its reference as the reply card, subagent names over the response's opening, and a click goes to the response (thread-2, MarkdownLayout `citationParagraph`). Left: the stash keeping a reply |
 
 ## New feature agent-theming (5)
 

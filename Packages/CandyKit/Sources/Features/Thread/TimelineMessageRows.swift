@@ -316,6 +316,7 @@ final class UserMessageRowView: TimelineRowView {
         markdown.contextChips = MarkdownContextChips.message(context: m.context, attachments: m.attachments, document: document,
                                                              environmentId: model?.environmentId,
                                                              environment: { model?.linkedEnvironment?($0) },
+                                                             text: text, providers: model?.providers ?? [],
                                                              thread: { model?.linkedThread?(ThreadId($0)) })
         if let load = model?.attachmentImage {
             markdown.contextImageLoader = { id, side in await load(id, side, true) }
