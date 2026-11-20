@@ -91,3 +91,24 @@ T3 4928 has no "start a thread from an issue" action on the web. The agent tools
 - Hover preview cards for issue links in messages (#38294) and opening Linear links in messages in the panel (#38854).
 - Dictation in the comment composer. CandyWrapper has no voice input.
 - Thread details issue rows. Features/Thread belongs to another agent today.
+
+## Status after the first pass
+
+Done, with the commits:
+
+1. `65a4ef14` wire types, writes, link commands, error messages.
+2. `39a3ad7d` list logic, the page, the issue panel, the right panel's `issue` tab, saved views.
+3. `0a5ca190` the app's page and panel controllers, sidebar, palette and route entries.
+4. `7eb2a4cf` the full-screen fidelity test against 58-issues-page.
+5. `8254080f` issue tabs beside a thread and Linked items' Issues section.
+6. `1aafa321` saved views on the Pull Requests page.
+
+Left, each with what it needs:
+
+- Issue tracker settings (`IssueTrackerSettings.tsx`, `issueTrackers.*`): a Settings section under Source control. The wire decodes.
+- Linking from the Issues page: T3 opens `ThreadLinkPicker` in a dialog. CandyWrapper has no thread picker dialog yet, so the link button shows only beside a thread.
+- The issue link hover card (`IssueLinkPreview.tsx`, #38294) and Linear links in messages opening the panel (#38854): MarkdownView's link handler needs an issue branch.
+- Thread details issue rows (`ThreadDetailsIssueRows.tsx`, #38160, #38995): the details card lives in Features/Thread.
+- Search fields inside the Labels and Assignee filter submenus: MenuPopupView needs a field row.
+- Component references for the issue row, the panel and the composer: specs through `scripts/gen-*-spec.py` and `scripts/component-reference`.
+- An on-screen check of the page, the panel, the pickers, the composer card and the Views dialog, in light, dark and Redesign.
