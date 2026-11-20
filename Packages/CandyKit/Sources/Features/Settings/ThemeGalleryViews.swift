@@ -46,34 +46,55 @@ public struct ThemeCardDefinition: Equatable, Sendable {
 
 /// `ThemePreviewCircle` (ThemePreviewCircles.tsx:118-170): a 56px ball, a `border-2 border-background` ring around
 /// a blurred base with an accent glow and an action tint (themePreview.ts render specs). The ball is drawn once
-/// into an image per colors and scale.
+/// per colors, mode and scale and shared through `cache`, so a rebuilt card or a reopened Settings draws it at once.
 final class ThemePreviewCircleView: DSView {
-    var colors: [ThemeColorRole: String] = [:] { didSet { if colors != oldValue { invalidateImage() } } }
-    var mode: ThemeAppearance = .light { didSet { if mode != oldValue { invalidateImage() } } }
-    private var image: CGImage?
-    private var imageScale: CGFloat = 0
+    var colors: [ThemeColorRole: String] = [:] { didSet { if colors != oldValue { needsDisplay = true } } }
+    var mode: ThemeAppearance = .light { didSet { if mode != oldValue { needsDisplay = true } } }
+
+    struct Key: Hashable, Sendable {
+        let colors: [ThemeColorRole: String]
+        let mode: ThemeAppearance
+        let scale: CGFloat
+    }
+
+    /// The picture on screen and what it shows. A new key keeps the old picture up until its own is ready.
+    private(set) var image: CGImage?
+    private var imageKey: Key?
     private var renderTask: Task<Void, Never>?
-    private var renderFailed = false
+    private var renderKey: Key?
+    private var failedKey: Key?
+
+    // ponytail: emptied at 64 entries, about 40 KB each at 2x; an LRU if theme editing churns it
+    private static var cache: [Key: CGImage] = [:]
+    /// Renders started, for the test that a refresh with unchanged themes renders nothing.
+    static private(set) var renderCount = 0
 
     isolated deinit { renderTask?.cancel() }
 
-    private func invalidateImage() {
+    /// Out of the window or hidden, the view holds no picture; the cache keeps it for the next draw.
+    private func dropImage() {
         renderTask?.cancel()
         renderTask = nil
+        renderKey = nil
         image = nil
-        imageScale = 0
-        renderFailed = false
-        needsDisplay = true
+        imageKey = nil
+    }
+
+    /// A rebuilt card starts from the picture its previous card showed, so a changed theme never flashes empty.
+    func adoptPicture(from other: ThemePreviewCircleView) {
+        guard image == nil, other.mode == mode else { return }
+        image = other.image
+        imageKey = other.imageKey
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { invalidateImage() }
+        if window == nil { dropImage() }
     }
 
     override func viewDidHide() {
         super.viewDidHide()
-        invalidateImage()
+        dropImage()
     }
 
     override func viewDidUnhide() {
@@ -93,27 +114,7 @@ final class ThemePreviewCircleView: DSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let scale = window?.backingScaleFactor ?? layer?.contentsScale ?? 2
-        if imageScale != scale { invalidateImage(); imageScale = scale }
-        if image == nil, renderTask == nil, !renderFailed {
-            if window?.isVisible == true {
-                guard !isHiddenOrHasHiddenAncestor else { return }
-                // Core Image's first blur can take hundreds of milliseconds. Let the page paint and
-                // remain interactive while producing the same pixels away from the main thread.
-                let colors = colors, mode = mode
-                renderTask = Task { [weak self] in
-                    let rendered = await ThemePreviewRenderer.shared.render(colors: colors, mode: mode, scale: scale)
-                    guard !Task.isCancelled, let self else { return }
-                    self.image = rendered
-                    self.renderFailed = rendered == nil
-                    self.renderTask = nil
-                    self.needsDisplay = true
-                }
-            } else {
-                // An offscreen export needs its final pixels before Snapshot returns.
-                image = Self.render(colors: colors, mode: mode, scale: scale)
-                renderFailed = image == nil
-            }
-        }
+        updateImage(Key(colors: colors, mode: mode, scale: scale))
         // The view is 4pt larger than the ball so the ball's 1px/2px shadow is not clipped.
         let s = min(bounds.width, bounds.height) - 4
         let ball = NSRect(x: (bounds.width - s) / 2, y: (bounds.height - s) / 2, width: s, height: s)
@@ -137,6 +138,47 @@ final class ThemePreviewCircleView: DSView {
             ctx.draw(image, in: CGRect(origin: .zero, size: inner.size))
             ctx.restoreGState()
         }
+    }
+
+    private func updateImage(_ key: Key) {
+        guard imageKey != key else { return }
+        if let cached = Self.cache[key] {
+            renderTask?.cancel()
+            renderTask = nil
+            renderKey = nil
+            image = cached
+            imageKey = key
+            return
+        }
+        guard renderKey != key, failedKey != key else { return }
+        if window?.isVisible == true {
+            guard !isHiddenOrHasHiddenAncestor else { return }
+            // Core Image's first blur can take hundreds of milliseconds. Let the page paint and
+            // remain interactive while producing the same pixels away from the main thread.
+            renderTask?.cancel()
+            renderKey = key
+            Self.renderCount += 1
+            renderTask = Task { [weak self] in
+                let rendered = await ThemePreviewRenderer.shared.render(key)
+                guard !Task.isCancelled, let self else { return }
+                self.renderTask = nil
+                self.renderKey = nil
+                self.finish(key, rendered)
+                self.needsDisplay = true
+            }
+        } else {
+            // An offscreen export needs its final pixels before Snapshot returns.
+            Self.renderCount += 1
+            finish(key, Self.render(colors: key.colors, mode: key.mode, scale: key.scale))
+        }
+    }
+
+    private func finish(_ key: Key, _ rendered: CGImage?) {
+        guard let rendered else { failedKey = key; return }
+        if Self.cache.count >= 64 { Self.cache.removeAll() }
+        Self.cache[key] = rendered
+        image = rendered
+        imageKey = key
     }
 
     /// The 52px padding box: base color, two radial gradients interpolated in OKLab, blurred 3px, scaled 1.1.
@@ -201,9 +243,9 @@ final class ThemePreviewCircleView: DSView {
 private actor ThemePreviewRenderer {
     static let shared = ThemePreviewRenderer()
 
-    func render(colors: [ThemeColorRole: String], mode: ThemeAppearance, scale: CGFloat) -> CGImage? {
+    func render(_ key: ThemePreviewCircleView.Key) -> CGImage? {
         guard !Task.isCancelled else { return nil }
-        return ThemePreviewCircleView.render(colors: colors, mode: mode, scale: scale)
+        return ThemePreviewCircleView.render(colors: key.colors, mode: key.mode, scale: key.scale)
     }
 }
 
@@ -418,7 +460,17 @@ final class ThemeCardTitleButton: ControlView {
 /// The card grid (`grid gap-2`, `repeat(auto-fit, minmax(min(100%, 16rem), 1fr))`).
 final class ThemeCardGridView: DSView, SettingsGroupRow {
     var cards: [ThemeLibraryCardView] = [] {
-        didSet { oldValue.forEach { $0.removeFromSuperview() }; cards.forEach(addSubview); needsLayout = true }
+        didSet {
+            for card in cards {
+                guard let old = oldValue.first(where: { $0.card.id == card.card.id }) else { continue }
+                for circle in card.circles {
+                    if let previous = old.circles.first(where: { $0.mode == circle.mode }) { circle.ball.adoptPicture(from: previous.ball) }
+                }
+            }
+            oldValue.forEach { $0.removeFromSuperview() }
+            cards.forEach(addSubview)
+            needsLayout = true
+        }
     }
 
     static func columns(_ width: CGFloat) -> Int { max(1, Int((width + 8) / (256 + 8))) }

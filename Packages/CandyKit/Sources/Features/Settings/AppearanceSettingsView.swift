@@ -76,7 +76,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
         buttons.create.action = { [weak self] in self?.createTheme() }
         buttons.add.action = { [weak self] in self?.addTheme() }
         let grid = ThemeCardGridView()
-        var signature = ""
+        var shown: ThemeGridContent?
         binder.add { [weak self, weak tiles, weak grid] in
             guard let self else { return }
             let lib = self.themes
@@ -84,13 +84,16 @@ public final class AppearanceSettingsView: SettingsPageBase {
             let colors = ThemeAppearance.allCases.map { a in
                 (lib.ownerCard(a).flatMap { lib.definition($0) }.map(ThemeCardDefinition.init) ?? .standard).colors(a)
             }
-            tiles?.wireframeColors = (colors[0], colors[1])
-            // Rebuilt only when what the cards show changed.
+            if let tiles, tiles.wireframeColors.light != colors[0] || tiles.wireframeColors.dark != colors[1] {
+                tiles.wireframeColors = (colors[0], colors[1])
+            }
+            // Rebuilt only when what the cards show changed. The cards are compared as values: a dictionary's
+            // description changes order between equal instances, so a string key rebuilt them on every refresh.
             let custom = lib.customThemes + lib.environmentThemes.filter { theme in !lib.customThemes.contains { $0.id == theme.id } }
-            let next = "\(lib.pickedModes(nil))|\(ThemeDefinition.pickerBuiltIns.map { lib.pickedModes($0.id) })|"
-                + custom.map { "\($0.id):\($0.label):\(lib.pickedModes($0.id)):\(ThemeCardDefinition($0).previews.map(\.colors))" }.joined(separator: ",")
-            guard next != signature, let grid else { return }
-            signature = next
+            let next = ThemeGridContent(picked: [lib.pickedModes(nil)] + (ThemeDefinition.pickerBuiltIns + custom).map { lib.pickedModes($0.id) },
+                                        custom: custom.map(ThemeCardDefinition.init))
+            guard next != shown, let grid else { return }
+            shown = next
             grid.cards = self.themeCards(custom)
             self.onHeightChange?()
         }
@@ -102,6 +105,12 @@ public final class AppearanceSettingsView: SettingsPageBase {
     }
 
     private var themes: ThemeLibrary { ThemeLibrary.shared }
+
+    /// What the theme grid shows: each card's picked modes and the saved and published cards.
+    struct ThemeGridContent: Equatable {
+        var picked: [[ThemeAppearance]]
+        var custom: [ThemeCardDefinition]
+    }
 
     private func themeCards(_ custom: [ThemeDefinition]) -> [ThemeLibraryCardView] {
         let lib = themes
