@@ -135,7 +135,7 @@ final class PickerMenuView: DSView, PickerPopupBody, PressDragMenu {
     }
 
     func pick(_ i: Int) {
-        guard entries[i].kind == .option, !entries[i].disabled else { return }
+        guard entries.indices.contains(i), entries[i].kind == .option, !entries[i].disabled else { return }
         let keepsOpen = entries[i].keepsOpen
         entries[i].onPick?()
         guard keepsOpen, let refreshEntries else { onClose?(); return }
@@ -143,6 +143,8 @@ final class PickerMenuView: DSView, PickerPopupBody, PressDragMenu {
         rows.forEach { $0.removeFromSuperview() }
         rows = entries.indices.map { PickerMenuRowView(menu: self, index: $0) }
         rows.forEach(addSubview)
+        // The refreshed entries can be fewer or in another order, so an index from the old list goes.
+        if let h = highlightedIndex, !selectableIndices.contains(h) { highlightedIndex = nil }
         needsLayout = true
     }
 
