@@ -193,6 +193,34 @@ import T3Protocol
         #expect(message() == "Couldn't search thread messages.")
     }
 
+    /// #37691 (projects.test.ts at 4928): a bare relative "Add project starts in" opens under home.
+    @Test func addProjectStartsUnderHomeForBareRelativeSettings() {
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: nil) == "~/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "  ") == "~/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "Desktop/dev") == "~/Desktop/dev/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "~/code") == "~/code/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "/srv/repos/") == "/srv/repos/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "./work") == "./work/")
+        #expect(PaletteAddProjectPaths.initialQuery(baseDirectory: "~") == "~/")
+    }
+
+    /// #32681 (source-control definition tests at 4928): a repository page URL clones its repository.
+    @Test func repositoryPagesCloneTheirRepository() {
+        let n = PaletteAddProjectPaths.normalizePastedCloneUrl
+        #expect(n("https://github.com/acme/app/tree/main/src") == "https://github.com/acme/app")
+        #expect(n("https://github.com/acme/app/blob/main/README.md#L3") == "https://github.com/acme/app")
+        #expect(n("https://gitlab.com/group/sub/app/-/tree/main") == "https://gitlab.com/group/sub/app")
+        #expect(n("https://bitbucket.org/acme/app/src/main/") == "https://bitbucket.org/acme/app")
+        #expect(n("https://codeberg.org/acme/app/src/branch/main/x") == "https://codeberg.org/acme/app")
+        #expect(n("https://user:pw@git.example.com:8443/team/app/-/blob/main/a?x=1") == "https://user:pw@git.example.com:8443/team/app")
+        // Off a known host a Forgejo-shaped path may be a GitLab project, so it stays; so does a clone URL.
+        #expect(n("https://git.example.com/a/src/branch/main/x") == "https://git.example.com/a/src/branch/main/x")
+        #expect(n("https://git.example.com/team/app.git") == "https://git.example.com/team/app.git")
+        #expect(n("https://github.com/acme/app") == "https://github.com/acme/app")
+        #expect(n("acme/app") == "https://github.com/acme/app.git")
+        #expect(n("git@github.com:acme/app.git") == "git@github.com:acme/app.git")
+    }
+
     @Test func keyboardRouting() {
         var ran: [String] = []
         var closed = 0

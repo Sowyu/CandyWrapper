@@ -73,6 +73,16 @@ public enum PaletteAddProjectPaths {
         hasTrailingSeparator(path) && parentPath(path) != nil
     }
 
+    /// `getAddProjectInitialQuery` (client-runtime operations/projects.ts at 4928, #37691): the `addProjectBaseDirectory`
+    /// setting as a folder, else `~/`. A bare relative setting such as `Desktop/dev` means a folder under home.
+    public static func initialQuery(baseDirectory: String?) -> String {
+        let trimmed = baseDirectory?.trimmingCharacters(in: .whitespaces) ?? ""
+        if trimmed.isEmpty { return "~/" }
+        let anchored = trimmed == "~" || trimmed.hasPrefix("/") || trimmed.hasPrefix("~/") || trimmed.hasPrefix("~\\")
+            || isWindowsAbsolute(trimmed) || isExplicitRelative(trimmed)
+        return ensureDirectoryPath(anchored ? trimmed : "~/" + trimmed)
+    }
+
     /// `ensureBrowseDirectoryPath`.
     public static func ensureDirectoryPath(_ path: String) -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -232,13 +242,80 @@ public enum PaletteAddProjectPaths {
         return last.hasSuffix(".git") ? String(last.dropLast(4)) : last
     }
 
-    /// `normalizePastedCloneUrl`: the `owner/repo` shorthand becomes a public GitHub HTTPS URL; anything
-    /// else stays as typed.
+    /// `normalizePastedCloneUrl`: the `owner/repo` shorthand becomes a public GitHub HTTPS URL, a repository page
+    /// copied from a browser becomes its repository (#32681); anything else stays as typed.
     public static func normalizePastedCloneUrl(_ input: String) -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         let shorthand = #"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]+(?:\.git)?$"#
-        guard trimmed.range(of: shorthand, options: .regularExpression) != nil else { return trimmed }
+        guard trimmed.range(of: shorthand, options: .regularExpression) != nil else { return repositoryUrlFromPage(trimmed) ?? trimmed }
         return "https://github.com/" + (trimmed.hasSuffix(".git") ? trimmed : trimmed + ".git")
+    }
+
+    /// One host's repository page routes (the `repositoryUrlFromPage` of each source control definition at 4928):
+    /// `recognizes` the host, `route`'s first group is the repository path, and `unknownHost` answers off a known
+    /// host: nil to stay out, the page itself to say it may already be a clone URL.
+    private struct PageRoute {
+        var recognizes: @Sendable (String) -> Bool
+        var known: @Sendable (URL) -> String?
+        var unknownHost: @Sendable (URL) -> String?
+    }
+
+    private static func pagePath(_ url: URL, _ pattern: String) -> String? {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let path = components?.percentEncodedPath ?? url.path
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)),
+              let range = Range(match.range(at: 1), in: path) else { return nil }
+        // Keeps the credentials and port a private clone relies on (`repositoryUrlFromPagePath`, core definition.ts).
+        components?.percentEncodedPath = "/" + path[range]
+        components?.query = nil
+        components?.fragment = nil
+        return components?.url?.absoluteString
+    }
+
+    private static let pageRoutes: [PageRoute] = {
+        @Sendable func labels(_ h: String) -> [Substring] { h.split(separator: ".") }
+        let github = #"^/([^/]+/[^/]+)/(?:tree|blob)/[^/]"#
+        let gitlab = #"^/([^/]+(?:/[^/]+)+?)/-/"#
+        let bitbucket = #"^/([^/]+/[^/]+)/src/[^/]"#
+        let forgejo = #"^/([^/]+(?:/[^/]+)+?)/src/(?:branch|tag|commit)/[^/]"#
+        let none: @Sendable (URL) -> String? = { _ in nil }
+        func plain(_ route: String) -> @Sendable (URL) -> String? { { url in pagePath(url, route) } }
+        // A mount path may itself contain `src/branch/`, so a `.git` path is always the clone URL; off Forgejo the
+        // same path is a GitLab project under groups named `src` and `branch`, so it answers with the page.
+        func forgejoPage(known: Bool) -> @Sendable (URL) -> String? {
+            { url in
+                if url.path.hasSuffix(".git") { return nil }
+                guard let repository = pagePath(url, forgejo) else { return nil }
+                return known ? repository : url.absoluteString
+            }
+        }
+        return [
+            PageRoute(recognizes: { $0 == "github.com" || $0.hasSuffix(".ghe.com") || labels($0).contains("github") },
+                      known: plain(github), unknownHost: none),
+            PageRoute(recognizes: { $0 == "gitlab.com" || labels($0).contains("gitlab") }, known: plain(gitlab), unknownHost: plain(gitlab)),
+            PageRoute(recognizes: { $0 == "bitbucket.org" || $0.hasSuffix(".bitbucket.org") || labels($0).contains("bitbucket") },
+                      known: plain(bitbucket), unknownHost: none),
+            PageRoute(recognizes: { $0 == "dev.azure.com" || $0.hasSuffix(".dev.azure.com") || $0.hasSuffix(".visualstudio.com") },
+                      known: none, unknownHost: none),
+            PageRoute(recognizes: { $0 == "codeberg.org" || labels($0).contains("forgejo") || labels($0).contains("gitea") },
+                      known: forgejoPage(known: true), unknownHost: forgejoPage(known: false)),
+            PageRoute(recognizes: { $0 == "git.cafe" || $0 == "staging.git.cafe" }, known: plain(github), unknownHost: none),
+        ]
+    }()
+
+    /// `repositoryUrlFromPage` (source-control-core shared/definition.ts at 4928, #32681): the repository a branch or file
+    /// page copied from a browser is in. A recognized host's routes are its own; elsewhere a `.git` path is already a
+    /// clone URL, and a page is rewritten only when every route that matches agrees.
+    // ponytail: hosts are tried in this fixed order; T3 takes `recognizeRemotesIn` from the client's options
+    public static func repositoryUrlFromPage(_ value: String) -> String? {
+        guard let url = URL(string: value), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host?.lowercased() else { return nil }
+        if let owner = pageRoutes.first(where: { $0.recognizes(host) }) { return owner.known(url) }
+        if url.path.hasSuffix(".git") { return nil }
+        let answers = Set(pageRoutes.compactMap { $0.unknownHost(url) })
+        guard answers.count == 1, let only = answers.first, only != url.absoluteString else { return nil }
+        return only
     }
 
     /// `getCloneDestinationBrowsePath`: picking a folder keeps the repository folder at the end, unless

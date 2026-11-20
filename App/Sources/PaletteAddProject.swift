@@ -420,10 +420,9 @@ final class PaletteAddProjectFlow {
         controller?.replaceQuery(PaletteAddProjectPaths.cloneDestinationPath(parent, cloneDestination ? pinnedCloneName : nil))
     }
 
-    /// `getAddProjectInitialQueryForEnvironment`: the `addProjectBaseDirectory` setting as a folder, else `~/`.
+    /// `getAddProjectInitialQueryForEnvironment`.
     private func initialQuery(_ env: String) -> String {
-        let base = threads.composer.config(env)?.settings.raw["addProjectBaseDirectory"]?.stringValue?.trimmingCharacters(in: .whitespaces) ?? ""
-        return base.isEmpty ? "~/" : PaletteAddProjectPaths.ensureDirectoryPath(base)
+        PaletteAddProjectPaths.initialQuery(baseDirectory: threads.composer.config(env)?.settings.raw["addProjectBaseDirectory"]?.stringValue)
     }
 
     private func startBrowse(_ env: String) {
