@@ -379,7 +379,7 @@ public final class DiffPanelView: DSView {
             ClientSettingsStore.shared.update(["diffLayout": .string(index == 0 ? "stacked" : "split")])
         }
         for toggle in [wrapToggle, whitespaceToggle, treeToggle] { toggle.iconSize = 14 }
-        wrapToggle.onPressedChange = { [weak self] in self?.wrapLines = $0 }
+        wrapToggle.onPressedChange = { [weak self] in self?.wrapOverride = $0; self?.wrapLines = $0 }
         whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0 }
         treeToggle.onPressedChange = { [weak self] shown in self?.treeScroll.isHidden = !shown; self?.needsLayout = true }
         treeScroll.isHidden = true
@@ -468,13 +468,18 @@ public final class DiffPanelView: DSView {
 
     private var settingsObserver: Int?
 
-    /// `diffLayout` follows the setting; `wordWrap` and `diffIgnoreWhitespace` seed the toggles once
-    /// (`useState(settings.wordWrap)`, DiffPanel.tsx:203-206).
+    /// The wrap toggle once pressed; until then it follows the `wordWrap` default as it changes
+    /// (4928 DiffPanel.tsx `wordWrapOverride ?? settings.wordWrap`, #35922).
+    private var wrapOverride: Bool?
+
+    /// `diffLayout` follows the setting; `diffIgnoreWhitespace` seeds its toggle once
+    /// (`useState(settings.diffIgnoreWhitespace)`, DiffPanel.tsx:203-206).
     private func applySettings(initial: Bool) {
         let c = ClientSettingsStore.shared.current
         layoutStyle = c.string("diffLayout") == "split" ? .split : .unified
+        let wrap = wrapOverride ?? c.bool("wordWrap")
+        if wrap != wrapLines || initial { wrapLines = wrap }
         guard initial else { return }
-        wrapLines = c.bool("wordWrap")
         ignoreWhitespace = c.bool("diffIgnoreWhitespace")
     }
 
@@ -694,7 +699,11 @@ public final class DiffPanelView: DSView {
     private func updateScopeLabel() {
         // `selectedScopeLabel` (DiffPanel.tsx:302-310), and the branch range's `head → base` (:810-850).
         showsRefresh = gitScope != nil
-        let compare = gitScope == .branch ? gitSource.flatMap { s in s.baseRef.map { (s.headRef ?? "HEAD", $0) } } : nil
+        // The selector stays after a failed read, so another base can be picked (4928 DiffPanel.tsx
+        // `canSelectBranchBase`, #27635): head and base fall back to HEAD and the saved choice or Automatic.
+        // ponytail: HEAD where T3 shows the git status branch name, read it here if users miss it
+        let canSelectBase = gitScope == .branch && gitResultShown && canReadFiles()
+        let compare = canSelectBase ? (gitSource?.headRef ?? "HEAD", gitSource?.baseRef ?? baseRef ?? "Automatic") : nil
         compareHead.text = compare?.0 ?? ""
         compareHead.toolTip = compare.map { "\($0.0) → \($0.1)" }
         baseRefTitle = compare?.1 ?? ""

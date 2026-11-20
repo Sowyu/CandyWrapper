@@ -90,6 +90,14 @@ public enum DelimitedTable {
         var index = chars.first == 0xFEFF ? 1 : 0
         var rowStart = index
         func endCell() {
+            // A cell keeps one unit past the limit, so a surrogate pair across the cut is backed off whole
+            // (4928 delimitedPreview.ts:31-43, #27497).
+            if cell.count > 2000 {
+                var end = 2000
+                if (0xD800...0xDBFF).contains(cell[end - 1]), (0xDC00...0xDFFF).contains(cell[end]) { end -= 1 }
+                cell.removeSubrange(end...)
+                truncated = true
+            }
             if row.count < 30 { row.append(String(decoding: cell, as: UTF16.self)) } else { truncated = true }
             cell.removeAll(keepingCapacity: true)
         }
@@ -97,7 +105,7 @@ public enum DelimitedTable {
             let c = chars[index]
             if c == 0x22 { // "
                 if quoted, index + 1 < chars.count, chars[index + 1] == 0x22 {
-                    if cell.count < 2000 { cell.append(0x22) } else { truncated = true }
+                    if cell.count <= 2000 { cell.append(0x22) } else { truncated = true }
                     index += 2
                     continue
                 }
@@ -116,7 +124,7 @@ public enum DelimitedTable {
                     rowStart = index + 1
                     if rows.count == 100 { return (rows, truncated || index < chars.count - 1) }
                 }
-            } else if cell.count < 2000 {
+            } else if cell.count <= 2000 {
                 cell.append(c)
             } else {
                 truncated = true

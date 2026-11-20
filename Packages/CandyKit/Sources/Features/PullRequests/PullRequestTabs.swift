@@ -1259,7 +1259,8 @@ final class ReviewThreadRow: DSView, StackItem {
         more = t.more.hasMoreReplies ? PullRequestMoreRepliesLine(t.more) : nil
         super.init(frame: .zero)
         let replyCount = t.replies.count + t.more.moreReplies
-        head.set(location: t.line.map { "\(t.path):\($0)" } ?? t.path, resolved: t.isResolved, dismissed: isDismissed, outdated: t.isOutdated,
+        // An overview thread has no file: "Overview" in the UI font, no file glyph (4928 PullRequestTimelineTab.tsx:525-536).
+        head.set(location: t.path.isEmpty ? "" : (t.line.map { "\(t.path):\($0)" } ?? t.path), resolved: t.isResolved, dismissed: isDismissed, outdated: t.isOutdated,
                  closedSummary: "· \(e.actor?.login ?? "ghost")" + (replyCount > 0 ? " · \(PullRequestDetailLogic.replyCountLabel(replyCount))" : ""))
         head.onToggle = { [weak self] in self?.toggle() }
         [marker, head, root].forEach(addSubview)
@@ -1332,14 +1333,18 @@ final class ReviewThreadRow: DSView, StackItem {
         }
 
         func set(location text: String, resolved isResolved: Bool, dismissed isDismissed: Bool, outdated isOutdated: Bool, closedSummary summary: String) {
-            location.text = text
+            overview = text.isEmpty
+            fileIcon.isHidden = overview
+            location.font = overview ? DSFont.ui(11) : DSFont.mono(11)
+            location.text = overview ? "Overview" : text
             resolved.isHidden = !isResolved
             resolvedIcon.isHidden = !isResolved
             dismissed.isHidden = !isDismissed
             outdated.isHidden = !isOutdated
             closedSummary.text = summary
-            setAccessibilityLabel(text)
+            setAccessibilityLabel(location.text)
         }
+        private var overview = false
 
         func setExpanded(_ open: Bool, motion: IconView.RotationMotion) {
             expanded = open
@@ -1359,7 +1364,7 @@ final class ReviewThreadRow: DSView, StackItem {
             for l in [dismissed, outdated, closedSummary] where !l.isHidden { tail.append((l, ceil(l.textWidth) + 1, 8)) }
             let tailWidth = tail.reduce(CGFloat(0)) { $0 + $1.1 + $1.2 }
             var x: CGFloat = 8
-            fileIcon.frame = NSRect(x: x, y: 10, width: 12, height: 12); x += 12 + 8
+            if !overview { fileIcon.frame = NSRect(x: x, y: 10, width: 12, height: 12); x += 12 + 8 }
             let lw = min(ceil(location.textWidth) + 1, max(0, right - 14 - 8 - x - tailWidth))
             location.frame = NSRect(x: x, y: 8, width: lw, height: 16); x += lw
             for (v, w, gap) in tail {

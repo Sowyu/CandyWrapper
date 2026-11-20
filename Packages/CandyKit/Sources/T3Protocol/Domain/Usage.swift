@@ -221,13 +221,17 @@ public struct UsageWindow: Equatable, Hashable, Sendable {
 
     public var isHourly: Bool { resolution == "hour" }
 
-    /// The `server.getUsageSummary` payload.
-    public func payload(awaitRefresh: Bool = false) -> JSONValue {
+    /// The `server.getUsageSummary` payload. `provisional` takes the server's last scan at once (4928
+    /// usage.ts:145-146, #33993); `modelFilter` is the environment's `usageModelFilter` setting, sent only
+    /// where the server has one (usageSummaryInput, client-runtime state/usage.ts, #28952).
+    public func payload(awaitRefresh: Bool = false, provisional: Bool = false, modelFilter: JSONValue? = nil) -> JSONValue {
         var o: [String: JSONValue] = ["sinceDay": .string(sinceDay), "untilDay": .string(untilDay), "timeZone": .string(timeZone),
                                       "resolution": .string(resolution)]
         if let sinceTime { o["sinceTime"] = .string(sinceTime) }
         if let untilTime { o["untilTime"] = .string(untilTime) }
         if awaitRefresh { o["awaitRefresh"] = .bool(true) }
+        if provisional { o["provisional"] = .bool(true) }
+        if case .object(let f)? = modelFilter, !f.isEmpty { o["modelFilter"] = .object(f) }
         return .object(o)
     }
 }
@@ -572,6 +576,15 @@ public enum UsageMerge {
     }
 
     /// `withoutProviders` (state/usage.ts:150-170): hidden providers' buckets and sources leave before the merge.
+    /// `rankProvidersByMetric` (4928 usageProviders.ts:69-82): highest cost, or tokens, first; ties keep their order.
+    public static func rankProviders(_ providers: [UsageProviderKind], _ totals: [UsageProviderTotals], tokens: Bool) -> [UsageProviderKind] {
+        let value = { (p: UsageProviderKind) in totals.first { $0.provider == p }.map { tokens ? $0.totalTokens : $0.costUsd } ?? 0 }
+        return providers.enumerated().sorted { a, b in
+            let va = value(a.element), vb = value(b.element)
+            return va != vb ? va > vb : a.offset < b.offset
+        }.map(\.element)
+    }
+
     public static func withoutProviders(_ summary: UsageSummary, _ hidden: Set<UsageProviderKind>) -> UsageSummary {
         guard !hidden.isEmpty else { return summary }
         var s = summary

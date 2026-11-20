@@ -28,9 +28,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | port |
-| 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | port |
-| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | port |
+| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | left (panels-2): the PR diff follows the file tree with a hide-tests filter; needs a tree order in PullRequestCodeView and the test classifier (diffFileTree.logic.ts) |
+| 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | left (panels-2): reviewing local commits needs the A23 wire (`review.getBranchCommits`, source kind `commit`) and a commit scope in DiffPanelView |
+| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | left (panels-2): Storybook files in the test filter, with #26730 |
 
 ## Port group provider-fallback (3)
 
@@ -111,25 +111,25 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c018660572 | #27497 | files | fix(shared): preserve surrogate pairs in truncated CSV cells | port |
-| f5fe0790e7 | #31868 | pr/git | fix(web): Office previews say "1 page", "1 sheet", "1 slide" and "1 row" | port |
-| bc3eb6d2b2 | #29051 | files | fix(web): fix japanese text in file viewer not rendering | port |
-| 84478e09c1 | #34331 | files | fix(web): long merged spreadsheet selections no longer crash | port |
-| 787c59c802 | #32040 | pr/git | fix(web): Word previews no longer cut ordinary documents short | port |
-| c8e8b58ee6 | #34429 | pr/git | fix(web): improve Excel spreadsheet previews | port |
-| 6464729c56 | #34453 | files | fix(web): improve PowerPoint slide font rendering | port |
-| 4574c6013d | #36602 | files | fix(web): preserve saved notebook traceback frame boundaries | port |
-| d6244ac5a3 | #36595 | files | fix(web): preserve literal entities in EPUB CDATA | port |
-| 6effe74c59 | #36689 | pr/git | fix(web): show repeated table rows and cells in ODT previews | port |
-| 13a6782a6c | #36685 | files | fix(web): ODS time cells without display text show their value | port |
-| 0fdc99c870 | #36703 | pr/git | fix(web): notebook previews strip ANSI colors from saved tracebacks | port |
-| 10a44f5553 | #36767 | pr/git | fix(web): RTF previews keep named spaces, hyphens and joiners | port |
-| 776698a3e7 | #33294 | pr/git | fix(web): OpenDocument slide previews no longer print speaker notes | port |
-| 85e009fbc9 | #34329 | pr/git | fix(web): show TAR hard links in archive previews | port |
-| 8ab40cc88e | #31885 | pr/git | fix(web): the PDF preview says "1 / 1 page" for a one-page PDF | port |
-| 2370e338f7 | #31886 | pr/git | fix(web): the SQLite, archive and notebook previews say "1 row", "1 entry" and "1 cell" | port |
-| dde53b11f3 | #31929 | terminal | fix(web): notebook error previews no longer show terminal color codes | port |
-| d085ee5d15 | #38188 | pr/git | fix(web): decode HEIC previews under desktop CSP | port |
+| c018660572 | #27497 | files | fix(shared): preserve surrogate pairs in truncated CSV cells | ported (panels-2): a truncated cell never splits a surrogate pair, DelimitedTable.parse |
+| f5fe0790e7 | #31868 | pr/git | fix(web): Office previews say "1 page", "1 sheet", "1 slide" and "1 row" | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| bc3eb6d2b2 | #29051 | files | fix(web): fix japanese text in file viewer not rendering | left (panels-2): not checked against CodeFileView's text decoding |
+| 84478e09c1 | #34331 | files | fix(web): long merged spreadsheet selections no longer crash | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 787c59c802 | #32040 | pr/git | fix(web): Word previews no longer cut ordinary documents short | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| c8e8b58ee6 | #34429 | pr/git | fix(web): improve Excel spreadsheet previews | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 6464729c56 | #34453 | files | fix(web): improve PowerPoint slide font rendering | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 4574c6013d | #36602 | files | fix(web): preserve saved notebook traceback frame boundaries | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| d6244ac5a3 | #36595 | files | fix(web): preserve literal entities in EPUB CDATA | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 6effe74c59 | #36689 | pr/git | fix(web): show repeated table rows and cells in ODT previews | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 13a6782a6c | #36685 | files | fix(web): ODS time cells without display text show their value | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 0fdc99c870 | #36703 | pr/git | fix(web): notebook previews strip ANSI colors from saved tracebacks | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 10a44f5553 | #36767 | pr/git | fix(web): RTF previews keep named spaces, hyphens and joiners | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 776698a3e7 | #33294 | pr/git | fix(web): OpenDocument slide previews no longer print speaker notes | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 85e009fbc9 | #34329 | pr/git | fix(web): show TAR hard links in archive previews | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| 8ab40cc88e | #31885 | pr/git | fix(web): the PDF preview says "1 / 1 page" for a one-page PDF | n/a (panels-2): PDFs show in Quick Look, which draws its own page count |
+| 2370e338f7 | #31886 | pr/git | fix(web): the SQLite, archive and notebook previews say "1 row", "1 entry" and "1 cell" | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| dde53b11f3 | #31929 | terminal | fix(web): notebook error previews no longer show terminal color codes | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
+| d085ee5d15 | #38188 | pr/git | fix(web): decode HEIC previews under desktop CSP | waits on the 3814 preview task in PROGRESS.md: CandyWrapper hands this file type to Quick Look (NativeFilePreviewView), so T3's own renderer fix has nothing to land on |
 
 ## Port group thread-media (5)
 
@@ -160,11 +160,11 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e6e2ab05cc | #28952 | usage | feat(usage): filter Usage totals by provider and model | port; needs wire: usage totals filter |
-| 9e1f81c788 | #34106 | thread | feat(claude): Fable resets are offered and redeemed apart from weekly resets | port; Fable resets |
-| 0b21a82aa3 | #35427 | usage | fix(shared): pooled limits weight each account by its plan size | port |
-| 63d5c6dfe4 | #34146 | usage | feat(opencode): read usage limits from the connected server | port |
-| 7fab4ef978 | #33993 | usage | perf(usage): the Usage page shows cost and tokens at once instead of after a full scan | port |
+| e6e2ab05cc | #28952 | usage | feat(usage): filter Usage totals by provider and model | ported (panels-2): each summary read sends the environment's `usageModelFilter` server setting as `modelFilter`, UsageController |
+| 9e1f81c788 | #34106 | thread | feat(claude): Fable resets are offered and redeemed apart from weekly resets | left (panels-2): Fable resets apart from weekly ones, needs the limits model |
+| 0b21a82aa3 | #35427 | usage | fix(shared): pooled limits weight each account by its plan size | left (panels-2): pooled limits weighting, not checked |
+| 63d5c6dfe4 | #34146 | usage | feat(opencode): read usage limits from the connected server | left (panels-2): not checked |
+| 7fab4ef978 | #33993 | usage | perf(usage): the Usage page shows cost and tokens at once instead of after a full scan | ported (panels-2): with nothing shown, the first read is `provisional`, then the plain read, then the awaiting one, UsageController.fetchProvisional |
 
 ## Port group timeline-handoff (1)
 
@@ -183,8 +183,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a852de0b7b | #29146 | thread | fix(web): play completion sounds without delay | port |
-| 5ef603df34 | #36527 | pr/git | fix(web): remove routine success notifications | port; routine success toasts removed |
+| a852de0b7b | #29146 | thread | fix(web): play completion sounds without delay | ported (panels-2): completions notify at once; only a background progress wake's completion waits 5 s, ThreadNotificationTracker |
+| 5ef603df34 | #36527 | pr/git | fix(web): remove routine success notifications | ported in part (panels-2): pull request copies, the Pull Requests page link copy, Git branch copies and the diff path copy toast only on failure. Left: the same in Sidebar, Settings, chat, media and the thread action menu, which other agents hold |
 
 ## Port group provider-status (1)
 
@@ -239,16 +239,16 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e1494ae25b | #25761 | thread | perf(pr): actions update every client from the host's reply instead of re-reads | port; needs wire: action replies carry state |
-| d5a50a1d0d | #32774 | pr/git | perf(pr): actions, title edits and labels show the moment you click, on every host | port |
+| e1494ae25b | #25761 | thread | perf(pr): actions update every client from the host's reply instead of re-reads | ported (panels-2): `runAction` asks `replyWithSummary` and the panel shows the reply without a re-read unless it reopened or moved the head; App/Sources/PullRequestsController.swift run(), T3Protocol PullRequestSummary |
+| d5a50a1d0d | #32774 | pr/git | perf(pr): actions, title edits and labels show the moment you click, on every host | left (panels-2): optimistic title, label and state edits on every host; the action reply patch (#25761) is in, the instant local edit is not |
 
 ## Port group pr-composer (3)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 7bc2a40ced | #30747 | pr/git | feat(pull-requests): PR composers complete @user mentions | port |
-| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | port |
-| e4ff5da0d3 | #30857 | pr/git | feat(pull-requests): PR composers complete #123 and GitLab !123 references | port |
+| 7bc2a40ced | #30747 | pr/git | feat(pull-requests): PR composers complete @user mentions | left (panels-2): @mention completion in PR composers (PullRequestMarkdownTextarea.tsx:40), needs a completion popup on PullRequestMarkdownEditorView |
+| f08d8dd0a5 | #30579 | pr/git | feat(web): add pull request comments to the chat | left (panels-2): add a PR comment to the chat, needs the composer's context insertion from Features/Composer |
+| e4ff5da0d3 | #30857 | pr/git | feat(pull-requests): PR composers complete #123 and GitLab !123 references | left (panels-2): #123 and !123 completion, with #30747; needs `references` filter options and `referenceSigils` (decoded) |
 
 ## Port group pi (4)
 
@@ -356,7 +356,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 40c3682543 | #33900 | thread | feat(web): screen readers can hear the agent's messages and steps during a turn | port; screen reader turn announcements |
+| 40c3682543 | #33900 | thread | feat(web): screen readers can hear the agent's messages and steps during a turn | left (panels-2): ThreadActivityAnnouncer belongs in Features/Thread TimelineView, which another agent holds |
 
 ## Port group html-render (5)
 
@@ -400,21 +400,21 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | port |
+| cf906e1fcf | #34644 | pr/git | feat(web): resolved review conversations fold into avatars on their diff line | left (panels-2): resolved conversations fold into avatars on their diff line, PullRequestReviewAnnotation.tsx |
 
 ## Port group add-project (2)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| dc032d7c8f | #34978 | thread | feat(web,mobile): Add project lists only GitHub until you turn other hosts on | skip: the Add project palette flow, outside the sidebar |
+| dc032d7c8f | #34978 | thread | feat(web,mobile): Add project lists only GitHub until you turn other hosts on | ported (panels-2): Add project lists the hosts `offeredSourceControlProviders` turns on, GitHub by default; a server without the setting keeps every host. The Settings switch belongs to the Settings agent |
 | f419698aea | #35202 | sidebar | feat(web): drop folders on the sidebar to add them as projects | ported 9a0153d1; adds on the primary environment, see #38722 |
 
 ## Port group terminal (2)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| c9f0caca1b | #33942 | terminal | perf(server,client): attaching to a terminal with a large history over a slow link drops from 5,555 ms to 751 ms median (7.4x) | port; needs wire: terminal attach history paging |
-| 93cbca3fcb | #36368 | terminal | fix(terminal): trimmed history no longer replays half of a control sequence | port |
+| c9f0caca1b | #33942 | terminal | perf(server,client): attaching to a terminal with a large history over a slow link drops from 5,555 ms to 751 ms median (7.4x) | left (panels-2): terminal attach history paging needs wire |
+| 93cbca3fcb | #36368 | terminal | fix(terminal): trimmed history no longer replays half of a control sequence | left (panels-2): trimmed history replaying half a control sequence, SwiftTerm side not checked |
 
 ## Port group resume (3)
 
@@ -440,20 +440,20 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | port |
+| f12e8206f5 | #37007 | pr/git | fix(web): load a too-large PR file's diff on demand | left (panels-2): load a withheld file's diff on demand; the wire (`path`, `withheldFilesReadable`, `withheldFileDiff`) is in, the Code tab's per-file load (PullRequestCodeTab.tsx, cutLineNotes.ts) is not |
 
 ## Port group pr-prefetch (2)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 238678951a | #32842 | thread | perf(web): resting on a PR row also reads its activity, so the timeline shows on click | port |
-| 4b22bb47d4 | #32911 | pr/git | perf(pr): PR panel paints from saved data and reads ahead on intent | port |
+| 238678951a | #32842 | thread | perf(web): resting on a PR row also reads its activity, so the timeline shows on click | left (panels-2): hover prefetch of PR activity |
+| 4b22bb47d4 | #32911 | pr/git | perf(pr): PR panel paints from saved data and reads ahead on intent | left (panels-2): PR panel paints from saved data and reads ahead on intent |
 
 ## Port group pr-links (1)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | port |
+| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | left (panels-2): Forgejo and Gitea /pulls/ links, needs the change request URL parser in T3Protocol RepositoryIdentity+PullRequests |
 
 ## Port group keybindings-unassign (1)
 
@@ -465,7 +465,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 14d57b451e | #38865 | browser | fix(web): server browser pane reports when Chromium draws no frames | port |
+| 14d57b451e | #38865 | browser | fix(web): server browser pane reports when Chromium draws no frames | left (panels-2): the server browser pane's no-frames report |
 
 ## Port group connect-settings (2)
 
@@ -569,7 +569,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 707dcdaa16 | #24904 | sidebar | feat: optionally clone repos into ghq-style <host>/<owner>/<repo> folders | port; needs wire: clone layout setting |
+| 707dcdaa16 | #24904 | sidebar | feat: optionally clone repos into ghq-style <host>/<owner>/<repo> folders | left (panels-2): ghq-style clone folders need the clone layout setting and its wire |
 
 ## New feature dictation (20)
 
@@ -708,7 +708,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2d558c4dad | #38537 | issues | fix(web): the issue viewer shows why a refresh failed | ported 39a3ad7d: "Could not refresh this issue" |
 | 6a29d58d14 | #38493 | issues | fix(client-runtime): closed issue searches no longer build up in memory | n/a: client-runtime cache internals; CandyWrapper holds one answer per environment |
 | f1d64aa0b6 | #38263 | pr/git | fix(azure-devops): legacy and project-less remotes list their work items | port |
-| 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | port |
+| 378584a760 | #38294 | issues | feat(web): hovering an issue link shows its preview card | left (panels-2): the issue link hover card needs an issue branch in the Markdown link handler (Features/Markdown, another agent); the card itself is not built |
 | b6a0fd6d62 | #38771 | issues | feat(issues): an issue shows every thread it is linked to | ported 0a5ca190: the linked-threads count opens the palette on the issue URL |
 | c350ee7e15 | #38256 | issues | feat(web): filter the issues list by project | ported 39a3ad7d: the Project filter |
 | 2e3d9fccdd | #38282 | issues | feat(web): show linked issues beside thread pull requests | ported 9a0153d1 in the sidebar: generic issue glyph, no state tint or hover list until CW has issues |
@@ -733,24 +733,24 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | port |
-| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | port |
-| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | port |
-| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | port |
-| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | port |
-| 6717d92cf3 | #28243 | browser | fix(web): Tab completes folder names in the add-project browser | port |
-| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | port |
-| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | port |
-| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | port |
-| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | port |
-| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | port |
-| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | port |
-| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | port |
-| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | port |
-| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | port |
-| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | port |
-| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | port |
-| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | port |
+| 8f6c9b7144 | #23338 | browser | fix(web): preserve typed dimensions with the aspect ratio locked | left (panels-2): not checked |
+| 083c903950 | #26233 | browser | fix(web): right panel's tab bar no longer slides under the title bar controls | left (panels-2): not checked |
+| cde3620577 | #26633 | browser | fix(web): forward native Copy and Cut from server browser tabs | left (panels-2): not checked |
+| 9cb59bf858 | #22328 | browser | fix(web): mod+L focuses the browser address bar from a focused page | left (panels-2): not checked |
+| 17948307cc | #28064 | browser | fix(client): the folder browser shows folders added or removed while T3 runs | left (panels-2): not checked |
+| 6717d92cf3 | #28243 | browser | fix(web): Tab completes folder names in the add-project browser | ported (panels-2): Tab opens the highlighted or only folder, or extends to the common prefix, Mode.onTab in CommandPaletteController |
+| b5d9f85b9a | #26027 | browser | fix(web): keep inward mini browser resizes from growing | left (panels-2): not checked |
+| 1436c4571f | #29347 | browser | fix(client-runtime): connect to the primary environment while the browser reports offline | left (panels-2): not checked |
+| 350ecd63be | #32569 | browser | fix(web): closing the right panel returns focus to where it was | left (panels-2): not checked |
+| 7c76c9ddc2 | #30882 | browser | fix(web): mouse back/forward over the right panel no longer moves the main chat | left (panels-2): not checked |
+| 2e18418abf | #34859 | browser | fix(web): Incognito browser visits stay out of project history | left (panels-2): not checked |
+| e6119fdf68 | #35143 | browser | fix(web): browser settings changed in project scope no longer overwrite the global default | left (panels-2): not checked |
+| ff1eead6f4 | #35947 | browser | fix(web): zoom shortcuts work while a desktop browser page has focus | left (panels-2): not checked |
+| 0f13d638af | #29475 | browser | fix(browser): Stop cancels loading pages | left (panels-2): not checked |
+| be5f805964 | #34943 | browser | fix(web): new desktop browser tabs open at the default zoom and appearance | left (panels-2): not checked |
+| 651accb100 | #25874 | browser | fix(web): new browser tabs open at your default zoom and appearance | left (panels-2): not checked |
+| 675fb1d9a7 | #36846 | browser | fix(web): show Browser device preferences read-only for projects | left (panels-2): not checked |
+| 6fc2fb192c | #35299 | browser | fix(web): desktop browser tabs show native navigation immediately | left (panels-2): not checked |
 
 ## Small fixes, composer (120)
 
@@ -837,7 +837,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 5e27bae22e | #28780 | composer | fix(web): a stashed prompt keeps its machine mentions | left: not reached in composer-3; T3 changes useComposerStash.ts (26 lines), still unchecked against CW |
 | f84ad6f30b | #36732 | composer | fix(web): discarded drafts stay discarded after image compression | left: not reached in composer-3; T3 changes preparingComposerImages.ts, discardComposerDraft.ts (16 lines), still unchecked against CW |
 | 081a5d92bf | #29617 | composer | fix(clients): the folder picker finds folders with accented names on macOS | left: belongs with the add-project folder picker, outside the composer; not checked this session |
-| 4954322f02 | #27458 | composer | fix(web): don't send completion notifications for snoozed threads | left: belongs with notifications, outside the composer; not checked this session |
+| 4954322f02 | #27458 | composer | fix(web): don't send completion notifications for snoozed threads | ported (panels-2): snoozed threads send no completion, including one that landed during the snooze and arrived after the wake |
 | f751c8488f | #29846 | composer | fix(web): the new-thread project picker follows the manual project order | left: belongs with the project picker, outside the composer; not checked this session |
 | 1f45f14ae8 | #33298 | composer | fix(web): queued images open in the image viewer | left: not reached in composer-3; T3 changes ChatView.tsx, QueuedRunsControl.tsx (68 lines), still unchecked against CW |
 | 619c652d25 | #35176 | composer | fix(web): retain custom model drafts until saved | left: not reached in composer-3; T3 changes ProviderInstanceCard.tsx, ProviderModelsSection.tsx, ProviderSettingsPanel.tsx (41 lines), still unchecked against CW |
@@ -881,299 +881,299 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | port |
-| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | port |
-| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | port |
-| 65b0ab8c91 | #27101 | connections | fix(client): dead connection routes are probed 30x less often | port |
-| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | port |
-| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | port |
-| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | port |
-| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | port |
-| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | port |
-| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | port |
-| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | port |
-| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | port |
-| 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | port |
-| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | port |
-| 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | port |
-| aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | port |
+| e6ca17001d | #26917 | connections | fix(web): update everything no longer waits on npm for service hosts | left (panels-2): not checked |
+| de386ada9e | #23244 | connections | fix(web): create tasks on a permitted connected environment | left (panels-2): not checked |
+| 4092c4ac56 | #27008 | connections | fix(client): retry the permissions check after a reconnect | left (panels-2): not checked |
+| 65b0ab8c91 | #27101 | connections | fix(client): dead connection routes are probed 30x less often | left (panels-2): not checked |
+| ebd1265ccf | #21706 | connections | fix(connect): the remove dialog says whether a T3 Connect environment is still on the account | left (panels-2): not checked |
+| 503bcaaf99 | #22887 | connections | fix: keep offline environments out of thread reorder writes | left (panels-2): not checked |
+| b1b3c10e24 | #23532 | connections | fix(clients): keep accepted server updates through disconnects | left (panels-2): not checked |
+| fd78ea42fc | #23753 | connections | fix(web): show an error when merge-back or disconnect fails | left (panels-2): not checked |
+| e5871b6719 | #24691 | connections | fix(web): Reconnect on a switched-off environment switches it back on | left (panels-2): not checked |
+| 9e97921ad8 | #24716 | connections | fix(clients): a route added after a reorder no longer disappears | left (panels-2): not checked |
+| d2d1e4f50e | #27847 | connections | fix(updates): version checks respect your configured npm registry | left (panels-2): not checked |
+| a05e8fde08 | #26160 | connections | fix(web): Add Environment dialog reopens on Remote link instead of a stale SSH selection | left (panels-2): not checked |
+| 1aa46d0cdf | #27998 | connections | fix(connect): T3 Connect sockets no longer drop every hour | left (panels-2): not checked |
+| 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | left (panels-2): not checked |
+| 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | ported (panels-2): a stale shell pauses its environment's tracker instead of forgetting it, so what changed during the disconnect notifies once on reconnect |
+| aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | left (panels-2): not checked |
 | 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | already in CandyWrapper: the child input banner opens the child's scoped thread id, which carries its own environment (Features/Thread/ThreadLineageController `updateChildInputs`) |
-| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | port |
-| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | port |
-| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | port |
-| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | port |
-| b5256ad09c | #22839 | connections | fix(opencode): verify CLI updates when loopback server is still running | port |
-| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | port |
-| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | port |
-| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | port |
-| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | port |
-| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | port |
-| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | port |
+| 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | left (panels-2): not checked |
+| d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | left (panels-2): not checked |
+| dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | left (panels-2): not checked |
+| 7fe1310ee5 | #32937 | connections | fix(web): Copy MCP URL uses the T3 Connect address | left (panels-2): not checked |
+| b5256ad09c | #22839 | connections | fix(opencode): verify CLI updates when loopback server is still running | left (panels-2): not checked |
+| 25f4c9d44e | #23194 | connections | fix(web): offer retry while an environment reconnects | left (panels-2): not checked |
+| ba32aabf62 | #23111 | connections | fix(scheduler): show short server timezone on fixed-time labels | left (panels-2): not checked |
+| 54a5c51a58 | #21530 | connections | fix(web): fall back to a readable server for shared repositories | left (panels-2): not checked |
+| 42d645ae9e | #32924 | connections | fix(web): update Retry stops re-sending servers already on the target version | left (panels-2): not checked |
+| 7eca0ed885 | #29462 | connections | fix(web): hand-started t3 servers get an update command that updates them | left (panels-2): not checked |
+| 6790f85f53 | #27692 | connections | fix(web): point pairing copy at Sharing & access | left (panels-2): not checked |
 | fa9d85fad5 | #35327 | connections | fix(web): a server updated with the app reconnects as soon as it is ready | n/a (settings-3): CandyWrapper has no relaunch handoff of server updates; ServerUpdater.run already retries the connection every second while a server restarts |
-| 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | port |
-| cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | port |
-| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | port |
-| bd9ff7eb2a | #33244 | connections | fix(client-runtime): recover thread list updates after stream defects | port |
-| ca7a9448b8 | #24932 | connections | fix(client-runtime): Reconnect works while the network reports offline | port |
-| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | port |
-| ead133ce70 | #28297 | connections | fix(web): SSH port field no longer turns 22.5 into port 22 | port |
-| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | port |
-| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | port |
-| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | port |
-| a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | port |
-| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | port |
-| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | port |
+| 00f617db4e | #24400 | connections | fix(client-runtime): recover subscriptions that stop on a healthy connection | left (panels-2): not checked |
+| cbf0f0a83f | #36445 | connections | fix(web): screen readers read the Update everything machine list as a table | left (panels-2): not checked |
+| 757f71a7f6 | #29788 | connections | fix(client-runtime): new T3 Connect machines appear without signing in again | left (panels-2): not checked |
+| bd9ff7eb2a | #33244 | connections | fix(client-runtime): recover thread list updates after stream defects | left (panels-2): not checked |
+| ca7a9448b8 | #24932 | connections | fix(client-runtime): Reconnect works while the network reports offline | already in CandyWrapper: connection-2 made Reconnect work while the device reports offline (ConnectionSignalTests) |
+| efae4e9da1 | #36559 | connections | fix(client): retry unread thread visits after reconnect | left (panels-2): not checked |
+| ead133ce70 | #28297 | connections | fix(web): SSH port field no longer turns 22.5 into port 22 | left (panels-2): not checked |
+| acd192fc64 | #36726 | connections | fix(web): removing an environment dismisses its notification toasts | left (panels-2): not checked |
+| 12102c74a3 | #28907 | connections | fix(web,mobile): Linked environments shows links made outside the app | left (panels-2): not checked |
+| 5583b26460 | #36793 | connections | fix(server,client): preserve literal JSON command output | left (panels-2): not checked |
+| a6765d41d5 | #33795 | connections | fix(web): audio and server spinners respect reduced motion | left (panels-2): not checked |
+| e1458f25e2 | #32048 | connections | fix(web): track switch no longer blocked when Local environment is off | left (panels-2): not checked |
+| 1672b51630 | #32157 | connections | fix(web): Add Environment drops the old tab's error when switching mode | left (panels-2): not checked |
 | 399ea10f4e | #37490 | connections | fix(web): Update everything no longer offers a Nightly build to a Stable desktop app | ported (settings-3): UpdateEverythingLogic.serverTargets skips a Stable desktop host for a Nightly target |
-| 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | port |
-| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | port |
-| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | port |
+| 27411651a4 | #37825 | connections | fix(auth): bind automatic pairing codes to peer links | left (panels-2): not checked |
+| c48825322d | #38442 | connections | fix(web): pairing links never use the desktop app's t3code:// address | left (panels-2): not checked |
+| dcaff67177 | #38980 | connections | fix(web): removing a connection withdraws its permission update notice | left (panels-2): not checked |
 
 ## Small fixes, device (10)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | port |
-| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | port |
-| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | port |
-| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | port |
-| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | port |
-| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | port |
-| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | port |
-| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | port |
-| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | port |
-| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | port |
+| a3df6044a4 | #21430 | device | fix(web): preserve the active pointer in the flat Device view | left (panels-2): not checked |
+| 9bd5e12242 | #24106 | device | fix(web): restored Device view waits for device state before setup | left (panels-2): not checked |
+| 43b56b1790 | #23339 | device | fix(device): forward numeric keypad keys to iOS simulators | left (panels-2): not checked |
+| 09ace626bb | #28323 | device | fix(web): device tools keep the typed text when a command fails | left (panels-2): not checked |
+| a821f039c1 | #29352 | device | fix(client-runtime): connection diagnosis no longer blames the host while this device's sign-in loads | left (panels-2): not checked |
+| 3ee55151e0 | #29912 | device | fix(web): device host checks show the error without a stack trace | left (panels-2): not checked |
+| 202d5b5616 | #25971 | device | fix(devices): keep devices listed when simulator discovery fails | left (panels-2): not checked |
+| f475de2f75 | #27030 | device | fix(web): device tool update buttons fit their popovers | left (panels-2): not checked |
+| aa37097093 | #35664 | device | fix(web): streamed device toolbar starts at the panel size | left (panels-2): not checked |
+| 9e32c95576 | #33199 | device | fix(client-runtime): show routes whose host refused this device's sign-in | left (panels-2): not checked |
 
 ## Small fixes, diff (18)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 456892da72 | #23723 | diff | fix(web): show rounded diff counts as 1m instead of 1000k | port |
-| 80a2351fcb | #25865 | diff | fix(web,mobile): Luau files are syntax highlighted in diffs | port |
-| dc9b1a5a63 | #27635 | diff | fix(web): keep diff base selector available after errors | port |
-| 5651d76818 | #28091 | diff | fix(web): horizontal scrolling inside diff and file panes no longer switches threads | port |
-| 1c0cc439ff | #28386 | diff | fix(web): deleting a thread clears its saved right-panel, diff-panel and mini-player state | port |
-| 300101f7e5 | #29309 | diff | fix(web): open files from Claude and ACP tool-call diffs | port |
-| 8b44f42b14 | #30567 | diff | fix(web): load selected diff metadata before file patches | port |
-| 996b43f01b | #22347 | diff | fix(web): retain diff selection across navigation | port |
-| bd02e64b5f | #28056 | diff | fix(web): expanding a diff whose files changed no longer crashes | port |
-| e5b5da3a7c | #27550 | diff | fix(web): reopening a guide with many cached diff pages no longer crashes | port |
-| f39c4405fa | #35090 | diff | fix(web): diff tab keeps its scroll position across thread switches | port |
-| fbd77b9b37 | #28947 | diff | fix(web): diff colors follow appearance contrast | port |
-| a621be8d15 | #35922 | diff | fix(web): open code blocks and diffs follow a changed word wrap default | port |
-| 953ce60d12 | #36606 | diff | fix(web): changed root files with a leading space open in the diff panel | port |
-| bef412cff6 | #33310 | diff | fix(web): diff file tree shows added and deleted files before their patches load | port |
-| b96a511067 | #35304 | diff | fix(web): repeated diff blocks no longer crash the viewer | port |
-| 2b6c14bbf1 | #23167 | diff | fix(web): diff file Open and Reveal reach a file whose name has a backslash | port |
-| 9a79883979 | #32684 | diff | fix(web): a file opened from a diff in a project folder inside a repository opens that file | port |
+| 456892da72 | #23723 | diff | fix(web): show rounded diff counts as 1m instead of 1000k | ported (panels-2): DiffStatView.compact rounds 999,500 up to 1m |
+| 80a2351fcb | #25865 | diff | fix(web,mobile): Luau files are syntax highlighted in diffs | left (panels-2): add luau to lua and xsl, xslt to xml in Features/Markdown/CodeHighlighter.swift, which another agent holds |
+| dc9b1a5a63 | #27635 | diff | fix(web): keep diff base selector available after errors | ported (panels-2): the Changes head and base selector stays after a failed read, HEAD and Automatic as fallbacks |
+| 5651d76818 | #28091 | diff | fix(web): horizontal scrolling inside diff and file panes no longer switches threads | left (panels-2): goes with the history-swipe group (#30173) outside the diff views |
+| 1c0cc439ff | #28386 | diff | fix(web): deleting a thread clears its saved right-panel, diff-panel and mini-player state | skipped (panels-2): CandyWrapper keeps panel and diff selection per open thread in memory; only the diff base choice persists (DiffPanelView baseRefsKey), and clearing it needs the delete path in Features/Sidebar |
+| 300101f7e5 | #29309 | diff | fix(web): open files from Claude and ACP tool-call diffs | left (panels-2): not checked against ToolCallDiff's open path |
+| 8b44f42b14 | #30567 | diff | fix(web): load selected diff metadata before file patches | n/a (panels-2): CandyWrapper reads the whole patch, with no metadata-first file list |
+| 996b43f01b | #22347 | diff | fix(web): retain diff selection across navigation | left (panels-2): diff selection across navigation lives in Features/Thread ThreadPanelView |
+| bd02e64b5f | #28056 | diff | fix(web): expanding a diff whose files changed no longer crashes | n/a: React render crash |
+| e5b5da3a7c | #27550 | diff | fix(web): reopening a guide with many cached diff pages no longer crashes | n/a: React render crash |
+| f39c4405fa | #35090 | diff | fix(web): diff tab keeps its scroll position across thread switches | left (panels-2): scroll position per thread needs ThreadPanelView to keep the DiffListView offset |
+| fbd77b9b37 | #28947 | diff | fix(web): diff colors follow appearance contrast | left (panels-2): DiffStyle's addition and deletion mixes need the appearance contrast boost (calc(N% - boost/4)) |
+| a621be8d15 | #35922 | diff | fix(web): open code blocks and diffs follow a changed word wrap default | ported (panels-2): the wrap toggle follows a changed wordWrap default until pressed |
+| 953ce60d12 | #36606 | diff | fix(web): changed root files with a leading space open in the diff panel | already in CandyWrapper: DiffPanelView.open passes the file path untrimmed |
+| bef412cff6 | #33310 | diff | fix(web): diff file tree shows added and deleted files before their patches load | n/a (panels-2): CandyWrapper reads the whole patch, so files and change types arrive together |
+| b96a511067 | #35304 | diff | fix(web): repeated diff blocks no longer crash the viewer | n/a: React key crash |
+| 2b6c14bbf1 | #23167 | diff | fix(web): diff file Open and Reveal reach a file whose name has a backslash | left (panels-2): not checked |
+| 9a79883979 | #32684 | diff | fix(web): a file opened from a diff in a project folder inside a repository opens that file | left (panels-2): not checked |
 
 ## Small fixes, files (22)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | port |
-| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | port |
-| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | port |
-| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | port |
-| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | port |
-| 09647d188d | #30601 | files | fix(shared): CSV and TSV attachments keep their table under generic file types | port |
-| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | port |
-| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | port |
-| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | port |
-| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | port |
-| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | port |
-| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | port |
-| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | port |
-| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | port |
-| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | port |
-| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | port |
-| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | port |
-| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | port |
-| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | port |
-| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | port |
-| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | port |
-| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | port |
+| de2b1d3358 | #23745 | files | fix(web): keep HTML prototype selection rings visible | left (panels-2): not checked |
+| f06dd4bbf5 | #25737 | files | feat(web): allow resizing the file explorer | left (panels-2): not checked |
+| 78f1ba8285 | #25555 | files | fix(web): preserve PDF scroll and zoom across autoreloads | left (panels-2): not checked |
+| 461df465ab | #26579 | files | fix(web): file context menu actions respond to pointer clicks | left (panels-2): not checked |
+| 433bff1e30 | #28521 | files | fix(web): clicking a file in the Files tree keeps focus on that row | left (panels-2): not checked |
+| 09647d188d | #30601 | files | fix(shared): CSV and TSV attachments keep their table under generic file types | already in CandyWrapper: FilePreviewKind.of picks the table from the .csv or .tsv extension, whatever the MIME type |
+| 9ef52de293 | #23203 | files | fix(shared): keep spreadsheet shorthand as inline code | left (panels-2): not checked |
+| 1ab3afe892 | #34360 | files | fix(web): opening a file focuses its editor so Cmd+F searches it | left (panels-2): not checked |
+| eceeab4d5c | #34346 | files | fix(web): Cmd+F in the Files panel focuses its search | left (panels-2): not checked |
+| f10a5029f5 | #35067 | files | fix(web): Files tree keeps expanded folders across remounts | left (panels-2): not checked |
+| 08544ba3e5 | #32693 | files | fix(web): open documents no longer reload after every agent command | left (panels-2): not checked |
+| 8cb551a3ce | #36664 | files | fix(web): saved files show external edits after a failed reload | left (panels-2): not checked |
+| 8b633d9a9e | #29802 | files | fix(web): PDF find matches curly quotes when you type straight ones | left (panels-2): not checked |
+| f05cd350d2 | #29996 | files | fix(web): opening a very large folder no longer freezes the Files panel | left (panels-2): not checked |
+| 2afee52025 | #33125 | files | fix(web): distinguish media Back from window close | left (panels-2): not checked |
+| 5f80af6805 | #36936 | files | fix(web): restore word selection in inline code | left (panels-2): not checked |
+| 71adeef080 | #37064 | files | fix(web): open PDF links in the file viewer | left (panels-2): not checked |
+| 109e9dbdfd | #37361 | files | fix(web): file tabs keep their scroll position when you switch back | left (panels-2): not checked |
+| 6dd092315e | #31785 | files | fix(web): file tree icons and ignored rows follow the theme's muted text | left (panels-2): not checked |
+| f4d0855a50 | #33805 | files | fix(web): PDF attachment chips no longer look like failed ones | left (panels-2): not checked |
+| 0d405f664a | #38510 | files | fix(web): a ~\ home path opens as a read-only home file, not as a project file | left (panels-2): not checked |
+| e48d6f3181 | #38749 | files | fix(web): PDFs in the desktop file panel can be saved again | left (panels-2): not checked |
 
 ## Small fixes, issues (2)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 0c676d95b1 | #38160 | issues | fix(web): screen readers name thread details issue and PR rows by number and title | port |
-| 05e3674636 | #38995 | issues | fix(web): screen readers read a linked issue's key once in thread details | port |
+| 0c676d95b1 | #38160 | issues | fix(web): screen readers name thread details issue and PR rows by number and title | left (panels-2): not checked |
+| 05e3674636 | #38995 | issues | fix(web): screen readers read a linked issue's key once in thread details | left (panels-2): not checked |
 
 ## Small fixes, palette (4)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | port |
-| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | port |
-| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | port |
-| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | port |
+| 1cfd23e7cb | #25236 | palette | fix(web): keep palette project lookups in their environment | left (panels-2): not checked |
+| 977d613611 | #29288 | palette | fix(web): command palette footer hints wrap instead of clipping on narrow viewports | left (panels-2): not checked |
+| b732621b51 | #37315 | palette | fix(clients): command palette skips tasks shown under their parent | left (panels-2): not checked |
+| e0f5acd178 | #38968 | palette | fix(web): the command palette lists a failed thread as Failed, not Waiting | left (panels-2): not checked |
 
 ## Small fixes, pr/git (161)
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | port |
-| 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | port |
-| a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | port |
-| 1c99a55444 | #23577 | pr/git | fix(web): report invalid preview addresses | port |
-| 13f9bc4e55 | #23678 | pr/git | fix(web): label inherited worktree cleanup modes correctly | port |
-| be43da4c0d | #23732 | pr/git | fix(web): PDF previews keep their page when the agent responds | port |
-| 3e7277e7e8 | #23742 | pr/git | fix(web): release discarded draft image previews after Undo expires | port |
-| 64968b3109 | #24060 | pr/git | fix(web): a branch restore in one thread no longer blocks another thread | port |
-| bc216e4675 | #24081 | pr/git | fix(web): closed preview sessions no longer keep syncing for the rest of the session | port |
-| e9dd8a68ee | #24117 | pr/git | fix(clients): offer Commit when the branch is behind upstream | port |
-| c9246445e0 | #24189 | pr/git | fix(web): long guide Next buttons wrap instead of overflowing | port |
-| f5bc64b7b7 | #24489 | pr/git | fix(web): deleting a thread no longer offers to remove a shared worktree | port |
-| 9474bcbae1 | #25303 | pr/git | fix(web): preserve trailing whitespace in review diffs | port |
-| e428a2c1f5 | #26060 | pr/git | fix(web,mobile): pull request text breaks lines when providers do | port |
-| 4dd2f735f2 | #26441 | pr/git | fix(web): Load balancing and PR sharing name the route in use | port |
-| 6e72f540f6 | #26563 | pr/git | fix(prs): classify generated files and evals correctly | port |
-| 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | port |
-| a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | port |
-| e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | port |
+| 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | ported (panels-2): "Allow edits from maintainers" checkbox in the ⋯ menu, `pullRequests.update` `maintainerCanModify`; the hint is a one-line subtitle plus tooltip |
+| 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | left (panels-2): not checked |
+| a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | left (panels-2): not checked |
+| 1c99a55444 | #23577 | pr/git | fix(web): report invalid preview addresses | left (panels-2): not checked |
+| 13f9bc4e55 | #23678 | pr/git | fix(web): label inherited worktree cleanup modes correctly | left (panels-2): not checked |
+| be43da4c0d | #23732 | pr/git | fix(web): PDF previews keep their page when the agent responds | left (panels-2): not checked |
+| 3e7277e7e8 | #23742 | pr/git | fix(web): release discarded draft image previews after Undo expires | left (panels-2): not checked |
+| 64968b3109 | #24060 | pr/git | fix(web): a branch restore in one thread no longer blocks another thread | left (panels-2): not checked |
+| bc216e4675 | #24081 | pr/git | fix(web): closed preview sessions no longer keep syncing for the rest of the session | left (panels-2): not checked |
+| e9dd8a68ee | #24117 | pr/git | fix(clients): offer Commit when the branch is behind upstream | left (panels-2): not checked |
+| c9246445e0 | #24189 | pr/git | fix(web): long guide Next buttons wrap instead of overflowing | left (panels-2): not checked |
+| f5bc64b7b7 | #24489 | pr/git | fix(web): deleting a thread no longer offers to remove a shared worktree | left (panels-2): not checked |
+| 9474bcbae1 | #25303 | pr/git | fix(web): preserve trailing whitespace in review diffs | left (panels-2): not checked |
+| e428a2c1f5 | #26060 | pr/git | fix(web,mobile): pull request text breaks lines when providers do | left (panels-2): not checked |
+| 4dd2f735f2 | #26441 | pr/git | fix(web): Load balancing and PR sharing name the route in use | left (panels-2): not checked |
+| 6e72f540f6 | #26563 | pr/git | fix(prs): classify generated files and evals correctly | left (panels-2): not checked |
+| 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | left (panels-2): not checked |
+| a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | left (panels-2): not checked |
+| e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | left (panels-2): not checked |
 | 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | left (not reached in composer-3): from @xl (576pt) T3 shows the wide strip layout, machine, separator and the worktree picker (`BranchToolbarEnvModeSelector`), which CW has no control for yet; needs a 4928 reference capture |
-| 45d29b45fe | #22382 | pr/git | fix(web): a refused review shows GitHub's reason | port |
-| 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | port |
-| a24ec905c8 | #28070 | pr/git | fix(web): machine label no longer shifts between one and many machines | port |
-| 793bbf47b3 | #28077 | pr/git | fix(web): long titles no longer overflow the pull request list tooltip | port |
-| 78aa0d5ca5 | #27925 | pr/git | feat(mcp): unlink every PR in given states with one call | port |
-| 01bd0a2702 | #27994 | pr/git | feat(mcp): link several PRs to a thread with one call | port |
-| 43d445b408 | #21839 | pr/git | fix(web): file preview videos keep their own aspect ratio | port |
-| 85133dc578 | #23129 | pr/git | fix(web): PR diffs list a `.logic.test.ts` file beside the source it covers | port |
-| 3331b93937 | #23156 | pr/git | fix(web): show linked pull request state in command palette rows | port |
-| 665351fc39 | #24118 | pr/git | fix(web): show readable errors when a stack action fails | port |
-| 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | port |
-| b50d8a1b15 | #28573 | pr/git | fix(web): add spacing above PR detail metadata | port |
-| 82b10d546c | #28665 | pr/git | fix(web): align pull request file viewed checkboxes | port |
-| f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | port |
-| 5b5bd169e0 | #26077 | pr/git | fix(web): PR merge buttons stay in place while the stack loads | port |
-| 7816a0fa81 | #27434 | pr/git | fix(web): Enter selects the first branch search result | port |
-| 716e1c071c | #28439 | pr/git | fix(web): Changes row no longer shows +0 while Diff has edits | port |
-| dd6c05ec31 | #28613 | pr/git | fix(preview): agent browser use no longer steals composer focus | port |
-| 4a5251b1c4 | #29005 | pr/git | fix(web): keep pending pull request actions scoped to each request | port |
-| 1d80d0e215 | #27438 | pr/git | fix(client-runtime): branch picker shows branches changed outside T3 Code | port |
-| 4494faa270 | #29161 | pr/git | fix(client-runtime): checking out a pull request refreshes cached branch lists | port |
-| 523145993e | #29575 | pr/git | fix(web): review comments keep a trailing blank line in their diff | port |
-| f2513bd288 | #23641 | pr/git | fix(web): project settings can set a checkout's grouping rule again | port |
-| 16fd1a440e | #25064 | pr/git | fix(web): match new-thread hero to selected checkout | port |
-| 6e58094f74 | #23396 | pr/git | fix(preview): explain invalid URLs and locators | port |
-| ea68f2a667 | #29908 | pr/git | fix(web): picking a branch in a subfolder project keeps the thread in the project folder | port |
-| c185d780fc | #29655 | pr/git | fix(preview): a dropped stream withdraws its stale file picker | port |
-| 48e73f6ca9 | #29360 | pr/git | fix: honor generic MIME aliases in attachment previews | port |
+| 45d29b45fe | #22382 | pr/git | fix(web): a refused review shows GitHub's reason | left (panels-2): not checked |
+| 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | left (panels-2): not checked |
+| a24ec905c8 | #28070 | pr/git | fix(web): machine label no longer shifts between one and many machines | left (panels-2): not checked |
+| 793bbf47b3 | #28077 | pr/git | fix(web): long titles no longer overflow the pull request list tooltip | left (panels-2): not checked |
+| 78aa0d5ca5 | #27925 | pr/git | feat(mcp): unlink every PR in given states with one call | n/a: T3's MCP tools, which run on the server |
+| 01bd0a2702 | #27994 | pr/git | feat(mcp): link several PRs to a thread with one call | n/a: T3's MCP tools, which run on the server |
+| 43d445b408 | #21839 | pr/git | fix(web): file preview videos keep their own aspect ratio | left (panels-2): not checked |
+| 85133dc578 | #23129 | pr/git | fix(web): PR diffs list a `.logic.test.ts` file beside the source it covers | left (panels-2): not checked |
+| 3331b93937 | #23156 | pr/git | fix(web): show linked pull request state in command palette rows | left (panels-2): not checked |
+| 665351fc39 | #24118 | pr/git | fix(web): show readable errors when a stack action fails | left (panels-2): not checked |
+| 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | left (panels-2): resizable Changes and PR Code file lists, 5.1 |
+| b50d8a1b15 | #28573 | pr/git | fix(web): add spacing above PR detail metadata | left (panels-2): not checked |
+| 82b10d546c | #28665 | pr/git | fix(web): align pull request file viewed checkboxes | left (panels-2): not checked |
+| f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | left (panels-2): not checked |
+| 5b5bd169e0 | #26077 | pr/git | fix(web): PR merge buttons stay in place while the stack loads | left (panels-2): not checked |
+| 7816a0fa81 | #27434 | pr/git | fix(web): Enter selects the first branch search result | left (panels-2): not checked |
+| 716e1c071c | #28439 | pr/git | fix(web): Changes row no longer shows +0 while Diff has edits | left (panels-2): not checked |
+| dd6c05ec31 | #28613 | pr/git | fix(preview): agent browser use no longer steals composer focus | left (panels-2): not checked |
+| 4a5251b1c4 | #29005 | pr/git | fix(web): keep pending pull request actions scoped to each request | left (panels-2): not checked |
+| 1d80d0e215 | #27438 | pr/git | fix(client-runtime): branch picker shows branches changed outside T3 Code | left (panels-2): not checked |
+| 4494faa270 | #29161 | pr/git | fix(client-runtime): checking out a pull request refreshes cached branch lists | left (panels-2): not checked |
+| 523145993e | #29575 | pr/git | fix(web): review comments keep a trailing blank line in their diff | left (panels-2): not checked |
+| f2513bd288 | #23641 | pr/git | fix(web): project settings can set a checkout's grouping rule again | left (panels-2): not checked |
+| 16fd1a440e | #25064 | pr/git | fix(web): match new-thread hero to selected checkout | left (panels-2): not checked |
+| 6e58094f74 | #23396 | pr/git | fix(preview): explain invalid URLs and locators | left (panels-2): not checked |
+| ea68f2a667 | #29908 | pr/git | fix(web): picking a branch in a subfolder project keeps the thread in the project folder | left (panels-2): not checked |
+| c185d780fc | #29655 | pr/git | fix(preview): a dropped stream withdraws its stale file picker | left (panels-2): not checked |
+| 48e73f6ca9 | #29360 | pr/git | fix: honor generic MIME aliases in attachment previews | left (panels-2): not checked |
 | b3041a8cb9 | #28832 | pr/git | fix(web): show Setting up during worktree setup | ported 9a0153d1 |
-| 199cb5b6a9 | #30085 | pr/git | fix(web): show the comparison base beside Changes totals | port |
-| 7384cf20da | #30704 | pr/git | fix(web,mobile): save pull request description checkbox changes | port |
-| e4b98f9d39 | #21631 | pr/git | fix(assets): preserve the PR repository for GitHub media | port |
-| 444921eb71 | #30483 | pr/git | fix(gitlab): merge requests can edit their labels | port |
-| d929e726f2 | #31741 | pr/git | fix(pr): GitCafe attachments render in pull request bodies | port |
-| c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | port |
-| 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | port |
-| e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | port |
-| cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | port |
-| 0aae72244e | #31814 | pr/git | fix(web): keep change totals aligned beside the label | port |
-| 0a2f59056b | #31858 | pr/git | fix(web): improve Changes row text and spacing | port |
-| 32a0531748 | #25988 | pr/git | fix(web): PR bodies keep before/after video tables intact | port |
-| e74b410e29 | #29642 | pr/git | fix(web): keybinding settings recognize the previewOpen condition | port |
-| 75200f45c6 | #29678 | pr/git | fix(web): thread navigation shortcuts honor previewFocus and previewOpen conditions | port |
-| daa6984fd6 | #30392 | pr/git | fix(web): review findings handed to a thread no longer end in a broken character | port |
-| 6647b0a761 | #30812 | pr/git | fix(web): rich text previews keep paragraphs that end with a backslash | port |
-| 8ab427c607 | #33113 | pr/git | fix(web): settings say custom instructions cover pull request descriptions | port |
-| a88a0adfa1 | #34003 | pr/git | fix(web): keep HTML previews anchored when accordions expand | port |
-| 44e894ffd7 | #34017 | pr/git | fix(web): preserve search result titles in drag previews | port |
-| 8fc6fd01d7 | #33949 | pr/git | fix(web): preserve previews during attachment preparation | port |
-| d152d2c824 | #30150 | pr/git | fix(client-runtime): a search query pasted from github.com lists pull requests again | port |
-| 4ca10398b1 | #34140 | pr/git | fix(web): tighter outdated-conversation cards in the PR code panel | port |
-| b3fdf2b10f | #33989 | pr/git | fix(web): PR links jump to the comment, diff line, checks or commits they name | port |
-| dea8472438 | #28732 | pr/git | feat(web): label chips show the label's description on hover | port |
+| 199cb5b6a9 | #30085 | pr/git | fix(web): show the comparison base beside Changes totals | left (panels-2): the Changes totals' comparison base, 5.1, needs the Git panel's Changes row |
+| 7384cf20da | #30704 | pr/git | fix(web,mobile): save pull request description checkbox changes | left (panels-2): not checked |
+| e4b98f9d39 | #21631 | pr/git | fix(assets): preserve the PR repository for GitHub media | left (panels-2): not checked |
+| 444921eb71 | #30483 | pr/git | fix(gitlab): merge requests can edit their labels | left (panels-2): not checked |
+| d929e726f2 | #31741 | pr/git | fix(pr): GitCafe attachments render in pull request bodies | left (panels-2): not checked |
+| c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | ported (panels-2): the reviewer picker asks the host with `query` past a truncated page where `reviewers.searchCandidates`, with T3's four truncation notes |
+| 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | left (panels-2): not checked |
+| e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | left (panels-2): not checked |
+| cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | left (panels-2): not checked |
+| 0aae72244e | #31814 | pr/git | fix(web): keep change totals aligned beside the label | left (panels-2): not checked |
+| 0a2f59056b | #31858 | pr/git | fix(web): improve Changes row text and spacing | left (panels-2): not checked |
+| 32a0531748 | #25988 | pr/git | fix(web): PR bodies keep before/after video tables intact | left (panels-2): not checked |
+| e74b410e29 | #29642 | pr/git | fix(web): keybinding settings recognize the previewOpen condition | left (panels-2): not checked |
+| 75200f45c6 | #29678 | pr/git | fix(web): thread navigation shortcuts honor previewFocus and previewOpen conditions | left (panels-2): not checked |
+| daa6984fd6 | #30392 | pr/git | fix(web): review findings handed to a thread no longer end in a broken character | left (panels-2): not checked |
+| 6647b0a761 | #30812 | pr/git | fix(web): rich text previews keep paragraphs that end with a backslash | left (panels-2): not checked |
+| 8ab427c607 | #33113 | pr/git | fix(web): settings say custom instructions cover pull request descriptions | left (panels-2): not checked |
+| a88a0adfa1 | #34003 | pr/git | fix(web): keep HTML previews anchored when accordions expand | left (panels-2): not checked |
+| 44e894ffd7 | #34017 | pr/git | fix(web): preserve search result titles in drag previews | left (panels-2): not checked |
+| 8fc6fd01d7 | #33949 | pr/git | fix(web): preserve previews during attachment preparation | left (panels-2): not checked |
+| d152d2c824 | #30150 | pr/git | fix(client-runtime): a search query pasted from github.com lists pull requests again | ported (panels-2): GitHub's own qualifiers (is, state, repo, org, user, sort, archived) are ignored, two different authors name none, a negated draft flips, PullRequestListLogic.parseQuery |
+| 4ca10398b1 | #34140 | pr/git | fix(web): tighter outdated-conversation cards in the PR code panel | left (panels-2): not checked |
+| b3fdf2b10f | #33989 | pr/git | fix(web): PR links jump to the comment, diff line, checks or commits they name | left (panels-2): PR links that jump to a comment, line, checks or commits, 5.2 |
+| dea8472438 | #28732 | pr/git | feat(web): label chips show the label's description on hover | left (panels-2): not checked |
 | b6d3097379 | #28459 | pr/git | feat(web): composer strip names the worktree folder | ported: a started thread's strip names its worktree folder (BranchToolbarLogic `lockedWorkspaceLabel`, Features/Git) |
-| 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | port |
-| 75b22bf56c | #30620 | pr/git | fix(web): dismiss image path tooltips after preview and scroll | port |
-| 8c9af5418a | #31972 | pr/git | fix(web): disable the git actions menu when nothing in it is usable | port |
-| 1bdf470328 | #34048 | pr/git | fix(web): project actions auto-open Preview in web clients | port |
-| 49bab9936e | #19553 | pr/git | fix(web): Changes row matches the diff comparison | port |
-| fcddd737e2 | #22208 | pr/git | fix(web): don't save retention age until committed | port |
-| 27188274e7 | #26992 | pr/git | fix(web): pull request search keeps partial-word matches after GitHub answers | port |
-| 479ee74135 | #15848 | pr/git | fix(web): a thread started from a pull request links it | port |
-| 7e565c510d | #34218 | pr/git | fix(git): stop new threads inheriting historical branch PRs | port |
-| 3a0bcba00a | #34607 | pr/git | fix(shared): GitLab merge request file and line links open that file | port |
-| 9411a71ec0 | #34509 | pr/git | fix(web): dismissing the pull request checkout toast stops the handoff | port |
-| 8214342385 | #32283 | pr/git | fix(web): collapsed PR comments no longer show raw HTML | port |
-| afe0528039 | #34727 | pr/git | fix(web): keep git action loading rows at idle height | port |
-| fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | port |
-| 3a30b011c3 | #34734 | pr/git | fix(web): cancelled PR checks show a gray stop sign instead of the failed X | port |
-| 3bd7b04544 | #34796 | pr/git | fix(web): Escape and tool keys work as soon as preview annotation starts | port |
-| 0ac41eecad | #34878 | pr/git | fix(web): sidebar rows drop a branch and worktree that were deleted | port |
-| ee90bdc940 | #34992 | pr/git | fix(web): CSV/TSV and large-text previews say "1 row", "1 column" and "1 line" | port |
-| abbd967c4b | #35111 | pr/git | fix(web): PR comment hover excerpts no longer end in a replacement character | port |
-| bf8e5e61b6 | #35066 | pr/git | fix(web): a failed page in the floating browser preview shows the error instead of a blank panel | port |
-| 167d41c094 | #35376 | pr/git | fix(web): a numeric author or labels in the URL no longer crashes Pull Requests | port |
-| d0f9d4dcc0 | #35406 | pr/git | fix(web): sidebar draft previews show cited assistant text, not the raw link | port |
-| 55081a1f7b | #35430 | pr/git | fix(shared): thread search ignores the t3 prefix of flat temporary branches | port |
-| f376f5cc1d | #32302 | pr/git | fix(web): J and K step the PR guide without clicking into it first | port |
-| 5cff012416 | #35548 | pr/git | feat(web): resize rows and columns in spreadsheet previews | port |
-| 1b133107a5 | #33877 | pr/git | fix(web): a branch picked right after opening the picker no longer waits for its status read | port |
-| fa8949a28c | #29441 | pr/git | fix(web): project settings can reach each checkout on one environment | port |
-| c00a373491 | #33903 | pr/git | fix(web): Select All then Copy in a read-only file preview copies the whole file | port |
-| c6995622d5 | #23627 | pr/git | fix(web): branch labels keep the space before a middle-truncated name | port |
-| e179cefe7a | #35677 | pr/git | fix(web): collapsed reasoning previews no longer split an emoji | port |
-| 5e18314b88 | #32738 | pr/git | fix(forgejo): fast-forward-only repositories can merge pull requests | port |
-| afff0d3efe | #35897 | pr/git | fix(clients): answer history no longer shows provider context from review comments | port |
-| b80531d6fb | #36056 | pr/git | fix(web): PR Code tab previews images the host sends no patch for | port |
-| 31b5549f98 | #35396 | pr/git | fix(web): pull request comment tooltips follow the Time format setting | port |
-| 21b0b7a057 | #36104 | pr/git | fix(composer): keep reviews from different Git hosts in suggestions | port |
-| 93aaad5b45 | #36211 | pr/git | fix(web): PR conversation headers wrap instead of overflowing | port |
-| fcd06873e8 | #36276 | pr/git | fix(web): removing a checkout moves its open draft to a remaining checkout | port |
-| b009582cc9 | #36347 | pr/git | fix(web): picking the previous branch after an outside checkout switches to it | port |
-| f8dc37d0b7 | #36315 | pr/git | fix(web): floating preview resize holds its shape and ends when interrupted | port |
-| bc7fe11002 | #36379 | pr/git | fix(web): a new worktree thread opened during a clone bases on the real default branch | port |
-| 36f011dfb7 | #36364 | pr/git | fix(web): file links the agent cited from a checkout it cd'd into open that file | port |
-| 2a1caac438 | #34446 | pr/git | fix(web): NVDA browse mode reads the current thread's branch, not the previous one | port |
-| a9fd0b2511 | #36466 | pr/git | fix(web): copying a file preview selection returns the selected lines after scrolling | port |
-| 34cf030e5e | #27882 | pr/git | fix(web): pull requests error names the environment that failed | port |
-| 058eea9246 | #36171 | pr/git | fix(pr): hide unsupported GitCafe review reactions | port |
-| 0516493a91 | #36528 | pr/git | fix(web): align status text and tighten pull request menu spacing | port |
-| 70be20493b | #24151 | pr/git | fix: re-ticking a file after a push no longer shows it Viewed | port |
-| 1159aa2991 | #36660 | pr/git | fix(client-runtime): preserve PR reference links across embedded media | port |
-| 92c91aac8f | #28095 | pr/git | fix(client-runtime): keep inherited qualifier values as PR search text | port |
-| a575d45286 | #28575 | pr/git | fix(web,server): the branch label no longer flips back after a switch | port |
-| 3d9aeaf757 | #36738 | pr/git | fix(shared): preview semicolon-separated CSV files as tables | port |
-| c342f3dec2 | #29867 | pr/git | fix(web): settled threads no longer offer a PR watch the server refuses | port |
-| 732198d3a9 | #36786 | pr/git | fix(web): a disabled Push names the real reason when there are local changes | port |
-| 170c1f7e2d | #29845 | pr/git | fix(web): Push on the default branch no longer offers a feature branch the server rejects | port |
-| 49eb9c8adc | #29871 | pr/git | fix(web,mobile): pull request project filter lists pinned projects first | port |
-| 69525bf895 | #33692 | pr/git | fix(web): a pull request whose title holds a numeric search ranks above description-only matches | port |
-| 73cbc6b1ed | #35527 | pr/git | fix(web): dropdown hover fills expanded Git action rows | port |
-| 62a51e26a4 | #34662 | pr/git | fix(web): more GitLab merge request links open their file, line or commit | port |
-| ed101ef641 | #35135 | pr/git | fix(preview): unload desktop pages before removing their tabs | port |
-| c041761d89 | #30107 | pr/git | fix(web,server): picking the previous branch after an agent's checkout switches back | port |
-| 3808e2d77e | #30571 | pr/git | fix(client-runtime): a line of inline triple-backtick code no longer breaks media in PR descriptions | port |
-| 9cd5733f58 | #34088 | pr/git | fix(web): an unreachable environment no longer hides pull requests from repositories it shares | port |
-| d6c1d17793 | #37022 | pr/git | fix(web): show drag preview inside sidebar search results | port |
-| 3ee426272b | #37033 | pr/git | fix(web): expand viewed checkbox click area | port |
-| cc4160c813 | #32404 | pr/git | fix(web): stashed prompt previews no longer end in a broken character | port |
-| 559cd7d3b9 | #25346 | pr/git | fix(web): quieter Ready and Merge buttons on PR rows | port |
-| aace48bfe4 | #32364 | pr/git | fix(web): PR file order follows alias imports of dotted modules | port |
-| 3a1dfb7acb | #37072 | pr/git | fix(web): HTML file previews use the current canvas color | port |
-| 06150a08ec | #37392 | pr/git | fix(web): No project threads in New worktree mode send without a base branch | port |
-| 558790aae5 | #37498 | pr/git | fix(web): stashed prompt previews show thread mentions by name, not as raw links | port |
-| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | port |
-| cd42e1a497 | #37651 | pr/git | fix(web): the PR author filter says "1 merge loaded", not "1 merges loaded" | port |
-| 0a842b222d | #37704 | pr/git | fix(web): list each pull request once across servers | port |
-| 15271c8d00 | #37733 | pr/git | fix(pr): label and reviewer pickers send picks once, when they close | port |
-| 9b313f2f09 | #37827 | pr/git | fix(composer): open PR completion after opening brackets | port |
-| 26f70e72fa | #37853 | pr/git | fix(web): a failed reaction toggle no longer clears a newer reaction choice | port |
-| 47c95c2812 | #37864 | pr/git | fix(web): a rewritten review guide no longer shows code from the previous push | port |
-| ed80c2fe66 | #29658 | pr/git | fix(web): screen readers name the file checkboxes in the commit dialog | port |
-| e9d5bae5cf | #37881 | pr/git | fix(web): linked PR comment highlight keeps its full outline | port |
-| d848e4b2b2 | #26566 | pr/git | fix(web): show the change breakdown on the floating Changes button | port |
-| 5b91a5a00e | #37950 | pr/git | fix(web): HTML file previews no longer flash white after agent commands | port |
-| 6ec1d31b1e | #36624 | pr/git | fix(web): preserve literal XML declarations in EPUB previews | port |
-| f98249acad | #38004 | pr/git | fix(web): unsaved PR review comments survive a light/dark switch | port |
-| f92c5e8f98 | #38276 | pr/git | fix(web): review summary line comments keep which side they refer to | port |
-| f5f8c8d18b | #38470 | pr/git | fix(web): opening a file in the preview browser shows its current contents | port |
-| 75514dfa55 | #38517 | pr/git | fix(web): keep Ready pending label until its request finishes | port |
-| 523a98447e | #38858 | pr/git | fix(web): files under "Also in this stop" in a review guide can be commented on | port |
+| 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | left (panels-2): Viewed files folding on reopen, with #37605, 5.2 |
+| 75b22bf56c | #30620 | pr/git | fix(web): dismiss image path tooltips after preview and scroll | left (panels-2): not checked |
+| 8c9af5418a | #31972 | pr/git | fix(web): disable the git actions menu when nothing in it is usable | left (panels-2): not checked |
+| 1bdf470328 | #34048 | pr/git | fix(web): project actions auto-open Preview in web clients | left (panels-2): not checked |
+| 49bab9936e | #19553 | pr/git | fix(web): Changes row matches the diff comparison | left (panels-2): not checked |
+| fcddd737e2 | #22208 | pr/git | fix(web): don't save retention age until committed | left (panels-2): not checked |
+| 27188274e7 | #26992 | pr/git | fix(web): pull request search keeps partial-word matches after GitHub answers | left (panels-2): not checked |
+| 479ee74135 | #15848 | pr/git | fix(web): a thread started from a pull request links it | left (panels-2): not checked |
+| 7e565c510d | #34218 | pr/git | fix(git): stop new threads inheriting historical branch PRs | left (panels-2): not checked |
+| 3a0bcba00a | #34607 | pr/git | fix(shared): GitLab merge request file and line links open that file | left (panels-2): not checked |
+| 9411a71ec0 | #34509 | pr/git | fix(web): dismissing the pull request checkout toast stops the handoff | left (panels-2): not checked |
+| 8214342385 | #32283 | pr/git | fix(web): collapsed PR comments no longer show raw HTML | left (panels-2): not checked |
+| afe0528039 | #34727 | pr/git | fix(web): keep git action loading rows at idle height | left (panels-2): not checked |
+| fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | left (panels-2): not checked |
+| 3a30b011c3 | #34734 | pr/git | fix(web): cancelled PR checks show a gray stop sign instead of the failed X | ported (panels-2): cancelled checks wear `octagon-x` in muted/70, PullRequestStyle.checkStatus |
+| 3bd7b04544 | #34796 | pr/git | fix(web): Escape and tool keys work as soon as preview annotation starts | left (panels-2): not checked |
+| 0ac41eecad | #34878 | pr/git | fix(web): sidebar rows drop a branch and worktree that were deleted | left (panels-2): not checked |
+| ee90bdc940 | #34992 | pr/git | fix(web): CSV/TSV and large-text previews say "1 row", "1 column" and "1 line" | left (panels-2): not checked |
+| abbd967c4b | #35111 | pr/git | fix(web): PR comment hover excerpts no longer end in a replacement character | left (panels-2): not checked |
+| bf8e5e61b6 | #35066 | pr/git | fix(web): a failed page in the floating browser preview shows the error instead of a blank panel | left (panels-2): not checked |
+| 167d41c094 | #35376 | pr/git | fix(web): a numeric author or labels in the URL no longer crashes Pull Requests | left (panels-2): not checked |
+| d0f9d4dcc0 | #35406 | pr/git | fix(web): sidebar draft previews show cited assistant text, not the raw link | left (panels-2): not checked |
+| 55081a1f7b | #35430 | pr/git | fix(shared): thread search ignores the t3 prefix of flat temporary branches | left (panels-2): not checked |
+| f376f5cc1d | #32302 | pr/git | fix(web): J and K step the PR guide without clicking into it first | left (panels-2): not checked |
+| 5cff012416 | #35548 | pr/git | feat(web): resize rows and columns in spreadsheet previews | left (panels-2): not checked |
+| 1b133107a5 | #33877 | pr/git | fix(web): a branch picked right after opening the picker no longer waits for its status read | left (panels-2): not checked |
+| fa8949a28c | #29441 | pr/git | fix(web): project settings can reach each checkout on one environment | left (panels-2): not checked |
+| c00a373491 | #33903 | pr/git | fix(web): Select All then Copy in a read-only file preview copies the whole file | left (panels-2): not checked |
+| c6995622d5 | #23627 | pr/git | fix(web): branch labels keep the space before a middle-truncated name | left (panels-2): not checked |
+| e179cefe7a | #35677 | pr/git | fix(web): collapsed reasoning previews no longer split an emoji | left (panels-2): not checked |
+| 5e18314b88 | #32738 | pr/git | fix(forgejo): fast-forward-only repositories can merge pull requests | ported (panels-2): `fast-forward` merge method, "Fast-forward merge" label, `mergeCapabilities["fast-forward"]` |
+| afff0d3efe | #35897 | pr/git | fix(clients): answer history no longer shows provider context from review comments | left (panels-2): not checked |
+| b80531d6fb | #36056 | pr/git | fix(web): PR Code tab previews images the host sends no patch for | left (panels-2): not checked |
+| 31b5549f98 | #35396 | pr/git | fix(web): pull request comment tooltips follow the Time format setting | left (panels-2): not checked |
+| 21b0b7a057 | #36104 | pr/git | fix(composer): keep reviews from different Git hosts in suggestions | left (panels-2): not checked |
+| 93aaad5b45 | #36211 | pr/git | fix(web): PR conversation headers wrap instead of overflowing | left (panels-2): not checked |
+| fcd06873e8 | #36276 | pr/git | fix(web): removing a checkout moves its open draft to a remaining checkout | left (panels-2): not checked |
+| b009582cc9 | #36347 | pr/git | fix(web): picking the previous branch after an outside checkout switches to it | left (panels-2): not checked |
+| f8dc37d0b7 | #36315 | pr/git | fix(web): floating preview resize holds its shape and ends when interrupted | left (panels-2): not checked |
+| bc7fe11002 | #36379 | pr/git | fix(web): a new worktree thread opened during a clone bases on the real default branch | left (panels-2): not checked |
+| 36f011dfb7 | #36364 | pr/git | fix(web): file links the agent cited from a checkout it cd'd into open that file | left (panels-2): not checked |
+| 2a1caac438 | #34446 | pr/git | fix(web): NVDA browse mode reads the current thread's branch, not the previous one | left (panels-2): not checked |
+| a9fd0b2511 | #36466 | pr/git | fix(web): copying a file preview selection returns the selected lines after scrolling | left (panels-2): not checked |
+| 34cf030e5e | #27882 | pr/git | fix(web): pull requests error names the environment that failed | left (panels-2): not checked |
+| 058eea9246 | #36171 | pr/git | fix(pr): hide unsupported GitCafe review reactions | left (panels-2): not checked |
+| 0516493a91 | #36528 | pr/git | fix(web): align status text and tighten pull request menu spacing | left (panels-2): not checked |
+| 70be20493b | #24151 | pr/git | fix: re-ticking a file after a push no longer shows it Viewed | left (panels-2): not checked |
+| 1159aa2991 | #36660 | pr/git | fix(client-runtime): preserve PR reference links across embedded media | left (panels-2): not checked |
+| 92c91aac8f | #28095 | pr/git | fix(client-runtime): keep inherited qualifier values as PR search text | left (panels-2): not checked |
+| a575d45286 | #28575 | pr/git | fix(web,server): the branch label no longer flips back after a switch | left (panels-2): not checked |
+| 3d9aeaf757 | #36738 | pr/git | fix(shared): preview semicolon-separated CSV files as tables | left (panels-2): not checked |
+| c342f3dec2 | #29867 | pr/git | fix(web): settled threads no longer offer a PR watch the server refuses | left (panels-2): not checked |
+| 732198d3a9 | #36786 | pr/git | fix(web): a disabled Push names the real reason when there are local changes | left (panels-2): not checked |
+| 170c1f7e2d | #29845 | pr/git | fix(web): Push on the default branch no longer offers a feature branch the server rejects | left (panels-2): not checked |
+| 49eb9c8adc | #29871 | pr/git | fix(web,mobile): pull request project filter lists pinned projects first | left (panels-2): not checked |
+| 69525bf895 | #33692 | pr/git | fix(web): a pull request whose title holds a numeric search ranks above description-only matches | left (panels-2): not checked |
+| 73cbc6b1ed | #35527 | pr/git | fix(web): dropdown hover fills expanded Git action rows | left (panels-2): not checked |
+| 62a51e26a4 | #34662 | pr/git | fix(web): more GitLab merge request links open their file, line or commit | left (panels-2): not checked |
+| ed101ef641 | #35135 | pr/git | fix(preview): unload desktop pages before removing their tabs | left (panels-2): not checked |
+| c041761d89 | #30107 | pr/git | fix(web,server): picking the previous branch after an agent's checkout switches back | left (panels-2): not checked |
+| 3808e2d77e | #30571 | pr/git | fix(client-runtime): a line of inline triple-backtick code no longer breaks media in PR descriptions | left (panels-2): not checked |
+| 9cd5733f58 | #34088 | pr/git | fix(web): an unreachable environment no longer hides pull requests from repositories it shares | left (panels-2): not checked |
+| d6c1d17793 | #37022 | pr/git | fix(web): show drag preview inside sidebar search results | left (panels-2): not checked |
+| 3ee426272b | #37033 | pr/git | fix(web): expand viewed checkbox click area | left (panels-2): not checked |
+| cc4160c813 | #32404 | pr/git | fix(web): stashed prompt previews no longer end in a broken character | left (panels-2): not checked |
+| 559cd7d3b9 | #25346 | pr/git | fix(web): quieter Ready and Merge buttons on PR rows | left (panels-2): not checked |
+| aace48bfe4 | #32364 | pr/git | fix(web): PR file order follows alias imports of dotted modules | left (panels-2): not checked |
+| 3a1dfb7acb | #37072 | pr/git | fix(web): HTML file previews use the current canvas color | left (panels-2): not checked |
+| 06150a08ec | #37392 | pr/git | fix(web): No project threads in New worktree mode send without a base branch | left (panels-2): not checked |
+| 558790aae5 | #37498 | pr/git | fix(web): stashed prompt previews show thread mentions by name, not as raw links | left (panels-2): not checked |
+| 1f698f01d9 | #37605 | pr/git | fix: PR diffs fold Viewed files the way GitHub does, on web and mobile | left (panels-2): Viewed files fold the way GitHub does, PullRequestCodeView |
+| cd42e1a497 | #37651 | pr/git | fix(web): the PR author filter says "1 merge loaded", not "1 merges loaded" | left (panels-2): not checked |
+| 0a842b222d | #37704 | pr/git | fix(web): list each pull request once across servers | left (panels-2): not checked |
+| 15271c8d00 | #37733 | pr/git | fix(pr): label and reviewer pickers send picks once, when they close | left (panels-2): not checked |
+| 9b313f2f09 | #37827 | pr/git | fix(composer): open PR completion after opening brackets | left (panels-2): not checked |
+| 26f70e72fa | #37853 | pr/git | fix(web): a failed reaction toggle no longer clears a newer reaction choice | left (panels-2): not checked |
+| 47c95c2812 | #37864 | pr/git | fix(web): a rewritten review guide no longer shows code from the previous push | left (panels-2): not checked |
+| ed80c2fe66 | #29658 | pr/git | fix(web): screen readers name the file checkboxes in the commit dialog | left (panels-2): not checked |
+| e9d5bae5cf | #37881 | pr/git | fix(web): linked PR comment highlight keeps its full outline | left (panels-2): not checked |
+| d848e4b2b2 | #26566 | pr/git | fix(web): show the change breakdown on the floating Changes button | left (panels-2): not checked |
+| 5b91a5a00e | #37950 | pr/git | fix(web): HTML file previews no longer flash white after agent commands | left (panels-2): not checked |
+| 6ec1d31b1e | #36624 | pr/git | fix(web): preserve literal XML declarations in EPUB previews | left (panels-2): not checked |
+| f98249acad | #38004 | pr/git | fix(web): unsaved PR review comments survive a light/dark switch | left (panels-2): not checked |
+| f92c5e8f98 | #38276 | pr/git | fix(web): review summary line comments keep which side they refer to | left (panels-2): not checked |
+| f5f8c8d18b | #38470 | pr/git | fix(web): opening a file in the preview browser shows its current contents | left (panels-2): not checked |
+| 75514dfa55 | #38517 | pr/git | fix(web): keep Ready pending label until its request finishes | left (panels-2): not checked |
+| 523a98447e | #38858 | pr/git | fix(web): files under "Also in this stop" in a review guide can be commented on | left (panels-2): not checked |
 
 ## Small fixes, settings (112)
 
@@ -1247,7 +1247,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b2e86d7902 | #35100 | settings | fix(web): an invalid provider setting is refused at its field instead of taking the provider offline | ported (settings-2): a refused value stays in the field marked invalid with "Enter a valid value. It was not saved." (ProvidersSettingsView.swift `ValidatedFieldControl`, `Field.pattern`) |
 | 32f3d8b160 | #35116 | settings | fix(client-runtime): Diagnostics Resource History keeps updating while open | port |
 | a30cb3283a | #35161 | settings | fix(web): Esc in the keybindings search clears it without closing Settings | port |
-| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | port |
+| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | left (panels-2): needs the `screenReaderWindowTitle` client setting and its Settings switch (Features/Settings), then status first in the window title (branding.logic.ts, Sidebar.logic.ts resolveWindowTitleThreadStatus) |
 | 4f555c746c | #28584 | settings | fix(web): choosing a project icon again re-reads it from disk | port |
 | 817b92f13a | #24110 | settings | fix(pi): stop offering extension-only models for text generation | port |
 | 141de5e9f4 | #25513 | settings | fix(web): a dismissed provider banner stays dismissed when you switch threads | port |
@@ -1352,7 +1352,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | cc0a7bb9d8 | #28644 | sidebar | fix(shared): file links with parentheses in the path keep their parent folder labels | skip: Markdown links, outside the sidebar |
 | 47474723cb | #28616 | sidebar | fix(web): clear failed badges when threads are opened | ported 9f448337 |
 | 04572419e4 | #36785 | sidebar | fix(clients): a one-hour snooze no longer reads "2h left" | ported 9a0153d1 |
-| 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | skip: Add project folder search, outside the sidebar |
+| 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | ported (panels-2): folder search ranks exact, prefix, boundary, substring and fuzzy matches, PaletteAddProjectPaths.filter |
 | 9888694f80 | #36909 | sidebar | fix(client): refresh open archive when threads are archived elsewhere | skip: Settings archive list, outside the sidebar |
 | 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | ported (sidebar-2): delegatedFrom decodes; a task from a listed parent leaves lists, the delete fallback and project opening (lineage.isListed) |
 | 26bf047d5e | #30597 | sidebar | fix(client-runtime): a disconnected machine's scratch folder no longer lists as a second "No project" | already in CandyWrapper: ThreadSession.swift keeps the last scratch folder while a machine is away |
@@ -1375,41 +1375,41 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| bfee44655c | #22106 | terminal | fix(web): keep a closed split terminal's tab in view | port |
-| 947916887c | #27515 | terminal | feat(pi): import terminal Pi sessions during setup | port |
-| 8f79233ccb | #24020 | terminal | fix(web): keep terminal close confirmations on their original thread | port |
-| cd7791de1e | #24251 | terminal | fix(web): expired terminal context toasts say "them" for several contexts | port |
-| f513369612 | #28189 | terminal | fix(web): terminal URLs like redis:// no longer become broken file links | port |
-| d7171d30a4 | #27843 | terminal | fix(shared): inverted terminal ranges emit no fake lines | port |
-| ee265cc539 | #29696 | terminal | fix(client-runtime): terminals fit their pane again after a reconnect | port |
-| 77b948e3e7 | #29804 | terminal | fix(web): big terminal selections no longer break sending | port |
-| 7f92cb0e49 | #29736 | terminal | fix(shared): ignore unsupported command output control parameters | port |
-| 16ca47b3d3 | #29737 | terminal | fix(shared): ignore unsupported command output erase modes | port |
-| 059804dfda | #30526 | terminal | fix(web): validate terminal links against filesystem metadata | port |
-| 1b14cb3d8c | #30603 | terminal | fix(web): terminal links keep route and pnpm paths in one piece | port |
-| a3cd0aa823 | #29164 | terminal | fix(web): deleting an archived thread also clears its draft, staged uploads and terminal state | port |
-| 9cd7a04797 | #33440 | terminal | fix(web): sending from an empty citation comment clears the composer | port |
-| facd190640 | #33129 | terminal | fix(web): opening the terminal with Cmd+J no longer re-renders the whole sidebar | port |
-| 05adc163fc | #34182 | terminal | fix(web): hide empty replies when renders show the result | port |
-| f697d4db3e | #34050 | terminal | fix(web): local server cards in the browser empty state take pointer clicks | port |
-| 3445b0b400 | #24773 | terminal | fix(web): terminal output no longer edits a hidden question draft | port |
-| 34de974868 | #34899 | terminal | fix(web): clicking the timeline's empty padding keeps following a streaming reply | port |
-| a2685e64d3 | #35404 | terminal | fix(web): SCP-style Git remotes no longer become terminal file links | port |
-| 8a38c63706 | #26433 | terminal | fix(web): thread navigation shortcuts work from the terminal and macOS composer | port |
-| 1acee5b8be | #36025 | terminal | fix(web): terminal OSC 8 file URIs open the file they name | port |
-| ed7e5010ba | #36117 | terminal | fix(web): terminal "Add to chat" now adds to a queued message being edited | port |
-| 764c0475b5 | #36174 | terminal | fix(web): terminal TypeScript links preserve error locations | port |
-| 1721f187c6 | #36380 | terminal | fix(web): clearing a running terminal keeps its screen and input modes | port |
-| 43a71d9b1a | #29654 | terminal | fix(web): a terminal reopened while its open is pending no longer closes itself | port |
-| 382312aba8 | #29612 | terminal | fix(web): the sidebar shortcut honors terminal and preview focus conditions | port |
-| e0ca4fcecb | #32047 | terminal | fix(web, mobile): a failed terminal resize is sent again | port |
-| 2cb2fa1385 | #37071 | terminal | fix(web): terminal links open bare compiler filenames | port |
-| e101cae1b9 | #37088 | terminal | fix(terminal): show shell startup failures across attachments | port |
-| 8dba23e420 | #37103 | terminal | fix(web): large terminal pastes reach the program intact | port |
-| 46f3ab39f2 | #37133 | terminal | fix(web): open terminal file links naming the server hostname | port |
-| 304cf149c8 | #37201 | terminal | fix(web): terminal file links preserve numeric filename suffixes | port |
+| bfee44655c | #22106 | terminal | fix(web): keep a closed split terminal's tab in view | left (panels-2): not checked |
+| 947916887c | #27515 | terminal | feat(pi): import terminal Pi sessions during setup | n/a: Pi session import runs in the server's setup |
+| 8f79233ccb | #24020 | terminal | fix(web): keep terminal close confirmations on their original thread | left (panels-2): not checked |
+| cd7791de1e | #24251 | terminal | fix(web): expired terminal context toasts say "them" for several contexts | left (panels-2): not checked |
+| f513369612 | #28189 | terminal | fix(web): terminal URLs like redis:// no longer become broken file links | ported (panels-2): the tail of a non-web URL such as redis:// or file:/// is no file link, TerminalLinks.extract |
+| d7171d30a4 | #27843 | terminal | fix(shared): inverted terminal ranges emit no fake lines | left (panels-2): not checked |
+| ee265cc539 | #29696 | terminal | fix(client-runtime): terminals fit their pane again after a reconnect | left (panels-2): not checked |
+| 77b948e3e7 | #29804 | terminal | fix(web): big terminal selections no longer break sending | left (panels-2): not checked |
+| 7f92cb0e49 | #29736 | terminal | fix(shared): ignore unsupported command output control parameters | left (panels-2): not checked |
+| 16ca47b3d3 | #29737 | terminal | fix(shared): ignore unsupported command output erase modes | left (panels-2): not checked |
+| 059804dfda | #30526 | terminal | fix(web): validate terminal links against filesystem metadata | left (panels-2): not checked |
+| 1b14cb3d8c | #30603 | terminal | fix(web): terminal links keep route and pnpm paths in one piece | ported (panels-2): route segments like [id] and (group)/ and pnpm paths with @ stay in one link |
+| a3cd0aa823 | #29164 | terminal | fix(web): deleting an archived thread also clears its draft, staged uploads and terminal state | left (panels-2): not checked |
+| 9cd7a04797 | #33440 | terminal | fix(web): sending from an empty citation comment clears the composer | left (panels-2): composer, outside the terminal |
+| facd190640 | #33129 | terminal | fix(web): opening the terminal with Cmd+J no longer re-renders the whole sidebar | left (panels-2): not checked |
+| 05adc163fc | #34182 | terminal | fix(web): hide empty replies when renders show the result | left (panels-2): thread timeline, outside the terminal |
+| f697d4db3e | #34050 | terminal | fix(web): local server cards in the browser empty state take pointer clicks | left (panels-2): browser empty state, see the browser batch |
+| 3445b0b400 | #24773 | terminal | fix(web): terminal output no longer edits a hidden question draft | left (panels-2): not checked |
+| 34de974868 | #34899 | terminal | fix(web): clicking the timeline's empty padding keeps following a streaming reply | left (panels-2): thread timeline, outside the terminal |
+| a2685e64d3 | #35404 | terminal | fix(web): SCP-style Git remotes no longer become terminal file links | ported (panels-2): an SCP-style Git remote's tail is no file link |
+| 8a38c63706 | #26433 | terminal | fix(web): thread navigation shortcuts work from the terminal and macOS composer | left (panels-2): not checked |
+| 1acee5b8be | #36025 | terminal | fix(web): terminal OSC 8 file URIs open the file they name | left (panels-2): not checked |
+| ed7e5010ba | #36117 | terminal | fix(web): terminal "Add to chat" now adds to a queued message being edited | left (panels-2): not checked |
+| 764c0475b5 | #36174 | terminal | fix(web): terminal TypeScript links preserve error locations | ported (panels-2): `file(42,7): error TS…:` links to file:42:7 |
+| 1721f187c6 | #36380 | terminal | fix(web): clearing a running terminal keeps its screen and input modes | left (panels-2): not checked |
+| 43a71d9b1a | #29654 | terminal | fix(web): a terminal reopened while its open is pending no longer closes itself | left (panels-2): not checked |
+| 382312aba8 | #29612 | terminal | fix(web): the sidebar shortcut honors terminal and preview focus conditions | left (panels-2): not checked |
+| e0ca4fcecb | #32047 | terminal | fix(web, mobile): a failed terminal resize is sent again | left (panels-2): not checked |
+| 2cb2fa1385 | #37071 | terminal | fix(web): terminal links open bare compiler filenames | ported (panels-2): a bare `name.ext:line:col` links |
+| e101cae1b9 | #37088 | terminal | fix(terminal): show shell startup failures across attachments | left (panels-2): not checked |
+| 8dba23e420 | #37103 | terminal | fix(web): large terminal pastes reach the program intact | left (panels-2): not checked |
+| 46f3ab39f2 | #37133 | terminal | fix(web): open terminal file links naming the server hostname | left (panels-2): not checked |
+| 304cf149c8 | #37201 | terminal | fix(web): terminal file links preserve numeric filename suffixes | ported (panels-2): `$`, `+` and `@` in names keep numeric suffixes in the link |
 | 48a64a8b68 | #35305 | terminal | feat(web): make terminal close confirmation optional | ported (settings-2): General > Confirmations > Terminal close confirmation, and TerminalController.confirmClose skips the dialog when it is off |
-| 17c401ddc0 | #38998 | terminal | fix(web): drawer drops a background terminal closed by another client | port |
+| 17c401ddc0 | #38998 | terminal | fix(web): drawer drops a background terminal closed by another client | left (panels-2): not checked |
 
 ## Small fixes, thread (266)
 
@@ -1520,7 +1520,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
 | 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | n/a: browser zoom shortcuts on keyboard layouts; CandyWrapper has no page zoom |
 | b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | port |
-| f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | port |
+| f3da8ff63b | #30575 | thread | feat(gitlab): resolve overview threads from Summary and Timeline | ported (panels-2): `overviewThreads` decode after the line threads and head "Overview" without a file glyph in the Timeline; Summary cards leave out the location |
 | afa617b465 | #15255 | thread | fix(web): branch picker no longer interrupts a running turn | port |
 | 3ed5fb29bd | #26311 | thread | fix(shared): Claude plugin skills no longer show their name twice | port |
 | e6afd2a24b | #22148 | thread | fix(web): render citation chips in the collapsed composer | port |
@@ -1686,40 +1686,40 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| fe219c4de1 | #24937 | usage | fix(web): keep tool groups collapsed after a usage-limit pause | port |
-| 061dc79e3b | #23963 | usage | fix(usage): reject cyclic model mappings before saving | port |
-| 06ded0b600 | #23767 | usage | fix(web): keep usage hubs that share a host | port |
-| 90235549bf | #23768 | usage | fix(usage): explain price edits blocked by model mappings | port |
-| 87c33c8990 | #24940 | usage | fix(web): Limits ChatGPT usage card names the connected accounts | port |
-| 8f258f0216 | #24630 | usage | fix(usage): use each account accent colour in limit bars | port |
-| 9cee35ac4a | #21939 | usage | fix(web): accept comma as decimal in usage price entry | port |
-| 9f52b7d419 | #25214 | usage | fix(usage): use the freshest reported pooled plan | port |
-| b010581aea | #23411 | usage | fix(usage): combine duplicated skipped-record warnings | port |
-| 5ffcb86798 | #24260 | usage | fix(web): usage limit toast shows the Limited icon | port |
-| 213b39198f | #25659 | usage | fix(web): composer emphasis shortcuts ignore delimiters inside inline code | port |
-| 689bdb82e9 | #23029 | usage | fix(web): usage-limit retry notice shows the timezone | port |
-| 31eb1d0076 | #29013 | usage | fix(web): closing Settings or Usage no longer jumps back to a quote's source | port |
-| 58cf69c835 | #28065 | usage | fix(usage): label a proxied Claude account by its e-mail, and drop .json from hub rows | port |
+| fe219c4de1 | #24937 | usage | fix(web): keep tool groups collapsed after a usage-limit pause | left (panels-2): thread timeline, outside Features/Usage |
+| 061dc79e3b | #23963 | usage | fix(usage): reject cyclic model mappings before saving | left (panels-2): not checked against UsagePriceLogic's alias validation |
+| 06ded0b600 | #23767 | usage | fix(web): keep usage hubs that share a host | left (panels-2): Limits hubs, not checked |
+| 90235549bf | #23768 | usage | fix(usage): explain price edits blocked by model mappings | left (panels-2): not checked against UsagePriceLogic's alias validation |
+| 87c33c8990 | #24940 | usage | fix(web): Limits ChatGPT usage card names the connected accounts | left (panels-2): Limits, not checked |
+| 8f258f0216 | #24630 | usage | fix(usage): use each account accent colour in limit bars | left (panels-2): Limits bar colors, not checked |
+| 9cee35ac4a | #21939 | usage | fix(web): accept comma as decimal in usage price entry | ported (panels-2): price entry reads the first comma as the decimal point, UsagePriceLogic.parse |
+| 9f52b7d419 | #25214 | usage | fix(usage): use the freshest reported pooled plan | left (panels-2): Limits pooled plan, not checked |
+| b010581aea | #23411 | usage | fix(usage): combine duplicated skipped-record warnings | left (panels-2): not checked |
+| 5ffcb86798 | #24260 | usage | fix(web): usage limit toast shows the Limited icon | left (panels-2): composer and thread toast, outside Features/Usage |
+| 213b39198f | #25659 | usage | fix(web): composer emphasis shortcuts ignore delimiters inside inline code | left (panels-2): composer, outside Features/Usage |
+| 689bdb82e9 | #23029 | usage | fix(web): usage-limit retry notice shows the timezone | left (panels-2): thread notice, outside Features/Usage |
+| 31eb1d0076 | #29013 | usage | fix(web): closing Settings or Usage no longer jumps back to a quote's source | left (panels-2): thread quote navigation, outside Features/Usage |
+| 58cf69c835 | #28065 | usage | fix(usage): label a proxied Claude account by its e-mail, and drop .json from hub rows | left (panels-2): Limits labels, not checked |
 | 3368dd70f2 |  | usage | fix(web): align usage table padding and thread status rows | port |
-| 935818e422 | #25341 | usage | fix(codex): sharing usage limits offer the existing recovery options | port |
-| c7537d0264 | #29292 | usage | fix(chat): show one usage-limit recovery notice | port |
-| e9233b01bb | #15632 | usage | fix(web): rank usage provider summaries by the selected metric | port |
-| 0f4a130710 | #30322 | usage | fix(codex): explain speed limits on managed connections | port |
-| 4c3a9d5818 | #32448 | usage | fix(cursor): use the SDK account for usage data | port |
-| ee21337d84 | #34243 | usage | fix(shared): a zero-credit cap no longer marks seat-based Codex out of usage | port |
-| 5099695673 | #25755 | usage | fix(web): price dialog no longer flags a model before a price is entered | port |
-| f28dc8ee94 | #34506 | usage | fix(cursor): unified usage plans show one meter | port |
-| 489fa8c052 | #34421 | usage | fix(cursor): hide duplicate pooled usage limits | port |
-| c17ec829d0 | #35020 | usage | fix(web): overlong content search queries explain the 256-character limit | port |
-| d9a97e7c49 | #28703 | usage | fix(web): sidebar keeps the open thread active while Settings or Usage is open | port |
-| 350753afac | #35341 | usage | fix(usage): Claude accounts with a $0 monthly cap no longer leave a blank cell | port |
-| 46b508d119 | #23584 | usage | fix(web): keep long ACP registry searches within the query limit | port |
-| 4192234c34 | #36561 | usage | fix(usage): distinct email-less hub accounts no longer collapse | port |
-| 2b596b8690 | #28581 | usage | fix(web): context meter no longer keeps the retired provider's usage | port |
-| 16854a766c | #37238 | usage | fix(web): usage chart and share-bar figures reach screen readers | port |
-| b5d9c71e1c | #37241 | usage | fix(web): screen readers announce each Usage figure with its label | port |
-| 2579c3c4dd | #37272 | usage | fix(web): close Usage without reloading | port |
-| 310baf7c99 | #38731 | usage | fix(web): closing Settings or Usage with Esc returns focus to the opener | port |
+| 935818e422 | #25341 | usage | fix(codex): sharing usage limits offer the existing recovery options | left (panels-2): thread recovery notice, outside Features/Usage |
+| c7537d0264 | #29292 | usage | fix(chat): show one usage-limit recovery notice | left (panels-2): thread recovery notice, outside Features/Usage |
+| e9233b01bb | #15632 | usage | fix(web): rank usage provider summaries by the selected metric | ported (panels-2): provider summary rows rank by the shown metric, UsageMerge.rankProviders |
+| 0f4a130710 | #30322 | usage | fix(codex): explain speed limits on managed connections | left (panels-2): Limits, not checked |
+| 4c3a9d5818 | #32448 | usage | fix(cursor): use the SDK account for usage data | left (panels-2): not checked |
+| ee21337d84 | #34243 | usage | fix(shared): a zero-credit cap no longer marks seat-based Codex out of usage | left (panels-2): Limits, not checked |
+| 5099695673 | #25755 | usage | fix(web): price dialog no longer flags a model before a price is entered | left (panels-2): not checked |
+| f28dc8ee94 | #34506 | usage | fix(cursor): unified usage plans show one meter | left (panels-2): Limits Cursor meters, not checked |
+| 489fa8c052 | #34421 | usage | fix(cursor): hide duplicate pooled usage limits | left (panels-2): Limits Cursor meters, not checked |
+| c17ec829d0 | #35020 | usage | fix(web): overlong content search queries explain the 256-character limit | left (panels-2): files content search, see the files batch |
+| d9a97e7c49 | #28703 | usage | fix(web): sidebar keeps the open thread active while Settings or Usage is open | left (panels-2): sidebar, outside Features/Usage |
+| 350753afac | #35341 | usage | fix(usage): Claude accounts with a $0 monthly cap no longer leave a blank cell | left (panels-2): not checked |
+| 46b508d119 | #23584 | usage | fix(web): keep long ACP registry searches within the query limit | left (panels-2): settings ACP registry, outside Features/Usage |
+| 4192234c34 | #36561 | usage | fix(usage): distinct email-less hub accounts no longer collapse | left (panels-2): Limits hubs, not checked |
+| 2b596b8690 | #28581 | usage | fix(web): context meter no longer keeps the retired provider's usage | left (panels-2): thread context meter, outside Features/Usage |
+| 16854a766c | #37238 | usage | fix(web): usage chart and share-bar figures reach screen readers | ported (panels-2): the chart is a group labeled like T3's sr-only caption with one row per period; the share bar's strip is hidden and its legend is a labeled list |
+| b5d9c71e1c | #37241 | usage | fix(web): screen readers announce each Usage figure with its label | ported (panels-2): the drawn model and period tables expose one element per row with each figure under its column, model rows open their dialog on press; dialog stats read label and value together |
+| 2579c3c4dd | #37272 | usage | fix(web): close Usage without reloading | n/a: browser history navigation |
+| 310baf7c99 | #38731 | usage | fix(web): closing Settings or Usage with Esc returns focus to the opener | left (panels-2): focus return after Esc, not checked |
 
 ## Skipped (32)
 

@@ -104,7 +104,7 @@ final class GitController {
             let menu = SidebarCommands.nativeMenu([ThreadMenuItem("copy", "Copy branch name")]) { _ in
                 NSPasteboard.general.clearContents()
                 let copied = NSPasteboard.general.setString(name, forType: .string)
-                AnchoredCopyToast.show(from: view, success: copied)
+                if !copied { AnchoredCopyToast.show(from: view, success: false) } // 4928 #36527: only failures toast
             }
             NSMenu.popUpContextMenu(menu, with: event, for: view)
         }
@@ -598,7 +598,7 @@ final class GitController {
                 copy.action = { [weak anchor] in
                     NSPasteboard.general.clearContents()
                     let copied = NSPasteboard.general.setString(name, forType: .string)
-                    if let anchor { AnchoredCopyToast.show(from: anchor, success: copied) }
+                    if let anchor, !copied { AnchoredCopyToast.show(from: anchor, success: false) } // 4928 #36527
                 }
                 items.append(copy)
             }

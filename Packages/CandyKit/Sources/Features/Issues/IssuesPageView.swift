@@ -276,37 +276,52 @@ public final class IssuesPageView: DSView {
             items.append(radios("Project", options, m.projectKey ?? "all") { [weak self] v in self?.onProject?(v == "all" ? nil : v) })
         }
         items.append(.separator)
-        // Labels: chosen ones lead, so one the first page lacks can still be cleared.
+        // Labels and Assignee filter as you type (4928 IssueListFilterPickers.tsx:170-294): chosen ones lead, so
+        // one the first page lacks can still be cleared, and at most 30 show.
+        let matches: @Sendable (String, [String?]) -> Bool = { needle, fields in needle.isEmpty || fields.contains { $0?.lowercased().contains(needle) == true } }
         let chosen = m.labels
-        var labelRows: [(String, String?)] = chosen.filter { n in !m.labelCandidates.contains { $0.name == n } }.map { ($0, nil) }
-        labelRows += m.labelCandidates.map { ($0.name, $0.color) }
-        var labelItems: [MenuItem] = labelRows.prefix(30).map { name, _ in
-            MenuItem.checkbox(name, checked: chosen.contains(name)) { [weak self] on in
-                let next = on ? Array((chosen + [name]).prefix(20)) : chosen.filter { $0 != name }
-                self?.onLabels?(next)
+        let labelItems: @MainActor (String) -> [MenuItem] = { [weak self] query in
+            let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+            let found = m.labelCandidates.filter { matches(needle, [$0.name, $0.description]) }
+            let names = chosen.filter { n in !found.contains { $0.name == n } } + found.map(\.name)
+            var items: [MenuItem] = names.prefix(30).map { name in
+                MenuItem.checkbox(name, checked: chosen.contains(name)) { [weak self] on in
+                    let next = on ? Array((chosen + [name]).prefix(20)) : chosen.filter { $0 != name }
+                    self?.onLabels?(next)
+                }
             }
+            if items.isEmpty, !m.candidatesLoading {
+                items = [MenuItem(m.candidatesFailed ? "The labels could not be read" : "No labels found", disabled: true)]
+            }
+            if m.candidatesTruncated { items.append(MenuItem("More labels exist than are listed here.", disabled: true)) }
+            _ = self
+            return items
         }
-        if labelItems.isEmpty {
-            labelItems = [MenuItem(m.candidatesLoading ? "Loading…" : m.candidatesFailed ? "The labels could not be read" : "No labels found", disabled: true)]
-        }
-        if m.candidatesTruncated { labelItems.append(MenuItem("More labels exist than are listed here.", disabled: true)) }
-        var labels = MenuItem.submenu("Labels", icon: .tag, labelItems)
+        var labels = MenuItem.submenu("Labels", icon: .tag, labelItems(""))
+        labels.submenuSearch = MenuSearch(placeholder: "Search labels", filter: labelItems)
         labels.shortcut = chosen.isEmpty ? "Any" : chosen.count == 1 ? chosen[0] : "\(chosen.count) labels"
         items.append(labels)
-        var anyone = MenuItem.radio("Anyone", checked: m.assignee == nil) { [weak self] _ in self?.onAssignee?(nil) }
-        anyone.closesOnClick = true
-        var people: [MenuItem] = [anyone]
-        var logins = m.assigneeCandidates.map(\.login)
-        if let a = m.assignee, !logins.contains(a) { logins.insert(a, at: 0) }
-        people += logins.prefix(30).map { login in
-            var item = MenuItem.radio(login, checked: m.assignee == login) { [weak self] _ in self?.onAssignee?(login) }
-            item.closesOnClick = true
-            return item
+        let assigneeItems: @MainActor (String) -> [MenuItem] = { [weak self] query in
+            let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+            var anyone = MenuItem.radio("Anyone", checked: m.assignee == nil) { [weak self] _ in self?.onAssignee?(nil) }
+            anyone.icon = .layers
+            anyone.closesOnClick = true
+            let found = m.assigneeCandidates.filter { matches(needle, [$0.login, $0.name]) }
+            var people = found.map { ($0.login, $0.name) }
+            if let a = m.assignee, !found.contains(where: { $0.login == a }) { people.insert((a, nil), at: 0) }
+            var items = [anyone] + people.prefix(30).map { login, name in
+                var item = MenuItem.radio(login, checked: m.assignee == login) { [weak self] _ in self?.onAssignee?(login) }
+                item.trailingDetail = name
+                item.closesOnClick = true
+                return item
+            }
+            if people.isEmpty, !m.candidatesLoading, m.candidatesFailed { items.append(MenuItem("The people could not be read", disabled: true)) }
+            if m.candidatesTruncated { items.append(MenuItem("More people exist than are listed here.", disabled: true)) }
+            _ = self
+            return items
         }
-        if logins.isEmpty {
-            people.append(MenuItem(m.candidatesLoading ? "Loading…" : m.candidatesFailed ? "The people could not be read" : "No people found", disabled: true))
-        }
-        var assignee = MenuItem.submenu("Assignee", icon: .userRound, people)
+        var assignee = MenuItem.submenu("Assignee", icon: .userRound, assigneeItems(""))
+        assignee.submenuSearch = MenuSearch(placeholder: "Search people", filter: assigneeItems)
         assignee.shortcut = m.assignee ?? "Anyone"
         items.append(assignee)
         MenuPopupView.show(items, from: filtersButton, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))

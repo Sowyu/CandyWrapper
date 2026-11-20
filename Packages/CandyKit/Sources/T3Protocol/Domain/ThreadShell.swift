@@ -31,6 +31,9 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     public var latestRunStopRequested: Bool?
     /// The latest run was a compaction T3 Code started and none of it failed (orchestrationV2.ts:1917). Absent before 3669.
     public var latestRunSilent: Bool?
+    /// The latest run answers a background-work progress wake, like a Monitor line (4928 orchestrationV2.ts:2234-2235).
+    /// Absent from older servers.
+    public var latestRunBackgroundWake: Bool?
     public var activeRunId: RunId?
     /// Absent on older servers; `resolveThreadWorkingStartedAt` then uses the latest run.
     public var activityRunStartedAt: Tristate<T3Timestamp>

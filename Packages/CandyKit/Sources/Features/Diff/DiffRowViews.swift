@@ -64,7 +64,8 @@ final class DiffFileHeaderView: DiffRowView {
             guard let self else { return }
             NSPasteboard.general.clearContents()
             let copied = NSPasteboard.general.setString(path, forType: .string)
-            AnchoredCopyToast.show(from: copy, success: copied)
+            // 4928 DiffFilePathCopyButton.tsx shows only the failure (#36527).
+            if !copied { AnchoredCopyToast.show(from: copy, success: false) }
         }
         setAccessibilityRole(.button)
     }
@@ -298,8 +299,9 @@ final class DiffStatView: DSView {
             v < 10 ? String(format: "%.1f", v).replacingOccurrences(of: ".0", with: "") + suffix : "\(Int(v.rounded()))\(suffix)"
         }
         if value < 1000 { return "\(value)" }
-        if value < 1_000_000 { return unit(Double(value) / 1000, "k") }
-        if value < 1_000_000_000 { return unit(Double(value) / 1_000_000, "m") }
+        // 999,500 rounds to 1m, not 1000k (4928 DiffStatLabel.tsx, #23723).
+        if value < 999_500 { return unit(Double(value) / 1000, "k") }
+        if value < 999_500_000 { return unit(Double(value) / 1_000_000, "m") }
         return unit(Double(value) / 1_000_000_000, "b")
     }
 

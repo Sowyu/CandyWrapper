@@ -162,6 +162,25 @@ public final class UsageChartView: DSView {
         xLabels[1].alignment = .center
         xLabels[2].alignment = .right
         plot.owner = self
+        // The plot and its axes are pointer-only; the chart reads as a group of per-period rows instead
+        // (4928 UsageProviderChart.tsx sr-only table, #37238).
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        plot.setAccessibilityElement(false)
+        xLabels.forEach { $0.setAccessibilityElement(false) }
+    }
+
+    /// The sr-only table's caption.
+    var accessibilityCaption: String { "\(model.hourly ? "Hourly" : "Daily") \(model.tokens ? "processed tokens" : "cost") by provider" }
+
+    /// One row per period: its providers' figures, then the total when there are several.
+    static func accessibilityRows(_ m: Model, columns: [UsageChartLogic.Column], period: (String) -> String, format: (Double) -> String) -> [String] {
+        m.periods.enumerated().map { i, p in
+            let c = i < columns.count ? columns[i] : nil
+            var parts = m.providers.map { "\($0.label) \(format(c?.value($0) ?? 0))" }
+            if m.providers.count > 1 { parts.append("Total \(format(c?.total ?? 0))") }
+            return "\(period(p)): " + parts.joined(separator: ", ")
+        }
     }
 
     private func format(_ v: Double) -> String { model.tokens ? UsageFormat.tokens(v) : UsageFormat.usd(v) }
@@ -189,6 +208,16 @@ public final class UsageChartView: DSView {
         xLabels[0].text = ps.first.map(formatPeriod)?.uppercased() ?? ""
         xLabels[1].text = ps.isEmpty ? "" : formatPeriod(ps[ps.count / 2]).uppercased()
         xLabels[2].text = ps.last.map(formatPeriod)?.uppercased() ?? ""
+        setAccessibilityLabel(accessibilityCaption)
+        yLabels.forEach { $0.setAccessibilityElement(false) }
+        let rows = Self.accessibilityRows(m, columns: columns, period: formatTooltipPeriod, format: format)
+        setAccessibilityChildren(rows.map { text in
+            let e = NSAccessibilityElement()
+            e.setAccessibilityRole(.staticText)
+            e.setAccessibilityLabel(text)
+            e.setAccessibilityParent(self)
+            return e
+        })
         plot.dataChanged()
         needsLayout = true
     }
@@ -470,7 +499,11 @@ public final class UsageShareBarView: DSView {
         let total = visible.reduce(0) { $0 + $1.value }
         bar.tooltips = visible.map { "\($0.label) · \(format($0.value)) · \(UsageFormat.percent($0.value / total))" }
         addSubview(bar)
-        bar.setAccessibilityLabel("\(label): " + visible.map { "\($0.label) \(format($0.value))" }.joined(separator: ", "))
+        // The legend carries every figure; the bar's tooltips are pointer-only (4928 UsageShareBar.tsx, #37238).
+        bar.setAccessibilityElement(false)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.list)
+        setAccessibilityLabel(label)
         legend = visible.map { s in
             let swatch = DSView()
             swatch.layer?.cornerRadius = 2

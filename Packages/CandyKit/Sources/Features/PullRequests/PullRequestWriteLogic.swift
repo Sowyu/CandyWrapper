@@ -157,6 +157,37 @@ public enum PullRequestWriteLogic {
         return q.isEmpty ? c : c.filter { $0.login.lowercased().contains(q) || ($0.name ?? "").lowercased().contains(q) }
     }
 
+    /// `hostReviewerQuery` (4928 client-runtime pullRequestReviewers.ts:38-43): what to ask the host for,
+    /// or nil when the loaded page already answers the query.
+    public static func hostReviewerQuery(loadedTruncated: Bool, searchable: Bool, debouncedQuery: String) -> String? {
+        let q = debouncedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return searchable && loadedTruncated && !q.isEmpty ? q : nil
+    }
+
+    /// `mergeReviewerCandidates` (pullRequestReviewers.ts:7-27): loaded rows keep the request state
+    /// writes update; host matches the loaded page lacks follow, not narrowed again.
+    public static func mergeReviewers(_ loaded: [PullRequestReviewerCandidate], searched: [PullRequestReviewerCandidate], query: String) -> [PullRequestReviewerCandidate] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let key = { (c: PullRequestReviewerCandidate) in "\(c.kind):\(c.id)" }
+        let known = Set(loaded.map(key)), hostMatches = Set(searched.map(key))
+        return loaded.filter { hostMatches.contains(key($0)) || needle.isEmpty || $0.login.lowercased().contains(needle) || ($0.name ?? "").lowercased().contains(needle) }
+            + searched.filter { !known.contains(key($0)) }
+    }
+
+    /// `ReviewerTruncation` and `TRUNCATED_LABELS` (pullRequestReviewers.ts:49-53, 78-97,
+    /// PullRequestReviewerPicker.tsx:31-53): why the list may be missing people, as the note reads.
+    public static func reviewerTruncationNote(loadedTruncated: Bool, searchable: Bool, query: String, searched: Bool,
+                                              searchError: String?, searchTruncated: Bool) -> String? {
+        guard loadedTruncated else { return nil }
+        guard searchable else { return "This repository has more people with access than are listed here. Ask for the rest on the host." }
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "This repository has more people with access than are listed here. Search to find them."
+        }
+        guard searched else { return nil }
+        if let searchError { return "Only the people already listed are matched: the host search failed. \(searchError)" }
+        return searchTruncated ? "More people match than the host returned. Keep typing to narrow it down." : nil
+    }
+
     // MARK: Composer (PullRequestComposer.tsx, PullRequestCommentForm.tsx, PullRequestReviewForm.tsx)
 
     /// `VERDICTS` (ReviewForm line 24): value, label, the toast once sent.

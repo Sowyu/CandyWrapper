@@ -16,8 +16,17 @@ public enum TerminalLinks {
 
     // The patterns as T3 writes them. Bare paths start only at a segment boundary.
     private static let url = try! NSRegularExpression(pattern: #"https?://[^\s"'`<>]+"#, options: [.caseInsensitive])
+    // 4928 (#30603, #37071, #36174, #37201): `$`, `+` and `@` in names, `[id]` and `(group)/` route segments, a bare
+    // `name.ext` before `:line:col` or a TypeScript location, and `(line,col)` before `: error TS…:`.
     private static let filePath = try! NSRegularExpression(pattern:
-        #"(?:~[\\/]|\.{1,2}[\\/]|/|[A-Za-z]:[\\/]|\\\\)[^\s"'`<>]+|(?<![\p{L}\p{M}\p{N}._-])[\p{L}\p{M}\p{N}._-]+(?:[\\/][\p{L}\p{M}\p{N}._-]+)+(?::\d+){0,2}"#)
+        #"(?:~[\\/]|\.{1,2}[\\/]|/|[A-Za-z]:[\\/]|\\\\)[^\s"'`<>]+|(?<![\p{L}\p{M}\p{N}._$+@-])[\p{L}\p{M}\p{N}._$+@-]+(?:(?:[\\/](?:[\p{L}\p{M}\p{N}._$+@-]|\[{1,2}[\p{L}\p{M}\p{N}._-]+\]{1,2}|\([\p{L}\p{M}\p{N}._-]+\)(?=[\\/]))+)+|\.\p{L}[\p{L}\p{M}\p{N}_-]*(?=:\d+:\d|\(\d+,\d+\):\s+(?:error|warning) TS\d+:))(?:(?::\d+){1,2}|\(\d+,\d+\)(?=:\s+(?:error|warning) TS\d+:))?"#)
+    /// The default PowerShell prompt delimits its unquoted path with `PS ` and `>`.
+    private static let powerShellPrompt = try! NSRegularExpression(pattern: #"^PS ((?:[A-Za-z]:[\\/]|\\\\|/)[^>\r\n]*)>"#)
+    /// The tail of `redis://host/0` or `file:///a.mjs` is not a path (#28189).
+    private static let schemeURL = try! NSRegularExpression(pattern: #"(?<![A-Za-z\d+.-])[+-]?[A-Za-z][A-Za-z\d+.-]+://[^\s"'`<>]+"#)
+    /// Nor is the tail of an SCP-style Git remote such as `git@github.com:acme/widgets.git` (#35404).
+    private static let scpRemote = try! NSRegularExpression(pattern: #"(?<![\w.@-])[\w.-]+@[\w.-]+:[^\s"'`<>]+"#)
+    private static let typeScriptLocation = try! NSRegularExpression(pattern: #"^:\s+(?:error|warning) TS\d+:"#)
     private static let quotedFilePath = try! NSRegularExpression(pattern:
         #"(["'`])(?<path>(?:~[\\/]|\.{1,2}[\\/]|/|[A-Za-z]:[\\/]|\\\\|[\p{L}\p{M}\p{N}._ -]+[\\/])[^\r\n]*?|[\p{L}\p{M}\p{N}._ -]+\.[\p{L}\p{M}\p{N}_-]+(?::\d+){0,2})\1(?<position>(?::\d+){0,2})"#)
     private static let trailingPunctuation = try! NSRegularExpression(pattern: #"[.,;!?]+$"#)
@@ -27,15 +36,28 @@ public enum TerminalLinks {
     private static let requestRoute = try! NSRegularExpression(pattern:
         #"(?:^|[\s"'`])(?:GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS|CONNECT|TRACE|proxying)\s+["'`]?(?:/|[A-Za-z0-9_-]+/)[^\s?]*\?\S*"#)
 
+    /// `extractTerminalLinks` (4928 terminal-links.ts:126-160).
     public static func extract(_ line: String) -> [Match] {
         let ns = line as NSString
         let all = NSRange(location: 0, length: ns.length)
-        let routes = requestRoute.matches(in: line, range: all).map { $0.range.location..<NSMaxRange($0.range) }
-        let urls = collect(line, .url, url, existing: [])
-        let quoted = collect(line, .path, quotedFilePath, existing: urls)
-        let paths = collect(line, .path, filePath, existing: urls + quoted)
-        return (urls + quoted + paths)
-            .filter { m in m.kind == .url || !routes.contains { $0.overlaps(m.start..<m.end) } }
+        var prompt: [Match] = []
+        if let m = powerShellPrompt.firstMatch(in: line, range: all), m.range(at: 1).location != NSNotFound {
+            let text = ns.substring(with: m.range(at: 1))
+            prompt = [Match(kind: .path, text: text, start: 3, end: 3 + (text as NSString).length)]
+        }
+        let nonPath = (requestRoute.matches(in: line, range: all) + schemeURL.matches(in: line, range: all)).map { $0.range.location..<NSMaxRange($0.range) }
+        let remoteTails = scpRemote.matches(in: line, range: all).map { m -> Range<Int> in
+            let colon = (ns.substring(with: m.range) as NSString).range(of: ":").location
+            return (m.range.location + colon + 1)..<NSMaxRange(m.range)
+        }
+        let urls = collect(line, .url, url, existing: prompt)
+        let quoted = collect(line, .path, quotedFilePath, existing: prompt + urls)
+        let paths = collect(line, .path, filePath, existing: prompt + urls + quoted)
+        return (prompt + urls + quoted + paths)
+            .filter { m in
+                m.kind == .url || (!nonPath.contains { $0.overlaps(m.start..<m.end) }
+                    && !remoteTails.contains { m.start >= $0.lowerBound && m.end <= $0.upperBound })
+            }
             .sorted { $0.start < $1.start }
     }
 
@@ -54,10 +76,14 @@ public enum TerminalLinks {
             let raw = isQuoted ? ns.substring(with: quotedPath) + position : ns.substring(with: m.range)
             let start = m.range.location + (isQuoted ? 1 : 0)
             guard !raw.isEmpty else { continue }
-            let text = isQuoted ? raw : trimClosingDelimiters(raw, kind)
-            guard !text.isEmpty, !(kind == .path && isURL(text)) else { continue }
+            let trimmed = isQuoted ? raw : trimClosingDelimiters(raw, kind)
+            guard !trimmed.isEmpty, !(kind == .path && isURL(trimmed)) else { continue }
+            // `file(12,5): error TS…:` opens at 12:5 (#36174).
+            let after = ns.substring(from: min(ns.length, start + (trimmed as NSString).length))
+            let text = kind == .path && typeScriptLocation.firstMatch(in: after, range: NSRange(location: 0, length: (after as NSString).length)) != nil
+                ? trimmed.replacingOccurrences(of: #"\((\d+),(\d+)\)$"#, with: ":$1:$2", options: .regularExpression) : trimmed
             // A position outside the quotes spans the closing quote in the terminal.
-            let candidate = Match(kind: kind, text: text, start: start, end: start + (text as NSString).length + (position.isEmpty ? 0 : 1))
+            let candidate = Match(kind: kind, text: text, start: start, end: start + (trimmed as NSString).length + (position.isEmpty ? 0 : 1))
             if (existing + found).contains(where: { candidate.start < $0.end && $0.start < candidate.end }) { continue }
             found.append(candidate)
         }

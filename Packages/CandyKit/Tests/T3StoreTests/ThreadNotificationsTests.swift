@@ -6,32 +6,56 @@ import Testing
 extension ThreadNotificationTracker {
     /// A scan, then the completion grace running out.
     mutating func settle(environmentId: String, threads: [ThreadShell]) -> [ThreadNotificationEvent] {
-        scan(environmentId: environmentId, threads: threads, nowMs: 0) + flush(nowMs: SidebarInboxReturnTracker.workingExitGraceMs)
+        scan(environmentId: environmentId, threads: threads, nowMs: 0) + flush(nowMs: ThreadNotificationTracker.releasedCompletionGraceMs)
     }
 }
 
 /// Cases from apps/web/src/components/ThreadNotificationCoordinator.test.tsx, .logic.test.ts and .badge.test.tsx.
 struct ThreadNotificationsTests {
-    /// ThreadNotificationCoordinator.logic.ts:56-70: completion waits 2 s and a continuation inside it cancels it.
-    @Test func completionWaitsOutTheGrace() {
+    /// 4928 (#29146): completion notifies at once; a continuation can no longer cancel it. Attention notifies at once.
+    @Test func completionNotifiesAtOnce() {
         var t = ThreadNotificationTracker()
         _ = t.scan(environmentId: "env-1", threads: [running()], nowMs: 0)
-        #expect(t.scan(environmentId: "env-1", threads: [completed()], nowMs: 1_000).isEmpty)
-        #expect(t.nextDueMs == 3_000)
-        #expect(t.flush(nowMs: 2_999).isEmpty)
-        #expect(t.flush(nowMs: 3_000).map(\.title) == ["Thread completed"])
+        #expect(t.scan(environmentId: "env-1", threads: [completed()], nowMs: 1_000).map(\.title) == ["Thread completed"])
         #expect(t.nextDueMs == nil)
-        // The continuation starts within the grace: no completion for the run before it.
-        _ = t.scan(environmentId: "env-1", threads: [running()], nowMs: 4_000)
-        _ = t.scan(environmentId: "env-1", threads: [completed(run: "run-2", at: "2026-09-13T10:00:00.000Z")], nowMs: 5_000)
         var next = running()
         next.latestRunId = "run-3"
         next.activeRunId = "run-3"
         _ = t.scan(environmentId: "env-1", threads: [next], nowMs: 6_000)
-        #expect(t.nextDueMs == nil && t.flush(nowMs: 10_000).isEmpty)
-        // Attention notifies at once.
         next.pendingRuntimeRequest = PendingRuntimeRequestSummary(id: "q", kind: .userInput, createdAt: "2026-09-13T11:00:00.000Z")
         #expect(t.scan(environmentId: "env-1", threads: [next], nowMs: 11_000).map(\.title) == ["Input needed"])
+        // The same request under a queued message's new run announces once (logic.ts attend).
+        next.latestRunId = "run-4"
+        #expect(t.scan(environmentId: "env-1", threads: [next], nowMs: 12_000).isEmpty)
+    }
+
+    /// A completion answering a progress wake waits `RELEASED_COMPLETION_GRACE_MS`; pausing stops its wake.
+    @Test func wakeCompletionWaitsOutTheGrace() {
+        var t = ThreadNotificationTracker()
+        _ = t.scan(environmentId: "env-1", threads: [running()], nowMs: 0)
+        var done = completed()
+        done.latestRunBackgroundWake = true
+        #expect(t.scan(environmentId: "env-1", threads: [done], nowMs: 1_000).isEmpty)
+        #expect(t.nextDueMs == 6_000)
+        t.pause(environmentId: "env-1")
+        #expect(t.nextDueMs == nil && t.flush(nowMs: 10_000).isEmpty)
+        #expect(t.scan(environmentId: "env-1", threads: [done], nowMs: 20_000).isEmpty)
+        #expect(t.nextDueMs == 25_000)
+        #expect(t.flush(nowMs: 25_000).map(\.title) == ["Thread completed"])
+    }
+
+    /// #27458: a snoozed thread's completion stays quiet, even when it arrives after the wake.
+    @Test func snoozedThreadsSendNoCompletion() {
+        var t = ThreadNotificationTracker()
+        var r = running()
+        r.snoozedAt = T3Timestamp("2026-09-13T08:00:00.000Z")
+        r.snoozedUntil = T3Timestamp("2026-09-13T09:30:00.000Z")
+        _ = t.scan(environmentId: "env-1", threads: [r], nowMs: 0)
+        var done = completed(at: "2026-09-13T09:00:00.000Z")
+        done.snoozedAt = r.snoozedAt
+        done.snoozedUntil = r.snoozedUntil
+        let afterWake = T3Timestamp("2026-09-13T10:00:00.000Z").epochMs!
+        #expect(t.scan(environmentId: "env-1", threads: [done], nowMs: afterWake).isEmpty)
     }
 
     private func running(_ id: String = "thread-1") -> ThreadShell {
@@ -94,11 +118,17 @@ struct ThreadNotificationsTests {
         #expect(t.settle(environmentId: "env-1", threads: [compacted]).isEmpty)
     }
 
-    @Test func reconnectDoesNotReplay() {
+    /// 4928 (#24493): what finished during a disconnect notifies on reconnect, once; a notified one does not replay.
+    @Test func reconnectNotifiesMissedCompletionsOnce() {
         var t = ThreadNotificationTracker()
         _ = t.settle(environmentId: "env-1", threads: [running()])
-        t.reset(environmentId: "env-1")
+        t.pause(environmentId: "env-1")
+        #expect(t.settle(environmentId: "env-1", threads: [completed()]).map(\.title) == ["Thread completed"])
+        t.pause(environmentId: "env-1")
         #expect(t.settle(environmentId: "env-1", threads: [completed()]).isEmpty)
+        // A removed environment is forgotten: its threads come back as first sightings.
+        t.reset(environmentId: "env-1")
+        #expect(t.settle(environmentId: "env-1", threads: [completed(run: "run-9", at: "2026-09-13T12:00:00.000Z")]).isEmpty)
     }
 
     @Test func attentionTitles() {

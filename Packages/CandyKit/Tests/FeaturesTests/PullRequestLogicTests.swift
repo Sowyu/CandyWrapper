@@ -3,6 +3,7 @@ import Testing
 @testable import T3Protocol
 @testable import Features
 import T3Store
+@testable import DesignSystem
 
 struct PullRequestSurfaceTests {
     /// `getFileViewedRange` (pullRequestDiff.logic.test.ts, T3 3824 #26349).
@@ -443,5 +444,131 @@ struct LinkPullRequestDialogTests {
         #expect(d.link.title == "Linking...")
         #expect(d.link.frame.width == idle)
         #expect(d.link.intrinsicContentSize.width <= d.link.frame.width)
+    }
+}
+
+/// 4928 reviewer search, maintainer edits and the fast-forward label (client-runtime
+/// pullRequestReviewers.ts:7-97, pullRequestEditing.ts:28-40, pullRequestDetail.logic.ts:58-63).
+struct PullRequest4928LogicTests {
+    static func person(_ login: String, _ id: String) -> PullRequestReviewerCandidate {
+        PullRequestReviewerCandidate(login: login, name: nil, avatarUrl: nil, isBot: nil, id: id, kind: "user", isRequested: false)
+    }
+
+    @Test func reviewerSearchAsksTheHostOnlyPastATruncatedSearchablePage() {
+        #expect(PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: true, searchable: true, debouncedQuery: " ann ") == "ann")
+        #expect(PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: false, searchable: true, debouncedQuery: "ann") == nil)
+        #expect(PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: true, searchable: false, debouncedQuery: "ann") == nil)
+        let loaded = [Self.person("ann", "1"), Self.person("bob", "2")]
+        let merged = PullRequestWriteLogic.mergeReviewers(loaded, searched: [Self.person("bob", "2"), Self.person("annie@x", "3")], query: "ann")
+        #expect(merged.map(\.id) == ["1", "2", "3"])
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: true, searchable: true, query: "", searched: false, searchError: nil, searchTruncated: false)?.hasSuffix("Search to find them.") == true)
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: true, searchable: true, query: "a", searched: true, searchError: "boom", searchTruncated: false)?.hasSuffix("failed. boom") == true)
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: true, searchable: true, query: "a", searched: true, searchError: nil, searchTruncated: false) == nil)
+        #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: false, searchable: false, query: "", searched: false, searchError: nil, searchTruncated: false) == nil)
+    }
+
+    @MainActor @Test func cancelledChecksWearAGrayStopSign() {
+        #expect(PullRequestStyle.checkStatus("cancelled").icon == .octagonX)
+        #expect(PullRequestStyle.checkStatus("failure").icon == .circleX)
+    }
+
+    @Test func fastForwardLabelAndMaintainerEdits() {
+        #expect(PullRequestDetailLogic.mergeMethodLabel("fast-forward") == "Fast-forward merge")
+    }
+}
+
+/// 4928 Usage: the summary payload's new fields and the drawn tables' accessibility rows
+/// (usage.ts:145-147, UsagePage.tsx and UsageProviderChart.tsx, #28952, #33993, #37238, #37241).
+@MainActor
+struct Usage4928Tests {
+    @Test func payloadSendsProvisionalAndAFilterOnlyWhenSet() {
+        let w = UsageWindow(sinceDay: "2026-11-01", untilDay: "2026-11-19", timeZone: "UTC")
+        #expect(w.payload().objectValue?["provisional"] == nil && w.payload().objectValue?["modelFilter"] == nil)
+        let f = JSONValue.object(["include": .array([.object(["provider": .string("claude")])])])
+        let p = w.payload(provisional: true, modelFilter: f).objectValue
+        #expect(p?["provisional"] == .bool(true) && p?["modelFilter"] == f)
+        #expect(w.payload(modelFilter: .object([:])).objectValue?["modelFilter"] == nil)
+    }
+
+    @Test func drawnTableRowsReachVoiceOver() {
+        let t = UsageBreakdownTableView()
+        t.frame = NSRect(x: 0, y: 0, width: 600, height: 200)
+        var opened: String?
+        t.onSelect = { opened = $0 }
+        t.content = .models([.init(key: "k", provider: .claude, model: "sonnet", cost: "$2.00", costMuted: false, share: "50%", tokens: "1M", fraction: 0.5, loading: false)])
+        let rows = t.subviews.compactMap { $0 as? UsageTableRowElement }
+        #expect(rows.count == 1)
+        #expect(rows.first?.accessibilityLabel() == "sonnet, Cost $2.00, Share 50%, Tokens 1M")
+        #expect(rows.first?.accessibilityPerformPress() == true && opened == "k")
+    }
+}
+
+struct UsageRanking4928Tests {
+    @Test func providersRankByTheShownMetricAndCommasAreDecimals() {
+        let totals = [UsageProviderTotals(provider: .claude, costUsd: 1, totalTokens: 900, records: 1, sessions: 1, costShare: 0, tokenShare: 0),
+                      UsageProviderTotals(provider: .codex, costUsd: 5, totalTokens: 10, records: 1, sessions: 1, costShare: 0, tokenShare: 0)]
+        #expect(UsageMerge.rankProviders([.claude, .codex], totals, tokens: false) == [.codex, .claude])
+        #expect(UsageMerge.rankProviders([.claude, .codex], totals, tokens: true) == [.claude, .codex])
+        let parsed = UsagePriceLogic.parse(model: "m", [.input: "2,5", .output: "0,075"])
+        #expect(parsed?.price.input == 2.5 && parsed?.price.output == 0.075)
+        #expect(UsagePriceLogic.parse(model: "m", [.input: "1,2,3", .output: "1"]) == nil)
+    }
+}
+
+/// 4928 add-project browse (client-runtime state/filesystem.ts:86-171, #26376, #28243).
+struct AddProjectBrowse4928Tests {
+    static func e(_ n: String) -> PaletteAddProjectPaths.Entry { .init(name: n, fullPath: "/r/\(n)") }
+
+    @Test func folderSearchRanksPrefixThenBoundaryThenSubstringThenFuzzy() {
+        let all = ["my-app", "app", "zapper", "a-p-p", ".app", "other"].map(Self.e)
+        #expect(PaletteAddProjectPaths.filter(all, query: "app").visible.map(\.name) == ["app", "my-app", "zapper", "a-p-p"])
+        #expect(PaletteAddProjectPaths.filter(all, query: ".a").visible.map(\.name) == [".app"])
+        #expect(PaletteAddProjectPaths.filter(all, query: "").visible.count == 5)
+    }
+
+    @Test func tabCompletesASingleMatchOrTheCommonPrefix() {
+        #expect(PaletteAddProjectPaths.tabCompletion([Self.e("src")], filterQuery: "s")! == ("src", true))
+        #expect(PaletteAddProjectPaths.tabCompletion([Self.e("Project-a"), Self.e("project-b")], filterQuery: "p")! == ("Project-", false))
+        #expect(PaletteAddProjectPaths.tabCompletion([Self.e("ab"), Self.e("cd")], filterQuery: "") == nil)
+        #expect(PaletteAddProjectPaths.tabCompletion([], filterQuery: "x") == nil)
+    }
+}
+
+/// 4928 delimitedPreview.ts:31-43 (#27497): a cut never splits a surrogate pair.
+struct DelimitedPreview4928Tests {
+    @Test func truncatedCellsKeepSurrogatePairsWhole() {
+        let long = String(repeating: "a", count: 1999) + "😀" + "b"
+        let r = DelimitedTable.parse(long, delimiter: ",")
+        #expect(r.truncated)
+        #expect(r.rows[0][0] == String(repeating: "a", count: 1999))
+        let exact = String(repeating: "c", count: 2000)
+        let e = DelimitedTable.parse(exact, delimiter: ",")
+        #expect(!e.truncated && e.rows[0][0].count == 2000)
+    }
+}
+
+/// `MenuSearchInput` (4928 ui/menu.tsx:76-111) in MenuPopupView.
+@MainActor
+struct MenuSearch4928Tests {
+    @Test func searchRowFiltersRowsAndKeepsLetters() {
+        let all = ["bug", "docs", "debt"]
+        let menu = MenuPopupView(items: [])
+        menu.search = MenuSearch(placeholder: "Search labels") { q in all.filter { q.isEmpty || $0.contains(q) }.map { MenuItem($0) } }
+        #expect(menu.items.map(\.title) == all)
+        let expected: CGFloat = MenuPopupView.searchHeight + 84 + 2 * MenuPopupView.inset
+        #expect(menu.intrinsicContentSize.height == expected)
+        #expect(menu.popupHandleKey(.character("d")) == false)
+        #expect(menu.popupHandleKey(.down) == true && menu.highlightedIndex == 0)
+    }
+}
+
+/// 4928 pullRequestQuery.ts (#30150): a query pasted from github.com.
+struct PullRequestQuery4928Tests {
+    @Test func githubQualifiersAreIgnoredAndTwoAuthorsNameNone() {
+        let r = PullRequestListLogic.parseQuery("is:pr state:open archived:false repo:org/repo org:org user:alice sort:updated-desc -repo:org/fork -state:closed fix")
+        #expect(r.text == "fix" && r.filters.isEmpty)
+        #expect(PullRequestListLogic.parseQuery("author:ann author:bob").filters.author == nil)
+        #expect(PullRequestListLogic.parseQuery("author:@me author:ME").filters.author == "@me")
+        #expect(PullRequestListLogic.parseQuery("-draft:true").filters.draft == "hide")
     }
 }

@@ -28,6 +28,7 @@ final class SidebarCommands {
         let c = PullRequestsPageController(sidebar: sidebar!, environments: environments, capabilities: threads.pullRequests.capabilities)
         c.onAddProject = { [weak self] in self?.addProject() }
         c.container.onEscape = { [weak self] in self?.goBack() }
+        c.onSearchThreads = { [weak self] url in self?.onSearchThreads?(url) }
         return c
     }()
     /// The Issues page, made on first open and kept for the session (`ISSUES_PANEL_REF`).

@@ -73,6 +73,9 @@ final class PullRequestDetailBinding {
     private var stackGeneration = 0
     /// The last stack read for this pull request succeeded (`pullRequestStackView` `isFresh`).
     private var stackFresh = false
+    /// `pullRequests.subscribeLinkedThreadRefreshes` while the page shows a pull request (4928 rpc.ts:1293-1301).
+    private var linkedRefreshes: (environmentId: String, task: Task<Void, Never>)?
+    private var linkedGeneration = 0
 
     init(surface: LazyView<PullRequestDetailView>, environments: Environments, capabilities: PullRequestCapabilities) {
         self.surface = surface
@@ -90,8 +93,8 @@ final class PullRequestDetailBinding {
             view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
             view.onCopy = { [weak self] text, label in
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(text, forType: .string)
-                self?.toast("\(label) copied", text, .success)
+                // 4928 dropped routine success toasts; only a failure speaks (#36527).
+                if !NSPasteboard.general.setString(text, forType: .string) { self?.toast("Failed to copy \(label.lowercased())", nil, .error) }
             }
             view.onMergeMethod = { m in UserDefaults.standard.set(m, forKey: Self.mergeMethodKey) }
             view.onAction = { [weak self] action, method in self?.perform(action, mergeMethod: method) }
@@ -103,6 +106,7 @@ final class PullRequestDetailBinding {
             view.onCommentAction = { [weak self] body, action in self?.commentAction(body, action) }
             view.onSaveTitle = { [weak self] title in self?.update(title: title) }
             view.onSaveBody = { [weak self] body in self?.update(body: body) }
+            view.onMaintainerEdits = { [weak self] value in self?.update(maintainerCanModify: value) }
             view.onSaveComment = { [weak self] comment, body in self?.updateComment(comment, body) }
             view.onReact = { [weak self] subject, content, reacted, bar in self?.react(subject, content, reacted, bar) }
             view.onPickLabels = { [weak self] anchor in self?.openPicker(.labels, from: anchor) }
@@ -159,6 +163,10 @@ final class PullRequestDetailBinding {
         view.commentSaving = false
         view.tab = .summary
         view.currentMergeMethod = nil
+        view.linkedThreadCount = nil
+        view.linkedThreadsFailed = false
+        view.maintainerEditsChoice = nil
+        view.maintainerEditsSaving = false
         // `usePullRequestDefaultMergeMethodResolver`: the project's override over the environment's setting.
         view.projectDefaultMergeMethod = Self.serverSettings?(environmentId).flatMap {
             ProjectSettings.resolve($0, projectId: target.projectId).settings["pullRequestMergeMethod"].stringValue
@@ -204,6 +212,7 @@ final class PullRequestDetailBinding {
                 let d = try reply.decode(as: PullRequestDetail.self)
                 guard let self, self.generation == gen else { return }
                 self.detail = d
+                if !self.view.maintainerEditsSaving { self.view.maintainerEditsChoice = nil }
                 self.view.activityPending = true
                 self.view.activityError = nil
                 if let ref = self.reference { self.view.reviewKey = PullRequestReviewStore.key(ref) }
@@ -212,6 +221,7 @@ final class PullRequestDetailBinding {
                 self.onStatus?(target.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft))
                 self.loadActivity(gen: gen)
                 self.loadChangeBreakdown(gen: gen)
+                self.readLinkedThreads()
                 if self.view.tab == .code { self.patchKey = nil; self.loadCode() }
             } catch {
                 guard let self, self.generation == gen else { return }
@@ -220,6 +230,51 @@ final class PullRequestDetailBinding {
                 self.view.showFailure(title: title, message: message)
             }
         }
+    }
+
+    // MARK: Linked threads on the page
+
+    /// `PullRequestThreadLinks display="count"` (4928 PullRequestThreadLinks.tsx:76-90, 137-181): only on the
+    /// page and where threads link many pull requests (`threadPullRequests`). A 4928 server signals link
+    /// changes on its own stream (`linkedThreadRefreshes`, client-runtime state/pullRequests.ts:833-850);
+    /// an older one is read again on each detail read, with no timer, where T3 polls every 10 s.
+    private func readLinkedThreads() {
+        guard view.context == .page, let env = environmentId, let shell, var ref = reference, let target,
+              capabilities.has(env, "threadPullRequests") else { stopLinkedRefreshes(); return }
+        ref.host = target.host
+        linkedGeneration += 1
+        let gen = linkedGeneration
+        Task { [weak self] in
+            do {
+                let r = try await shell.supervisor.request("pullRequests.linkedThreads", payload: ref.payload).decode(as: PullRequestLinkedThreadsResult.self)
+                guard let self, self.linkedGeneration == gen else { return }
+                // ponytail: archived threads drop out; T3 also hides threads the sidebar hides (`visibleLinkedThreads`), add that if counts disagree
+                self.view.linkedThreadCount = r.threads.filter { $0.archivedAt == nil }.count
+                self.view.linkedThreadsFailed = false
+            } catch {
+                guard let self, self.linkedGeneration == gen else { return }
+                // "Retain the last count while refresh temporarily clears query data": a failure keeps it.
+                self.view.linkedThreadsFailed = self.view.linkedThreadCount == nil
+            }
+        }
+        guard capabilities.has(env, "linkedThreadRefreshes"), linkedRefreshes?.environmentId != env else { return }
+        stopLinkedRefreshes()
+        // The stream's first value is its baseline; each later one means a link changed.
+        let first = FirstValue()
+        let task = shell.supervisor.subscribe("pullRequests.subscribeLinkedThreadRefreshes", payload: { .object([:]) }, handler: { [weak self] event in
+            guard case .value = event else { return }
+            await MainActor.run {
+                guard !first.take(), self?.linkedRefreshes?.environmentId == env else { return }
+                self?.readLinkedThreads()
+            }
+        })
+        linkedRefreshes = (env, task)
+    }
+
+    /// The page hid or moved to another environment: the stream closes, as an unmounted atom's does.
+    func stopLinkedRefreshes() {
+        linkedRefreshes?.task.cancel()
+        linkedRefreshes = nil
     }
 
     /// The diff stats' code, tests, mocks, generated and docs split, read as soon as the detail shows
@@ -363,7 +418,9 @@ final class PullRequestDetailBinding {
         }
         Task { [weak self] in
             do {
-                _ = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))
+                // 4928 asks for the host's summary and shows it without a re-read (client-runtime
+                // state/pullRequests.ts:1134-1137, 895-931, #25761). A 3824 server answers nothing.
+                let reply = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod, replyWithSummary: true))
                 guard let self else { return }
                 // 2994 shows the new state in the panel and toasts only a revert, which opens another
                 // pull request (PullRequestDetailPanel.tsx:1027-1030).
@@ -371,7 +428,16 @@ final class PullRequestDetailBinding {
                 guard self.stillShows(shown) else { return }
                 self.view.actionPending = false
                 self.onActed?(action)
-                self.reload(invalidate: action == "update-branch" || action == "approve-workflows")
+                let summary = reply == .null ? nil : try? reply.decode(as: PullRequestSummary.self)
+                let rereadsAnyway = ["update-branch", "approve-workflows", "revert", "delete-branch"].contains(action)
+                if let summary, !rereadsAnyway, var d = self.detail, !d.needsReread(after: summary) {
+                    d.apply(summary)
+                    self.detail = d
+                    self.view.show(d)
+                    if let t = self.target { self.onStatus?(t.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft)) }
+                } else {
+                    self.reload(invalidate: action == "update-branch" || action == "approve-workflows")
+                }
             } catch {
                 guard let self else { return }
                 if self.stillShows(shown) { self.view.actionPending = false }
@@ -448,6 +514,19 @@ final class PullRequestDetailBinding {
         }
     }
 
+    /// `saveMaintainerEdits` (4928 PullRequestActionsMenu.tsx:187-208): the choice shows at once and
+    /// holds until the read after the save; a refusal takes it back.
+    private func update(maintainerCanModify value: Bool) {
+        guard !view.maintainerEditsSaving else { return }
+        let previous = view.maintainerEditsChoice
+        view.maintainerEditsChoice = value
+        view.maintainerEditsSaving = true
+        write("pullRequests.update", { PullRequestPayloads.update($0, maintainerCanModify: value) }, failure: "Could not save maintainer access") { [weak self] ok in
+            self?.view.maintainerEditsSaving = false
+            if !ok { self?.view.maintainerEditsChoice = previous }
+        }
+    }
+
     private func update(body: String) {
         view.bodySaving = true
         write("pullRequests.update", { PullRequestPayloads.update($0, body: body) }, failure: "Could not save the description") { [weak self] ok in
@@ -514,6 +593,11 @@ final class PullRequestDetailBinding {
         var labels: [PullRequestLabelCandidate] = []
         var people: [PullRequestReviewerCandidate] = []
         var query = ""
+        // The host search past the first page (4928 PullRequestReviewerPicker.tsx:80-99).
+        let searchable = detail?.capabilities.reviewers.searchCandidates == true
+        var loadedTruncated = false
+        var searched: (query: String, list: PullRequestReviewerCandidateList?, error: String?)?
+        var searchTask: Task<Void, Never>?
         func render() {
             if kind == .labels {
                 picker.rows = PullRequestWriteLogic.filterLabels(labels, query: query).map {
@@ -521,7 +605,13 @@ final class PullRequestDetailBinding {
                           checked: $0.isApplied)
                 }
             } else {
-                picker.rows = PullRequestWriteLogic.filterReviewers(people, query: query).map {
+                let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                let hit = searched.flatMap { $0.query == q && PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: loadedTruncated, searchable: searchable, debouncedQuery: q) != nil ? $0 : nil }
+                let note = PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: loadedTruncated, searchable: searchable, query: q, searched: hit != nil,
+                                                                        searchError: hit?.error, searchTruncated: hit?.list?.truncated == true)
+                picker.truncatedText = note
+                picker.truncated = note != nil
+                picker.rows = PullRequestWriteLogic.mergeReviewers(people, searched: hit?.list?.candidates ?? [], query: q).map {
                     .init(key: "\($0.kind):\($0.id)", title: $0.login, actor: PullRequestActor(login: $0.login, name: $0.name, avatarUrl: $0.avatarUrl, isBot: $0.isBot),
                           trailing: $0.kind == "team" ? "team" : nil, checked: $0.isRequested)
                 }
@@ -535,7 +625,7 @@ final class PullRequestDetailBinding {
                         labels = list.candidates; picker.truncated = list.truncated
                     } else {
                         let list = try await shell.supervisor.request("pullRequests.reviewerCandidates", payload: ref.payload).decode(as: PullRequestReviewerCandidateList.self)
-                        people = list.candidates; picker.truncated = list.truncated
+                        people = list.candidates; loadedTruncated = list.truncated
                     }
                     picker.state = .loaded
                     render()
@@ -544,14 +634,33 @@ final class PullRequestDetailBinding {
                 }
             }
         }
-        picker.onQuery = { q in query = q; render() }
+        picker.onQuery = { q in
+            query = q
+            render()
+            guard kind == .reviewers else { return }
+            searchTask?.cancel()
+            // `useDebouncedValue(query.trim(), 250)`: one wait per keystroke, then one host read.
+            searchTask = Task {
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled, let hostQuery = PullRequestWriteLogic.hostReviewerQuery(loadedTruncated: loadedTruncated, searchable: searchable, debouncedQuery: q),
+                      searched?.query != hostQuery || searched?.error != nil else { return }
+                do {
+                    let list = try await shell.supervisor.request("pullRequests.reviewerCandidates", payload: PullRequestPayloads.reviewerCandidates(ref, query: hostQuery))
+                        .decode(as: PullRequestReviewerCandidateList.self)
+                    searched = (hostQuery, list, nil)
+                } catch {
+                    searched = (hostQuery, nil, Self.failure(error, number: ref.number).1)
+                }
+                render()
+            }
+        }
         picker.onPick = { [weak self] key in
             guard let self else { return }
             picker.disabled = true
             if kind == .labels, let c = labels.first(where: { $0.name == key }) {
                 self.write("pullRequests.setLabels", { PullRequestPayloads.setLabels($0, labels: [c.name], applied: !c.isApplied) },
                            failure: c.isApplied ? "Could not take \(c.name) off" : "Could not put \(c.name) on") { _ in picker.disabled = false; read() }
-            } else if let c = people.first(where: { "\($0.kind):\($0.id)" == key }) {
+            } else if let c = (people + (searched?.list?.candidates ?? [])).first(where: { "\($0.kind):\($0.id)" == key }) {
                 self.write("pullRequests.requestReviewers", { PullRequestPayloads.requestReviewers($0, reviewers: [(c.id, c.kind)], requested: !c.isRequested) },
                            failure: c.isRequested ? "Could not take back the review request to \(c.login)" : "Could not ask \(c.login) for a review") { [weak self] ok in
                     picker.disabled = false
@@ -1203,8 +1312,10 @@ final class ThreadPullRequestsController {
 
     private func copy(_ text: String, title: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        panel.toasts.show(ToastView(title: title, message: text, kind: .success))
+        // 4928 dropped routine success toasts (#36527); `title` stays for the failure.
+        if !NSPasteboard.general.setString(text, forType: .string) {
+            panel.toasts.show(ToastView(title: "Failed to copy", message: title.replacingOccurrences(of: " copied", with: ""), kind: .error))
+        }
     }
 
     func registerShortcuts(_ shortcuts: Shortcuts) {
@@ -1308,4 +1419,12 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
         if let previewPopup, let window = anchor.window { PopupHost.host(for: window).close(previewPopup, returnFocus: false) }
         previewPopup = nil
     }
+}
+
+/// Whether a stream's first value has arrived yet, read on the main actor.
+@MainActor
+private final class FirstValue: @unchecked Sendable {
+    private var seen = false
+    /// True the first time only.
+    func take() -> Bool { defer { seen = true }; return !seen }
 }

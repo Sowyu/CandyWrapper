@@ -96,6 +96,9 @@ final class UsageModelStatsView: DSView {
         stats = values.map { k, v in
             let l = UsageStyle.label(k, 12, color: Themed.color(\.mutedForeground))
             let value = UsageStyle.label(v, 24, .semibold, lineHeight: 32)
+            // Each figure reads with its label, as T3's dt and dd pair (4928 UsageModelDialog.tsx, #37241).
+            l.setAccessibilityElement(false)
+            value.setAccessibilityLabel("\(k): \(v)")
             addSubview(l)
             addSubview(value)
             return (l, value)
