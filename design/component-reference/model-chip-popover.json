@@ -1,0 +1,33 @@
+{
+ "component": "model-chip-popover",
+ "source": "apps/web/src/components/chat/ModelMentionChip.tsx, contextChipParts.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "claude",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) rounded-lg text-popover-foreground outline-none transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] has-data-[slot=calendar]:rounded-xl has-data-[slot=calendar]:before:rounded-[calc(var(--radius-xl)-1px)] data-starting-style:scale-98 data-starting-style:opacity-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] dropdown-glass shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] max-w-[calc(100vw-2rem)] w-96\" data-slot=\"popover-popup\" data-side=\"top\"><div class=\"relative size-full max-h-(--available-height) overflow-clip px-(--viewport-inline-padding) has-data-[slot=calendar]:p-2 data-instant:transition-none py-2 [--viewport-inline-padding:--spacing(3)] not-data-transitioning:overflow-y-auto\" data-slot=\"popover-viewport\"><h2 class=\"sr-only\" data-slot=\"popover-title\">Model Claude Haiku 5.5</h2><div class=\"space-y-1 p-2 text-sm\"><p class=\"font-medium\">Claude Haiku 5.5</p><p class=\"text-muted-foreground\">Claude</p><p class=\"font-mono text-xs text-muted-foreground\">@claudeAgent/claude-haiku-5-5</p></div></div></div>",
+   "wrapperStyle": "display:inline-block;--available-height:600px;margin-bottom:64px",
+   "native": {
+    "label": "Claude Haiku 5.5",
+    "provider": "Claude",
+    "source": "@claudeAgent/claude-haiku-5-5"
+   }
+  },
+  {
+   "name": "long",
+   "html": "<div class=\"relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) rounded-lg text-popover-foreground outline-none transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] has-data-[slot=calendar]:rounded-xl has-data-[slot=calendar]:before:rounded-[calc(var(--radius-xl)-1px)] data-starting-style:scale-98 data-starting-style:opacity-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)] dropdown-glass shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)] max-w-[calc(100vw-2rem)] w-96\" data-slot=\"popover-popup\" data-side=\"top\"><div class=\"relative size-full max-h-(--available-height) overflow-clip px-(--viewport-inline-padding) has-data-[slot=calendar]:p-2 data-instant:transition-none py-2 [--viewport-inline-padding:--spacing(3)] not-data-transitioning:overflow-y-auto\" data-slot=\"popover-viewport\"><h2 class=\"sr-only\" data-slot=\"popover-title\">Model GPT-6 Astra (high reasoning, long context)</h2><div class=\"space-y-1 p-2 text-sm\"><p class=\"font-medium\">GPT-6 Astra (high reasoning, long context)</p><p class=\"text-muted-foreground\">Codex Work Account</p><p class=\"font-mono text-xs text-muted-foreground\">@codex_work/gpt-6-astra-high-reasoning-long-context-preview</p></div></div></div>",
+   "wrapperStyle": "display:inline-block;--available-height:600px;margin-bottom:64px",
+   "native": {
+    "label": "GPT-6 Astra (high reasoning, long context)",
+    "provider": "Codex Work Account",
+    "source": "@codex_work/gpt-6-astra-high-reasoning-long-context-preview"
+   }
+  }
+ ]
+}
