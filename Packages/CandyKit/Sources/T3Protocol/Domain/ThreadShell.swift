@@ -77,6 +77,9 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     public var tags: LenientArray<String>?
     /// 4928 linked issues (orchestrationV2.ts:2222).
     public var issues: LenientArray<ThreadIssueLink>?
+    /// The thread in a linked environment that delegated this task here (4928 orchestrationV2.ts:138-142, 2228).
+    /// Absent before 4928; MCP-launched threads send `null`.
+    public var delegatedFrom: DelegatedFrom?
     /// The outcome of the last title regeneration (4928 orchestrationV2.ts:2289).
     public var lastTitleRegeneration: LastTitleRegeneration?
     public var deletedAt: T3Timestamp?
@@ -251,6 +254,11 @@ public struct ThreadLineage: Codable, Hashable, Sendable {
     public var rootThreadId: ThreadId
     /// A side chat: a hidden fork that lives in its parent's view (4928 orchestrationV2.ts:173).
     public var sideChat: Bool?
+    /// Client side, never on the wire: a task delegated from a thread the client lists, which shows under that
+    /// parent (`delegatedUnderParent`, client-runtime state/threadShell.ts:731-753). Set when shells merge.
+    public var delegatedUnderParent = false
+
+    private enum CodingKeys: String, CodingKey { case parentThreadId, relationshipToParent, rootThreadId, sideChat }
 
     public init(parentThreadId: ThreadId?, relationshipToParent: LineageRelationship?, rootThreadId: ThreadId, sideChat: Bool? = nil) {
         self.parentThreadId = parentThreadId
@@ -261,7 +269,11 @@ public struct ThreadLineage: Codable, Hashable, Sendable {
 
     /// `isListedThreadLineage` (4928 orchestrationV2.ts:177-179): subagents and side chats show
     /// inside their parent, never in thread lists, search or settled counts.
-    public var isListed: Bool { relationshipToParent != .subagent && sideChat != true }
+    public var isListedLineage: Bool { relationshipToParent != .subagent && sideChat != true }
+
+    /// `isShownUnderParent` negated (4928 client-runtime state/threadShell.ts:60-72): subagents, side chats and
+    /// tasks delegated from a listed parent stay out of thread lists.
+    public var isListed: Bool { isListedLineage && !delegatedUnderParent }
 }
 
 /// `forkedFrom`: a union on `type` (`run`, `node`, `provider_thread`). Kept flat so a new type
@@ -425,4 +437,17 @@ public struct PullRequestStack: Codable, Hashable, Sendable {
 extension ThreadShell {
     /// `isProviderNativeSubagentThread` (orchestrationV2.ts:442-451).
     public var isProviderNativeSubagent: Bool { lineage.relationshipToParent == .subagent && creationSource == "provider" }
+}
+
+/// `OrchestrationV2DelegatedFrom` (4928 orchestrationV2.ts:138-142): the delegating thread and its title then.
+public struct DelegatedFrom: Codable, Hashable, Sendable {
+    public var environmentId: String
+    public var threadId: ThreadId
+    public var title: String
+
+    public init(environmentId: String, threadId: ThreadId, title: String) {
+        self.environmentId = environmentId
+        self.threadId = threadId
+        self.title = title
+    }
 }

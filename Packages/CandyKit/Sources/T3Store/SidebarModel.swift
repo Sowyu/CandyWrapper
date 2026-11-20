@@ -452,6 +452,31 @@ public enum SidebarModel {
         !thread.lineage.isListed
     }
 
+    /// `resolveListedAncestorThreadRef` (4928 client-runtime state/threadShell.ts:74-110, #37500): subagents, side
+    /// chats and tasks delegated from a listed parent have no row, so an open one is represented by its nearest
+    /// listed ancestor. A broken chain (missing or archived parent, a cycle) resolves to the thread itself.
+    public static func resolveListedAncestorThreadId(_ id: ThreadId, threads: [ThreadShell]) -> ThreadId {
+        guard let first = threads.first(where: { $0.id == id }), !first.lineage.isListed else { return id }
+        let byId = Dictionary(threads.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        var visited = Set<ThreadId>(), current = id
+        while let thread = byId[current] {
+            let parent: ThreadId
+            if !thread.lineage.isListedLineage {
+                guard let p = thread.lineage.parentThreadId else { return id }
+                parent = p
+            } else if let delegated = thread.delegatedFrom {
+                parent = delegated.threadId
+                // A task whose parent isn't listed keeps its own row.
+                guard let p = byId[parent], p.archivedAt == nil else { return current }
+            } else {
+                return current
+            }
+            if !visited.insert(current).inserted { return id }
+            current = parent
+        }
+        return id
+    }
+
     /// Port of `filterSidebarV2VisibleThreads` (Sidebar.logic.ts:570-583) for one environment:
     /// unarchived, not a subagent, and in scope when a scope is set.
     public static func filterSidebarV2VisibleThreads(
@@ -819,8 +844,8 @@ public enum SidebarModel {
         return relative.isEmpty ? canonical : "\(canonical)::\(relative)"
     }
 
-    /// Port of `deriveProjectGroupLabel` (projectGrouping.ts:159-190).
-    public static func deriveProjectGroupLabel(representative: ProjectShell, members: [ProjectShell]) -> String {
+    /// Port of `deriveProjectGroupLabel` (client-runtime projectGrouping.ts:201-248 at 4928).
+    public static func deriveProjectGroupLabel(groupKey: String, representative: ProjectShell, members: [ProjectShell]) -> String {
         func unique(_ values: [String?]) -> [String] {
             var seen = Set<String>(), out: [String] = []
             for case let value? in values {
@@ -835,6 +860,11 @@ public enum SidebarModel {
         if titles.count == 1, !displayNames.contains(titles[0]), !repoNames.contains(titles[0]) { return titles[0] }
         if displayNames.count == 1 { return displayNames[0] }
         if repoNames.count == 1 { return repoNames[0] }
+        // A whole-repository group is named for the repository, not one member's folder: clones can disagree on its
+        // casing. A subfolder group keeps its own title (#35614).
+        if let identity = representative.repositoryIdentity, groupKey == identity.groupingKey {
+            return identity.groupingDisplayName ?? identity.name ?? representative.title
+        }
         return representative.title
     }
 
@@ -907,7 +937,7 @@ public enum SidebarModel {
             return ProjectGroup(
                 key: key,
                 label: group.count > 1
-                    ? deriveProjectGroupLabel(representative: representative, members: group) : representative.title,
+                    ? deriveProjectGroupLabel(groupKey: key, representative: representative, members: group) : representative.title,
                 representative: representative, members: group, memberProjectIds: ids[key] ?? [])
         }
     }

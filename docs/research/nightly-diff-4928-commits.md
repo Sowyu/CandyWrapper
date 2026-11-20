@@ -489,7 +489,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | left: needs projects.createFromThread and its menu, see PROGRESS.md |
+| 58e60bf5e8 | #26767 | thread | feat: turn a No project thread into a project | ported (sidebar-2): projects.createFromThread behind threadProjectFromScratch; thread menu Turn into project with its toasts |
 | 84e69da395 | #34788 | pr/git | fix(web): No project threads offer no Initialize Git, and their linked PRs show and act in the thread | left: belongs with the No project conversion |
 
 ## New feature fleet-channel (1)
@@ -526,25 +526,25 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | port |
-| b5c83cdb95 | #28326 | thread | Show the full title in lineage/side-chat row tooltips | port |
-| 171f78b879 | #29917 | thread | fix(client): project removal counts only listed threads, not side chats or subagents | port |
-| 12ec17ce4c | #29891 | thread | fix(web): opening a project from the command palette no longer lands in a subagent or side chat | port |
-| 725cfc9c3d | #31114 | thread | fix(threads): side chats inherit parent permissions by default | port |
-| e455200077 | #32315 | thread | fix: side chats start with the parent's permission mode and reasoning level | port |
-| 915676ee6a | #30370 | thread | fix(web): deleting the open thread no longer opens a side chat or subagent | port |
-| b8c2cfad6b | #29832 | composer | fix(web): deleting a thread clears its side chats' drafts | port |
-| b10cdded50 | #32929 | thread | fix(web): a new side chat focuses its message input | port |
-| 46015ec958 | #33160 | thread | fix(web): Go to source on a side chat quote keeps you on its parent thread | port |
-| d63db06436 | #34686 | pr/git | fix(contracts): side chats open after an abandoned worktree setup | port |
-| 76ae36ef8c | #36800 | pr/git | fix(web): deleting a thread with side chats offers to delete its worktree | port |
-| 2dd810d0f6 | #36932 | thread | fix(web,mobile): /btw and /side drafts show the send arrow while a turn runs | port |
-| a31fab93a2 | #31360 | thread | fix(web): focus side-chat composer when selecting its tab | port |
-| d23f479a87 | #32117 | thread | fix(web): right panel shortcuts work while a side chat has focus | port |
-| def3722faa | #31931 | thread | fix(web): Shift+F6 moves from a side chat back to the main chat | port |
-| 4fa5f0e0e6 | #32907 | thread | fix(web): a side chat's subagent opens its parent as a side chat tab, not a bare page | port |
-| 0de6ddb823 | #37228 | thread | fix(web): editing a queued message into /btw no longer saves it to the main thread | port |
-| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | port |
+| 50c1c5dc53 | #26901 | browser | feat: side chats beside the main thread | left: planned in side-chats-4928.md (sidebar-2) |
+| b5c83cdb95 | #28326 | thread | Show the full title in lineage/side-chat row tooltips | left: planned in side-chats-4928.md (sidebar-2) |
+| 171f78b879 | #29917 | thread | fix(client): project removal counts only listed threads, not side chats or subagents | already in CandyWrapper: SettingsPages.swift:80 counts only lineage.isListed threads (sidebar-2) |
+| 12ec17ce4c | #29891 | thread | fix(web): opening a project from the command palette no longer lands in a subagent or side chat | already in CandyWrapper: PaletteCommands.swift:717 skips threads that are not listed (sidebar-2) |
+| 725cfc9c3d | #31114 | thread | fix(threads): side chats inherit parent permissions by default | left: planned in side-chats-4928.md (sidebar-2) |
+| e455200077 | #32315 | thread | fix: side chats start with the parent's permission mode and reasoning level | left: planned in side-chats-4928.md (sidebar-2) |
+| 915676ee6a | #30370 | thread | fix(web): deleting the open thread no longer opens a side chat or subagent | already in CandyWrapper: the delete fallback skips threads that are not lineage.isListed (sidebar-2) |
+| b8c2cfad6b | #29832 | composer | fix(web): deleting a thread clears its side chats' drafts | left: planned in side-chats-4928.md (sidebar-2) |
+| b10cdded50 | #32929 | thread | fix(web): a new side chat focuses its message input | left: planned in side-chats-4928.md (sidebar-2) |
+| 46015ec958 | #33160 | thread | fix(web): Go to source on a side chat quote keeps you on its parent thread | left: planned in side-chats-4928.md (sidebar-2) |
+| d63db06436 | #34686 | pr/git | fix(contracts): side chats open after an abandoned worktree setup | left: planned in side-chats-4928.md (sidebar-2) |
+| 76ae36ef8c | #36800 | pr/git | fix(web): deleting a thread with side chats offers to delete its worktree | left: planned in side-chats-4928.md (sidebar-2) |
+| 2dd810d0f6 | #36932 | thread | fix(web,mobile): /btw and /side drafts show the send arrow while a turn runs | left: planned in side-chats-4928.md (sidebar-2) |
+| a31fab93a2 | #31360 | thread | fix(web): focus side-chat composer when selecting its tab | left: planned in side-chats-4928.md (sidebar-2) |
+| d23f479a87 | #32117 | thread | fix(web): right panel shortcuts work while a side chat has focus | left: planned in side-chats-4928.md (sidebar-2) |
+| def3722faa | #31931 | thread | fix(web): Shift+F6 moves from a side chat back to the main chat | left: planned in side-chats-4928.md (sidebar-2) |
+| 4fa5f0e0e6 | #32907 | thread | fix(web): a side chat's subagent opens its parent as a side chat tab, not a bare page | left: planned in side-chats-4928.md (sidebar-2) |
+| 0de6ddb823 | #37228 | thread | fix(web): editing a queued message into /btw no longer saves it to the main thread | left: planned in side-chats-4928.md (sidebar-2) |
+| 052ca497cf | #38350 | composer | fix(web,mobile): side chats keep your attachments and context | left: planned in side-chats-4928.md (sidebar-2) |
 
 ## New feature pin-archive-projects (1)
 
@@ -1340,12 +1340,12 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | fc2b5de20c | #35426 | sidebar | fix(web): a project filter that hides every active thread says so and offers Show all projects | ported 9a0153d1 |
 | 8fc1dade71 | #35522 | sidebar | fix(web): keep settled pagination focused while loading | already in CandyWrapper: the Show more row keeps list focus while it loads |
 | a7779fc558 | #35499 | sidebar | fix(web): a focused folder New thread button no longer draws over the hidden-thread count | already in CandyWrapper: SidebarRowViews.swift shows the folder New thread button and the count never together |
-| b1c1e07ded | #23517 | sidebar | fix(web): a click no longer lands on the sidebar row that just slid under it | left: ignore presses on rows that just slid under the pointer |
+| b1c1e07ded | #23517 | sidebar | fix(web): a click no longer lands on the sidebar row that just slid under it | ported (sidebar-2): SidebarShiftGuard drops presses for 500ms on rows that moved half a row without the user's input |
 | db470a3ebd | #35659 | sidebar | fix(web): legacy collapsed project folders stay collapsed after a save | skip: web localStorage migration |
-| 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | left: needs a server clock offset per environment |
+| 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | ported (sidebar-2): ServerClock records the first config snapshot's serverTime; sidebar timers count on it. The timeline's work group timer (Features/Thread) still reads this Mac's clock |
 | dea07a1b12 | #36467 | sidebar | fix(web): rewind no longer offers file restore in project-folder threads | skip: rewind file restore, outside the sidebar |
 | 1f55acf13b | #36543 | sidebar | fix(client-runtime): refresh settled counts when threads move project | already in CandyWrapper: ShellReducer.swift invalidates counts on any update of an older settled thread |
-| 306914f016 | #35614 | sidebar | fix(client-runtime): grouped projects no longer take one folder's name as their label | left: repository-named group labels in project grouping |
+| 306914f016 | #35614 | sidebar | fix(client-runtime): grouped projects no longer take one folder's name as their label | ported (sidebar-2): deriveProjectGroupLabel names a whole-repository group after the repository |
 | 28f1786829 | #36590 | sidebar | fix(web): recreated folders no longer show deleted files | skip: files panel, outside the sidebar |
 | df8c1a1fd4 | #25269 | sidebar | fix(web): Narrator highlights the sidebar thread title where it is drawn | skip: web Narrator highlight |
 | 96735d7311 | #27109 | sidebar | fix(web): picking a sidebar search result scrolls the list to that thread | already in CandyWrapper: revealRouteRow scrolls to the opened result |
@@ -1354,7 +1354,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 04572419e4 | #36785 | sidebar | fix(clients): a one-hour snooze no longer reads "2h left" | ported 9a0153d1 |
 | 752bdaeb70 | #26376 | sidebar | feat(client): add-project folder search matches substrings and fuzzy subsequences | skip: Add project folder search, outside the sidebar |
 | 9888694f80 | #36909 | sidebar | fix(client): refresh open archive when threads are archived elsewhere | skip: Settings archive list, outside the sidebar |
-| 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | left: needs delegatedFrom; the delete fallback skips nested threads already |
+| 304dc13648 | #30428 | sidebar | fix(web): opening a project or deleting the open thread skips delegated tasks | ported (sidebar-2): delegatedFrom decodes; a task from a listed parent leaves lists, the delete fallback and project opening (lineage.isListed) |
 | 26bf047d5e | #30597 | sidebar | fix(client-runtime): a disconnected machine's scratch folder no longer lists as a second "No project" | already in CandyWrapper: ThreadSession.swift keeps the last scratch folder while a machine is away |
 | fe59fa44d0 | #31009 | sidebar | fix(web): renaming a sidebar thread no longer shifts the row or covers it with the hover card | ported 0166b1ef |
 | 81df733306 | #31894 | sidebar | fix(web): opening a project from the command palette skips settled and snoozed threads | skip: palette, outside the sidebar |
@@ -1363,13 +1363,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1b04bab05d | #33053 | sidebar | fix(web): settle check lines up with row timestamps | ported 0166b1ef |
 | 40f63b468f | #37067 | sidebar | fix(assets): align app icons and retain a folder placeholder while loading | skip: Markdown file links and server icons, outside the sidebar |
 | 40dcbc5f6a | #37475 | sidebar | fix(web): a stopped run no longer shows the green Done badge in the sidebar | ported 9a0153d1 |
-| 45dedf2955 | #37500 | sidebar | fix(web): an open delegated task selects its parent's sidebar row | left: needs delegatedFrom |
+| 45dedf2955 | #37500 | sidebar | fix(web): an open delegated task selects its parent's sidebar row | ported (sidebar-2): SidebarModel.resolveListedAncestorThreadId picks the row |
 | 1d1489d0b8 | #37727 | sidebar | fix(web): keyboard-opened sidebar menus select their first item | skip: CW opens native menus, where AppKit handles keyboard selection |
 | d405bd94ac | #29520 | sidebar | fix(web): sidebar width recovers when the window widens after a narrow start | skip: sidebar width lives in App/Sources |
 | 55c134a346 | #37925 | sidebar | fix(client-runtime): Tab completes a folder name when the list shows fuzzy matches | skip: Add project folder completion, outside the sidebar |
 | 9b3b1c79a7 | #38155 | sidebar | fix(client): a thread search that fails says so instead of "No results" | ported 0166b1ef in the sidebar; the palette half is outside it |
 | e6265a926e | #38545 | sidebar | fix(web): thread jump hints re-check when a modifier changes while the hold is already met | skip: modifier-hold jump hints, see #26112 |
-| 6927cfe2ad | #38722 | sidebar | fix(web): dropped folders open on this computer's server when the desktop app's own environment is off | left: pick this computer's environment for dropped folders |
+| 6927cfe2ad | #38722 | sidebar | fix(web): dropped folders open on this computer's server when the desktop app's own environment is off | n/a (sidebar-2): the primary is always this computer's server here; no setting turns it off while another connection shares its home |
 
 ## Small fixes, terminal (35)
 

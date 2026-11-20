@@ -291,3 +291,14 @@ Left for settings-4928. In every case the diff covers the whole 2040x1400 crop: 
 ### Inventory sections
 
 No failing screen led into 1.7 (subagents) or 5.2 (pull requests), and the diff screens pass, so no row of 5.1 was ported. Rows ported here: orchestrationTiming.ts formatDuration (33a1a21a).
+
+## Results after sidebar-2 (2026-11-19)
+
+Every case below was failing at the start of the task. No ceiling moved and no reference was recaptured.
+
+- Sidebar `wholeSidebar` list 12.63% to 3.94% light, 13.52% to 4.24% dark; below the art 14.51% to 6.57%, 14.61% to 6.13%. The cause was not the row design. T3 scrolls the open row's card into view on mount (routeReveal.ts:36-66), which moved its list up 7pt, and the 02 fixture sorted two rows by age where T3 sorts by `createdAt`.
+- Pickers `13-model-picker` 6.65/6.63% to 1.16/1.17%, `41-traits-picker` and `53-effort-menu-permissions` 29.73/24.81% to 1.15/1.17%. All three are T3's docked picker, 554x393pt at (407, 324), which the cases now render. The effort column takes `border-l` and `bg-foreground/[0.09]` rows.
+- `03c-footer-controls` 20.90/20.91% to 4.61/4.75%: the single trigger at its 4928 x, 802.07.
+- `54-composer-effort-bars` 4.49/13.82% to 1.65/1.61%: T3's capture sits at the thread's end.
+- `22-commit-dialog` 7.16/8.67% to 1.41/1.40%: the case cropped the 3824 dialog's 568pt box, and the 4928 dialog is 576.5pt tall.
+- Still failing: `05-approval-request` 4.80/4.89% against 4%. Glyph positions match T3's to the pixel and the ink means match, so the rest is Chrome's rasterizer against CoreText. `cardAndDiff` in 48 still lands the card 0.75pt short, as above.

@@ -96,7 +96,7 @@ final class ShellSession {
         self.http = http
         self.token = token
         self.supervisor = supervisor
-        configFeed = ServerConfigFeed(supervisor: supervisor)
+        configFeed = ServerConfigFeed(supervisor: supervisor, environmentId: environmentId)
         let relay = ChangeRelay()
         store = ShellStore(cached: cached, onChange: { relay.fire() })
         relay.set { [weak self] in Task { @MainActor in self?.pacer.request() } }

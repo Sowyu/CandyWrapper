@@ -653,6 +653,11 @@ final class SidebarCommands {
         state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
         state.snoozePresets = presets
         state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
+        if let env = thread.id.environmentId, let config = threads.composer.config(env) {
+            state.canTurnIntoProject = ProjectCommands.canTurnIntoProject(
+                worktreePath: thread.worktreePath, projectRoot: snapshot?.projects.first { $0.id == thread.projectId }?.workspaceRoot,
+                scratchRoot: config.scratchWorkspaceRoot, capabilities: config.capabilities)
+        }
         var items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
         if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) { items += extraMenuItems(id) }
         let choose: @MainActor (String) -> Void = { [weak self, weak sidebar] choice in
@@ -700,6 +705,18 @@ final class SidebarCommands {
         case "regenerate-title":
             guard thread.titleRegeneration == nil else { return }
             simple(id, ThreadCommands.regenerateTitle(id.localId), failure: "Failed to regenerate thread title")
+        case "turn-into-project":
+            // Sidebar.tsx and useThreadActionMenu.ts at 4928 (#26767): a toast either way; the shell stream moves the row.
+            guard let env = id.environmentId else { return }
+            let title = thread.title
+            Task {
+                do {
+                    _ = try await environments.request(env, ProjectCommands.createFromThreadMethod, ProjectCommands.createFromThread(id.localId))
+                    toast("Project created", title, .success)
+                } catch {
+                    fail("Could not turn thread into a project", error)
+                }
+            }
         case "mark-unread":
             // ponytail: server-side only; servers without visited tracking need T3's local marker
             simple(id, ThreadCommands.markUnread(id.localId), failure: nil)
@@ -918,6 +935,18 @@ final class SidebarCommands {
                 }
                 sidebar?.clearSelection()
             }
+        case "turn-into-project":
+            // Sidebar.tsx and useThreadActionMenu.ts at 4928 (#26767): a toast either way; the shell stream moves the row.
+            guard let env = id.environmentId else { return }
+            let title = thread.title
+            Task {
+                do {
+                    _ = try await environments.request(env, ProjectCommands.createFromThreadMethod, ProjectCommands.createFromThread(id.localId))
+                    toast("Project created", title, .success)
+                } catch {
+                    fail("Could not turn thread into a project", error)
+                }
+            }
         case "mark-unread":
             for id in ids { simple(id, ThreadCommands.markUnread(id.localId), failure: nil) }
             sidebar?.clearSelection()
@@ -988,8 +1017,9 @@ final class SidebarCommands {
 
     /// Folders dropped on the sidebar open as projects, one at a time so the last one stays open
     /// (T3 4928 sidebar/SidebarFolderDrop.tsx:36-81, 103-121).
-    // ponytail: adds on the primary environment; T3 picks this computer's server (#38722). Pick the local one once
-    // Environments names it.
+    /// They open on this computer's server (#38722, useOpenLocalWorkspace.ts and primaryEnvironment.ts
+    /// `localEnvironmentIdAtom`). Here that is always the primary: CandyWrapper has no setting that turns the local
+    /// environment off while another connection shares its T3 home.
     func addDroppedFolders(_ folders: [URL], otherFiles: Int) {
         if otherFiles > 0 { toast("Only folders can be added as projects", "Drop files on a thread to attach them.", .info) }
         guard !folders.isEmpty else { return }

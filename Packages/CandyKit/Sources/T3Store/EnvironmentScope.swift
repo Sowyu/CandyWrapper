@@ -51,12 +51,25 @@ public enum EnvironmentScope {
         s.lineage.parentThreadId = thread.lineage.parentThreadId.map(t)
         s.lineage.rootThreadId = t(thread.lineage.rootThreadId)
         s.forkedFrom?.threadId = thread.forkedFrom?.threadId.map(t)
+        // Names a thread in its own environment, so it takes that scope.
+        if let d = thread.delegatedFrom { s.delegatedFrom?.threadId = ThreadId(key(d.environmentId, d.threadId.rawValue)) }
         s.pendingBackgroundTasks = thread.pendingBackgroundTasks?.map { task in
             var task = task
             task.childThreadId = task.childThreadId.map(t)
             return task
         }
         return s
+    }
+
+    /// `delegatedUnderParentAtom` (4928 client-runtime state/threadShell.ts:731-753): a task delegated from a thread
+    /// of an environment in the merge, while that thread is unarchived, shows under its parent instead of in lists.
+    public static func markDelegatedUnderParent(_ snapshot: inout ShellSnapshot) {
+        guard snapshot.threads.contains(where: { $0.delegatedFrom != nil }) else { return }
+        let listedParents = Set(snapshot.threads.lazy.filter { $0.archivedAt == nil }.map(\.id))
+        for i in snapshot.threads.indices {
+            guard let parent = snapshot.threads[i].delegatedFrom?.threadId else { continue }
+            snapshot.threads[i].lineage.delegatedUnderParent = listedParents.contains(parent)
+        }
     }
 
     public static func scope(_ match: ThreadSearchMatch, _ env: String) -> ThreadSearchMatch {
@@ -141,6 +154,7 @@ public struct MergedShell: Sendable {
         if parts.count == 1 {
             var only = parts[0]
             only.snapshotSequence = 0
+            EnvironmentScope.markDelegatedUnderParent(&only)
             return only
         }
         var merged = ShellSnapshot(schemaVersion: parts.map(\.schemaVersion).max() ?? 1, snapshotSequence: 0)
@@ -151,6 +165,7 @@ public struct MergedShell: Sendable {
             merged.olderSettledByEnvironment.merge(part.olderSettledByEnvironment) { _, new in new }
             merged.partialEnvironmentIds.formUnion(part.partialEnvironmentIds)
         }
+        EnvironmentScope.markDelegatedUnderParent(&merged)
         return merged
     }
 }

@@ -147,10 +147,24 @@ public final class SidebarContentView: DSView {
         didSet {
             // Inline, so the fix-up does not run this observer again.
             if showsNoRoute { state.activeThreadId = nil; state.activeDraftId = nil }
+            if state.activeThreadId != oldValue.activeThreadId, !resolvingRoute {
+                routeThreadId = state.activeThreadId
+                state.activeThreadId = listedRowId(for: routeThreadId)
+            }
             if state.hiddenThreadIds != oldValue.hiddenThreadIds || state.hiddenThreadTags != oldValue.hiddenThreadTags { refreshListSnapshot() }
             if state != oldValue { rebuild(animated: true) }
         }
     }
+    /// The thread the route opened. `state.activeThreadId` holds the row standing for it: a subagent, side chat or
+    /// task delegated from a listed parent selects its nearest listed ancestor (#37500, threadShell.ts:74-110).
+    private var routeThreadId: ThreadId?
+    private var resolvingRoute = false
+
+    private func listedRowId(for id: ThreadId?) -> ThreadId? {
+        guard let id, let threads = snapshot?.threads else { return id }
+        return SidebarModel.resolveListedAncestorThreadId(id, threads: threads)
+    }
+
     /// The snapshot the list draws: `snapshot` without the threads `state.hiddenThreadIds` names, nor those a
     /// hidden tag hides (`SidebarModel.hidesForTags`).
     private var listSnapshot: ShellSnapshot?
@@ -463,6 +477,12 @@ public final class SidebarContentView: DSView {
     /// knows; without it every thread is compared.
     public func setSnapshot(_ snapshot: ShellSnapshot?, animated: Bool = true, changedThreadIds: Set<ThreadId>? = nil) {
         self.snapshot = snapshot
+        let row = listedRowId(for: routeThreadId)
+        if row != state.activeThreadId {
+            resolvingRoute = true
+            state.activeThreadId = row
+            resolvingRoute = false
+        }
         refreshListSnapshot()
         listCache?.noteChanges(changedThreadIds)
         rebuild(animated: animated)
@@ -616,7 +636,9 @@ public final class SidebarContentView: DSView {
         // Before the list is on screen with a size, every row reads as out of view; the launch reveal waits for one.
         guard window != nil, list.visibleRect.height > 0 else { return }
         initialRevealOwed = false
-        list.scrollItemToVisible("thread:\(id.rawValue)") // `scrollIntoView({ block: "nearest" })`
+        // `row.scrollIntoView({ block: "nearest" })` on the card, not its `py-0.5` item (routeReveal.ts:66,
+        // SidebarThreadRow.tsx:1541-1560).
+        list.scrollItemToVisible("thread:\(id.rawValue)", inset: 2)
     }
 
     private func searchItems(nowMs: Int64) -> [SidebarItem] {
@@ -1157,6 +1179,12 @@ public final class SidebarContentView: DSView {
         scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
         list.needsLayout = true
+        // T3 scrolls the open row into view on mount (sidebar/routeReveal.ts:36-66). A snapshot set before the
+        // sidebar had a window reveals on its first sized layout instead of waiting for the next rebuild.
+        if initialRevealOwed, window != nil, state.activeThreadId != nil, scrollArea.frame.height > 0 {
+            list.layoutSubtreeIfNeeded()
+            revealRouteRow()
+        }
     }
 }
 

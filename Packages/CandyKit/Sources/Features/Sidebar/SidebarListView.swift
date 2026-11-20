@@ -65,6 +65,10 @@ public final class SidebarListView: DSView {
     public override var acceptsFirstResponder: Bool { true }
     public override var canBecomeKeyView: Bool { true }
 
+    /// Drops presses on rows that just slid under the pointer (Sidebar.shiftGuard.ts, #23517).
+    let shiftGuard = SidebarShiftGuard()
+    private var pressMonitor: Any?
+
     // MARK: Data
 
     /// Replaces the items. Rows whose model is unchanged keep their view untouched; moved rows slide.
@@ -82,6 +86,7 @@ public final class SidebarListView: DSView {
         let oldItems = Dictionary(uniqueKeysWithValues: items.map { ($0.key, $0) })
         items = new
         recomputeGeometry()
+        recordShifts()
         let shouldAnimate = (animated || released != nil) && window != nil && !Motion.reduced && !oldTops.isEmpty
         // Rows that left the list fade out where they were.
         var faded = 0
@@ -188,7 +193,55 @@ public final class SidebarListView: DSView {
         super.viewWillMove(toWindow: newWindow)
         if newWindow == nil, sort != nil { cancelSort() }
         if newWindow == nil { endDitherDrag(commit: false) }
+        if newWindow == nil, let pressMonitor { NSEvent.removeMonitor(pressMonitor); self.pressMonitor = nil }
     }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, pressMonitor == nil else { return }
+        // Window capture, before any row or its buttons see the press (Sidebar.shiftGuard.ts:105-111). A local
+        // monitor runs only on events, so an idle list costs nothing.
+        pressMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .leftMouseDragged,
+                                                                   .leftMouseUp, .rightMouseUp, .otherMouseUp, .keyDown]) { [weak self] event in
+            nonisolated(unsafe) let event = event
+            let drop = MainActor.assumeIsolated { self?.dropsEvent(event) ?? false }
+            return drop ? nil : event
+        }
+    }
+
+    /// Records rows that moved for the shift guard, keyed like the views.
+    private func recordShifts() {
+        var next: [String: (top: CGFloat, height: CGFloat)] = [:]
+        for (i, item) in items.enumerated() { next[item.key] = (tops[i], item.height) }
+        shiftGuard.update(tops: next, now: ProcessInfo.processInfo.systemUptime)
+    }
+
+    /// True for a press, drag or release the shift guard swallows.
+    private func dropsEvent(_ event: NSEvent) -> Bool {
+        guard event.window === window, let window, let content = window.contentView else { return false }
+        switch event.type {
+        case .keyDown:
+            // Editing text can't move rows; Enter and modified keys in a field can (`editsText`).
+            let editing = window.firstResponder is NSText
+            let modified = !event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            if !editing || event.keyCode == 36 || event.keyCode == 76 || modified { shiftGuard.noteInput(at: event.timestamp) }
+            return false
+        case .leftMouseDragged:
+            return shiftGuard.holdingDrop
+        case .leftMouseUp, .rightMouseUp, .otherMouseUp:
+            if shiftGuard.releaseDrop() { return true }
+            shiftGuard.noteInput(at: event.timestamp)
+            return false
+        default:
+            guard let hit = content.hitTest(content.convert(event.locationInWindow, from: nil)), hit.isDescendant(of: self) else {
+                return shiftGuard.dropsPress(on: nil, at: event.timestamp)
+            }
+            let y = convert(event.locationInWindow, from: nil).y
+            let key = items.indices.first { tops[$0] <= y && y < tops[$0] + items[$0].height }.map { items[$0].key }
+            return shiftGuard.dropsPress(on: key, at: event.timestamp)
+        }
+    }
+
 
     public override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
@@ -670,9 +723,10 @@ public final class SidebarListView: DSView {
     }
 
     /// The frame of the item with this key, for scrolling a search highlight into view.
-    func scrollItemToVisible(_ key: String) {
+    /// `inset` trims the item's frame first: T3 reveals a thread row's card, inside the `li`'s `py-0.5`.
+    func scrollItemToVisible(_ key: String, inset: CGFloat = 0) {
         guard let i = indexByKey[key] else { return }
-        scrollToVisible(frame(at: i))
+        scrollToVisible(frame(at: i).insetBy(dx: 0, dy: inset))
         tile(oldTops: nil)
     }
 

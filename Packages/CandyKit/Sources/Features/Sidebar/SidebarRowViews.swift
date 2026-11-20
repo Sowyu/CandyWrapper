@@ -692,7 +692,8 @@ final class SidebarCardRowView: SidebarRowBase {
             statusLabel.color = color
             statusIcon.set(SB.statusIcon(top), color: color)
             duration.text = (r.status == .working || r.status == .waiting) ? r.workingStartedMs.map {
-                SidebarModel.formatWorkingDurationLabel(elapsedMs: Double(nowMs - $0)) } ?? "" : ""
+                // `toServerClock` (SidebarThreadRow.tsx WorkingDurationLabel, #36420): host timestamps, host clock.
+                SidebarModel.formatWorkingDurationLabel(elapsedMs: Double(ServerClock.toServerClock(r.id.environmentId, nowMs) - $0)) } ?? "" : ""
             duration.color = color
             duration.font = SB.tabular(12, .medium)
         } else {
