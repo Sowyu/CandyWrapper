@@ -1950,7 +1950,7 @@ final class ComposerController {
         let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
         strip.showsPermissions = modern && thread == nil
         let unrestricted = pickers.isUnrestricted
-        let mode = unrestricted ? ComposerPickers.ModeInfo(label: UnrestrictedAccess.label, description: UnrestrictedAccess.description, icon: .triangleAlert)
+        let mode = unrestricted ? ComposerPickers.unrestrictedMode
             : ComposerPickers.modes[pickers.current.runtimeMode] ?? ComposerPickers.modes[.fullAccess]!
         strip.permissions.text = mode.label
         strip.permissions.glyphs = [pickers.current.runtimeMode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : mode.icon.definition]
