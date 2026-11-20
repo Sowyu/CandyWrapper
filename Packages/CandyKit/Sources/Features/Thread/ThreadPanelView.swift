@@ -418,6 +418,10 @@ public final class ThreadPanelView: DSView {
     /// `/clear`'s armed notice (ComposerFreshSession.tsx at 4928), keyed by thread; nil hides it.
     public let lazyFreshSessionBanner = LazyView { ComposerNoticeBannerView() }
     public var freshSessionKey: String? { didSet { if freshSessionKey != oldValue { needsLayout = true } } }
+    /// "Using <fallback>" on a new thread whose default provider is out of usage (`modelFallbackBannerItem`,
+    /// ComposerUsageLimits.tsx:80-126 at 4928), keyed by the exhausted window; nil hides it.
+    public let lazyFallbackBanner = LazyView { ComposerNoticeBannerView() }
+    public var fallbackKey: String? { didSet { if fallbackKey != oldValue { needsLayout = true } } }
     /// "Replying to" (ChatComposer.tsx `replyBannerItems` at 4928), keyed by the reply's context id; nil hides it.
     public let lazyReplyBanner = LazyView { ComposerNoticeBannerView() }
     public var replyKey: String? { didSet { if replyKey != oldValue { needsLayout = true } } }
@@ -521,6 +525,7 @@ public final class ThreadPanelView: DSView {
         // cancels a dismiss still playing instead of running it against the new thread's banner.
         let thread = model.projection?.thread.id.rawValue ?? ""
         if showsNoticeBanner && composerVisible { items.append(notice("project-clone:" + thread, noticeBanner)) }
+        if composerVisible, let key = fallbackKey { items.append(notice("fallback-model:" + key, lazyFallbackBanner.view)) }
         if docked, let key = freshSessionKey { items.append(notice("fresh-session:" + key, lazyFreshSessionBanner.view)) }
         if docked && showsEnvironmentBanner {
             items.append(ComposerBannerStackItem(id: "environment-unavailable", view: environmentBanner,

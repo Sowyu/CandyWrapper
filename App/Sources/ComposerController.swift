@@ -2555,6 +2555,39 @@ final class ComposerController {
         panel.freshSessionKey = shown
     }
 
+    // MARK: Provider fallback (#26164)
+
+    private var dismissedFallbackWindow: String?
+
+    /// `modelFallbackBannerItem` (ComposerUsageLimits.tsx:80-126 at 4928) on a new thread that starts on the fallback
+    /// because its default provider is out of usage (ChatView.tsx:2635-2680): "Use <default>" switches back.
+    private func updateFallbackBanner() {
+        var key: String?
+        if case .draft = target, pickers.currentMultiple == nil, let fallback = pickers.current.fallback {
+            let window = fallback.provider.instanceId.rawValue + ":" + (fallback.resetsAt ?? "")
+            if window != dismissedFallbackWindow {
+                key = window
+                let providers = serverConfig.providers
+                let fallbackName = providers.first { $0.instanceId == fallback.selection.instanceId }?.models
+                    .first { $0.slug == fallback.selection.model }?.name ?? fallback.selection.model
+                let defaultModel = fallback.provider.models.first { $0.slug == fallback.defaultSelection.model }?.name ?? fallback.defaultSelection.model
+                let providerName = fallback.provider.displayName ?? fallback.provider.driver
+                let resets = fallback.resetsAt.map { UsageLimitsView.upcoming($0, nowMs: Int64(Date().timeIntervalSince1970 * 1000)) }
+                let banner = panel.lazyFallbackBanner.view
+                banner.apply(.init(variant: .neutral, icon: .gauge, title: "Using \(fallbackName)",
+                                   description: resets.map { "\(providerName) is out of usage · resets \($0)" } ?? "\(providerName) is out of usage",
+                                   actions: ["Use \(defaultModel)"], dismissLabel: "Dismiss fallback model notice"))
+                let selection = fallback.defaultSelection
+                banner.onAction = { [weak self] index in
+                    guard let self else { return }
+                    if index == 0 { pickers.select(selection.instanceId, model: selection.model) } else { dismissedFallbackWindow = window }
+                    updateFallbackBanner()
+                }
+            }
+        }
+        panel.fallbackKey = key
+    }
+
     // MARK: Prompt suggestions (#28047, #33706)
 
     private var suggestionSubscription: Task<Void, Never>?
@@ -5478,6 +5511,7 @@ extension ComposerController {
     private func updateThreadBanners() {
         updateFreshSessionBanner()
         updateReplyBanner()
+        updateFallbackBanner()
         let thread = shellThread
         panel.showsGoal = thread?.goal != nil
         if let goal = thread?.goal {

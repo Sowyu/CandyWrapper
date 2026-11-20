@@ -36,9 +36,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
-| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
-| bc448b8697 | #27859 | composer | fix(web): composer fallback keeps the effort of a model saved under an alias | left: provider fallback needs the fallback settings in Settings > Project defaults (not this task's area), the usage-limit check in packages/shared/src/usageLimits.ts and the new-thread hero line; 19 files at 4928 |
+| 861a51a6c4 | #26164 | usage | feat(server,web,mobile): fall back when the default provider is out of usage | ported, composer and store side: a new draft without its own pick starts on the server's `fallbackModelSelection` while its default provider is out of usage for its model (T3Store UsageFallback, ComposerSelectionStore.resolve), and the draft shows "Using <model>" with "<provider> is out of usage · resets <time>", "Use <default>" and a dismiss per window (ComposerController `updateFallbackBanner`, ThreadPanelView slot). Left for the Settings agent: the Fallback model row in Settings > Project defaults that writes `fallbackModelSelection` |
+| cb1de7ba23 | #27593 | settings | fix(web): configure reasoning for the fallback model | left for the Settings agent: the fallback model's effort is picked in Settings > Project defaults; the composer already starts the fallback with the options saved in `fallbackModelSelection` |
+| bc448b8697 | #27859 | composer | fix(web): composer fallback keeps the effort of a model saved under an alias | ported with #26164: the fallback starts with its saved options as they are, so an effort saved under a model alias stays (ComposerSelectionStore.resolve) |
 
 ## Port group usage-meter (3)
 

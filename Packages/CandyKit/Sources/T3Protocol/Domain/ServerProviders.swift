@@ -353,6 +353,9 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
 public struct ServerThreadDefaults: Decodable, Hashable, Sendable {
     public var defaultModelSelection: ModelSelection?
     public var defaultRuntimeMode: RuntimeMode
+    /// `fallbackModelSelection` (settings.ts at 4928, #26164): what a new thread starts on when the default's provider
+    /// is out of usage. Absent before 4928.
+    public var fallbackModelSelection: ModelSelection?
     /// `environmentIcon`: the machine kind the user picked for this environment, or nil for the detected one.
     public var environmentIcon: String?
     /// The whole settings object as sent, for the Settings pages (`ServerSettingsValues`).
@@ -366,12 +369,13 @@ public struct ServerThreadDefaults: Decodable, Hashable, Sendable {
         self.raw = raw
     }
 
-    private enum CodingKeys: String, CodingKey { case defaultModelSelection, defaultRuntimeMode, environmentIcon }
+    private enum CodingKeys: String, CodingKey { case defaultModelSelection, defaultRuntimeMode, environmentIcon, fallbackModelSelection }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         defaultModelSelection = try c.decodeIfPresent(ModelSelection.self, forKey: .defaultModelSelection)
         defaultRuntimeMode = try c.decodeIfPresent(RuntimeMode.self, forKey: .defaultRuntimeMode) ?? .fullAccess
+        fallbackModelSelection = try? c.decodeIfPresent(ModelSelection.self, forKey: .fallbackModelSelection)
         // `ForwardCompatibleNullable`: an unknown kind reads as no override.
         let icon = try? c.decodeIfPresent(String.self, forKey: .environmentIcon)
         environmentIcon = icon.flatMap { ["server", "cloud", "linux", "desktop", "laptop", "mac-mini", "mac-studio"].contains($0) ? $0 : nil }
