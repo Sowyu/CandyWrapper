@@ -292,6 +292,7 @@ public actor T3ConnectAuthorizer {
                 let connection = RPCConnection(socket: try await URLSessionRPCSocket.open(url: socket.url),
                                                serverVersion: socket.token.serverVersion, serverCapabilities: socket.token.serverCapabilities)
                 await connection.start()
+                keepSessionAlive(connection, environmentId: environmentId, expiresAt: socket.token.expiresAt)
                 return connection
             } catch is CancellationError {
                 throw CancellationError()
@@ -300,6 +301,43 @@ public actor T3ConnectAuthorizer {
             }
         }
     }
+
+    /// The environment closes a socket when its one-hour session expires, unless the same DPoP key renewed it: a
+    /// 4928 server then moves the socket to the newer session (SessionStore.awaitInvalidation, #27998). So T3 renews a
+    /// live socket's token in its last minute, retrying a relay blip every 5 s until expiry (connection/driver.ts:250-266,
+    /// authorization/service.ts:784-812). Older servers still close the socket at expiry and the supervisor reconnects.
+    /// One sleep per connection, about an hour long. It ends with the socket.
+    nonisolated func keepSessionAlive(_ connection: RPCConnection, environmentId: String, expiresAt: Date,
+                                      sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) }) {
+        let renewal = Task { [self] in
+            var expires = expiresAt
+            while !Task.isCancelled {
+                let now = await self.currentDate()
+                guard now < expires else { return }
+                do { try await sleep(max(5, expires.timeIntervalSince(now) - T3ConnectToken.refreshSkew)) } catch { return }
+                guard !Task.isCancelled, await !connection.isClosed else { return }
+                do {
+                    let renewed = try await token(environmentId: environmentId)
+                    expires = max(expires, renewed.expiresAt)
+                } catch is CancellationError {
+                    return
+                } catch let failure as ConnectionFailure {
+                    // A blocked credential ends the loop; a transient one retries after the 5 s floor.
+                    if case .blocked = failure { return }
+                } catch CloudSessionError.signedOut {
+                    return
+                } catch {
+                    continue
+                }
+            }
+        }
+        Task {
+            _ = await connection.waitUntilClosed()
+            renewal.cancel()
+        }
+    }
+
+    private func currentDate() -> Date { now() }
 
     // MARK: Environment HTTP
 

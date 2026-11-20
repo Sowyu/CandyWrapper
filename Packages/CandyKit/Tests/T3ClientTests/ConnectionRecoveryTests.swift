@@ -147,3 +147,30 @@ final class Box<T>: @unchecked Sendable {
         set { lock.withLock { stored = newValue } }
     }
 }
+
+extension T3ConnectAuthorizerTests {
+    /// A live relay socket renews its token in the session's last minute, so a 4928 server moves the socket to the
+    /// new session instead of closing it at the hour (#27998, driver.ts:250-266, service.ts:784-812).
+    @Test func aLiveSocketRenewsItsTokenBeforeExpiry() async throws {
+        serveHappyPath()
+        let authorizer = try makeAuthorizer()
+        let token = try await authorizer.token(environmentId: "env-1")
+        let socket = FakeSocket()
+        let connection = RPCConnection(socket: socket)
+        await connection.start()
+        let sleeps = Box<[TimeInterval]>()
+        sleeps.value = []
+        authorizer.keepSessionAlive(connection, environmentId: "env-1", expiresAt: token.expiresAt) { [clock] seconds in
+            sleeps.value = (sleeps.value ?? []) + [seconds]
+            // Park after the renewal so the test can look.
+            if (sleeps.value ?? []).count > 1 { try await Task.sleep(for: .seconds(3600)) }
+            clock.advance(seconds)
+        }
+        #expect(await eventually { http.requests.filter { $0.url?.path == "/oauth/token" }.count == 2 })
+        #expect(sleeps.value?.first == 3540)
+        // The next renewal waits for the new token's last minute.
+        #expect(await eventually { (sleeps.value ?? []).count == 2 })
+        #expect(sleeps.value?.last == 3540)
+        await connection.close()
+    }
+}
