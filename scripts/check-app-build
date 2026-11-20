@@ -1,0 +1,24 @@
+#!/bin/sh
+# Builds the app target into a scratch derived-data folder and prints only the compiler's error lines.
+# Exits non-zero on any error. Every task that edits App/Sources runs it before its last commit, because
+# `swift test` only builds CandyKit and never sees the app target.
+# Usage: scripts/check-app-build [derived-data-dir], default /tmp/cw-check-app-build.
+# It uses scripts/build-test-app's flags, so it never reads the Keychain.
+set -u
+cd "$(dirname "$0")/.."
+dd="${1-/tmp/cw-check-app-build}"
+scripts/preflight >/dev/null || { echo "scripts/preflight failed, not building" >&2; exit 2; }
+log="$(mktemp -t cw-check-app-build)"
+xcodebuild -scmProvider system -packageAuthorizationProvider netrc -disableAutomaticPackageResolution \
+  -project CandyWrapper.xcodeproj -scheme CandyWrapper -configuration Debug -derivedDataPath "$dd" \
+  PRODUCT_BUNDLE_IDENTIFIER=dev.candywrapper.test.check-app-build CANDY_URL_SCHEME=candywrapper-check-app-build \
+  build >"$log" 2>&1
+status=$?
+errors="$(grep -E '(^|: )error: ' "$log" | sort -u)"
+if [ "$status" -ne 0 ] || [ -n "$errors" ]; then
+  if [ -n "$errors" ]; then echo "$errors"; else tail -n 20 "$log"; fi
+  echo "app build failed, full log in $log" >&2
+  exit 1
+fi
+rm -f "$log"
+echo "app build ok"
