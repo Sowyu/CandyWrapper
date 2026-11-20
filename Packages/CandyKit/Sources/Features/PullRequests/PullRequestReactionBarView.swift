@@ -11,6 +11,8 @@ public final class PullRequestReactionBarView: DSView {
     public var canReact = false { didSet { rebuild() } }
     /// Presses in flight, cleared when `reactions` moves on.
     private var pending: (signature: String, values: [String: Bool]) = ("", [:])
+    /// Presses of each reaction still waiting on the host, under the same signature.
+    private var inFlight: [String: Int] = [:]
     /// (content, reacted): the caller sends the press and calls `pressFailed` when the host refuses.
     public var onToggle: ((String, Bool) -> Void)?
     private var pills: [PullRequestReactionPill] = []
@@ -32,15 +34,21 @@ public final class PullRequestReactionBarView: DSView {
     private func toggle(_ content: String, _ reacted: Bool) {
         let sig = PullRequestReactions.signature(reactions)
         var values = pending.signature == sig ? pending.values : [:]
+        if pending.signature != sig { inFlight = [:] }
         values[content] = reacted
         pending = (sig, values)
+        inFlight[content, default: 0] += 1
         rebuild()
         onToggle?(content, reacted)
     }
 
-    /// The host refused: the pill goes back (lines 80-87).
+    /// The host refused: the pill goes back (lines 80-87), unless a newer press of the same reaction is
+    /// still waiting, whose choice stands (#37853, 4928 PullRequestReactions.tsx).
+    // ponytail: counts presses rather than naming them, so of two in flight the first failure keeps the choice either way; pass a press id through onToggle if that order matters
     public func pressFailed(_ content: String) {
-        pending.values[content] = nil
+        let left = max(0, (inFlight[content] ?? 1) - 1)
+        inFlight[content] = left == 0 ? nil : left
+        if left == 0 { pending.values[content] = nil }
         rebuild()
     }
 

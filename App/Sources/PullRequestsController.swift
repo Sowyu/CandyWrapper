@@ -179,9 +179,10 @@ final class PullRequestDetailBinding {
         slices = []; sliceCursor = nil; sliceError = nil; sliceLoading = false
         omittedStats = [:]; withheldReadable = false; withheldLoaded = [:]; withheldStatus = [:]
         stackFresh = false
-        // A write still running belongs to the previous pull request; its reply leaves this one alone.
-        view.pendingAction = nil
-        view.actionPending = false
+        // A write still running belongs to its own pull request: coming back to it shows it pending (#29005).
+        let running = actionKey.flatMap { runningActions[$0] }
+        view.pendingAction = running
+        view.actionPending = running != nil
         view.stackPending = false
         view.titleSaving = false
         view.bodySaving = false
@@ -486,8 +487,14 @@ final class PullRequestDetailBinding {
         run(action, mergeMethod: mergeMethod, shell: shell, ref: ref, shown: showing, provider: view.detail?.provider)
     }
 
+    /// Actions in flight by pull request (`pendingKeys`, 4928 usePullRequestActions.ts, #29005).
+    private var runningActions: [String: String] = [:]
+    private var actionKey: String? { environmentId.flatMap { e in target.map { "\(e) \($0.surfaceId)" } } }
+
     /// `finishAction`: the action goes to the pull request it was chosen on, even once another one shows.
     private func run(_ action: String, mergeMethod: String?, shell: ShellSession, ref: PullRequestRef, shown: Int, provider: String?) {
+        guard let key = actionKey, runningActions[key] == nil else { return }
+        runningActions[key] = action
         if stillShows(shown) {
             view.pendingAction = action
             view.actionPending = true
@@ -498,6 +505,7 @@ final class PullRequestDetailBinding {
                 // state/pullRequests.ts:1134-1137, 895-931, #25761). A 3824 server answers nothing.
                 let reply = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod, replyWithSummary: true))
                 guard let self else { return }
+                self.runningActions[key] = nil
                 // 2994 shows the new state in the panel and toasts only a revert, which opens another
                 // pull request (PullRequestDetailPanel.tsx:1027-1030).
                 if action == "revert" || action == "delete-branch" { self.toast(PullRequestDetailLogic.actionSuccess(action, provider: provider), nil, .success) }
@@ -516,6 +524,7 @@ final class PullRequestDetailBinding {
                 }
             } catch {
                 guard let self else { return }
+                self.runningActions[key] = nil
                 if self.stillShows(shown) { self.view.actionPending = false }
                 self.toast(PullRequestDetailLogic.actionFailure(action, provider: provider, inPanel: true), Self.failure(error, number: ref.number, provider: provider).1, .error)
             }
