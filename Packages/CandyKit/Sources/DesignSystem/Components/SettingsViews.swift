@@ -118,7 +118,8 @@ public final class SettingsRowView: DSView {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         titleLabel.font = dither ? DSFont.ui(13) : DSFont.ui(14, weight: .medium)
         titleLabel.color = Themed.color(dither ? \.foreground : \.contrastForeground)
-        detailText.balanced = !DesignGeometry.usesClassic(self)
+        // 4928's description is `text-pretty` (settingsLayout.tsx:557); Redesign keeps its own greedy wrap.
+        detailText.pretty = !DesignGeometry.usesClassic(self)
         if !detailIsError {
             detailText.color = dither ? Themed.color(\.mutedForeground)
                 : Themed.color(\.contrastMutedForeground, DesignGeometry.usesClassic(self) ? 0.8 : 1)
