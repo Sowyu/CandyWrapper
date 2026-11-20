@@ -468,6 +468,19 @@ public enum ModelTraits {
 
     /// The options a send carries (`modelOptionsForDispatch`): only ids that were set explicitly,
     /// resolved against the descriptors, plus the implicit fast mode default.
+    /// `hasRuntimeModelCatalog` (providerModels.ts at 4928): drivers that discover their models at runtime.
+    static let runtimeCatalogDrivers: Set<String> = ["opencode", "antigravity", "cursor", "pi", "acpRegistry"]
+
+    /// `isRuntimeModelDefaultAlias`: Antigravity's and ACP's default marker (`DEFAULT_MODEL_BY_PROVIDER`, model.ts:144-159).
+    static func isRuntimeDefaultMarker(_ driver: String, _ model: String?) -> Bool {
+        (driver == "antigravity" && model == "antigravity-default") || (driver == "acpRegistry" && model == "default")
+    }
+
+    /// `keepsUnavailableModelOptions`: Antigravity lists its default only as an alias, so its lookups are not gaps.
+    static func keepsUnavailableModelOptions(_ driver: String, _ model: String?) -> Bool {
+        driver != "antigravity" && !isRuntimeDefaultMarker(driver, model) && runtimeCatalogDrivers.contains(driver)
+    }
+
     public static func dispatchOptions(_ model: ServerProviderModel?, _ selections: [ProviderOptionSelection]?) -> [ProviderOptionSelection]? {
         let withFast = withImplicitFastMode(model, selections)
         guard let withFast, !withFast.isEmpty else { return nil }
