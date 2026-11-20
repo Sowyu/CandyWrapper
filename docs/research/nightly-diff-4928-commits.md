@@ -1516,7 +1516,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 32fdad5f49 | #32151 | thread | fix(web): timeline minimap preview no longer steals hover or jumps around | port |
 | 5b11efe5df | #30473 | thread | fix(clients): images the agent opens stay visible in the chat | ported in 2eb8794e |
 | 11611419f3 | #33396 | thread | fix(web): trackpad flicks over the right panel tabs no longer navigate back | n/a: browser back-swipe navigation, which AppKit views don't have |
-| 1c17285e58 | #28084 | thread | fix(shared): cite assistant messages with IDs over 512 characters | port |
+| 1c17285e58 | #28084 | thread | fix(shared): cite assistant messages with IDs over 512 characters | ported (thread-4): ThreadAssistantCitation.parse takes ids up to 4,096 characters and hrefs up to 256,168 |
 | d835e430db | #22874 | thread | fix(web): question answers submit while normal sends are blocked | port |
 | 691b9709b0 | #26408 | thread | fix(web): Ctrl + "+" zooms on keyboard layouts with a dedicated plus key | n/a: browser zoom shortcuts on keyboard layouts; CandyWrapper has no page zoom |
 | b3f5d52701 | #24138 | thread | fix(composer): steer instead of queueing during automatic compaction | port |
