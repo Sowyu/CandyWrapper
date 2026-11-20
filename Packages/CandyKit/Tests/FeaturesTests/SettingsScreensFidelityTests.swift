@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// Actual 3824 browser screens at 1100 × 780, cropped to the 1020 × 700 route panel.
+/// Actual 4928 browser screens at 1100 × 780, cropped to the 1020 × 700 route panel.
 /// Keep the component suites: they check states that the full-screen capture does not contain.
 @MainActor @Suite(.fidelity)
 struct SettingsScreensFidelityTests {
@@ -40,35 +40,36 @@ struct SettingsScreensFidelityTests {
         // The browser fixture uses T3's default order; CandyWrapper defaults to manual ordering.
         context.client = ClientSettings(decoding: .object(["sidebarProjectSortOrder": .string("updated_at")]))
         context.scope = SettingsScopeState(environments: [SettingsScopeEnvironment(
-            id: "sandbox", label: "miniko", machine: "mac-mini", settings: ServerSettingsValues(.object([:])),
+            id: "sandbox", label: "Sandbox Mac", machine: "mac-mini", settings: ServerSettingsValues(.object([:])),
             capabilities: ["threadAutoSettlement", "threadRestartContinuation", "projectSettingsOverrides", "storageCleanup", "storageCleanupRun"])], primaryId: "sandbox",
             projects: [SettingsScopeProject(key: "demo", displayName: "demo-repo", members: [
                 .init(environmentId: "sandbox", projectId: "demo", title: "demo-repo",
-                      workspaceRoot: FileManager.default.homeDirectoryForCurrentUser
-                        .appendingPathComponent("CandyWrapper-research/sandbox-3824-ref/demo-repo").path)])])
+                      workspaceRoot: "/Users/Shared/cw-sandbox-4928/demo-repo")])])
         context.scheduledTasks = ["sandbox": .loaded([])]
         context.subscribeResourceTelemetry = { _, receive in receive(telemetryFixture(dark: dark)); return nil }
         return context
     }
 
+    /// The counters 39-settings-diagnostics shows in each theme's 4928 capture (they are live, so the two differ).
     static func telemetryFixture(dark: Bool) -> JSONValue {
+        let gb = 1024.0
         func group(_ cpu: Double, _ memory: Double, _ count: Int, _ read: Double, _ write: Double) -> JSONValue {
             .object(["currentCpuPercent": .number(cpu), "currentRssBytes": .number(memory * 1_048_576),
                      "processCount": .number(Double(count)), "processStarts": .number(Double(count)), "processExits": .number(0),
-                     "peakRssBytes": .number((dark ? 537 : 585) * 1_048_576), "cpuTimeMs": .number(dark ? 990 : 2610),
+                     "peakRssBytes": .number((dark ? 2.24 : 2.25) * gb * 1_048_576), "cpuTimeMs": .number(dark ? 770 : 1430),
                      "ioReadBytesPerSecond": .number(read * 1_048_576), "ioWriteBytesPerSecond": .number(write * 1024),
-                     "ioReadBytes": .number((dark ? 59.4 : 169) * 1_048_576), "ioWriteBytes": .number((dark ? 96 : 508) * 1024)])
+                     "ioReadBytes": .number(79.1 * 1_048_576), "ioWriteBytes": .number((dark ? 128 : 240) * 1024)])
         }
         return .object(["sampleIntervalMs": .number(1000), "readAt": .string(UsageFormat.isoString(TimestampFormat.nowMs())),
                         "power": .object(["thermalState": .string("unknown")]),
                         "health": .object(["native": .object(["status": .string("healthy")])]),
-                        "groups": .object(["allT3": group(dark ? 39.9 : 59, dark ? 508 : 584, 5, dark ? 26 : 44.7, dark ? 15.6 : 47.1),
-                                           "backend": group(dark ? 38.1 : 57.5, dark ? 501 : 577, 4, dark ? 26 : 44.7, dark ? 15.6 : 47.1),
-                                           "electron": group(0, 0, 0, 0, 0), "monitor": group(dark ? 1.8 : 1.5, dark ? 6.48 : 7.11, 1, 0, 0)])])
+                        "groups": .object(["allT3": group(dark ? 5.4 : 2.8, (dark ? 2.24 : 2.25) * gb, 14, 0, dark ? 15.8 : 15.7),
+                                           "backend": group(dark ? 3.5 : 1.8, (dark ? 2.23 : 2.24) * gb, 13, 0, dark ? 15.8 : 15.7),
+                                           "electron": group(0, 0, 0, 0, 0), "monitor": group(dark ? 2.0 : 1.1, dark ? 10.4 : 11.2, 1, 0, 0)])])
     }
 
     static func providerFixture(_ context: SettingsPageContext) {
-        let names = ["Opus 5.5", "Sonnet 5.5", "Fable 5.1", "Fable 5", "Opus 5", "Opus 4.8", "Opus 4.7",
+        let names = ["Opus 5.5", "Sonnet 5.5", "Fable 5.2", "Fable 5.1", "Fable 5", "Opus 5", "Opus 4.8", "Opus 4.7",
                      "Opus 4.6", "Opus 4.5", "Sonnet 5", "Sonnet 4.6", "Haiku 5.5", "Haiku 4.5"]
         let models = names.map { name in
             var options = [ProviderOptionDescriptor(id: name == "Haiku 4.5" ? "thinking" : "reasoningEffort", label: "Reasoning", type: .select)]
@@ -79,12 +80,12 @@ struct SettingsScreensFidelityTests {
                                        optionDescriptors: options)
         }
         var claude = ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", models: models)
-        claude.version = "2.1.312"
-        claude.auth = .object(["status": .string("authenticated"), "label": .string("Claude Max Subscription"),
+        claude.version = "2.1.328"
+        claude.auth = .object(["status": .string("authenticated"), "label": .string("Claude Ultra Subscription"),
                                "email": .string("account@example.invalid")])
         var codex = ServerProvider(instanceId: "codex", driver: "codex")
-        codex.version = "0.164.0"
-        codex.auth = .object(["status": .string("authenticated"), "label": .string("ChatGPT Pro 100 Subscription")])
+        codex.version = "0.170.0"
+        codex.auth = .object(["status": .string("authenticated"), "label": .string("ChatGPT Plus Subscription")])
         let settings = JSONValue.object(["idleCompaction": .string("onReturn"), "favorites": .array([])])
         var config = ServerProviderConfig(providers: [codex, claude], settings: ServerThreadDefaults(raw: settings))
         config.platformOS = "darwin"
@@ -97,6 +98,17 @@ struct SettingsScreensFidelityTests {
     static func settings(_ section: SettingsSection, fraction: CGFloat, dark: Bool) -> AppRouteModalView {
         let context = context(dark: dark)
         if section == .providers { providerFixture(context) }
+        if section == .archive {
+            // 35 lists "Old experiment", archived and created 16 (dark) or 22 (light) minutes before the capture.
+            let at = UsageFormat.isoString(TimestampFormat.nowMs() - (dark ? 16 : 22) * 60_000)
+            let archived = JSONValue.object([
+                "projects": .array([.object(["id": .string("demo"), "title": .string("demo-repo"),
+                                             "workspaceRoot": .string("/Users/Shared/cw-sandbox-4928/demo-repo")])]),
+                "threads": .array([.object(["id": .string("archived"), "projectId": .string("demo"), "title": .string("Old experiment"),
+                                            "archivedAt": .string(at), "createdAt": .string(at)])]),
+            ])
+            context.request = { _, _, _ in archived }
+        }
         let page = SettingsPageView()
         page.header.isRouteModal = true
         page.header.section = section
@@ -119,6 +131,13 @@ struct SettingsScreensFidelityTests {
         }
         if let connections = body as? ConnectionsSettingsView { connections.showsAccess = false }
         (body as? SettingsPageBase)?.refresh()
+        if section == .archive {
+            // The archive loads in a main-actor task; let it land before the snapshot.
+            let deadline = Date().addingTimeInterval(2)
+            while Date() < deadline, !descendants(body).contains(where: { $0 is ArchivedThreadRow }) {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+            }
+        }
         (body as? SettingsPageBase)?.onHeightChange = { [weak page] in page?.pageChanged() }
         if let appearance = body as? AppearanceSettingsView { appearance.splitDiffsPage() }
         if section == .providers {
