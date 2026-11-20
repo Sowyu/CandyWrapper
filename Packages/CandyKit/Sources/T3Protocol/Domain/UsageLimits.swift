@@ -31,11 +31,25 @@ public struct UsageLimitWindow: Hashable, Sendable {
 
 /// `ServerProviderResetCredits`.
 public struct UsageResetCredits: Hashable, Sendable {
+    /// `ServerProviderResetCreditOption` (4928 providerUsageLimits.ts): one kind of banked reset, such as
+    /// Claude's weekly reset or its Fable-only one, redeemed by its `creditId`.
+    public struct Option: Hashable, Sendable {
+        public var creditId: String
+        public var label: String
+        public var description: String
+        public var availableCount: Int
+        public var expiresAt: String?
+        public init(creditId: String, label: String, description: String, availableCount: Int, expiresAt: String? = nil) {
+            self.creditId = creditId; self.label = label; self.description = description; self.availableCount = availableCount; self.expiresAt = expiresAt
+        }
+    }
     public var availableCount: Int
     public var nextExpiresAt: String?
     public var nextCreditId: String?
-    public init(availableCount: Int, nextExpiresAt: String? = nil, nextCreditId: String? = nil) {
-        self.availableCount = availableCount; self.nextExpiresAt = nextExpiresAt; self.nextCreditId = nextCreditId
+    /// Present when resets differ in what they refill; absent from 3824 servers.
+    public var options: [Option]?
+    public init(availableCount: Int, nextExpiresAt: String? = nil, nextCreditId: String? = nil, options: [Option]? = nil) {
+        self.availableCount = availableCount; self.nextExpiresAt = nextExpiresAt; self.nextCreditId = nextCreditId; self.options = options
     }
 }
 
@@ -63,7 +77,14 @@ public struct ProviderUsageLimits: Hashable, Sendable {
         windows = (json["windows"]?.arrayValue ?? []).compactMap(UsageLimitWindow.init(json:))
         credentialFingerprint = json["credentialFingerprint"]?.stringValue
         if let r = json["resetCredits"], let count = r["availableCount"]?.intValue {
-            resetCredits = UsageResetCredits(availableCount: count, nextExpiresAt: r["nextExpiresAt"]?.stringValue, nextCreditId: r["nextCreditId"]?.stringValue)
+            // `ForwardCompatibleArray`: an option this client can't read is dropped, not the whole list.
+            let options = r["options"]?.arrayValue.map { $0.compactMap { o -> UsageResetCredits.Option? in
+                guard let id = o["creditId"]?.stringValue, let label = o["label"]?.stringValue,
+                      let text = o["description"]?.stringValue, let n = o["availableCount"]?.intValue else { return nil }
+                return UsageResetCredits.Option(creditId: id, label: label, description: text, availableCount: n, expiresAt: o["expiresAt"]?.stringValue)
+            } }
+            resetCredits = UsageResetCredits(availableCount: count, nextExpiresAt: r["nextExpiresAt"]?.stringValue,
+                                             nextCreditId: r["nextCreditId"]?.stringValue, options: options)
         }
         if let e = json["externalUsage"], let label = e["label"]?.stringValue, let url = e["url"]?.stringValue { externalUsage = ExternalUsage(label: label, url: url) }
         unavailableReason = json["unavailable"]?["reason"]?.stringValue
@@ -116,11 +137,14 @@ public struct UsageLimitSourceSnapshot: Hashable, Sendable {
 /// `ProviderConsumeResetCreditInput`: a native instance, or a hub's account and credit.
 public enum UsageResetCreditTarget: Equatable, Sendable {
     case instance(String)
+    /// A native instance's chosen credit (4928 `creditId`, #34106).
+    case instanceCredit(String, creditId: String)
     case hub(sourceId: String, accountId: String, creditId: String)
 
     public var payload: JSONValue {
         switch self {
         case .instance(let id): .object(["instanceId": .string(id)])
+        case .instanceCredit(let id, let c): .object(["instanceId": .string(id), "creditId": .string(c)])
         case .hub(let s, let a, let c): .object(["sourceId": .string(s), "accountId": .string(a), "creditId": .string(c)])
         }
     }
@@ -430,6 +454,33 @@ public enum UsageLimitsLogic {
         if reset <= nowMs { return "resets now" }
         if reset - nowMs < 60_000 { return "Resets momentarily" }
         return "resets in \(duration(Double(reset - nowMs)))"
+    }
+
+    /// `ResetCreditChoice` (packages/shared/src/usageLimits.ts, #34106): one redeemable reset as the
+    /// views offer it, with its target already naming the chosen credit.
+    public struct ResetChoice: Equatable, Sendable {
+        public var key: String
+        public var summary: String
+        public var actionLabel: String
+        public var confirmDescription: String
+        public var availableCount: Int
+        public var target: UsageResetCreditTarget
+    }
+
+    /// `resetCreditChoices`: an option per kind of reset on an instance that lists them, else the
+    /// banked count as one choice.
+    public static func resetChoices(_ c: UsageResetCredits, target: UsageResetCreditTarget, nowMs: Int64, compact: Bool = false) -> [ResetChoice] {
+        if let options = c.options, case .instance(let id) = target {
+            return options.map { o in
+                let expires = o.expiresAt.flatMap(T3Timestamp.parseEpochMs).map { duration(Double($0 - nowMs)) }
+                return ResetChoice(key: o.creditId, summary: "\(o.label) · \(o.availableCount) left" + (expires.map { " · expires in \($0)" } ?? ""),
+                                   actionLabel: "Use", confirmDescription: "\(o.label): \(o.description) This cannot be undone.",
+                                   availableCount: o.availableCount, target: .instanceCredit(id, creditId: o.creditId))
+            }
+        }
+        return [ResetChoice(key: "next", summary: resetCreditsSummary(c, nowMs: nowMs, compact: compact), actionLabel: "Use reset",
+                            confirmDescription: "This redeems one credit on your account and clears the current rate-limit windows. It cannot be undone.",
+                            availableCount: c.availableCount, target: target)]
     }
 
     /// `resetCreditsSummary`.

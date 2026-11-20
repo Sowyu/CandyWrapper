@@ -206,40 +206,64 @@ final class UsageLimitWindowBar: DSView {
     }
 }
 
-/// `ResetCredits`: the banked count, `Use reset` (confirmed by the app) and the outcome.
+/// `ResetCredits`: a row per reset choice, its summary and `Use reset` or `Use` (confirmed by the app),
+/// then the outcome. A server that lists kinds of reset, such as Claude's weekly and Fable resets,
+/// gets one row each, `flex-col gap-1` (UsageLimits.tsx, #34106).
 public final class UsageResetCreditsView: DSView {
-    private let summary: LabelView
-    public let button = ButtonView("Use reset", variant: .outline, size: .xs)
+    private var rows: [(choice: UsageLimitsLogic.ResetChoice, summary: LabelView, button: ButtonView?)] = []
     private let status = UsageStyle.label("", 12)
+    /// The choice whose button was pressed last, read by `onUse`.
+    public private(set) var chosen: UsageLimitsLogic.ResetChoice?
     public var onUse: (() -> Void)?
-    public var busy = false { didSet { button.title = busy ? "Using…" : "Use reset"; button.isEnabled = !busy && canUse; needsLayout = true } }
-    public var canUse = true { didSet { button.isEnabled = !busy && canUse } }
+    public var busy = false { didSet { restyle() } }
+    public var canUse = true { didSet { restyle() } }
     public var statusText: String? { didSet { status.text = statusText ?? ""; needsLayout = true } }
     let available: Bool
 
-    public init(credits: UsageResetCredits, nowMs: Int64) {
-        summary = UsageStyle.label(UsageLimitsLogic.resetCreditsSummary(credits, nowMs: nowMs), 12, color: Themed.color(\.mutedForeground), tabular: true)
-        available = credits.availableCount > 0
+    public init(credits: UsageResetCredits, nowMs: Int64, target: UsageResetCreditTarget? = nil) {
+        let choices = UsageLimitsLogic.resetChoices(credits, target: target ?? .instance(""), nowMs: nowMs)
+        available = choices.contains { $0.availableCount > 0 }
         super.init(frame: .zero)
-        addSubview(summary)
-        if available { addSubview(button) }
+        for c in choices {
+            let summary = UsageStyle.label(c.summary, 12, color: Themed.color(\.mutedForeground), tabular: true)
+            addSubview(summary)
+            var button: ButtonView?
+            if c.availableCount > 0 {
+                let b = ButtonView(c.actionLabel, variant: .outline, size: .xs)
+                b.action = { [weak self] in self?.chosen = c; self?.onUse?() }
+                addSubview(b)
+                button = b
+            }
+            rows.append((c, summary, button))
+        }
         addSubview(status)
-        button.action = { [weak self] in self?.onUse?() }
     }
 
-    public func height(forWidth width: CGFloat) -> CGFloat { 24 }
+    private func restyle() {
+        for r in rows { r.button?.title = busy ? "Using…" : r.choice.actionLabel; r.button?.isEnabled = !busy && canUse }
+        needsLayout = true
+    }
+
+    public func height(forWidth width: CGFloat) -> CGFloat { CGFloat(rows.count) * 24 + CGFloat(max(0, rows.count - 1)) * 4 }
 
     public override func layout() {
         super.layout()
-        var x: CGFloat = 0
-        summary.frame = NSRect(x: 0, y: 4, width: ceil(summary.textWidth) + 1, height: 16)
-        x = summary.frame.maxX + 12
-        if available {
-            let w = button.intrinsicContentSize.width
-            button.frame = NSRect(x: x, y: 0, width: w, height: 24)
-            x += w + 12
+        // ponytail: the outcome stays beside the pressed row, as before 4928; T3 now gives it a line of its own
+        // under the rows, which needs the banner and segment to grow with it.
+        var y: CGFloat = 0
+        var statusFrame = NSRect.zero
+        for (i, r) in rows.enumerated() {
+            r.summary.frame = NSRect(x: 0, y: y + 4, width: ceil(r.summary.textWidth) + 1, height: 16)
+            var x = r.summary.frame.maxX + 12
+            if let b = r.button {
+                let w = b.intrinsicContentSize.width
+                b.frame = NSRect(x: x, y: y, width: w, height: 24)
+                x += w + 12
+            }
+            if r.choice == chosen || i == 0 { statusFrame = NSRect(x: x, y: y + 4, width: max(0, bounds.width - x), height: 16) }
+            y += 28
         }
-        status.frame = NSRect(x: x, y: 4, width: max(0, bounds.width - x), height: 16)
+        status.frame = statusFrame
     }
 }
 
@@ -262,7 +286,7 @@ public struct UsageLimitsModel {
 public final class UsageLimitsView: DSView, SettingsGroupRow {
     public var model = UsageLimitsModel() { didSet { rebuild() } }
     /// A segment wants its account's reset credit used (the app confirms first).
-    public var onUseReset: ((UsageLimitAccount) -> Void)?
+    public var onUseReset: ((UsageLimitAccount, UsageLimitsLogic.ResetChoice?) -> Void)?
     public var onEnableCursor: ((String) -> Void)?
     public var onOpenURL: ((String) -> Void)?
     private var items: [NSView & SettingsGroupRow] = []
@@ -345,7 +369,7 @@ final class UsagePoolSectionView: DSView, SettingsGroupRow {
             }
             let card = UsagePoolCardView(window: w, color: color, nowMs: nowMs, label: details?.label, description: details?.description,
                                          resetStatus: status)
-            card.onUseReset = { [weak owner] a in owner?.onUseReset?(a) }
+            card.onUseReset = { [weak owner] a, c in owner?.onUseReset?(a, c) }
             return card
         }
         cards.forEach(addSubview)
@@ -397,7 +421,7 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     /// `role="status"` under the segments: the account's name in `font-medium text-foreground`, then the words.
     // ponytail: keyed by account, so every card with that account shows it; key by window too if users notice
     private let resetStatus: TextBlockView?
-    var onUseReset: ((UsageLimitAccount) -> Void)?
+    var onUseReset: ((UsageLimitAccount, UsageLimitsLogic.ResetChoice?) -> Void)?
 
     init(window w: UsageLimitPoolWindow, color: NSColor, nowMs: Int64, label: String?, description: String?,
          resetStatus status: (account: UsageLimitAccount, text: String)? = nil) {
@@ -435,7 +459,7 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
             let seg = UsagePoolSegmentView(account: col.account, window: cw, reset: restores[col.account.key], refillPercent: col.refillPercent,
                                            color: color, nowMs: nowMs, index: i + 1,
                                            columns: w.columns.count, showAccountName: w.columns.count > 1)
-            seg.onUseReset = { [weak self] a in self?.onUseReset?(a) }
+            seg.onUseReset = { [weak self] a, c in self?.onUseReset?(a, c) }
             segments.append(seg)
             addSubview(seg)
             let row = UsagePoolLegendRow(segment: seg)
@@ -514,7 +538,7 @@ final class UsagePoolSegmentView: ControlView {
     let nowMs: Int64
     let index: Int
     var isWide = false { didSet { if isWide != oldValue { configure() } } }
-    var onUseReset: ((UsageLimitAccount) -> Void)?
+    var onUseReset: ((UsageLimitAccount, UsageLimitsLogic.ResetChoice?) -> Void)?
     private let number: LabelView
     private let name: NSView?
     private let percent: LabelView
@@ -655,10 +679,10 @@ final class UsagePoolSegmentView: ControlView {
 
     func openPopover(from trigger: NSView) {
         let content = UsageSegmentPopoverContent(segment: self)
-        content.onUseReset = { [weak self] in
+        content.onUseReset = { [weak self] choice in
             guard let self else { return }
             self.popupHost?.closeAll()
-            self.onUseReset?(self.account)
+            self.onUseReset?(self.account, choice)
         }
         PopoverView(content: content, padding: .default, width: .auto).show(from: trigger, placement: PopupPlacement(side: .top, align: .center, sideOffset: 6))
     }
@@ -751,7 +775,7 @@ final class UsageSegmentPopoverContent: DSView {
     /// Each part with its height and the gap above it.
     private var parts: [(view: NSView, height: CGFloat, gap: CGFloat)] = []
     private var rules: [DSView] = []
-    var onUseReset: (() -> Void)?
+    var onUseReset: ((UsageLimitsLogic.ResetChoice) -> Void)?
 
     init(segment s: UsagePoolSegmentView) {
         super.init(frame: .zero)
@@ -787,19 +811,23 @@ final class UsageSegmentPopoverContent: DSView {
         if let t = s.timeLeft { rows2.append(("Even pace", "\(t)% left by now")) }
         if let r = s.reset, r.restoresPercent > 0 { rows2.append(("Restores", "+\(r.restoresPercent)% of pool")) }
         section(rows2)
-        if a.redeem != nil, let credits = a.limits.resetCredits, credits.availableCount > 0 {
-            let line = DSView()
-            let text = UsageStyle.label(UsageLimitsLogic.resetCreditsSummary(credits, nowMs: s.nowMs, compact: true), 12,
-                                        color: Themed.color(\.mutedForeground), tabular: true)
-            let button = ButtonView("Use reset", variant: .outline, size: .xs)
-            button.action = { [weak self] in self?.onUseReset?() }
-            line.addSubview(text)
-            line.addSubview(button)
-            text.frame = NSRect(x: 0, y: 4, width: 180, height: 16)
-            let bw = button.intrinsicContentSize.width
-            button.frame = NSRect(x: 256 - bw, y: 0, width: bw, height: 24)
+        // UsageLimitsPooled.tsx (#34106): a row per reset choice, `flex-col gap-1.5`.
+        if let redeem = a.redeem, let credits = a.limits.resetCredits, credits.availableCount > 0 {
             rule()
-            add(line, 24, gap: 10)
+            for (i, choice) in UsageLimitsLogic.resetChoices(credits, target: redeem.target, nowMs: s.nowMs, compact: true).enumerated() {
+                let line = DSView()
+                let text = UsageStyle.label(choice.summary, 12, color: Themed.color(\.mutedForeground), tabular: true)
+                line.addSubview(text)
+                text.frame = NSRect(x: 0, y: 4, width: 180, height: 16)
+                if choice.availableCount > 0 {
+                    let button = ButtonView(choice.actionLabel, variant: .outline, size: .xs)
+                    button.action = { [weak self] in self?.onUseReset?(choice) }
+                    line.addSubview(button)
+                    let bw = button.intrinsicContentSize.width
+                    button.frame = NSRect(x: 256 - bw, y: 0, width: bw, height: 24)
+                }
+                add(line, 24, gap: i == 0 ? 10 : 6)
+            }
         }
     }
 

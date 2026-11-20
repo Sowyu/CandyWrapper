@@ -161,7 +161,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | e6e2ab05cc | #28952 | usage | feat(usage): filter Usage totals by provider and model | ported (panels-2): each summary read sends the environment's `usageModelFilter` server setting as `modelFilter`, UsageController |
-| 9e1f81c788 | #34106 | thread | feat(claude): Fable resets are offered and redeemed apart from weekly resets | left (panels-2): Fable resets apart from weekly ones, needs the limits model |
+| 9e1f81c788 | #34106 | thread | feat(claude): Fable resets are offered and redeemed apart from weekly resets | ported (panels-4): Fable and weekly resets get a row and a Use button each, and the confirm names the choice (UsageResetCredits.Option, UsageLimitsLogic.resetChoices, UsageResetCreditsView, the Usage segment popover; packages/shared/src/usageLimits.ts, UsageLimits.tsx:364-387) |
 | 0b21a82aa3 | #35427 | usage | fix(shared): pooled limits weight each account by its plan size | left (panels-2): pooled limits weighting, not checked |
 | 63d5c6dfe4 | #34146 | usage | feat(opencode): read usage limits from the connected server | left (panels-2): not checked |
 | 7fab4ef978 | #33993 | usage | perf(usage): the Usage page shows cost and tokens at once instead of after a full scan | ported (panels-2): with nothing shown, the first read is `provisional`, then the plain read, then the awaiting one, UsageController.fetchProvisional |
