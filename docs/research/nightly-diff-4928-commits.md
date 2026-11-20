@@ -778,13 +778,13 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 1ad78611ba | #25511 | composer | fix(web): keep the default instance's draft model off custom instances | port |
 | 868524f259 | #27384 | composer | fix(web): Backspace no longer re-nests a checkbox under a bullet | port |
 | e71f414cb0 | #27472 | composer | fix(web): Esc in the theme color picker restores the previous color | port |
-| 6dddccb244 | #27837 | composer | fix(shared): /Model with a query still opens the model picker | port |
+| 6dddccb244 | #27837 | composer | fix(shared): /Model with a query still opens the model picker | skip: superseded; 4928 composerTrigger.ts has no `/model <query>` trigger left |
 | 71d52eb61b | #28083 | composer | fix(web): align composer context icons and space their labels | port |
 | dc102e5062 | #28209 | composer | fix(web): skill menus show loading while project skills arrive | port |
 | ce48e45900 | #28499 | composer | fix(web): prevent composer image thumbnail flicker | port |
 | 4ff9a32bad | #27457 | composer | fix(web): format inline code typed with a dead-key backtick | port |
 | 3f695422ae | #24684 | composer | fix(web): a failed plan follow-up no longer overwrites the next draft | port |
-| ab06e2a265 | #29165 | composer | fix(clients): attachment sizes just under 1 MB no longer read "1024 KB" | port |
+| ab06e2a265 | #29165 | composer | fix(clients): attachment sizes just under 1 MB no longer read "1024 KB" | ported: ComposerFileRow.formatSize picks the unit after rounding |
 | d1e5044c67 | #29158 | composer | fix(shared): context chip labels no longer split an emoji at the 200-character cap | port |
 | 228e289506 | #29828 | composer | fix(web): drafts saved by older versions load instead of being wiped | port |
 | 92388d5a08 | #29789 | composer | fix(web): picking a custom model named like a Codex alias keeps that model | port |
@@ -844,7 +844,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | ec01233fb6 | #35528 | composer | fix(web): pasted images stay at their original insertion point | port |
 | 1ea5e4b42d | #35122 | composer | fix(web): typing in the file editor no longer jumps to the prompt | port |
 | 37c266d25a | #34537 | composer | fix(web): showing a composer banner no longer makes the page restyle everything until reload | port |
-| cbdf35f2f0 | #23166 | composer | fix(web): enable Send when the composer holds only a thread context | port |
+| cbdf35f2f0 | #23166 | composer | fix(web): enable Send when the composer holds only a thread context | already in CandyWrapper: thread and machine contexts are chips in the prompt text, so the prompt is never empty and Send stays enabled |
 | 62405fce57 | #30583 | composer | fix(web): preserve thread identity across composer pastes | port |
 | 2b7fc890de | #30947 | composer | fix(web): a send that finishes after you leave its thread no longer blanks the open thread's composer | port |
 | 3c8f3f2c3d | #31314 | composer | fix(web): up-arrow recall keeps thread and machine mentions | port |
@@ -867,7 +867,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | bcb0604581 | #37661 | composer | fix(web): model picker options no longer jump a pixel on hover | port |
 | 6f5838f9bc | #37691 | composer | fix(client-runtime): a relative "Add project starts in" opens the picker under home | port |
 | caef8c3847 | #32912 | composer | fix(composer): show local command actions while running | port |
-| c69f4b780b | #31590 | composer | fix(web): model picker lists a model reported twice once | port |
+| c69f4b780b | #31590 | composer | fix(web): model picker lists a model reported twice once | ported: ModelPickerSections lists a model reported twice once |
 | 750e492ed6 | #37771 | composer | feat(web): copy snapshots into another composer | port |
 | e514c36f3c | #31174 | composer | fix(web): project picker jump shortcuts follow the filtered rows | port |
 | f39ecd3df8 | #29663 | composer | fix(web): a rule typed under a line stays a rule when sent | port |

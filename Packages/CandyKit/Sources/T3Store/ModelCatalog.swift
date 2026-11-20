@@ -296,8 +296,11 @@ public struct ModelPickerSections: Sendable {
                     let right = order.firstIndex(of: b.element.slug) ?? Int.max
                     return left == right ? a.offset < b.offset : left < right
                 }.map(\.element)
+            // A model the provider reports twice lists once (#31590).
+            var seen = Set<String>()
             for m in models {
                 let key = "\(e.id.rawValue):\(m.slug)"
+                guard seen.insert(key).inserted else { continue }
                 flat.append(ModelPickerItem(model: m, entry: e, isFavorite: favoriteKeys.contains(key),
                                             isSelected: selectedKeys.map { $0.contains(key) }
                                                 ?? (e.id == active && (m.slug == activeModel || m.aliases?.contains(activeModel) == true))))

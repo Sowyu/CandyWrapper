@@ -66,4 +66,10 @@ struct Composer4928Tests {
         view.banner = ThreadErrorState.Banner(message: "Boom", variant: .error)
         #expect(view.refresh.isHidden)
     }
+
+    /// #29165: just under 1 MB reads "1.0 MB".
+    @Test func sizeJustUnderAMegabyte() {
+        #expect(ComposerFileRow.formatSize(1024 * 1024 - 100) == "1.0 MB")
+        #expect(ComposerFileRow.formatSize(1500) == "2 KB")
+    }
 }
