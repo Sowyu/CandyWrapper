@@ -399,6 +399,7 @@ public final class SidebarContentView: DSView {
         SidebarModel.ProjectGrouping.current = grouping
         if state.grouping != grouping { state.grouping = grouping }
         state.boringSidebarEnabled = c.bool("boringSidebarEnabled")
+        state.boringSidebarMultilineRows = c.bool("boringSidebarMultilineRows")
         let working = c.bool("sidebarWorkingShelfEnabled")
         if state.workingShelfEnabled != working {
             // Off resets the tracker; on starts from a fresh baseline (`inboxReturns.observe(null)`).

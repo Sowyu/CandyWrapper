@@ -15,7 +15,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 5211acfe95 | #26463 | sidebar | feat(web): boring sidebar can show folder threads on two lines | left: the two-line folder row and its Labs switch, see PROGRESS.md |
+| 5211acfe95 | #26463 | sidebar | feat(web): boring sidebar can show folder threads on two lines | ported (composer-5): Labs "Two-line folder rows" (`boringSidebarMultilineRows`, client setting, shown while Boring sidebar is on) puts folder threads on two lines, 54pt with the meta line (worktree glyph and branch or scratch machine, terminal, PR, issue, machine and agents) and 36pt without, the trailing icons then on the title line. Folder row titles now take the card colors. Spec sidebar-folder-rows (0.96 to 2.44%). Settings search catalog entry left to the settings agent |
 | 911212bf4f | #26495 | composer | fix(web): open project picker from boring sidebar's header | already in CandyWrapper: App/Sources/PaletteCommands.swift:916 opens the picker in every sidebar |
 
 ## Port group composer-lists (1)

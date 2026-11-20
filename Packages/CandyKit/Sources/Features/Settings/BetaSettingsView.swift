@@ -17,6 +17,14 @@ public final class BetaSettingsView: SettingsPageBase {
         let folders = clientSwitch("boring-sidebar",
             "Group sidebar threads into project folders. Pinned threads stay on top, and Snoozed and Settled stay below the folders.",
             key: "boringSidebarEnabled", label: "Boring sidebar (group by project)", title: "Boring sidebar (group by project)")
+        // `BoringSidebarMultilineRow` (LabsSettingsPanel.tsx:54-80 at 4928, #26463), shown while the boring sidebar is on.
+        let multiline = clientSwitch("boring-sidebar-multiline",
+            "In the boring sidebar, show folder threads on two lines: the title, then the branch, pull request, and agent.",
+            key: "boringSidebarMultilineRows", label: "Two-line folder rows", title: "Two-line folder rows")
+        binder.add { [weak self, weak multiline] in
+            guard let self, let multiline else { return }
+            multiline.isHidden = !self.context.client.bool("boringSidebarEnabled")
+        }
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"
         // T3's copy names the Connections group for links and its Sharing & access page for guests (LabsSettingsPanel.tsx at 3814).
@@ -55,7 +63,7 @@ public final class BetaSettingsView: SettingsPageBase {
             suggestions.isHidden = !self.context.scope.allStore("promptSuggestionsEnabled")
         }
         // #33131 removed the Legacy features section: plan mode and the context window indicator.
-        items = [section("beta", "Beta", [folders, guest, linked, suggestions])]
+        items = [section("beta", "Beta", [folders, multiline, guest, linked, suggestions])]
         binder.refresh()
     }
 }
