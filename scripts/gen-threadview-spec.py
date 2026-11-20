@@ -20,7 +20,7 @@ def load(name, until):
 g = {"__file__": os.path.join(ROOT, "scripts/gen-git-spec.py")}
 exec(load("gen-git-spec.py", "def toolbar_trigger"), g)
 m = {"__file__": os.path.join(ROOT, "scripts/gen-markdown-spec.py")}
-exec(load("gen-markdown-spec.py", "diff_rendering = "), m)
+exec(load("gen-markdown-spec.py", "main_chunk = "), m)
 lucide, control, panel_label, middle, machine, S = g["lucide"], g["control"], g["panel_label"], g["middle"], g["machine"], g["S"]
 ICON, CHEVRON_PANEL = g["ICON"], g["CHEVRON_PANEL"]
 
@@ -47,9 +47,11 @@ def card(density, open_in=True):
                  + control("primary", f'{lucide("git-commit-horizontal", ICON)}<span class="not-sr-only ml-0 truncate">Commit</span>')
                  + f'<span aria-hidden="true" class="{S["THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS"]}"></span>'
                  + control("secondary", lucide("chevron-down", CHEVRON_PANEL)) + '</div>')
-    changes = control("row", f'{lucide("file-diff", ICON)}<span class="flex-1 text-left">Changes</span>'
-                      '<span class="flex items-center gap-1.5 font-mono text-xs tabular-nums"><span class="text-diff-addition-foreground">+4</span>'
-                      '<span class="text-muted-foreground">-0</span></span>')
+    # GitActionsControl.tsx:1620-1660 (4928): base label (Uncommitted for a working tree diff, :1143) and counts in one row.
+    changes = control("row", f'{lucide("file-diff", ICON)}<span class="flex min-w-0 flex-1 items-baseline gap-1.5"><span class="shrink-0">Changes</span>'
+                      '<span class="pointer-events-auto min-w-0 truncate font-normal text-muted-foreground">Uncommitted</span>'
+                      '<span class="ml-auto flex shrink-0 items-baseline gap-2 ps-2 font-mono tabular-nums"><span class="text-diff-addition-foreground">+4</span>'
+                      '<span class="text-muted-foreground">-0</span></span></span>')
     separated = " border-t border-border/65" if density == "full" else ""
     return ('<div class="dropdown-glass isolate contain-paint grid max-h-full grid-rows-[minmax(0,1fr)] overflow-hidden rounded-2xl" '
             f'style="width:264px" data-density="{density}"><div><div>'
@@ -60,24 +62,25 @@ def card(density, open_in=True):
 
 cases = [{"name": f"card.{d}", "html": card(d), "native": {"kind": "card", "density": d}} for d in ["full", "compact", "essential"]]
 
-# ThreadDetailsPrRow.tsx:434-476 once the host answers: passing checks, watched, Merge offered.
+# ThreadDetailsPrRow.tsx:495-570 at 4928 (the title row is part `title`, ThreadDetailsControl.tsx) once the host answers: passing checks, watched, Merge offered.
 META = S["THREAD_DETAILS_PANEL_META_ACTION_CLASS"]
 ICON_PART = S["THREAD_DETAILS_PANEL_ICON_ACTION_CLASS"]
 CTRL = g["CTRL"]
 def meta(children, tone=""):
     base = f"{CTRL} {META}"
-    if "bg-primary" in tone:
+    if "bg-black/[0.035]" in tone:
         base = base.replace("bg-transparent", "").replace("h-6", "h-5")
     return f'<button type="button" class="{base} {tone}">{children}</button>'
 pr_row = ('<div style="width:246px"><div class="pb-1.5">'
           + control("row", f'{lucide("git-pull-request-arrow", "size-4 shrink-0 text-emerald-600 dark:text-emerald-300/90")}'
-                    '<span class="min-w-0 flex-1 text-left line-clamp-2 whitespace-normal leading-4.5">Add login redirect</span>', "h-auto min-h-8 py-0.75 items-start [&>svg]:mt-0.5")
+                    '<span class="min-w-0 flex-1 text-left line-clamp-2 whitespace-normal leading-4.5">Add login redirect</span>', "h-auto min-h-8 items-start pt-1.5 pb-0 disabled:opacity-100 sm:h-auto [&>svg]:mt-px")
           + '<div class="flex h-5 min-w-0 items-center gap-0.5 ps-9 pe-2.5 text-xs text-muted-foreground">'
           '<span class="me-1 shrink-0 tabular-nums">#42</span>'
           + meta(lucide("circle-check", "size-3.5 text-emerald-600 dark:text-emerald-300/90"))
           + f'<button type="button" class="{CTRL} {ICON_PART} group/watch">{lucide("eye", "size-3.5 group-hover/watch:hidden")}</button>'
           '<span class="flex-1"></span>'
-          + meta("Merge", "h-5 bg-primary text-primary-foreground hover:text-primary-foreground")
+          # ThreadDetailsControl.tsx:62-71 (4928): the primary tone is a faint pill, no longer bg-primary.
+          + meta("Merge", "bg-black/[0.035] text-foreground/80 hover:text-foreground hover:!bg-black/[0.06] data-pressed:!bg-black/[0.06] dark:bg-white/[0.08] dark:hover:!bg-white/[0.12] dark:data-pressed:!bg-white/[0.12] h-5 focus-visible:ring-1 focus-visible:ring-offset-0")
           + '</div></div></div>')
 cases.append({"name": "pr.merge", "html": pr_row, "native": {"kind": "pr"}})
 
@@ -95,20 +98,21 @@ for outcome, glyph, fill, stale in [("approved", "circle-check", "fill-emerald-5
 
 # ---------------------------------------------------------------------------------------------- Chips
 
+# ContextChip.tsx:8-50 (4928): the ink falls back from --context-chip-message-ink, the image kind lost its
+# bubble, and every accent is a kind class over the --context-chip-* colors T3 computes at runtime
+# (themePalette.ts:736), which the prepare gets by importing T3's main chunk.
 BASE = ("inline-flex max-w-full items-center gap-[0.2em] font-medium leading-[normal] text-(--context-chip-ink) "
-        "[--context-chip-ink:var(--context-chip-accent)] [--document-icon-stroke:var(--context-chip-ink)] "
+        "[--context-chip-ink:var(--context-chip-message-ink,var(--context-chip-accent))] [--document-icon-stroke:var(--context-chip-ink)] "
         "[&_svg]:block [&_svg]:size-[1em] [&_svg]:shrink-0 [&_svg]:self-center "
         "[button&,a&,[data-popup-open]&]:cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 "
         "focus-visible:outline-current rounded-sm disabled:cursor-default")
-ACCENTS = {"thread": "oklch(0.62_0.12_190)", "terminal": "oklch(0.62_0.134_163)", "file": "oklch(0.62_0.136_237)", "image": "oklch(0.62_0.136_237)"}
-COMPOUND = ""
+KINDS = {k: f"[--context-chip-accent:var(--context-chip-{k})]" for k in ["thread", "terminal", "file", "image"]}
 LABEL = '<span class="block min-w-0 self-baseline overflow-x-clip text-ellipsis whitespace-nowrap underline decoration-transparent decoration-1 underline-offset-[0.2em]{extra}" data-slot="context-chip-label">{text}</span>'
 
 def context_chip(tag, kind, inner, style=""):
-    base = BASE.replace("rounded-sm", "") if kind == "image" else BASE
-    cls = f"{base} {COMPOUND}" + (" rounded-lg border border-(--context-chip-accent)/30 bg-(--context-chip-accent)/10 px-1.5" if kind == "image" else "") + (" no-underline" if tag == "a" else "")
+    cls = f"{BASE} {KINDS[kind]}" + (" no-underline" if tag == "a" else "")
     attrs = ' href="#thread"' if tag == "a" else ' type="button"'
-    st = f' style="--context-chip-accent:{ACCENTS[kind].replace(chr(95), chr(32))};{style}"'
+    st = f' style="{style}"' if style else ""
     return f'<{tag}{attrs} class="{cls}" data-slot="context-chip"{st}>{inner}</{tag}>'
 
 def label(text, extra=""):
@@ -150,8 +154,13 @@ for kind, (chip, source) in CHIPS.items():
                   "native": {"kind": "chip", "chip": kind, "markdown": f"Look at {source} please.", "width": "360",
                              "rgb": ",".join(map(str, IMAGE_RGB))}})
 
+import glob
+MAIN_CHUNK = glob.glob(os.path.join(m["ASSETS"], "main-*.js"))[0]
+# Importing main writes T3's runtime root styles, the context chip colors among them; the stored
+# appearance mode keeps the dark page dark (useTheme.ts:162-172).
 PREPARE = ("(document.querySelectorAll('svg[data-light]').forEach(s => s.style.color = document.documentElement.classList.contains('dark') "
-           "? s.dataset.dark : s.dataset.light), 'tinted')")
+           "? s.dataset.dark : s.dataset.light), localStorage.setItem('t3code:theme-appearance-mode', document.documentElement.classList.contains('dark') ? 'dark' : 'light'), "
+           f"import('file://{MAIN_CHUNK}').then(() => new Promise(r => setTimeout(r, 300))).then(() => 'tinted'))")
 spec = {"component": "threadview", "source": "apps/web/src/components/chat/ThreadDetailsPanel.tsx; chat/MessagesTimeline.tsx; ContextChip.tsx",
         "states": ["rest"], "themes": ["light", "dark"], "prepare": PREPARE, "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/threadview.json"), "w") as fh:

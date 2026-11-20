@@ -28,6 +28,8 @@ for percent in [0,25,95]:
     circ=2*math.pi*9.75
     color='var(--color-error)' if percent>90 else 'color-mix(in oklab,var(--color-muted-foreground) 72%,transparent)'
     html='<div style="display:flex;width:28px;height:28px;align-items:center;justify-content:center"><svg style="width:20px;height:20px;transform:rotate(-90deg)" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.75" fill="none" class="stroke-muted-foreground/24" stroke-width="3"/><circle cx="12" cy="12" r="9.75" fill="none" stroke="'+color+'" stroke-width="3" stroke-linecap="round" stroke-dasharray="'+str(circ)+'" stroke-dashoffset="'+str(circ*(1-percent/100))+'"/></svg></div>'
-    cases.append({'name':'meter-'+str(percent),'html':html,'native':{'kind':'meter','used':percent*1000,'max':100000}})
+    # Retired at 4928: T3 deleted ContextWindowMeter.tsx with the Labs cleanup (521ac7c218, #33131). The
+    # reference keeps the last capture; the fidelity test skips retired cases.
+    cases.append({'name':'meter-'+str(percent),'html':html,'retired':'ContextWindowMeter.tsx removed in Nightly 4928 (#33131)','native':{'kind':'meter','used':percent*1000,'max':100000}})
 spec={'component':'thread-leftovers','source':'apps/web/src/components/chat/{ThreadFindBar,ContextWindowMeter}.tsx','states':['rest'],'themes':['light','dark'],'cases':cases}
 with open(os.path.join(ROOT,'design/component-reference/thread-leftovers.json'),'w') as out: json.dump(spec,out,indent=1)

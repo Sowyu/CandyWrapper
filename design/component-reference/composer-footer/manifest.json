@@ -1,19 +1,19 @@
 {
   "cluster.access-icon" : {
     "height" : 28,
-    "width" : 100.8828125
+    "width" : 192.9296875
   },
   "cluster.bars" : {
     "height" : 28,
-    "width" : 141.0390625
+    "width" : 233.0859375
   },
   "cluster.both-icon" : {
     "height" : 28,
-    "width" : 58
+    "width" : 178.4453125
   },
   "cluster.overflow-both" : {
     "height" : 28,
-    "width" : 34
+    "width" : 180.4453125
   },
   "files.question" : {
     "height" : 104,

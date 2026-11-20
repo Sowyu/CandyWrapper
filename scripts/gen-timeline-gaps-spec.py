@@ -38,7 +38,7 @@ cases = []
 POPUP = ov["POPUP"].replace("max-w-lg", "max-w-xl")
 save_dialog = (f'<div role="dialog" data-slot="dialog-popup" class="{POPUP}">'
                '<div class="flex flex-col gap-2 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pb-3 max-sm:pb-4" data-slot="dialog-header">'
-               '<h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="dialog-title">Save plan to workspace</h2>'
+               '<h2 class="wrap-anywhere font-semibold text-xl leading-snug" data-slot="dialog-title">Save plan to workspace</h2>'
                '<p class="text-muted-foreground text-sm" data-slot="dialog-description">Enter a path relative to /tmp/demo-repo.</p></div>'
                '<div class="space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1" data-slot="dialog-panel">'
                '<label class="grid gap-1.5"><span class="text-xs font-medium text-foreground">Workspace path</span>'
@@ -58,8 +58,9 @@ split = ('<div data-chat-composer-implement-actions="true" class="flex items-cen
          + lucide("chevron-down", "size-3.5") + '</button></div>')
 # On the composer glass Chromium draws the label unsmoothed: a composited, non-opaque layer does the same here.
 GLASS_LAYER = "display:inline-block;will-change:transform"
-cases.append({"name": "plan.implement-split", "html": split, "wrapperStyle": GLASS_LAYER, "native": {"kind": "implement-split"}})
-cases.append({"name": "plan.refine", "html": f'<button type="submit" class="{PILL} h-9 sm:h-8 px-4">Refine</button>', "wrapperStyle": GLASS_LAYER, "native": {"kind": "refine"}})
+# Retired at 4928 with plan mode (#33131); the fidelity test skips retired cases.
+cases.append({"name": "plan.implement-split", "html": split, "retired": "plan follow-up actions removed from ComposerPrimaryActions.tsx in Nightly 4928 (521ac7c218, #33131)", "wrapperStyle": GLASS_LAYER, "native": {"kind": "implement-split"}})
+cases.append({"name": "plan.refine", "html": f'<button type="submit" class="{PILL} h-9 sm:h-8 px-4">Refine</button>', "retired": "plan follow-up actions removed from ComposerPrimaryActions.tsx in Nightly 4928 (521ac7c218, #33131)", "wrapperStyle": GLASS_LAYER, "native": {"kind": "refine"}})
 
 # ---------------------------------------------------------------------------------- Citation comment
 
@@ -71,7 +72,8 @@ def comment_editor(value):
             f'<div class="{P_VIEWPORT} {P_PAD["compact"]} not-data-transitioning:overflow-y-auto" data-slot="popover-viewport">'
             '<div data-citation-comment-editor="true">'
             f'<textarea aria-label="Comment on selected text" placeholder="Add an optional comment..." rows="2" class="{TEXTAREA}">{html.escape(value)}</textarea>'
-            '<div class="mt-2 flex items-center justify-end gap-2">' + btn("outline", "xs", "Cancel") + btn("default", "xs", "Save") + '</div>'
+            # AssistantCitationCommentEditor.tsx:121-145 (4928): idle speech controls render nothing.
+            '<div class="mt-2 flex flex-wrap items-center justify-end gap-2"><div class="flex gap-2">' + btn("outline", "xs", "Cancel") + btn("default", "xs", "Save") + '</div></div>'
             '</div></div></div>')
 cases.append({"name": "citation.empty", "html": comment_editor(""), "wrapperStyle": "display:inline-block;--available-height:600px;margin-bottom:64px",
               "native": {"kind": "citation", "comment": ""}})

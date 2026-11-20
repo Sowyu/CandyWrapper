@@ -1,14 +1,14 @@
 {
   "bare.panel" : {
-    "height" : 218,
+    "height" : 225.5,
     "width" : 512
   },
   "default" : {
-    "height" : 183,
+    "height" : 190.5,
     "width" : 512
   },
   "default.panel" : {
-    "height" : 239,
+    "height" : 246.5,
     "width" : 512
   }
 }

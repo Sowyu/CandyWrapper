@@ -59,7 +59,7 @@ def rows(items, hidden=0):
         more = (f'<button type="button" class="flex h-8 w-full cursor-pointer items-center rounded-lg {S["THREAD_DETAILS_PANEL_ROW_CONTENT_CLASS"]} '
                 f'text-sm font-medium text-muted-foreground/70 hover:bg-black/[0.055] hover:text-foreground/80 dark:hover:bg-white/[0.075]">'
                 f'{lucide("plus", "size-4 shrink-0")}Show {min(hidden, 12)} more</button>')
-    return f'<ul aria-label="Related threads" class="m-0 max-h-[13.5rem] list-none overflow-y-auto overscroll-contain p-0">{"".join(items)}</ul>{more}'
+    return f'<ul aria-label="Related threads" class="m-0 max-h-[13.5rem] list-none overflow-y-auto p-0">{"".join(items)}</ul>{more}'
 
 def previous(count, failed, expanded=False):
     accessory = f'<span class="shrink-0 text-3xs leading-none text-destructive-foreground">{failed} failed</span>' if failed else ""

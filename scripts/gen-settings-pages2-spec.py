@@ -54,10 +54,10 @@ REST_LAYERS = SPAN.format(LAYERS).replace('class="', 'class="opacity-0 ', 1)
 def server_row(title, desc, control, reset=""):
     """SettingsRow with the inheritance indicator and a reset span."""
     return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
-            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
+            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_auto] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
             f'{REST_LAYERS}{SPAN.format(reset)}</div>'
-            f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p></div>'
+            f'<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground">{desc}</p></div>'
             f'<div class="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">{control}</div></div></div>')
 
 
@@ -81,7 +81,7 @@ action_title = (f'<span class="flex min-w-0 items-center gap-2">{lucide("list-ch
 action_control = ('<span class="text-xs text-muted-foreground">⇧⌘L</span><span class="flex shrink-0 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">'
                   + button("ghost-muted", "icon-xs", lucide("settings", "size-3.5")) + "</span>")
 action_row = row("", "", action_control, title_html=action_title,
-                 desc_html='<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground"><code class="block max-w-full truncate font-mono">bun run lint</code></p>')
+                 desc_html='<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground"><code class="block max-w-full truncate font-mono">bun run lint</code></p>')
 action_row = action_row.replace(f'class="{ROW}"', f'class="{ROW.replace(" py-3", "")} group py-2"', 1)
 actions = section("Actions", server_row("Actions", "Commands that run in this project's checkout or its worktree, with optional shortcuts.",
                                         f'<div class="flex flex-wrap items-center gap-1.5">{ADD_ACTION}</div>') + action_row)
@@ -121,7 +121,9 @@ vcs = section("Version Control", discovery_row("Git", "git version 2.54.0 (Apple
               + discovery_row("Jujutsu", None, "Support for Jujutsu is coming soon.", None, "bg-muted-foreground/35", False, False, coming=True),
               action=scan)
 
-# --- Providers: the instance list (ProviderSettingsPanel.tsx:1185-1205, ProviderInstanceCard.tsx:909-975).
+# --- Providers: the instance list (ProviderSettingsPanel.tsx:1185-1205, ProviderInstanceCard.tsx:1173-1250 at 4928:
+# the row is relative, the selected fill is bg-foreground/[0.06], and the switch sits in the
+# pointer-events-none action span).
 ICON_WRAP = "relative isolate z-30 inline-flex shrink-0 items-center justify-center overflow-visible size-5"
 
 
@@ -129,13 +131,13 @@ def provider_row(name, icon, version, status, dot=None, selected=False):
     ver = f'<code class="max-w-24 shrink-0 truncate text-xs text-muted-foreground">{version}</code>' if version else ""
     dot_html = (f'<span class="flex h-[1.45em] shrink-0 items-center"><span class="size-1.5 shrink-0 rounded-full {dot}" aria-hidden=""></span></span>'
                 if dot else "")
-    return (f'<div data-slot="settings-row" class="group flex min-h-18 items-center gap-3 px-3 py-3 transition-colors sm:px-4 {"bg-muted/45" if selected else "hover:bg-muted/25"}">'
-            '<div class="pointer-events-none relative flex min-w-0 flex-1 items-start gap-3 rounded-md text-left transition-opacity">'
+    return (f'<div data-slot="settings-row" class="group relative flex min-h-18 items-center gap-3 px-3 py-3 transition-colors sm:px-4 {"bg-foreground/[0.06]" if selected else "hover:bg-muted/25"}">'
+            '<div class="pointer-events-none flex min-w-0 flex-1 items-start gap-3 rounded-md text-left transition-opacity">'
             f'<span class="{ICON_WRAP}">{icon}</span><span class="min-w-0 flex-1"><span class="flex min-w-0 items-center gap-2">'
             f'<span class="truncate text-sm font-medium text-foreground">{name}</span>{ver}</span>'
             f'<span class="mt-0.5 flex items-start gap-1.5 text-xs leading-normal text-muted-foreground/80">{dot_html}'
             f'<span class="pointer-events-auto line-clamp-2 [overflow-wrap:anywhere]">{status}</span></span></span></div>'
-            f'<span class="flex h-5 shrink-0 items-center">{switch("default", "on", False)}</span></div>')
+            f'<span class="pointer-events-none relative flex h-5 shrink-0 items-center gap-1 *:pointer-events-auto">{switch("default", "on", False)}</span></div>')
 
 
 ADD_ROW = ('<button type="button" class="flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left text-sm text-muted-foreground transition-colors '

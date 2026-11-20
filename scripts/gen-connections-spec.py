@@ -106,7 +106,7 @@ def nav_group(heading, entries):
 menu = "".join(nav_group(heading, entries) for heading, entries in NAV_GROUPS)
 nav = SIDEBAR.format('<div class="relative flex w-full min-w-0 flex-col p-[var(--sidebar-content-inset)]"><div class="flex flex-col gap-2">'
                      f'{search}<div class="flex flex-col gap-4">{menu}</div></div></div>')
-back = SIDEBAR.format('<div class="flex flex-col gap-2 px-[var(--sidebar-content-inset)] py-1"><div class="flex items-center gap-1"><div class="min-w-0 flex-1">'
+back = SIDEBAR.format('<div class="flex flex-col gap-2 px-[var(--sidebar-content-inset)] pt-1 pb-[var(--sidebar-content-inset)] max-md:hidden"><div class="flex items-center gap-1"><div class="min-w-0 flex-1">'
                       '<ul class="flex w-full min-w-0 flex-col gap-1 flex-row items-center"><li class="group/menu-item relative min-w-0 flex-1">'
                       f'<button type="button" data-sidebar="menu-button" data-slot="sidebar-menu-button" data-active="false" class="{MB}">{lucide("arrow-left")}<span>Back</span></button>'
                       '</li></ul></div></div></div>')
@@ -119,23 +119,23 @@ header = ('<header class="flex shrink-0 items-center gap-3" style="height:52px;p
           '<li aria-current="page" class="flex min-w-0 items-center font-medium text-foreground truncate">Connections</li></ol></nav></div></header>')
 
 # SettingsSection / SettingsGroup / SettingsRow (3824 settingsLayout.tsx:235,467-499, #24865).
-GROUP = "relative overflow-visible text-foreground rounded-xl border border-border/60 bg-card/40 shadow-xs/5 [&>*+*]:border-t [&>*+*]:border-border/50 [&>[data-slot=settings-row]]:rounded-none"
+GROUP = "relative overflow-visible text-foreground rounded-xl border border-border/60 bg-card/40 shadow-xs/5 *:not-first:border-t *:not-first:border-border/50 [&>[data-slot=settings-row]]:rounded-none"
 ROW = "@container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground py-3"
 ELLIPSIS = button("ghost-muted", "icon-xs", lucide("ellipsis", "size-3.5"))
 
 
 def section(title, children, icon="", action=""):
-    return (f'<section class="space-y-2.5"><div class="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4">'
+    return (f'<section class="space-y-2.5"><div class="flex min-h-7 flex-wrap items-start justify-between gap-x-4 gap-y-1 px-3 sm:px-4">'
             f'<div class="flex min-w-0 items-center gap-1"><h2 class="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">{icon}{title}</h2></div>'
             f'<div class="flex min-h-7 min-w-7 items-center justify-end">{action}</div></div><div class="{GROUP}">{children}</div></section>')
 
 
 def settings_row(title, desc, control):
     return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
-            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
+            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_auto] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
             '<span class="inline-flex h-5 w-5 shrink-0 items-center justify-center"></span></div>'
-            f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p></div>'
+            f'<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground">{desc}</p></div>'
             f'<div class="flex w-full min-w-0 shrink-0 items-center gap-2 @min-[32rem]/settings-row:w-auto @min-[32rem]/settings-row:justify-end">{control}</div></div></div>')
 
 
@@ -238,7 +238,7 @@ def add_dialog(route_label=None, error=None, ssh=False):
             + (f'<div>{ssh_fields(error)}</div></div>' if ssh else f'<div><div class="space-y-4">{fields}{err}{submit}</div></div></div>'))
     return (f'<div role="dialog" data-slot="dialog-popup" class="{POPUP}">'
             f'<div class="flex flex-col gap-2 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pb-3 max-sm:pb-4" data-slot="dialog-header">'
-            f'<h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="dialog-title">{title}</h2>'
+            f'<h2 class="wrap-anywhere font-semibold text-xl leading-snug" data-slot="dialog-title">{title}</h2>'
             f'<p class="text-muted-foreground text-sm" data-slot="dialog-description">{desc}</p></div>'
             f'<div class="space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1" data-slot="dialog-panel">{body}</div>'
             f'{CLOSE}</div>')
@@ -255,10 +255,10 @@ def host_row(title, desc, control=None):
     if control is not None:
         return settings_row(title, desc, control)
     return (f'<div data-slot="settings-row" class="{ROW}"><div class="flex flex-col gap-3 @min-[32rem]/settings-row:grid '
-            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
+            '@min-[32rem]/settings-row:grid-cols-[minmax(0,1fr)_auto] @min-[32rem]/settings-row:items-center @min-[32rem]/settings-row:gap-8">'
             f'<div class="min-w-0 flex-1 space-y-1"><div class="flex min-h-5 items-center gap-1.5"><h3 class="text-sm font-medium text-foreground">{title}</h3>'
             '<span class="inline-flex h-5 w-5 shrink-0 items-center justify-center"></span></div>'
-            f'<p class="max-w-2xl text-balance text-xs leading-normal text-muted-foreground">{desc}</p></div></div></div>')
+            f'<p class="max-w-2xl text-pretty text-xs leading-normal text-muted-foreground">{desc}</p></div></div></div>')
 
 
 GRANTS = [("View environment", True), ("Operate tasks", True), ("Change environment settings", True), ("Manage providers", True),
@@ -339,9 +339,9 @@ def client_row(label, info, scopes, current, live):
 
 def authorized(open_):
     chevron = lucide("chevron-right", "size-4 shrink-0 text-muted-foreground transition-transform duration-150 motion-reduce:transition-none" + (" rotate-90" if open_ else ""))
-    control = (f'<div class="flex shrink-0 items-center"><div class="flex items-center gap-2">{button("destructive-outline", "xs", "Revoke others")}'
+    control = (f'<div class="ms-auto flex max-w-full items-center py-1.5"><div class="flex items-center gap-2">{button("destructive-outline", "xs", "Revoke others")}'
                f'{button("default", "xs", lucide("plus", "size-3") + "Create link")}</div></div>')
-    header = (f'<div class="flex items-center gap-4 px-3 sm:px-4"><button type="button" class="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2 text-left outline-none rounded-md">'
+    header = (f'<div class="flex flex-wrap items-center gap-x-4 px-3 sm:px-4"><button type="button" class="flex min-h-11 min-w-0 flex-1 basis-40 items-center gap-2 py-2 text-left outline-none rounded-md">'
               f'{chevron}<span class="shrink-0 text-sm font-medium">Authorized clients</span>'
               f'<span class="min-w-0 truncate text-xs text-muted-foreground">2 clients · 1 pairing link</span></button>{control}</div>')
     panel = ""
@@ -349,7 +349,7 @@ def authorized(open_):
         rows = (link_row("Living room iPad", "Expires in 4m 12s", 13, share=True)
                 + client_row("CandyWrapper", "Desktop · macOS · 127.0.0.1", 16, True, True)
                 + client_row("iPhone", "Mobile · iOS · Safari", 13, False, False))
-        panel = f'<div class="border-t border-border/50 [&>*+*]:border-t [&>*+*]:border-border/50">{rows}</div>'
+        panel = f'<div class="border-t border-border/50 *:not-first:border-t *:not-first:border-border/50">{rows}</div>'
     return f'<section><div class="{FOLD}">{header}{panel}</div></section>'
 
 
@@ -391,7 +391,7 @@ def create_link_dialog():
               f'{button("outline", "default", "Cancel")}{button("default", "default", "Create link")}</div>')
     return (f'<div role="dialog" data-slot="dialog-popup" class="{CL_POPUP}">'
             f'<div class="flex flex-col gap-2 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-panel])]:pb-3 max-sm:pb-4" data-slot="dialog-header">'
-            f'<h2 class="wrap-anywhere font-semibold text-xl leading-none" data-slot="dialog-title">Create pairing link</h2>'
+            f'<h2 class="wrap-anywhere font-semibold text-xl leading-snug" data-slot="dialog-title">Create pairing link</h2>'
             f'<p class="text-muted-foreground text-sm" data-slot="dialog-description">Generate a one-time link that another device can use to pair with this backend as an authorized client.</p></div>'
             f'<div class="space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1" data-slot="dialog-panel">{panel}</div>'
             f'{footer}{CLOSE}</div>')

@@ -49,9 +49,9 @@ NO_PROJECTS = ('<div class="flex flex-col items-center gap-2 px-2 py-6 text-cent
                '<button type="button" class="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground">'
                f'{lucide("plus", "-mx-0.5 size-3")}Add project</button></div>')
 
-# Sidebar.tsx:1650-1663, the field alone at the title's width.
+# sidebar/SidebarThreadRow.tsx:660-673 (4928, ThreadRenameInput), the field alone at the title's width.
 RENAME = ('<input value="Create a file named approval-demo.txt" aria-label="Thread title" style="width:204px;display:block" '
-          'class="min-w-0 flex-1 rounded-sm border border-input bg-card px-1 text-sm font-medium text-card-foreground outline-none focus:border-foreground">')
+          'class="-mx-1 min-w-0 flex-1 rounded-sm bg-card px-1 text-sm font-medium text-card-foreground outline-none ring-1 ring-inset ring-input focus:ring-foreground">')
 
 # sidebar/SidebarProviderUpdatePill.tsx:140-205, at the footer's width.
 PILL_TONES = {
@@ -67,13 +67,14 @@ def pill(tone, icon, title, dismissible):
             f'{lucide(icon, "size-3.5 shrink-0")}<span class="min-w-0 wrap-break-word">{title}</span></button>{close}</div>')
 
 # ui/tooltip.tsx TooltipPopup (glass) with ThreadHoverCardPopup and ThreadHoverCard, rows from Sidebar.tsx:488-566.
-POPUP = ("relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-popover-foreground text-xs "
+# The thread hover card is a glass TooltipPopup (tooltip.tsx:136-156 at 4928).
+POPUP = ("relative flex origin-(--transform-origin) rounded-md text-popover-foreground text-xs "
          "before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] dropdown-glass shadow-xl shadow-black/25 before:hidden "
          "max-w-80 wrap-anywhere whitespace-normal leading-snug text-left")
 def card_row(icon_html, text):
     return f'<div class="flex min-w-0 items-center gap-2">{icon_html}<div class="min-w-0 truncate text-foreground/75">{text}</div></div>'
 def hover_card(title, rows):
-    return (f'<div class="{POPUP}"><div class="relative size-full overflow-clip px-(--viewport-inline-padding) py-1 [--viewport-inline-padding:--spacing(2)]">'
+    return (f'<div class="{POPUP}"><div class="min-w-0 px-2 py-1" data-slot="tooltip-viewport">'
             '<div class="flex min-w-0 max-w-80 flex-col gap-2 px-1 py-2">'
             f'<div class="min-w-0 truncate text-xs leading-tight font-medium text-foreground">{title}</div>'
             f'<div class="grid gap-1.5 pl-0.5 text-xs text-muted-foreground">{"".join(rows)}</div></div></div></div>')

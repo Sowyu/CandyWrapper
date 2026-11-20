@@ -130,8 +130,9 @@ specs["select-popup"] = {"source": "apps/web/src/components/ui/select.tsx", "sta
 
 # Combobox and Autocomplete popups (combobox.tsx:162-212, autocomplete.tsx:100-128)
 CB_SPAN = "dropdown-glass relative flex max-h-full min-w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] transition-[scale,opacity] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]"
-CB_POPUP = "flex min-w-0 max-h-[min(var(--available-height),23rem)] flex-1 flex-col overflow-hidden text-foreground"
-CB_ITEM = "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-foreground/[0.09] data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.06] data-selected:text-foreground data-highlighted:bg-foreground/[0.09] data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-foreground/[0.09] [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
+CB_POPUP = "flex min-w-0 max-h-[min(var(--available-height),23rem)] flex-1 flex-col overflow-hidden text-foreground [-webkit-app-region:no-drag]"
+# combobox.tsx:199-205 (4928): the selected fill is the default selectedFill class.
+CB_ITEM = "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-foreground/[0.09] data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:text-foreground data-highlighted:bg-foreground/[0.09] data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-foreground/[0.09] [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:bg-foreground/[0.06]"
 CB_CONTENT = "flex min-w-0 flex-1 items-center gap-2 [&_svg:not([class*='text-'])]:text-muted-foreground"
 AC_SPAN = "relative flex max-h-full min-w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) rounded-lg border bg-popover not-dark:bg-clip-padding shadow-lg/5 transition-[scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]"
 AC_POPUP = "flex max-h-[min(var(--available-height),23rem)] flex-1 flex-col text-foreground"
@@ -169,11 +170,11 @@ specs["popover"] = {"source": "apps/web/src/components/ui/popover.tsx", "states"
                     "cases": [{"name": f"{p}.{w}", "html": popover(p, w), "wrapperStyle": "display:inline-block;--available-height:600px",
                                "native": {"padding": p, "width": w}} for p, w in (("default", "auto"), ("compact", "auto"), ("default", "md"))]}
 
-# Tooltip (tooltip.tsx:105-135)
-T_BASE = "relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-popover-foreground text-xs transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]"
+# Tooltip (tooltip.tsx:136-156 at 4928: no Base UI viewport, the popup no longer sizes to --popup-width)
+T_BASE = "relative flex origin-(--transform-origin) rounded-md text-popover-foreground text-xs transition-[scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]"
 T_VARIANT = {"default": "border bg-popover not-dark:bg-clip-padding shadow-md/5", "glass": "dropdown-glass shadow-xl shadow-black/25 before:hidden"}
 T_TEXT = {"default": "max-w-80 wrap-anywhere whitespace-normal leading-snug", "code": "max-w-120 wrap-anywhere text-left font-mono text-[11px] leading-relaxed"}
-T_VIEWPORT = "relative size-full overflow-clip px-(--viewport-inline-padding) py-1 [--viewport-inline-padding:--spacing(2)] data-instant:transition-none"
+T_VIEWPORT = "min-w-0 px-2 py-1"
 
 def tooltip(variant, text):
     surface = T_VARIANT["glass" if variant == "glass" else "default"]

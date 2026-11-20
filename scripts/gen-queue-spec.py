@@ -11,10 +11,11 @@ def row(kind, text):
     fold = kind in ['agent', 'automation']
     sender = '<p class="me-1 text-2xs text-muted-foreground/70">Sent by T3 Code</p>' if kind == 'server' else '<p class="me-1 text-2xs text-guest-foreground">Guest</p>' if kind == 'guest' else ''
     if fold:
+        # TimelineUserMessageRow.tsx:420-430 (4928): generic labels pass fitLabel and never truncate (:338, :967).
         label = 'Automation' if kind == 'automation' else 'Review helper'
         glyph = 'calendar-clock' if kind == 'automation' else 'messages-square'
         body = (f'<button class="flex w-full min-w-0 items-center gap-1.5 rounded-2xl px-3 py-2 text-left text-sm">{icon(glyph,"size-4 shrink-0 stroke-2 text-muted-foreground")}'
-                f'<span class="max-w-1/2 shrink-0 truncate text-muted-foreground">{label}</span><span class="min-w-0 flex-1 truncate">{text}</span>{icon("chevron-down","size-3.5 shrink-0 text-muted-foreground")}</button>')
+                f'<span class="shrink-0 text-muted-foreground">{label}</span><span class="min-w-0 flex-1 truncate">{text}</span>{icon("chevron-down","size-3.5 shrink-0 text-muted-foreground")}</button>')
     else:
         body = f'<div class="flex flex-col gap-2"><p class="whitespace-pre-wrap wrap-anywhere">{text}</p></div>'
     bubble = f'<div class="flex min-w-0 max-w-[80%] flex-col rounded-2xl border border-dashed text-sm {color} ' + ('' if fold else 'px-3 py-2') + f'">{body}</div>'
