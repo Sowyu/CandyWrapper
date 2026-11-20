@@ -986,7 +986,9 @@ final class ButtonRow: DSView {
 final class BannerView: DSView {
     private let label = TextBlockView()
     let retry = ButtonView("Retry", variant: .outline, size: .xs)
-    var text = "" { didSet { label.text = text + " Showing the last pull requests loaded."; needsLayout = true } }
+    /// The words after the error; the Issues page says "Showing the issues that loaded." (IssuesPage.tsx:508).
+    var suffix = " Showing the last pull requests loaded."
+    var text = "" { didSet { label.text = text + suffix; needsLayout = true } }
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         layer?.cornerRadius = 10

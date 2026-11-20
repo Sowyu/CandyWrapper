@@ -16,6 +16,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     case pullRequest(PullRequestSurfaceTarget)
     /// The thread's linked pull requests, one singleton tab.
     case pullRequests
+    /// `issue:<scope>`: an issue beside a thread or on the Issues page (4928 rightPanelStore.ts:84-96).
+    case issue(IssueSurfaceTarget)
     /// `browser:<tabId>`: a server browser tab; nil is the `browser:new` placeholder that shows the
     /// empty state until a tab exists.
     case browser(tabId: String?)
@@ -34,13 +36,14 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .file(let path, _, _): "file:" + path
         case .pullRequest(let target): target.surfaceId
         case .pullRequests: "pull-requests"
+        case .issue(let target): target.surfaceId
         case .browser(let tabId): "browser:" + (tabId ?? "new")
         case .terminal(let t): "terminal:" + t.resourceId
         case .attachment(let a): "attachment:" + a.id
         }
     }
 
-    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, browser, terminal, device }
+    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, issue, browser, terminal, device }
     public var kind: Kind {
         switch self {
         case .device, .deviceTarget: .device
@@ -49,6 +52,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .file, .attachment: .file
         case .pullRequest: .pullRequest
         case .pullRequests: .pullRequests
+        case .issue: .issue
         case .browser: .browser
         case .terminal: .terminal
         }
@@ -67,6 +71,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
             return String(path[cut...])
         case .pullRequest(let target): return "#\(target.number)"
         case .pullRequests: return "Pull requests"
+        // A git host numbers its issues; a tracker with keys of its own names them (RightPanelTabs.tsx:610-612).
+        case .issue(let target): return target.key.allSatisfy(\.isNumber) && !target.key.isEmpty ? "#\(target.key)" : target.key
         case .browser: return "Browser"
         // The app shows the server's label for the active terminal when it knows one.
         case .terminal(let t): return TerminalLabels.label(t.activeTerminalId)
@@ -97,6 +103,10 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         return nil
     }
 
+    public var issue: IssueSurfaceTarget? {
+        if case .issue(let target) = self { return target }
+        return nil
+    }
     public var terminal: TerminalPanelSurface? {
         if case .terminal(let t) = self { return t }
         return nil
@@ -177,6 +187,35 @@ public struct PullRequestSurfaceTarget: Codable, Sendable, Hashable {
     }
 }
 
+/// The issue an `issue` surface shows (4928 rightPanelStore.ts:84-96, `issueSurfaceId` :325-330).
+public struct IssueSurfaceTarget: Codable, Sendable, Hashable {
+    public var environmentId: String?
+    /// The server's own project id, whose credentials read the issue.
+    public var projectId: String
+    public var tracker: String
+    public var host: String?
+    public var scope: String
+    public var key: String
+    public var url: String?
+    public init(environmentId: String? = nil, projectId: String, tracker: String, host: String?, scope: String, key: String, url: String? = nil) {
+        self.environmentId = environmentId; self.projectId = projectId; self.tracker = tracker; self.host = host?.lowercased()
+        self.scope = scope; self.key = key; self.url = url
+    }
+
+    public var surfaceId: String {
+        func enc(_ s: String) -> String {
+            var allowed = CharacterSet.alphanumerics
+            allowed.insert(charactersIn: "-_.!~*'()")
+            return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
+        }
+        let env = environmentId.map { enc($0) + ":" } ?? ""
+        let h = host.map { enc($0.lowercased()) + ":" } ?? ""
+        return "issue:\(env)\(enc(projectId)):\(tracker):\(h)\(enc(scope.lowercased())):\(enc(key))"
+    }
+
+    public var ref: IssueRef { IssueRef(projectId: projectId, tracker: tracker, host: host, scope: scope, key: key) }
+}
+
 /// A thread's panel (`ThreadRightPanelState`, rightPanelStore.ts:107-112): its tabs in order, the
 /// active one and whether the panel shows. Every mutation is a port of the store action it names.
 public struct RightPanelState: Codable, Sendable, Equatable {
@@ -224,7 +263,7 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         case .files: upsert(.files)
         case .pullRequests: upsert(.pullRequests)
         case .browser: upsert(surfaces.first { $0.kind == .browser } ?? .browser(tabId: nil))
-        case .file, .pullRequest, .terminal: break
+        case .file, .pullRequest, .issue, .terminal: break
         }
     }
 
@@ -254,6 +293,13 @@ public struct RightPanelState: Codable, Sendable, Equatable {
     /// `openPullRequest` (rightPanelStore.ts:675-689): a known tab takes the newer URL.
     public mutating func openPullRequest(_ target: PullRequestSurfaceTarget) {
         let surface = RightPanelSurface.pullRequest(target)
+        upsert(surface)
+        if target.url != nil { surfaces = surfaces.map { $0.id == surface.id ? surface : $0 } }
+    }
+
+    /// `openIssue` (4928 rightPanelStore.ts:870): a known tab takes the newer URL.
+    public mutating func openIssue(_ target: IssueSurfaceTarget) {
+        let surface = RightPanelSurface.issue(target)
         upsert(surface)
         if target.url != nil { surfaces = surfaces.map { $0.id == surface.id ? surface : $0 } }
     }
@@ -464,6 +510,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
         case .browser(let tabId): if tabId == nil { state.openBrowser(nil) }
         case .file(let path, let line, _): state.openFile(path, line: line)
         case .pullRequest(let target): state.openPullRequest(target)
+        case .issue(let target): state.openIssue(target)
         case .deviceTarget: state.upsert(surface)
         case .attachment(let a): state.openAttachment(a)
         case .terminal: break
