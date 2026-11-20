@@ -19,6 +19,14 @@ public final class PullRequestCodeView: DSView {
     private let footer = LabelView("", font: DSFont.ui(12))
     private let footerRetry = ButtonView("Retry", variant: .outline, size: .xs)
     private let orphanToggle = LinkLabel()
+    /// "N test files hidden" after the file count, a link that shows them again (PullRequestCodeTab.tsx:1447-1454).
+    private let hiddenTestsLink = LinkLabel()
+    private let viewedCounts = LabelView("", font: DSFont.ui(12))
+    /// "Hide test files" at the toolbar's end while the loaded diff has any (:1686-1703, #26730).
+    private let hideTestsToggle = ToggleView(nil, icon: .flaskConicalOff, variant: .ghost, size: .sm, pressed: DiffHideTestFiles.value)
+    private var hideTestsTooltip: TooltipController?
+    private var testFileCount = 0
+    private var hiddenTestFileCount = 0
     private let orphanChevron = IconView(name: .chevronRight, size: 14)
     private let orphanRule = CALayer()
     private let orphanScroll: ScrollAreaView
@@ -75,7 +83,17 @@ public final class PullRequestCodeView: DSView {
         footer.alignment = .center
         orphanToggle.font = DSFont.ui(12)
         orphanToggle.underlines = false
-        [scope, counts, scroll, status, footer, footerRetry, orphanToggle, orphanChevron, orphanScroll].forEach(addSubview)
+        [scope, counts, hiddenTestsLink, viewedCounts, hideTestsToggle, scroll, status, footer, footerRetry, orphanToggle, orphanChevron, orphanScroll].forEach(addSubview)
+        viewedCounts.lineHeight = 16
+        hiddenTestsLink.font = DSFont.ui(12)
+        hiddenTestsLink.underlines = false
+        hiddenTestsLink.isHidden = true
+        hiddenTestsLink.onClick = { [weak self] in self?.setHideTests(false) }
+        hideTestsToggle.iconSize = 14
+        hideTestsToggle.isHidden = true
+        hideTestsToggle.setAccessibilityLabel("Hide test files")
+        hideTestsTooltip = TooltipController.attach(to: hideTestsToggle, text: "Hide test files", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        hideTestsToggle.onPressedChange = { [weak self] in self?.setHideTests($0) }
         scope.action = { [weak self] in self?.showScopeMenu() }
         footerRetry.action = { [weak self] in self?.onLoadMore?() }
         // `CollapsiblePanel` (PullRequestCodeTab.tsx:1500): the list slides open over 200 ms and the diff rides it.
@@ -128,9 +146,7 @@ public final class PullRequestCodeView: DSView {
         scope.isHidden = commits.isEmpty
         if patches != self.patches {
             self.patches = patches
-            let diff = UnifiedDiff(patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n"))
-            paths = diff.files.map(\.path)
-            list.setDiff(diff, collapsedByDefault: false)
+            rebuildDiff()
             // An appended slice keeps what the reader folded: the choices are by path.
             applyFolds()
         }
@@ -174,6 +190,31 @@ public final class PullRequestCodeView: DSView {
             }
         }
         updateCounts()
+    }
+
+    /// The loaded files in file tree order, tests left out while hidden (PullRequestCodeTab.tsx, #26730, #29083).
+    private func rebuildDiff() {
+        let full = UnifiedDiff(patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n"))
+        let order = orderDiffPathsLikeTree(full.files.map(\.path))
+        let tests = Set(full.files.indices.filter { ChangedFileKind.isTest(full.files[$0].path) })
+        testFileCount = tests.count
+        let shown = DiffHideTestFiles.value ? order.filter { !tests.contains($0) } : order
+        hiddenTestFileCount = order.count - shown.count
+        let diff = full.selecting(shown)
+        paths = diff.files.map(\.path)
+        list.setDiff(diff, collapsedByDefault: false)
+        hideTestsToggle.isPressed = DiffHideTestFiles.value
+        hideTestsToggle.isHidden = testFileCount == 0
+        hideTestsTooltip?.text = DiffHideTestFiles.value ? "Show test files" : "Hide test files"
+    }
+
+    private func setHideTests(_ hide: Bool) {
+        guard hide != DiffHideTestFiles.value else { return }
+        DiffHideTestFiles.value = hide
+        rebuildDiff()
+        applyFolds()
+        updateCounts()
+        updateAnnotations()
     }
 
     /// `diffFilesCollapsed` on folds every file; off leaves it to the Viewed marks (PullRequestCodeTab.tsx:458).
@@ -298,12 +339,18 @@ public final class PullRequestCodeView: DSView {
     }
 
     private func updateCounts() {
-        var text = "\(paths.count) \(paths.count == 1 ? "file" : "files")" + (nextCursor == nil ? "" : "+")
+        let files = "\(paths.count) \(paths.count == 1 ? "file" : "files")" + (nextCursor == nil ? "" : "+")
+        var viewed = ""
         if store != nil && !paths.isEmpty {
-            text += "  ·  \(PullRequestDetailLogic.countViewed(paths, states: states, overlay: overlay)) / \(paths.count) "
-            text += store == "environment" ? "viewed in T3 Code" : "viewed"
+            viewed = "  ·  \(PullRequestDetailLogic.countViewed(paths, states: states, overlay: overlay)) / \(paths.count) "
+            viewed += store == "environment" ? "viewed in T3 Code" : "viewed"
         }
-        counts.text = text
+        hiddenTestsLink.isHidden = hiddenTestFileCount == 0
+        hiddenTestsLink.text = "\(hiddenTestFileCount) test \(hiddenTestFileCount == 1 ? "file" : "files") hidden"
+        // Without hidden tests the line stays one label, as before.
+        counts.text = hiddenTestsLink.isHidden ? files + viewed : files + "  ·  "
+        viewedCounts.text = hiddenTestsLink.isHidden || viewed.isEmpty ? "" : "·  " + viewed.dropFirst(5)
+        viewedCounts.isHidden = viewedCounts.text.isEmpty
         needsLayout = true
     }
 
@@ -331,7 +378,19 @@ public final class PullRequestCodeView: DSView {
             let sw = min(256, ceil(scope.intrinsicContentSize.width))
             scope.frame = NSRect(x: x, y: 8, width: sw, height: 24); x += sw + 12
         }
-        counts.frame = NSRect(x: x, y: 12, width: max(0, w - 16 - x), height: 16)
+        var right = w - 16
+        if !hideTestsToggle.isHidden {
+            hideTestsToggle.frame = NSRect(x: right - 28, y: 6, width: 28, height: 28); right -= 28 + 8
+        }
+        if hiddenTestsLink.isHidden {
+            counts.frame = NSRect(x: x, y: 12, width: max(0, right - x), height: 16)
+        } else {
+            let cw = ceil(counts.textWidth), lw = ceil(hiddenTestsLink.textWidth) + 1
+            counts.frame = NSRect(x: x, y: 12, width: min(cw, max(0, right - x)), height: 16)
+            hiddenTestsLink.frame = NSRect(x: x + cw, y: 12, width: min(lw, max(0, right - x - cw)), height: 16)
+            let vx = x + cw + lw + 6
+            viewedCounts.frame = NSRect(x: vx, y: 12, width: max(0, right - vx), height: 16)
+        }
         var top: CGFloat = 41
         let hasOrphans = !orphanCards.isEmpty
         [orphanToggle, orphanChevron].forEach { $0.isHidden = !hasOrphans }
@@ -374,9 +433,11 @@ public final class PullRequestCodeView: DSView {
         rule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         orphanRule.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         counts.color = Themed.color(\.mutedForeground)
+        viewedCounts.color = Themed.color(\.mutedForeground)
         status.color = Themed.color(\.mutedForeground)
         footer.color = Themed.color(\.mutedForeground)
         orphanToggle.color = Themed.color(\.mutedForeground)
+        hiddenTestsLink.color = Themed.color(\.primary)
         orphanChevron.strokeColor = Themed.color(\.mutedForeground)
     }
 }

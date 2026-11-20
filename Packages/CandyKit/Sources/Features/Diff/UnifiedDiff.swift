@@ -67,6 +67,13 @@ public struct UnifiedDiff: Sendable {
         lines = parser.lines
     }
 
+    /// The same diff with only these files, in this order. Hunks index the shared lines, so they stay valid.
+    public func selecting(_ indices: [Int]) -> UnifiedDiff {
+        var d = self
+        d.files = indices.filter { files.indices.contains($0) }.map { files[$0] }
+        return d
+    }
+
     public func text(_ line: Line) -> String {
         let start = Int(line.start)
         return String(decoding: bytes[start..<start + Int(line.length)], as: UTF8.self)

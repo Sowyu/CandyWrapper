@@ -78,6 +78,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case files
     case film
     case flaskConical
+    case flaskConicalOff
     case folder
     case folderClosed
     case folderCode
@@ -337,6 +338,7 @@ extension IconName {
         case .fileText: return "file-text"
         case .files: return "files"
         case .film: return "film"
+        case .flaskConicalOff: return "flask-conical-off"
         case .flaskConical: return "flask-conical"
         case .folder: return "folder"
         case .folderClosed: return "folder-closed"
@@ -988,6 +990,15 @@ extension IconName {
                 IconElement(.path(d: "M17 3v18")),
                 IconElement(.path(d: "M17 7.5h4")),
                 IconElement(.path(d: "M17 16.5h4")),
+            ])
+        case .flaskConicalOff:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M10 2v2.343")),
+                IconElement(.path(d: "M14 2v6.343")),
+                IconElement(.path(d: "m2 2 20 20")),
+                IconElement(.path(d: "M20 20a2 2 0 0 1-2 2H6a2 2 0 0 1-1.755-2.96l5.227-9.563")),
+                IconElement(.path(d: "M6.453 15H15")),
+                IconElement(.path(d: "M8.5 2h7")),
             ])
         case .flaskConical:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

@@ -28,9 +28,9 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | left (panels-2): the PR diff follows the file tree with a hide-tests filter; needs a tree order in PullRequestCodeView and the test classifier (diffFileTree.logic.ts) |
+| a5448f4c50 | #26730 | pr/git | fix(web): pull request diff follows the file tree, with a hide-tests filter | ported (panels-3): the PR Code tab follows the file tree order, and the Diff panel and Code tab hide tests behind a flask toggle with "N test files hidden", ChangedFileKind.swift, DiffPanelView, PullRequestCodeView; no spec case yet for the toggle |
 | 5ef56853ef | #19941 | pr/git | feat(web): review local commits in the Diff pane | left (panels-2): reviewing local commits needs the A23 wire (`review.getBranchCommits`, source kind `commit`) and a commit scope in DiffPanelView |
-| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | left (panels-2): Storybook files in the test filter, with #26730 |
+| 348009de22 | #29083 | pr/git | fix(prs): include Storybook files in the test filter and counts | ported (panels-3): Storybook `.stories.` files count as tests, ChangedFileKind |
 
 ## Port group provider-fallback (3)
 
