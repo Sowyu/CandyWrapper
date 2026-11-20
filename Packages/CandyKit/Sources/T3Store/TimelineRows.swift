@@ -96,6 +96,9 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
     public var groupedWithPrevious = false
     /// The message above is a steer too, so the steer label shows once.
     public var continuesSteer = false
+    /// A turn or attempt fold's anchor rows whose work the server deferred: opening the fold loads them
+    /// (`deferredWorkItemIds`, MessagesTimeline.logic.ts:597-611, 1941-1972 at 4928, #26240).
+    public var deferredWorkItemIds: [String] = []
 
     public init(id: String, createdAt: T3Timestamp?, kind: Kind) {
         self.id = id
@@ -107,6 +110,14 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         switch kind {
         case .message(let m, _, _, _, _, _), .assistantMeta(let m, _, _, _): m
         default: nil
+        }
+    }
+
+    /// An open turn or attempt fold.
+    public var isExpandedFold: Bool {
+        switch kind {
+        case .turnFold(_, _, let expanded), .attemptFold(_, _, _, let expanded): expanded
+        default: false
         }
     }
 
@@ -416,6 +427,15 @@ public enum TimelineRows {
         var attemptId: RunAttemptId
         var createdAt: T3Timestamp
         var hiddenEntryIds: Set<String>
+        var deferredWorkItemIds: [String] = []
+    }
+
+    /// The source item ids of deferred anchors among `entries`, in order.
+    static func deferredWorkItemIds<S: Sequence>(_ entries: S) -> [String] where S.Element == TimelineEntry {
+        entries.compactMap { entry in
+            guard let row = entry.work?.projectedItem, row.item.hasDeferredWork else { return nil }
+            return row.sourceItemId.rawValue
+        }
     }
 
     /// `completeSupersededReplyEntryIds` (MessagesTimeline.logic.ts:722-768, T3 2994 ec43786140): final replies of
@@ -425,7 +445,6 @@ public enum TimelineRows {
     ///
     /// 4928 (`retainedAssistantReplyEntryIds`, MessagesTimeline.logic.ts at 4928, #34501): an answer whose provider
     /// marks it `phase: "final_answer"` always stays, and the timing guess applies only to answers without a phase.
-    // ponytail: no `deferredWork.lastOrdinal` skip yet; add it with deferred work rows
     static func completeSupersededReplyEntryIds(_ entries: [TimelineEntry]) -> Set<String> {
         var lastOutput: [RunAttemptId: TimelineEntry] = [:]
         var ids = Set<String>()
@@ -438,6 +457,13 @@ public enum TimelineRows {
             case .message(let message, _) where message.role != .user: break
             case .work(let work) where work.itemType != .systemNotice && work.itemType != .notification: break
             default: continue
+            }
+            // Rows inside a deferred group's ordinals were not sent, so they cannot end the attempt (L:815-825 at 4928).
+            if let end = lastOutput[attempt.id]?.work?.projectedItem?.item, end.hasDeferredWork,
+               let last = end.deferredWork?.lastOrdinal,
+               let ordinal = entry.work?.projectedItem?.item.ordinal ?? entry.messageRow?.item.ordinal, last > ordinal
+            {
+                continue
             }
             lastOutput[attempt.id] = entry
         }
@@ -473,7 +499,8 @@ public enum TimelineRows {
         var folds: [String: AttemptFold] = [:]
         for id in order {
             guard let group = byAttempt[id], let first = group.first, let attempt = first.attempt else { continue }
-            folds[first.id] = AttemptFold(runId: attempt.runId, attemptId: attempt.id, createdAt: first.createdAt, hiddenEntryIds: Set(group.map(\.id)))
+            folds[first.id] = AttemptFold(runId: attempt.runId, attemptId: attempt.id, createdAt: first.createdAt,
+                                          hiddenEntryIds: Set(group.map(\.id)), deferredWorkItemIds: deferredWorkItemIds(group))
         }
         return folds
     }
@@ -741,6 +768,9 @@ public enum TimelineRows {
             completeSupersededReplyEntryIds: completeReplies)
         var collapsed = Set<String>()
         for fold in folds.values where !input.expandedRunIds.contains(fold.runId) { collapsed.formUnion(fold.hiddenEntryIds) }
+        // Anchors a superseded attempt fold loads stay out of the turn fold's list (L:1661 at 4928).
+        let hasDeferredWork = entries.contains { $0.work?.projectedItem?.item.hasDeferredWork == true }
+        let supersededDeferredIds = Set(attemptFolds.values.flatMap(\.deferredWorkItemIds))
         var collapsedSuperseded = Set<String>()
         for fold in attemptFolds.values where !input.expandedAttemptIds.contains(fold.attemptId) {
             collapsedSuperseded.formUnion(fold.hiddenEntryIds)
@@ -890,16 +920,23 @@ public enum TimelineRows {
                    compactionRuns[run] != nil, compactedRunIds.contains(run) { continue }
             }
             if let fold = folds[entry.id] {
-                rows.append(TimelineRow(
+                var row = TimelineRow(
                     id: "turn-fold:\(fold.runId.rawValue)", createdAt: fold.createdAt,
-                    kind: .turnFold(runId: fold.runId, label: fold.label, expanded: input.expandedRunIds.contains(fold.runId))))
+                    kind: .turnFold(runId: fold.runId, label: fold.label, expanded: input.expandedRunIds.contains(fold.runId)))
+                if hasDeferredWork {
+                    row.deferredWorkItemIds = deferredWorkItemIds(entries.lazy.filter { fold.entryIds.contains($0.id) })
+                        .filter { !supersededDeferredIds.contains($0) }
+                }
+                rows.append(row)
             }
             if collapsed.contains(entry.id) { continue }
             if let fold = attemptFolds[entry.id] {
-                rows.append(TimelineRow(
+                var row = TimelineRow(
                     id: "attempt-fold:\(fold.attemptId.rawValue)", createdAt: fold.createdAt,
                     kind: .attemptFold(runId: fold.runId, attemptId: fold.attemptId, label: "Superseded attempt",
-                                       expanded: input.expandedAttemptIds.contains(fold.attemptId))))
+                                       expanded: input.expandedAttemptIds.contains(fold.attemptId)))
+                row.deferredWorkItemIds = fold.deferredWorkItemIds
+                rows.append(row)
             }
             if collapsedSuperseded.contains(entry.id) || activeWorkEntryIds.contains(entry.id) { continue }
 

@@ -192,7 +192,12 @@ public enum ThreadReduction {
             {
                 return nil
             }
-            let previous = projection.turnItems.first { $0.id == item.id }
+            let previous = projection.turnItems.last { $0.id == item.id }
+            var item = item
+            // An update keeps the anchor's deferred cursor (orchestrationV2Projection.ts:420-429 at 4928).
+            if let previous, previous.raw["deferredWork"] != nil, item.raw["deferredWork"] == nil {
+                item = item.settingDeferredWork(previous.deferredWork)
+            }
             upsert(&next.turnItems, item)
             // Only interrupt requests can change another item's visibility.
             if item.type == .runInterruptRequest || previous?.type == .runInterruptRequest {
@@ -243,25 +248,42 @@ public enum ThreadReduction {
 
     // MARK: History pages (threadHistoryMerge.ts:62-149)
 
-    /// Port of `mergeOlderHistoryIntoProjection`: dedupes by `sourceThreadId:sourceItemId`, keeps
-    /// live values of rows already present, prepends the page in server order and renumbers.
-    public static func mergeOlderHistory(_ projection: ThreadProjection, _ olderItems: [ProjectedTurnItem]) -> ThreadProjection {
-        guard !olderItems.isEmpty else { return projection }
+    /// Port of `mergeOlderHistoryIntoProjection` (threadHistoryMerge.ts:86-180 at 4928): dedupes by
+    /// `sourceThreadId:sourceItemId`, keeps live values of rows already present and renumbers. A plain page
+    /// interleaves at the rows both lists share (#29711). With `work`, the page is a deferred work group: its
+    /// rows go between the anchor and the group's last ordinal, and the anchor keeps `deferredWork` with the
+    /// next cursor until the group is complete (#26240).
+    public static func mergeOlderHistory(
+        _ projection: ThreadProjection, _ olderItems: [ProjectedTurnItem], work: (anchorId: TurnItemId, nextCursor: String?)? = nil
+    ) -> ThreadProjection {
+        if olderItems.isEmpty, work == nil { return projection }
         func key(_ row: ProjectedTurnItem) -> String { "\(row.sourceThreadId.rawValue):\(row.sourceItemId.rawValue)" }
         let threadId = projection.thread.id
+        let start = work.flatMap { w in projection.visibleTurnItems.firstIndex { $0.sourceItemId == w.anchorId } }
+        let anchor = start.map { projection.visibleTurnItems[$0] }
+        let deferred = anchor?.item.deferredWork
+        if work != nil, deferred == nil { return projection }
         let currentByKey = Dictionary(projection.visibleTurnItems.map { (key($0), $0) }, uniquingKeysWith: { _, last in last })
         var turnItemOrder = projection.turnItems.map(\.id)
         var turnItemById = Dictionary(projection.turnItems.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         var pageKeys = Set<String>()
         var page: [ProjectedTurnItem] = []
         for pageRow in olderItems {
+            if let anchor, let deferred,
+               pageRow.sourceThreadId != anchor.sourceThreadId || pageRow.item.ordinal < anchor.item.ordinal
+                || pageRow.item.ordinal > deferred.lastOrdinal
+            {
+                continue
+            }
             let k = key(pageRow)
             if pageKeys.contains(k) { continue }
             var row = currentByKey[k] ?? pageRow
             let rowIsLocal = row.isLocal || row.sourceThreadId == threadId
             if currentByKey[k] == nil, rowIsLocal, let currentItem = turnItemById[row.sourceItemId] {
-                // Hidden live items stay hidden; paging may reveal retained interrupt requests.
-                guard currentItem.type == .runInterruptRequest, isVisible(currentItem, in: projection) else { continue }
+                // Hidden live items stay hidden. Snapshots also keep interrupt requests and pending request
+                // cards outside the window; their history page shows them (c15e49a77c, #26435).
+                let revealed: Set<TurnItemType> = [.runInterruptRequest, .approvalRequest, .userInputRequest]
+                guard revealed.contains(currentItem.type), isVisible(currentItem, in: projection) else { continue }
                 row.item = currentItem
             }
             pageKeys.insert(k)
@@ -271,12 +293,62 @@ public enum ThreadReduction {
                 turnItemOrder.append(row.sourceItemId)
             }
         }
-        guard !page.isEmpty else { return projection }
-        let visible = page + projection.visibleTurnItems.filter { !pageKeys.contains(key($0)) }
-        if visible == projection.visibleTurnItems { return projection }
+        if page.isEmpty, work == nil { return projection }
+        let current = projection.visibleTurnItems
+        var visible: [ProjectedTurnItem]
+        if let work, let start, let anchor, let deferred {
+            var end = start + 1
+            while end < current.count {
+                let row = current[end]
+                if row.sourceThreadId != anchor.sourceThreadId || row.visibility == "synthetic" || row.item.ordinal > deferred.lastOrdinal { break }
+                end += 1
+            }
+            var updated = anchor
+            updated.item = anchor.item.settingDeferredWork(work.nextCursor.map {
+                TurnItem.DeferredWork(cursor: $0, itemCount: deferred.itemCount, lastOrdinal: deferred.lastOrdinal)
+            })
+            let section = (page + current[start..<end].filter { !pageKeys.contains(key($0)) })
+                .map { $0.sourceItemId == anchor.sourceItemId ? updated : $0 }
+            // A stable sort, like `Array.prototype.sort`.
+            let ordered = section.enumerated().sorted { ($0.element.item.ordinal, $0.offset) < ($1.element.item.ordinal, $1.offset) }.map(\.element)
+            visible = Array(current[..<start]) + ordered + Array(current[end...])
+            if anchor.isLocal, turnItemById[updated.item.id] != nil { turnItemById[updated.item.id] = updated.item }
+        } else {
+            visible = interleave(current, page, pageKeys: pageKeys, key: key)
+        }
+        if visible == current { return projection }
         var merged = projection
         merged.turnItems = turnItemOrder.compactMap { turnItemById[$0] }
         merged.visibleTurnItems = renumbered(visible)
+        return merged
+    }
+
+    /// `interleavePage` (threadHistoryMerge.ts:53-84 at 4928): a page is a contiguous range, so current rows
+    /// before its first shared row are older, and new page rows sit just before the next row both lists share.
+    static func interleave(
+        _ current: [ProjectedTurnItem], _ page: [ProjectedTurnItem], pageKeys: Set<String>, key: (ProjectedTurnItem) -> String
+    ) -> [ProjectedTurnItem] {
+        var currentIndex: [String: Int] = [:]
+        for (index, row) in current.enumerated() { currentIndex[key(row)] = index }
+        var merged: [ProjectedTurnItem] = []
+        merged.reserveCapacity(current.count + page.count)
+        var pending: [ProjectedTurnItem] = []
+        var next = 0
+        func emitCurrent(through end: Int) {
+            while next < end {
+                if !pageKeys.contains(key(current[next])) { merged.append(current[next]) }
+                next += 1
+            }
+        }
+        for row in page {
+            guard let index = currentIndex[key(row)] else { pending.append(row); continue }
+            emitCurrent(through: index + 1)
+            merged += pending
+            merged.append(row)
+            pending = []
+        }
+        merged += pending
+        emitCurrent(through: current.count)
         return merged
     }
 }
@@ -425,6 +497,48 @@ public struct ThreadReducer: Sendable {
         return changes
     }
 
+    // MARK: Deferred work (threads.ts:727-860 at 4928, #26240)
+
+    /// The `view: "work"` page request for an anchor row's folded group, or nil when the anchor is gone or its
+    /// group is complete.
+    public func deferredWorkRequest(anchorId: TurnItemId) -> ThreadHistoryRequest? {
+        guard status != .deleted, let cursor = deferredWorkCursor(anchorId) else { return nil }
+        return ThreadHistoryRequest(threadId: threadId, cursor: cursor, throughEntryId: anchorId.rawValue, view: .work)
+    }
+
+    func deferredWorkCursor(_ anchorId: TurnItemId) -> String? {
+        projection?.visibleTurnItems.first { $0.sourceItemId == anchorId }?.item.deferredWork?.cursor
+    }
+
+    public enum DeferredWorkResult: Equatable, Sendable {
+        /// Merged; load `next` too while it is non-nil.
+        case loaded(next: String?)
+        /// The anchor is gone or already complete.
+        case noop
+        case failed(String)
+    }
+
+    /// Merges one page of a deferred group at its anchor. A page for a cursor the anchor no longer holds is
+    /// dropped (`isCurrent`, threads.ts:745-753).
+    @discardableResult
+    public mutating func applyDeferredWorkPage(
+        _ page: ThreadHistoryPage, anchorId: TurnItemId, requestCursor: String
+    ) -> (ThreadChangeSet, DeferredWorkResult) {
+        var changes = ThreadChangeSet()
+        guard let current = projection, status != .deleted else { return (changes, .noop) }
+        let cursor = deferredWorkCursor(anchorId)
+        guard cursor == requestCursor else {
+            return (changes, cursor == nil ? .noop : .failed("Work history changed. Try again."))
+        }
+        if let next = page.nextCursor, next == requestCursor { return (changes, .failed("Work history did not advance.")) }
+        let merged = ThreadReduction.mergeOlderHistory(current, page.items, work: (anchorId, page.nextCursor))
+        changes.projectionChanged = merged != current
+        projection = merged
+        history.expanded = true
+        changes.historyChanged = true
+        return (changes, .loaded(next: page.nextCursor))
+    }
+
     /// A load-earlier request was cancelled (its view moved to another connection): the control
     /// becomes usable again without an error. Port of `clearActiveHistoryLoading`
     /// (threadHistoryMerge.ts:38-50), which T3 runs when the request's fiber is interrupted.
@@ -464,6 +578,7 @@ public struct ThreadReducer: Sendable {
             afterSequence: projection == nil ? nil : lastSequence,
             requestCompletionMarker: requestCompletionMarker ? true : nil,
             acceptBoundedSnapshot: true,
-            acceptCompactTurnItems: true)
+            acceptCompactTurnItems: true,
+            acceptDeferredWork: true)
     }
 }

@@ -36,6 +36,9 @@ struct TimelineRowUI: Hashable {
     var workflowCoordinator: JSONValue?
     /// Runs of this row's preparation failures that a Retry can prepare again.
     var retryRunIds: Set<RunId> = []
+    /// An open fold waits for its deferred work, or the last load failed (MessagesTimeline.tsx:1802-1840 at 4928).
+    var deferredWorkLoading = false
+    var deferredWorkFailed = false
 }
 
 /// What MCP App rows ask of the environment (McpAppFrame.tsx: `mcpAppEnvironment`, `useTurnItemDetail`).
@@ -98,6 +101,14 @@ public final class ThreadViewModel {
     private var findOpenedMessages: Set<String> = []
     private var expandedRunIds: Set<RunId> = []
     private var expandedAttemptIds: Set<RunAttemptId> = []
+    /// Loads deferred work groups by anchor item id; false when any failed (`loadEarlierHistory` with
+    /// `workAnchorId`, threads.ts:727-860 at 4928, #26240).
+    public var onLoadDeferredWork: (@MainActor ([String]) async -> Bool)?
+    /// Fold rows whose last deferred load failed, and anchors loading now.
+    private var deferredWorkFailedRows: Set<String> = []
+    private var deferredWorkLoadingAnchors: Set<String> = []
+    /// A fold opened since the last pass; the next one loads its deferred work. Streaming passes skip the scan.
+    private var deferredWorkCheck = false
     private var expandedWorkGroupIds: Set<String> = []
     private var expandedEntries: Set<String> = []
     private var expandedMessages: Set<String> = []
@@ -357,6 +368,7 @@ public final class ThreadViewModel {
             threadRowsPending = true
             findOpenedRuns = []; findOpenedAttempts = []; findOpenedMessages = []
             expandedRunIds = []; expandedAttemptIds = []; expandedWorkGroupIds = []
+            deferredWorkFailedRows = []; deferredWorkLoadingAnchors = []; deferredWorkCheck = false
             expandedEntries = []; expandedMessages = []; expandedPlans = []
             expandedChangedFiles = []; folderOverrides = [:]
             dropOutputs()
@@ -403,7 +415,7 @@ public final class ThreadViewModel {
                 if expandedAttemptIds.insert(attempt.id).inserted { findOpenedAttempts.insert(attempt.id); changed = true }
             }
         }
-        if changed { derive() }
+        if changed { deferredWorkCheck = true; derive() }
         if let row = items.first(where: { $0.id == match.entryId }), let message = row.row.message,
            expandedMessages.insert(message.id.rawValue).inserted { findOpenedMessages.insert(message.id.rawValue); refreshItems() }
     }
@@ -415,8 +427,42 @@ public final class ThreadViewModel {
         if changed { derive(); refreshItems() }
     }
 
-    func toggleRun(_ id: RunId) { findOpenedRuns.remove(id); expandedRunIds.formSymmetricDifference([id]); derive() }
-    func toggleAttempt(_ id: RunAttemptId) { findOpenedAttempts.remove(id); expandedAttemptIds.formSymmetricDifference([id]); derive() }
+    func toggleRun(_ id: RunId) {
+        findOpenedRuns.remove(id); expandedRunIds.formSymmetricDifference([id]); deferredWorkCheck = true; derive()
+    }
+    func toggleAttempt(_ id: RunAttemptId) {
+        findOpenedAttempts.remove(id); expandedAttemptIds.formSymmetricDifference([id]); deferredWorkCheck = true; derive()
+    }
+
+    /// A fold row's click (`useDeferredWorkLoading.toggle`, MessagesTimeline.tsx:1833-1837 at 4928): an open fold whose
+    /// load failed retries, anything else toggles.
+    func clickFold(_ row: TimelineRow, toggle: () -> Void) {
+        let failed = deferredWorkFailedRows.remove(row.id) != nil
+        if failed, !row.deferredWorkItemIds.isEmpty, row.isExpandedFold {
+            deferredWorkCheck = true
+            refreshItems()
+        } else {
+            toggle()
+        }
+    }
+
+    /// Starts loads for open folds with deferred anchors that are not loading or failed.
+    private func loadOpenDeferredWork() {
+        guard deferredWorkCheck, let load = onLoadDeferredWork else { return }
+        deferredWorkCheck = false
+        for item in items where item.row.isExpandedFold && !item.row.deferredWorkItemIds.isEmpty && !deferredWorkFailedRows.contains(item.id) {
+            let anchors = item.row.deferredWorkItemIds.filter { !deferredWorkLoadingAnchors.contains($0) }
+            guard !anchors.isEmpty else { continue }
+            deferredWorkLoadingAnchors.formUnion(anchors)
+            let rowId = item.id, generation = self.generation
+            Task { @MainActor [weak self] in
+                let ok = await load(anchors)
+                guard let self, self.generation == generation else { return }
+                self.deferredWorkLoadingAnchors.subtract(anchors)
+                if !ok { self.deferredWorkFailedRows.insert(rowId); self.refreshItems() }
+            }
+        }
+    }
     func toggleGroup(_ id: String) { expandedWorkGroupIds.formSymmetricDifference([id]); derive() }
     func toggleEntry(_ id: String) {
         expandedEntries.formSymmetricDifference([id])
@@ -509,9 +555,14 @@ public final class ThreadViewModel {
             items = rows.map(item)
         }
         OpenTiming.measure("timeline apply", "\(items.count) rows") { onChange?(change) }
+        loadOpenDeferredWork()
     }
     func item(_ row: TimelineRow) -> TimelineItem {
         var ui = TimelineRowUI()
+        if !row.deferredWorkItemIds.isEmpty {
+            ui.deferredWorkFailed = deferredWorkFailedRows.contains(row.id)
+            ui.deferredWorkLoading = row.isExpandedFold && !ui.deferredWorkFailed
+        }
         switch row.kind {
         case .pendingApproval(let approval):
             ui.approvalResponding = respondingApprovalRequestIds.contains(approval.requestId)

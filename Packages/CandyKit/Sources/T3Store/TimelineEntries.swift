@@ -114,6 +114,7 @@ public struct TimelineEntry: Sendable, Hashable, Identifiable {
 
     public var message: ChatMessage? { if case .message(let m, _) = kind { return m }; return nil }
     public var work: WorkLogEntry? { if case .work(let e) = kind { return e }; return nil }
+    public var messageRow: ProjectedTurnItem? { if case .message(_, let row) = kind { return row }; return nil }
     public var eventItem: ProjectedTurnItem? { if case .event(let p) = kind { return p }; return nil }
     /// A published page or app: it stays visible when its turn or attempt folds.
     public var isWebContent: Bool {
