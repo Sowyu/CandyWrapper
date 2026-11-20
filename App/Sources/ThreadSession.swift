@@ -18,9 +18,6 @@ final class ThreadSession {
     private weak var panel: ThreadPanelView?
     private weak var sidebar: SidebarContentView?
     private var shell: ShellSession?
-    /// `getThreadLinkMetadata` answers by `<environment>/<thread>`; nil inside means the server doesn't know the thread.
-    fileprivate var linkMetadata: [String: ThreadLinkMetadata?] = [:]
-    fileprivate var linkMetadataLoading: Set<String> = []
     private var subscription: Task<Void, Never>?
     private var historyLoad: Task<Void, Never>?
     private var citation: (messageId: String, pages: Int)?
@@ -413,6 +410,9 @@ final class ThreadController {
     private var retryingPreparations: Set<RunId> = []
     private weak var sidebar: SidebarContentView?
     private let environments: Environments
+    /// `getThreadLinkMetadata` answers by `<environment>/<thread>`; nil inside means the server doesn't know the thread.
+    fileprivate var linkMetadata: [String: ThreadLinkMetadata?] = [:]
+    fileprivate var linkMetadataLoading: Set<String> = []
     private var session: ThreadSession? {
         willSet { if let old = session, old !== newValue { retain(old) } }
     }
@@ -1781,7 +1781,7 @@ extension ThreadController {
     }
 }
 
-extension ThreadSession {
+extension ThreadController {
     /// `MarkdownThreadLink` (4928 chat/MarkdownThreadLink.tsx:20-71): a link to a thread this client hasn't loaded
     /// asks its server for the title and project with `orchestration.getThreadLinkMetadata`, once per thread, where
     /// the server sets `threadLinkMetadata`. Until the answer lands the chip shows the link's own text.
