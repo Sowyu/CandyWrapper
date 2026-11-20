@@ -625,6 +625,8 @@ public enum TimelineRows {
             }
             var hidden = Set<String>()
             let terminalIndex = group.terminal.flatMap { t in group.entries.firstIndex { $0.id == t.id } } ?? group.entries.count
+            // Folded dividers lose their place in the turn, so only the latest stays visible (MessagesTimeline.logic.ts at 4928, #34177).
+            let visibleCompactionId = group.entries.last { $0.work?.sourceActivityKind == "context-compaction" }?.id
             for (index, entry) in group.entries.enumerated() {
                 if entry.id == group.terminal?.id { continue }
                 let isCompaction = entry.work?.sourceActivityKind == "context-compaction"
@@ -632,7 +634,8 @@ public enum TimelineRows {
                 if !isCompaction, index > terminalIndex, !isFoldableTrailing { continue }
                 // Linked resources and still-working children outlive their run.
                 // A finished reply a steer superseded answers its prompt, so it stays out (MessagesTimeline.logic.ts:1110-1116).
-                if entry.isPersistentResourceCard || liveSubagentEntryIds.contains(entry.id) || completeSupersededReplyEntryIds.contains(entry.id) {
+                if entry.id == visibleCompactionId || entry.isPersistentResourceCard || liveSubagentEntryIds.contains(entry.id)
+                    || completeSupersededReplyEntryIds.contains(entry.id) {
                     continue
                 }
                 if entry.work?.itemType == .notification { continue }
@@ -836,7 +839,7 @@ public enum TimelineRows {
             while index >= activeTurnHeaderIndex {
                 let entry = entries[index]
                 guard let w = entry.work, w.tone != .error, w.sourceActivityKind != "runtime.error",
-                    w.itemType != .systemNotice, w.itemType != .notification, w.questionAnswer == nil, pendingApproval(entry) == nil, runIsActiveResponse(w.runId),
+                    w.itemType != .systemNotice, w.itemType != .notification, w.itemType != .todoList, w.questionAnswer == nil, pendingApproval(entry) == nil, runIsActiveResponse(w.runId),
                     w.sourceActivityKind != "context-compaction", !collapsed.contains(entry.id),
                     !collapsedSuperseded.contains(entry.id), folds[entry.id] == nil, attemptFolds[entry.id] == nil
                 else { break }
@@ -991,7 +994,7 @@ public enum TimelineRows {
             case .work(let work):
                 if (work.runId.map { failed.contains($0) } ?? false) || (work.itemType == .error && work.toolLifecycleStatus == .failed)
                     || work.tone == .error || work.sourceActivityKind == "runtime.error" || work.itemType == .systemNotice
-                    || work.itemType == .notification || work.questionAnswer != nil
+                    || work.itemType == .notification || work.itemType == .todoList || work.questionAnswer != nil
                 {
                     rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .work(groupedEntries: [work], isExpandedToolGroup: false, displayLabel: nil)))
                     continue
@@ -1002,7 +1005,7 @@ public enum TimelineRows {
                     let next = entries[cursor]
                     guard let nextWork = next.work, nextWork.sourceActivityKind != "context-compaction", nextWork.tone != .error,
                         nextWork.sourceActivityKind != "runtime.error", nextWork.itemType != .systemNotice,
-                        nextWork.itemType != .notification, nextWork.questionAnswer == nil, pendingApproval(next) == nil, !activeWorkEntryIds.contains(next.id), !collapsed.contains(next.id),
+                        nextWork.itemType != .notification, nextWork.itemType != .todoList, nextWork.questionAnswer == nil, pendingApproval(next) == nil, !activeWorkEntryIds.contains(next.id), !collapsed.contains(next.id),
                         !collapsedSuperseded.contains(next.id), folds[next.id] == nil, attemptFolds[next.id] == nil,
                         nextWork.runId == work.runId, next.attempt?.id == entry.attempt?.id
                     else { break }

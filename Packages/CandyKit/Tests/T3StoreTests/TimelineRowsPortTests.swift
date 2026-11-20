@@ -738,4 +738,24 @@ struct ToolCallVisibilityTests {
         #expect(TimelineRows.liveAnswerPreview(entries + [message("a1", role: .assistant, run: "r1", at: at, text: "Found it. The key is wrong.")]) == "Found it.")
         #expect(TimelineRows.liveAnswerPreview(Array(entries.prefix(3))) == nil)
     }
+
+    /// #34177 (MessagesTimeline.logic.ts at 4928): a folded turn keeps only its latest context-compacted divider.
+    @Test func foldedTurnsKeepOneCompactionDivider() {
+        let at: T3Timestamp = "2026-01-01T00:00:00Z"
+        func compaction(_ id: String) -> TimelineEntry {
+            work(id, run: "r1", at: at, label: "Compacted context", tone: .info) { $0.sourceActivityKind = "context-compaction"; $0.toolLifecycleStatus = .completed }
+        }
+        let rows = derive([
+            message("u", role: .user, at: at),
+            work("cmd1", run: "r1", at: at) { $0.itemType = .commandExecution; $0.toolLifecycleStatus = .completed },
+            compaction("c1"),
+            work("cmd2", run: "r1", at: at) { $0.itemType = .commandExecution; $0.toolLifecycleStatus = .completed },
+            compaction("c2"),
+            message("a", role: .assistant, run: "r1", at: at, text: "Done."),
+        ])
+        let kinds = rows.map { "\($0.id):\(kind($0))" }
+        #expect(kinds.contains { $0.hasPrefix("c2:") })
+        #expect(!kinds.contains { $0.hasPrefix("c1:") })
+        #expect(kinds.contains { $0.hasSuffix(":turn-fold") })
+    }
 }

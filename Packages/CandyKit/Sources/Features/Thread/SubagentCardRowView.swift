@@ -165,8 +165,14 @@ extension SubagentCardPresentation {
     /// `SimpleWorkEntryRow` (MessagesTimeline.tsx:5362-5381): a notification about a child the parent has a
     /// record of draws as that subagent's card; without a record it stays a work line.
     @MainActor static func notificationCard(_ e: WorkLogEntry, records: [JSONValue]) -> SubagentCardPresentation? {
-        guard let child = notificationChild(e),
-              let record = records.first(where: { $0["childThreadId"]?.stringValue == child }) else { return nil }
+        guard let child = notificationChild(e) else { return nil }
+        // Follow-up tasks share a child conversation, so a delegated-task notice names the tasks it reports on
+        // (V2LifecycleRow.tsx and TimelineWorkEntryRow.tsx at 4928, #22141).
+        let source = e.projectedItem?.item["source"]
+        let taskIds = NotificationSource.kind(source) == "delegated_task" ? source?["taskIds"]?.arrayValue?.compactMap(\.stringValue) : nil
+        let found = taskIds.map { ids in records.first { ids.contains($0["id"]?.stringValue ?? "") } }
+            ?? records.first(where: { $0["childThreadId"]?.stringValue == child })
+        guard let record = found else { return nil }
         let time = e.createdAt.epochMs.map { TL.timeOfDay(Date(timeIntervalSince1970: Double($0) / 1000),
                                                           format: ClientSettingsStore.shared.current.string("timestampFormat")) } ?? ""
         let event = notificationEvent(outcome: e.projectedItem?.item["outcome"]?.stringValue, timestamp: time)

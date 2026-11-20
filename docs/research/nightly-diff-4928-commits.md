@@ -177,7 +177,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | ab8e488e10 | #28629 | thread | feat(antigravity): runtime 1.4.5 with real turn failures and subagent work | port; Antigravity turn failures, server side mostly |
-| ddc3cefbc4 | #34177 | thread | fix(clients): collapsed turns show one context-compacted divider | port |
+| ddc3cefbc4 | #34177 | thread | fix(clients): collapsed turns show one context-compacted divider | ported (thread-4): TimelineRows.turnFolds keeps the turn's latest compaction divider visible and folds the others |
 
 ## Port group notifications (2)
 
@@ -1423,7 +1423,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 616c426f5f | #27372 | thread | fix(shared): TypeScript files no longer show as videos | ported: `video/mp2t` and `video/vnd.dlna.mpeg-tts` attachments stay files in sent messages and their chips (thread-2, T3Store `isPlayableVideoMime`). The composer side needs nothing (thread-4): no composer chip takes its kind from a `video/` type, and the reattach check that reads one (ComposerAttachments.matchesReattachMarker) only runs on a file of the same name and size |
 | 8d012a688e | #27522 | thread | fix(web): a new thread's first reply shows without reloading | port |
 | a0d6cc8ba9 | #21594 | thread | fix(client-runtime): goal token counts no longer read 1000k | ported: goal usage reads 1m, not 1000k, from 999,500 tokens (thread-2, ThreadRecoveryPresentation) |
-| f47700849e | #22141 | thread | fix(web): show the result of the notified delegated task | port |
+| f47700849e | #22141 | thread | fix(web): show the result of the notified delegated task | ported (thread-4): SubagentCardPresentation.notificationCard picks the record a delegated task's taskIds name |
 | 5ad7da060d | #22367 | thread | fix(web): keep markdown separators visible in dark mode | ported in eceea265 |
 | 9ceb949a01 | #22875 | thread | fix(web): copied Markdown tables keep formula pipes | ported (thread-3): table Copy as Markdown keeps formula pipes (MarkdownLayout.markdown) |
 | c40b32a729 | #23448 | thread | fix(web): keep ACP agent logos in multi-model selections | port |
@@ -1480,7 +1480,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 53f1d09470 | #30528 | thread | fix(web): refresh resource timeline while diagnostics is open | port |
 | 47a89f2ee7 | #30762 | thread | fix(shared): shortened agent paths like /tmp/... no longer become broken file chips | ported in 93df13b9 |
 | fe199e35ca | #30390 | thread | fix(client-runtime): untitled subagent titles no longer end in a broken character | n/a (thread-3): Swift String.prefix cuts at whole characters (ThreadRelationships.swift:72) |
-| ef81fd15ca | #31888 | thread | fix(web): keep task updates static in the timeline | port |
+| ef81fd15ca | #31888 | thread | fix(web): keep task updates static in the timeline | ported (thread-4): todo_list entries stay out of the live work rows and tool groups, like notifications |
 | 6dcaf6cbe7 | #29285 | thread | fix(web): remote subagents no longer split from the lineage list | port |
 | 8bf1b64cae | #32141 | thread | fix(web): the citation comment box opens at the quote instead of sliding in from the corner | port |
 | 07508ffd2f | #31794 | thread | fix(web): popovers over the desktop header respond to the pointer | n/a: Electron's title bar drag region; AppKit hit-tests popups above the window chrome |
