@@ -115,7 +115,8 @@ public final class CommitSummaryView: BoxView {
     let edit = ButtonView("Edit", variant: .ghost, size: .xs)
     private let none = LabelView("none", font: DSFont.ui(14, weight: .medium))
     let list = CommitFileListView()
-    private let totals = SlashTotalsView()
+    // The summary's spans are flex items, so the browser drops the spaces around its slash (GitActionsControl.tsx:1995-2003).
+    private let totals = SlashTotalsView(compact: true)
 
     init(branch: String?, isDefaultRef: Bool, files: [VcsStatus.File]?) {
         selection = GitActionsLogic.CommitSelection(files: files ?? [])
@@ -208,16 +209,17 @@ public final class CommitSummaryView: BoxView {
     }
 }
 
-/// `+N / -N` in mono, `diff-addition` and `diff-deletion` around a muted slash.
+/// `+N / -N` in mono, `diff-addition` and `diff-deletion` around a muted slash. `compact` draws `+N/-N`.
 final class SlashTotalsView: DSView {
-    private let plus = LabelView(), slash = LabelView(" / "), minus = LabelView()
+    private let plus = LabelView(), slash: LabelView, minus = LabelView()
     var insertions = 0 { didSet { plus.text = "+\(insertions)"; invalidateIntrinsicContentSize(); needsLayout = true } }
     var deletions = 0 { didSet { minus.text = "-\(deletions)"; invalidateIntrinsicContentSize(); needsLayout = true } }
     var excludedText: String? { didSet { needsLayout = true; invalidateIntrinsicContentSize() } }
     private let excluded = LabelView("Excluded")
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(compact: Bool = false) {
+        slash = LabelView(compact ? "/" : " / ")
+        super.init(frame: .zero)
         for l in [plus, slash, minus, excluded] { l.font = DSFont.mono(14); l.lineHeight = 20; addSubview(l) }
         plus.text = "+0"; minus.text = "-0"
     }
