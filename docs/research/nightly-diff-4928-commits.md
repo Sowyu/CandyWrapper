@@ -1687,39 +1687,39 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | fe219c4de1 | #24937 | usage | fix(web): keep tool groups collapsed after a usage-limit pause | left (panels-2): thread timeline, outside Features/Usage |
-| 061dc79e3b | #23963 | usage | fix(usage): reject cyclic model mappings before saving | left (panels-2): not checked against UsagePriceLogic's alias validation |
-| 06ded0b600 | #23767 | usage | fix(web): keep usage hubs that share a host | left (panels-2): Limits hubs, not checked |
-| 90235549bf | #23768 | usage | fix(usage): explain price edits blocked by model mappings | left (panels-2): not checked against UsagePriceLogic's alias validation |
-| 87c33c8990 | #24940 | usage | fix(web): Limits ChatGPT usage card names the connected accounts | left (panels-2): Limits, not checked |
-| 8f258f0216 | #24630 | usage | fix(usage): use each account accent colour in limit bars | left (panels-2): Limits bar colors, not checked |
+| 061dc79e3b | #23963 | usage | fix(usage): reject cyclic model mappings before saving | ported (panels-3): a save whose final mappings form a cycle is refused per row, UsagePriceLogic.changes |
+| 06ded0b600 | #23767 | usage | fix(web): keep usage hubs that share a host | left (panels-3): hubs sharing a host is AddUsageLimitSourceDialog logic in Features/Settings, held for the Settings agent |
+| 90235549bf | #23768 | usage | fix(usage): explain price edits blocked by model mappings | ported (panels-3): prices typed for a model a destination maps get "X maps this model…", UsagePriceLogic.changes |
+| 87c33c8990 | #24940 | usage | fix(web): Limits ChatGPT usage card names the connected accounts | left (panels-3): the ChatGPT external-usage card listing its connected accounts needs the accounts on UsageLimitsLogic.externalUsageLinks and a line in UsageLimitsView |
+| 8f258f0216 | #24630 | usage | fix(usage): use each account accent colour in limit bars | left (panels-3): per-account accent colours need ProviderEnvironmentLogic.accentColor parsed to NSColor in UsageLimitWindowBar and the pooled member bars |
 | 9cee35ac4a | #21939 | usage | fix(web): accept comma as decimal in usage price entry | ported (panels-2): price entry reads the first comma as the decimal point, UsagePriceLogic.parse |
-| 9f52b7d419 | #25214 | usage | fix(usage): use the freshest reported pooled plan | left (panels-2): Limits pooled plan, not checked |
-| b010581aea | #23411 | usage | fix(usage): combine duplicated skipped-record warnings | left (panels-2): not checked |
+| 9f52b7d419 | #25214 | usage | fix(usage): use the freshest reported pooled plan | ported (panels-3): the freshest report naming a plan gives the merged account's plan, UsageLimitsLogic.accounts |
+| b010581aea | #23411 | usage | fix(usage): combine duplicated skipped-record warnings | left (panels-3): combining duplicated skipped-record warnings needs usageFormat.ts's grouping in UsagePageView's warning list |
 | 5ffcb86798 | #24260 | usage | fix(web): usage limit toast shows the Limited icon | left (panels-2): composer and thread toast, outside Features/Usage |
 | 213b39198f | #25659 | usage | fix(web): composer emphasis shortcuts ignore delimiters inside inline code | left (panels-2): composer, outside Features/Usage |
 | 689bdb82e9 | #23029 | usage | fix(web): usage-limit retry notice shows the timezone | left (panels-2): thread notice, outside Features/Usage |
 | 31eb1d0076 | #29013 | usage | fix(web): closing Settings or Usage no longer jumps back to a quote's source | left (panels-2): thread quote navigation, outside Features/Usage |
-| 58cf69c835 | #28065 | usage | fix(usage): label a proxied Claude account by its e-mail, and drop .json from hub rows | left (panels-2): Limits labels, not checked |
+| 58cf69c835 | #28065 | usage | fix(usage): label a proxied Claude account by its e-mail, and drop .json from hub rows | ported (panels-3): a hub e-mail replaces the driver's default instance name, and hub rows drop .json; UsageLimitsLogic.accounts |
 | 3368dd70f2 |  | usage | fix(web): align usage table padding and thread status rows | port |
 | 935818e422 | #25341 | usage | fix(codex): sharing usage limits offer the existing recovery options | left (panels-2): thread recovery notice, outside Features/Usage |
 | c7537d0264 | #29292 | usage | fix(chat): show one usage-limit recovery notice | left (panels-2): thread recovery notice, outside Features/Usage |
 | e9233b01bb | #15632 | usage | fix(web): rank usage provider summaries by the selected metric | ported (panels-2): provider summary rows rank by the shown metric, UsageMerge.rankProviders |
-| 0f4a130710 | #30322 | usage | fix(codex): explain speed limits on managed connections | left (panels-2): Limits, not checked |
-| 4c3a9d5818 | #32448 | usage | fix(cursor): use the SDK account for usage data | left (panels-2): not checked |
-| ee21337d84 | #34243 | usage | fix(shared): a zero-credit cap no longer marks seat-based Codex out of usage | left (panels-2): Limits, not checked |
-| 5099695673 | #25755 | usage | fix(web): price dialog no longer flags a model before a price is entered | left (panels-2): not checked |
-| f28dc8ee94 | #34506 | usage | fix(cursor): unified usage plans show one meter | left (panels-2): Limits Cursor meters, not checked |
-| 489fa8c052 | #34421 | usage | fix(cursor): hide duplicate pooled usage limits | left (panels-2): Limits Cursor meters, not checked |
+| 0f4a130710 | #30322 | usage | fix(codex): explain speed limits on managed connections | left (panels-3): the speed-limit explanation is in ChatGptSharingControl, a Features/Composer control held for the composer agent |
+| 4c3a9d5818 | #32448 | usage | fix(cursor): use the SDK account for usage data | left (panels-3): removing Cursor's usage settings touches Features/Settings, held for the Settings agent; the meter side is free with the runtime |
+| ee21337d84 | #34243 | usage | fix(shared): a zero-credit cap no longer marks seat-based Codex out of usage | ported (panels-3): a zero-credit cap no longer exhausts seat-based Codex with plan windows, UsageFallback.exhaustedWindow |
+| 5099695673 | #25755 | usage | fix(web): price dialog no longer flags a model before a price is entered | ported (panels-3): a new price row shows its error only once a price or mapping is typed, UsageDialogs row |
+| f28dc8ee94 | #34506 | usage | fix(cursor): unified usage plans show one meter | ported (panels-3): Cursor's Overall and Cursor Models descriptions, UsageLimitsLogic.cursorWindows |
+| 489fa8c052 | #34421 | usage | fix(cursor): hide duplicate pooled usage limits | left (panels-3): hiding Cursor's duplicate total needs hasDuplicateCursorTotal in UsageLimitsLogic.displayWindows and a label-less card |
 | c17ec829d0 | #35020 | usage | fix(web): overlong content search queries explain the 256-character limit | left (panels-2): files content search, see the files batch |
 | d9a97e7c49 | #28703 | usage | fix(web): sidebar keeps the open thread active while Settings or Usage is open | left (panels-2): sidebar, outside Features/Usage |
-| 350753afac | #35341 | usage | fix(usage): Claude accounts with a $0 monthly cap no longer leave a blank cell | left (panels-2): not checked |
+| 350753afac | #35341 | usage | fix(usage): Claude accounts with a $0 monthly cap no longer leave a blank cell | left (panels-3): the $0 cap cell needs the limits' zeroSpendCap field on the wire and a dashed cell in the pooled grid |
 | 46b508d119 | #23584 | usage | fix(web): keep long ACP registry searches within the query limit | left (panels-2): settings ACP registry, outside Features/Usage |
-| 4192234c34 | #36561 | usage | fix(usage): distinct email-less hub accounts no longer collapse | left (panels-2): Limits hubs, not checked |
+| 4192234c34 | #36561 | usage | fix(usage): distinct email-less hub accounts no longer collapse | left (panels-3): keying email-less hub accounts by a remote endpoint needs the source endpoint and host classification in UsageLimitsLogic.accounts |
 | 2b596b8690 | #28581 | usage | fix(web): context meter no longer keeps the retired provider's usage | left (panels-2): thread context meter, outside Features/Usage |
 | 16854a766c | #37238 | usage | fix(web): usage chart and share-bar figures reach screen readers | ported (panels-2): the chart is a group labeled like T3's sr-only caption with one row per period; the share bar's strip is hidden and its legend is a labeled list |
 | b5d9c71e1c | #37241 | usage | fix(web): screen readers announce each Usage figure with its label | ported (panels-2): the drawn model and period tables expose one element per row with each figure under its column, model rows open their dialog on press; dialog stats read label and value together |
 | 2579c3c4dd | #37272 | usage | fix(web): close Usage without reloading | n/a: browser history navigation |
-| 310baf7c99 | #38731 | usage | fix(web): closing Settings or Usage with Esc returns focus to the opener | left (panels-2): focus return after Esc, not checked |
+| 310baf7c99 | #38731 | usage | fix(web): closing Settings or Usage with Esc returns focus to the opener | left (panels-3): Esc returning focus to the opener is the route modal in App, which the Settings agent changed this week |
 
 ## Skipped (32)
 

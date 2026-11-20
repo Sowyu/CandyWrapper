@@ -222,8 +222,8 @@ public enum UsageLimitsLogic {
 
     /// `CURSOR_USAGE_WINDOWS` (usageLimits.ts:32-48).
     public static let cursorWindows: [(id: String, label: String, description: String)] = [
-        ("totalPercentUsed", "Overall", "Combined usage across both allowances, not a third quota."),
-        ("autoPercentUsed", "Cursor Models", "Grok and Composer use this first. Auto can use either pool."),
+        ("totalPercentUsed", "Overall", "All usage on your plan this billing cycle."),
+        ("autoPercentUsed", "Cursor Models", "Grok, Composer, and Auto use this allowance."),
         ("apiPercentUsed", "Other Models", "Claude, GPT, and Gemini use this pool. Grok and Composer fall back here."),
     ]
 
@@ -232,6 +232,10 @@ public enum UsageLimitsLogic {
     }
 
     static let kindOrder = ["session": 0, "weekly": 1, "monthly": 2, "other": 3]
+
+    /// `PROVIDER_DISPLAY_NAMES` (4928 contracts model.ts:197-209).
+    static let providerDisplayNames = ["antigravity": "Antigravity", "codex": "Codex", "claudeAgent": "Claude", "cursor": "Cursor", "grok": "Grok",
+                                       "fx": "fx", "kiro": "Kiro", "muse": "Muse Code", "acpRegistry": "ACP Registry", "pi": "Pi", "opencode": "OpenCode"]
 
     /// `providersWithLimits`: enabled, installed, available and reporting usage at all.
     public static func providersWithLimits(_ providers: [ServerProvider]) -> [ServerProvider] {
@@ -305,7 +309,10 @@ public enum UsageLimitsLogic {
         var accounts: [String: UsageLimitAccount] = [:]
         var creditSources: [String: UsageLimitAccount] = [:]
         var hubRedeems: [String: UsageLimitAccount] = [:]
+        // The freshest report that names a plan gives it (4928 usageLimits.ts, #25214).
+        var planSources: [String: UsageLimitAccount] = [:]
         func merge(_ key: String, _ next: UsageLimitAccount) {
+            if next.plan != nil, planSources[key].map({ next.limits.checkedMs > $0.limits.checkedMs }) ?? true { planSources[key] = next }
             if let r = next.redeem, r.target.isHub, hubRedeems[key].map({ next.limits.checkedMs > $0.limits.checkedMs }) ?? true {
                 hubRedeems[key] = next
             }
@@ -319,8 +326,11 @@ public enum UsageLimitsLogic {
             let winner = fresher ? next : previous
             let creditSource = creditSources[key]
             var merged = previous
-            merged.displayName = previous.displayName ?? next.displayName
-            merged.plan = previous.plan ?? next.plan
+            // A hub e-mail names the account better than the driver's default instance name (#28065).
+            let hubEmail = [previous, next].contains { $0.environments.isEmpty && $0.email != nil }
+            let displayName = previous.displayName ?? next.displayName
+            merged.displayName = hubEmail && displayName?.lowercased() == providerDisplayNames[previous.driver]?.lowercased() ? nil : displayName
+            merged.plan = planSources[key]?.plan ?? previous.plan ?? next.plan
             merged.accentColor = previous.accentColor ?? next.accentColor
             merged.environments = envs
             merged.sourceLabel = envs.isEmpty ? (previous.sourceLabel ?? next.sourceLabel) : nil

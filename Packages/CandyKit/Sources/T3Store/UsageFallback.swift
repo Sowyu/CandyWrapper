@@ -34,6 +34,11 @@ public enum UsageFallback {
                 let pool = w.id.range(of: "^(gemini|claude|gpt|3p)-", options: .regularExpression).map { String(w.id[$0].dropLast()) }
                 return pool == nil || family == nil || pool == family || (pool == "3p" && (family == "claude" || family == "gpt"))
             }
+        case "codex":
+            // Seat-based plans spend credits only past their plan windows, so the credit cap blocks only plans
+            // without them (4928 usageLimits.ts:62-68, #34243).
+            let hasPlanWindows = (provider?.usageLimits?.windows ?? []).contains { $0.id == "primary" || $0.id == "secondary" }
+            return exhausted.first { $0.id != "individual" || !hasPlanWindows }
         case "opencode":
             return exhausted.first { !$0.id.hasPrefix("go_") || model.hasPrefix("opencode-go/") }
         default:

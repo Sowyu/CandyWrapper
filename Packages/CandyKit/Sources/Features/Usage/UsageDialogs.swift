@@ -477,7 +477,12 @@ final class UsagePriceRowView: DSView {
         reset.icon = r.isNew ? .x : .rotateCcw
         tip?.text = r.removed ? "Undo reset" : r.isNew ? "Remove row" : "Reset to automatic"
         reset.setAccessibilityLabel(r.removed ? "Undo reset for \(r.model)" : r.isNew ? "Remove new model" : "Reset price for \(r.model) to automatic")
-        let showError = message != nil && (!r.model.trimmingCharacters(in: .whitespaces).isEmpty || r.values.values.contains { !$0.isEmpty })
+        // A new row still blocks Save, but shows a price error only once a price or mapping is typed
+        // (UsagePriceOverrides.tsx, #25755).
+        let blank = { (v: String?) in (v ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+        let awaitingPrice = r.isNew && blank(r.alias) && r.values.values.allSatisfy(blank)
+            && message != "Enter a model ID." && message != "This model already has a row. Edit its prices there."
+        let showError = message != nil && !awaitingPrice && (!r.model.trimmingCharacters(in: .whitespaces).isEmpty || r.values.values.contains { !$0.isEmpty })
         error.text = showError ? message! : ""
         modelInput.isInvalid = showError && !r.model.trimmingCharacters(in: .whitespaces).isEmpty
         needsLayout = true

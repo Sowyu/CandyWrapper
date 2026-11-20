@@ -45,6 +45,15 @@ struct UsageLogicTests {
         #expect(UsagePriceLogic.changes(a, [UsagePriceDraft(id: "n", model: "m", isNew: true, alias: "m")]).errors["n"] == "Map to a different model.")
         let missing = UsagePriceLogic.changes(Self.target("b"), [UsagePriceDraft(id: "n", model: "new", isNew: true, values: [.input: "1"])])
         #expect(missing.errors["n"] == "Output is required on B.")
+        // #23963: a batch that closes a mapping cycle is refused; reversing a cleared mapping in one save is fine.
+        let looped = Self.target("d", aliases: ["x": "y"])
+        #expect(UsagePriceLogic.changes(looped, [UsagePriceDraft(id: "y", model: "y", isNew: false, alias: "x")]).errors["y"] == "Model mappings cannot form a cycle on D.")
+        let reversed = UsagePriceLogic.changes(looped, [UsagePriceDraft(id: "x", model: "x", isNew: false, removed: true),
+                                                         UsagePriceDraft(id: "y", model: "y", isNew: false, alias: "x")])
+        #expect(reversed.errors.isEmpty)
+        // #23768: prices typed for a model this destination maps say why they cannot apply.
+        let blocked = UsagePriceLogic.changes(looped, [UsagePriceDraft(id: "x", model: "x", isNew: false, values: [.input: "1"])])
+        #expect(blocked.errors["x"] == "D maps this model. Remove it from \"Apply to\" or clear its mapping first.")
         #expect(UsagePriceLogic.patch(mapped) == ["usagePriceOverrides": .object(["m": .null]), "usageModelAliases": .object(["m": .string("big")])])
         #expect(UsagePriceLogic.blocker(Self.target("c", aliases: nil), mapped) == "Update server to map models")
         let t = UsagePriceTarget.make(environmentId: "e", label: "E", connected: true, settings: .object([:]), capabilities: [], canWrite: true)
