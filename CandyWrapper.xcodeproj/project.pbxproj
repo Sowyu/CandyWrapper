@@ -541,7 +541,7 @@
 				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CANDY_UPDATE_FEED_URL = "https://github.com/Sowyu/CandyWrapper/releases/download/appcast/appcast.xml";
-				CANDY_UPDATE_PUBLIC_KEY = "3lPqUDTLuxLA+rq4R0InFIoN6hun/6vy1ElXcGaTnqA=";
+				CANDY_UPDATE_PUBLIC_KEY = "uEahF8lFv2jlwRpuV6iYH7ExKGN6uDNatub9V3IyxtE=";
 				CANDY_URL_SCHEME = t3code;
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
@@ -625,7 +625,7 @@
 				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CANDY_UPDATE_FEED_URL = "";
-				CANDY_UPDATE_PUBLIC_KEY = "3lPqUDTLuxLA+rq4R0InFIoN6hun/6vy1ElXcGaTnqA=";
+				CANDY_UPDATE_PUBLIC_KEY = "uEahF8lFv2jlwRpuV6iYH7ExKGN6uDNatub9V3IyxtE=";
 				CANDY_URL_SCHEME = "candywrapper-dev";
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
