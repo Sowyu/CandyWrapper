@@ -269,7 +269,12 @@ final class ComposerEffortColumnView: DSView {
     private let leftRule = CALayer()
     private var scrollOffset: CGFloat = 0
     /// The row holding keyboard focus, or nil while the model list has it.
-    private(set) var focusIndex: Int? { didSet { for (i, r) in rows.enumerated() { r.focused = i == focusIndex } } }
+    private(set) var focusIndex: Int? { didSet { showFocus() } }
+    /// `focus-visible`: the focused row lights only after keyboard input. Chromium does not match it for focus that
+    /// follows a click, so a level focused by picking a model with the pointer, or clicked itself, stays unlit and the
+    /// pointer's row is the only one lit (COLUMN_ROW, ComposerModelEffort.tsx:188 at 4928).
+    var focusVisible = false { didSet { if focusVisible != oldValue { showFocus() } } }
+    private func showFocus() { for (i, r) in rows.enumerated() { r.focused = focusVisible && i == focusIndex } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -324,7 +329,11 @@ final class ComposerEffortColumnView: DSView {
         }
         for (i, row) in rows.enumerated() {
             row.capy = capy
-            row.action = { [weak self] in self?.activate(i) }
+            row.action = { [weak self] in
+                // A click focuses its row without the focus fill.
+                self?.focusVisible = false; self?.focusIndex = i
+                self?.activate(i)
+            }
             row.toggle?.onChange = { [weak self] on in
                 guard let self, i < self.rowDescriptors.count else { return }
                 self.onBoolean?(self.rowDescriptors[i].0.id, on)
@@ -365,6 +374,7 @@ final class ComposerEffortColumnView: DSView {
 
     /// `moveBetweenRows` (:246-261): Up and Down move between enabled rows without wrapping.
     func handleKey(_ key: PopupKey) -> Bool {
+        focusVisible = true
         let enabled = rows.indices.filter { rows[$0].isEnabled }
         switch key {
         case .up, .down:
@@ -678,6 +688,8 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
     /// Moves keyboard focus into the column (`focusEffort`); false when it has no rows.
     @discardableResult
     func focusEffort(levelsOnly: Bool) -> Bool {
+        // From the keyboard (Right, the effort shortcut) the focus shows; after a model click it does not.
+        column.focusVisible = NSApp.currentEvent?.type == .keyDown
         let focused = column.focus(levelsOnly: levelsOnly)
         if focused { picker.highlightedRow = nil }
         return focused

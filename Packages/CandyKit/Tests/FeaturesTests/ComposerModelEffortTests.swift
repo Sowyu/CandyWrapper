@@ -81,6 +81,18 @@ import T3Store
         // The default permissions live in the picker's footer, so the chip hides.
         #expect(p.controlsView.hidesPermissions)
     }
+
+    /// Screen pass 2026-11-20, item 8: after a model click the column focused its level and lit it, so a click on another
+    /// level left two rows lit. Focus that follows the pointer is not `focus-visible`; keys make it visible.
+    @Test func pointerFocusLeavesOnlyThePointersRowLit() throws {
+        let column = ComposerEffortColumnView()
+        column.update(descriptors: [Self.effort(["low", "medium", "high"], current: "medium")], ultrathink: false, locked: false, model: "Haiku 5.5")
+        #expect(column.focus(levelsOnly: true))
+        #expect(!column.rows.contains { $0.focused }, "a model click's focus shows no fill")
+        column.rows[2].action?()
+        #expect(column.focusIndex == 2 && !column.rows.contains { $0.focused }, "a clicked level takes focus without the fill")
+        #expect(column.handleKey(.up) && column.rows[1].focused, "a key shows the focus")
+    }
 }
 
 /// Writes the docked picker and the closed footer controls to `CW_EXPORT_DIR` for eyeballing. An export tool, not a
