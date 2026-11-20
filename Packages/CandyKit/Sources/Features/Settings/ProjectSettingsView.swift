@@ -77,6 +77,17 @@ public final class ProjectSettingsView: ScopedSettingsPage {
             choices = scope.projectMenu.map { p in (p.displayName, { [weak self] in
                 self?.context.selectScope?(SettingsScopeSelection(machine: scope.selection.machine, project: p.key)) }) }
         }
+        if choices != nil, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            // Redesign: a list in place of the chooser, kept across refreshes so a search survives.
+            let select: @MainActor (String) -> Void = { [weak self] key in
+                self?.context.selectScope?(SettingsScopeSelection(machine: scope.selection.machine, project: key)) }
+            let entries = SettingsProjectList.entries(scope)
+            if let list = scopeNotice as? SettingsProjectListView { list.reload(entries, select: select); return }
+            let list = SettingsProjectListView(entries: entries, select: select)
+            scopeNotice = list
+            body = [list]
+            return
+        }
         if let choices {
             let n: NSView & SettingsGroupRow = DesignGeometry.usesClassic(self)
                 ? SettingsScopeNoticeView("Choose a project to manage its name, icon, checkouts and actions.", choices: choices)
