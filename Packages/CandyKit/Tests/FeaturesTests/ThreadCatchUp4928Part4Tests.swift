@@ -42,6 +42,8 @@ struct ThreadCatchUp4928Part4Tests {
         #expect(links("https://example.com/a.，下一句") == ["https://example.com/a=>https://example.com/a"])
         #expect(links("https://example.com/search?q=hello，world") == ["https://example.com/search?q=hello=>https://example.com/search?q=hello"])
         #expect(links("http://a.com。http://b.com，").count == 2)
+        // Screen pass 3, item 5: a CJK letter right before the scheme, as micromark's `previousProtocol` allows.
+        #expect(links("见https://example.com/a。好") == ["https://example.com/a=>https://example.com/a"])
         #expect(links("# **http://localhost:3000**，刷新") == ["http://localhost:3000=>http://localhost:3000"])
         // Unicode earlier in the URL keeps the mark; code, labels and destinations stay as typed.
         #expect(links("https://example.com/日本語，続き").first?.hasPrefix("https://example.com/日本語，続き") == true)
