@@ -110,6 +110,10 @@ KEEP_AFTER = {
 
 # Pages CandyWrapper doesn't have yet: voice dictation and the secrets store. Their rows stay out of search.
 UNPORTED_PATHS = {"/settings/voice", "/settings/secrets"}
+# 4928 rows CandyWrapper doesn't draw yet, so a search never lands on a page without them. Remove an id when its row lands.
+UNPORTED_IDS = {"boring-sidebar-multiline", "screen-reader-announcements", "screen-reader-window-title", "simlock-hosts",
+                "worktree-fast-checkout", "keep-awake-while-agents-work", "ghq-clone-layout", "welcome-page", "text-generators",
+                "device-sources", "issue-trackers"}
 
 
 def swift_string(literal):
@@ -149,7 +153,7 @@ for kind, text in entries:
     for m in re.finditer(r"(\w+):\s*(" + STRING + r"|true|false|\[[^\]]*\])", text):
         fields.setdefault(m.group(1), m.group(2))
     title = fields["title"].strip('"')
-    if fields["to"].strip('"') in UNPORTED_PATHS:
+    if fields["to"].strip('"') in UNPORTED_PATHS or fields["id"].strip('"') in UNPORTED_IDS:
         continue
     args = [f'id: {fields["id"]}', f'title: {json.dumps(TITLES.get(title, title))}', f'to: .{PATHS[fields["to"].strip(chr(34))]}']
     if "targetId" in fields:
