@@ -402,7 +402,7 @@ final class GitController {
         let pill = panel.header.pill
         pill.showsVersionControl = target != nil
         pill.isRepo = isRepo
-        let totals = status?.branchChanges.map { ($0.insertions, $0.deletions) } ?? status.map { ($0.workingTree.insertions, $0.workingTree.deletions) } ?? (0, 0)
+        let totals = GitActionsLogic.changesTotals(status).map { ($0.insertions, $0.deletions) } ?? (0, 0)
         if pill.totals.insertions != totals.0 || pill.totals.deletions != totals.1 {
             pill.totals.insertions = totals.0
             pill.totals.deletions = totals.1
@@ -436,9 +436,10 @@ final class GitController {
         card.branch.isEnabled = refsLoaded && !branchActionPending
         card.showsVersionControl = true
         card.isRepo = isRepo
-        let totals = status?.branchChanges.map { ($0.insertions, $0.deletions) } ?? status.map { ($0.workingTree.insertions, $0.workingTree.deletions) } ?? (0, 0)
+        let totals = GitActionsLogic.changesTotals(status).map { ($0.insertions, $0.deletions) } ?? (0, 0)
         card.totals.insertions = totals.0
         card.totals.deletions = totals.1
+        card.changesBase = GitActionsLogic.changesBaseLabel(status)
     }
 
     private var quickAction: GitActionsLogic.QuickAction {
@@ -1029,7 +1030,7 @@ final class GitController {
         render()
     }
 
-    private var defaultBranchDialog: (dialog: DefaultBranchDialog, branch: String)?
+    private var defaultBranchDialog: (dialog: DefaultBranchDialog, branch: String, action: GitStackedAction)?
 
     /// The feature branch option follows the live status while the dialog is open. Until the
     /// status loads it stays on, and the server rejects a stale request (GitActionsControl.tsx:1159-1167).
@@ -1037,7 +1038,7 @@ final class GitController {
         guard let pending = defaultBranchDialog else { return }
         guard modal?.panel === pending.dialog.dialog else { defaultBranchDialog = nil; return }
         pending.dialog.setFeatureBranchUnavailable(GitActionsLogic.featureBranchUnavailableReason(
-            branchName: pending.branch, hasWorkingTreeChanges: status?.hasWorkingTreeChanges ?? true))
+            branchName: pending.branch, hasWorkingTreeChanges: status?.hasWorkingTreeChanges ?? true, action: pending.action))
     }
 
     /// The default-branch dialog: continue here, or run it on a new feature branch.
@@ -1048,7 +1049,7 @@ final class GitController {
                                                            terminology: terminology)
         let d = DefaultBranchDialog(copy: copy, canWrite: true, canChangeBranch: true)
         let host = present(d.dialog, in: window)
-        defaultBranchDialog = (d, branch)
+        defaultBranchDialog = (d, branch, action)
         syncDefaultBranchDialog()
         d.abort.action = { [weak host] in host?.close() }
         d.proceed.action = { [weak self, weak host] in

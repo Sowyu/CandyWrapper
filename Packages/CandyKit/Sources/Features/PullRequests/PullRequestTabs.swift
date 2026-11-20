@@ -1421,7 +1421,9 @@ final class PullRequestDescriptionItem: DSView, StackItem, FocusWithinObserver {
     func set(_ d: PullRequestDetail) {
         detail = d
         view.cwd = d.workspaceRoot
-        view.setMarkdown(d.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "_No description provided._" : d.body)
+        // PullRequestMarkdown.tsx (#26060): GitHub, Forgejo and Azure DevOps keep single line breaks.
+        view.setMarkdown(d.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "_No description provided._" : d.body,
+                         preservesLineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
         // Keyed by the pull request, so an editor left open never shows over the next one.
         if editingURL != nil && editingURL != d.url { stopEditing() }
         editButton.isHidden = editor != nil || !PullRequestWriteLogic.canEditChangeRequest(d)

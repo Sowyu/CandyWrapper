@@ -343,7 +343,9 @@ final class PullRequestsPageController {
                     let r = try await read(involvement, filters, parsed.text.isEmpty ? nil : parsed.text)
                     cursors[env] = r.nextCursors.isEmpty ? nil : r.nextCursors
                     if r.truncated { truncated.append(env) }
-                    merged.entries += r.entries
+                    // The first environment to answer keeps a pull request several of them read (pullRequestList.logic.ts, #37704).
+                    let held = Set(merged.entries.map(\.url))
+                    merged.entries += r.entries.filter { !held.contains($0.url) }
                     merged.errors += r.errors
                     merged.providers += r.providers.filter { p in !merged.providers.contains { $0.host == p.host } }
                     merged.truncated = merged.truncated || r.truncated

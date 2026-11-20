@@ -522,7 +522,9 @@ final class PullRequestDetailBinding {
             } catch {
                 // The draft is kept.
                 composer?.reviewPending = false
-                self?.toast("The review could not be submitted", nil, .error)
+                // PullRequestReviewForm.tsx (#22382): the host's reason, or the hint when it gave none.
+                self?.toast("The review could not be submitted", PullRequestDetailLogic.readableFailure(Self.failure(error, number: ref.number).1,
+                    hint: "The host refused the review. Your draft is still here to try again."), .error)
             }
         }
     }
@@ -786,7 +788,12 @@ final class PullRequestDetailBinding {
                 self?.toast(action == "merge" ? "Stack merge request completed" : "Stack rebased",
                             action == "merge" ? "GitHub merged the stack or added it to its merge queue." : nil, .success)
             } catch {
-                self?.toast(action == "merge" ? "Could not merge the stack" : "Could not rebase the stack", Self.failure(error, number: ref.number).1, .error)
+                // PullRequestStackMenu.tsx (#24118): the host's reason, or what usually stops each action.
+                let hint = action == "merge"
+                    ? "The host refused the merge. Check that you have write access, that the checks it requires have passed, and that the branch is not conflicting."
+                    : "The host refused the rebase. A rebase stops at the first commit that does not apply cleanly."
+                self?.toast(action == "merge" ? "Could not merge the stack" : "Could not rebase the stack",
+                            PullRequestDetailLogic.readableFailure(Self.failure(error, number: ref.number).1, hint: hint), .error)
             }
             guard let self, self.stillShows(shown) else { return }
             self.view.stackPending = false

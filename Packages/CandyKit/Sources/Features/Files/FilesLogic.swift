@@ -79,7 +79,39 @@ public func filePreviewReadErrorMessage(failure: String?, operation: String?, me
 /// `parseDelimitedPreview` (packages/shared/src/delimitedPreview.ts): quoted delimiters, escaped
 /// quotes and multiline cells; at most 100 rows, 30 columns and 2,000 characters a cell.
 public enum DelimitedTable {
+    /// `csvPreviewDelimiter` (delimitedPreview.ts, #36738): semicolons win only when they are
+    /// consistent across the first two records and commas are not.
+    public static func csvDelimiter(_ text: String) -> Character {
+        let chars = Array(text.utf16)
+        var commas = [0, 0], semicolons = [0, 0]
+        var record = 0, second = false, quoted = false, fieldStart = true
+        var index = chars.first == 0xFEFF ? 1 : 0
+        while index < chars.count {
+            defer { index += 1 }
+            let c = chars[index]
+            if quoted {
+                guard c == 0x22 else { continue }
+                if index + 1 < chars.count, chars[index + 1] == 0x22 { index += 1 } else { quoted = false }
+            } else if c == 0x22, fieldStart { quoted = true }
+            else if c == 0x0A || c == 0x0D {
+                if record == 1 { break }
+                if c == 0x0D, index + 1 < chars.count, chars[index + 1] == 0x0A { index += 1 }
+                record = 1
+                fieldStart = true
+                continue
+            } else if c == 0x2C { commas[record] += 1 }
+            else if c == 0x3B { semicolons[record] += 1 }
+            second = second || record == 1
+            fieldStart = c == 0x2C || c == 0x3B
+        }
+        if semicolons[0] <= commas[0] { return "," }
+        if !second { return ";" }
+        let consistentCommas = commas[0] > 0 && commas[1] == commas[0]
+        return semicolons[1] == semicolons[0] && !consistentCommas ? ";" : ","
+    }
+
     public static func parse(_ text: String, delimiter: Character) -> (rows: [[String]], truncated: Bool) {
+        let delimiter = delimiter == "," ? csvDelimiter(text) : delimiter
         let chars = Array(text.utf16)
         let delim = delimiter.utf16.first!
         var rows: [[String]] = []
