@@ -972,8 +972,9 @@ final class SidebarCommands {
 
     /// Folders dropped on the sidebar open as projects, one at a time so the last one stays open
     /// (T3 4928 sidebar/SidebarFolderDrop.tsx:36-81, 103-121).
-    // ponytail: adds on the primary environment; T3 picks this computer's server (#38722). Pick the local one once
-    // Environments names it.
+    /// They open on this computer's server (#38722, useOpenLocalWorkspace.ts and primaryEnvironment.ts
+    /// `localEnvironmentIdAtom`). Here that is always the primary: CandyWrapper has no setting that turns the local
+    /// environment off while another connection shares its T3 home.
     func addDroppedFolders(_ folders: [URL], otherFiles: Int) {
         if otherFiles > 0 { toast("Only folders can be added as projects", "Drop files on a thread to attach them.", .info) }
         guard !folders.isEmpty else { return }

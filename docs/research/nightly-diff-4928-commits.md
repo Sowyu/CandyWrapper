@@ -1369,7 +1369,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 55c134a346 | #37925 | sidebar | fix(client-runtime): Tab completes a folder name when the list shows fuzzy matches | skip: Add project folder completion, outside the sidebar |
 | 9b3b1c79a7 | #38155 | sidebar | fix(client): a thread search that fails says so instead of "No results" | ported 0166b1ef in the sidebar; the palette half is outside it |
 | e6265a926e | #38545 | sidebar | fix(web): thread jump hints re-check when a modifier changes while the hold is already met | skip: modifier-hold jump hints, see #26112 |
-| 6927cfe2ad | #38722 | sidebar | fix(web): dropped folders open on this computer's server when the desktop app's own environment is off | left: pick this computer's environment for dropped folders |
+| 6927cfe2ad | #38722 | sidebar | fix(web): dropped folders open on this computer's server when the desktop app's own environment is off | n/a (sidebar-2): the primary is always this computer's server here; no setting turns it off while another connection shares its home |
 
 ## Small fixes, terminal (35)
 
