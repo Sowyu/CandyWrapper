@@ -70,7 +70,8 @@ struct PanelScreensFidelityTests {
             let view = CommandPaletteView(content: .results([CommandPaletteGroup("In messages", matches)]))
             view.input.text = "hello"
             view.footerActionLabel = "Select"
-            return (view, CGRect(x: 262, y: 78, width: 576, height: 410), "palette")
+            // Four matches: the 4928 palette ends at 326pt (its bottom border, measured on both captures).
+            return (view, CGRect(x: 262, y: 78, width: 576, height: 326), "palette")
         case "11-terminal-drawer":
             let view = TerminalDrawerView()
             let surface = TerminalSurfaceView()
@@ -127,7 +128,9 @@ struct PanelScreensFidelityTests {
             view.input.placeholder = "Search files..."
             view.footerActionLabel = "Open file"
             view.escapeLabel = "Back"
-            return (view, CGRect(x: 262, y: 78, width: 576, height: 328), "palette")
+            view.highlightedIndex = 0
+            // Three files: the 4928 palette ends at 278pt (its bottom border, measured on both captures).
+            return (view, CGRect(x: 262, y: 78, width: 576, height: 278), "palette")
         case "46-project-search":
             let body = ContentSearchView()
             let python = "    return f\"Hello, {name}!\""
