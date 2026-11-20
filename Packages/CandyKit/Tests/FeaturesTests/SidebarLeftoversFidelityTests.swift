@@ -43,7 +43,8 @@ struct SidebarLeftoversFidelityTests {
             field.begin(ThreadId("t"), title: "Create a file named approval-demo.txt")
             if state == "focus-visible" { field.input.previewState(FieldView.State(focused: true)) }
             let box = SidebarSearchFidelityTests.SidebarBox(frame: NSRect(origin: .zero, size: size))
-            field.frame = NSRect(x: 8, y: 8, width: 204, height: 22)
+            // The spec's input is 204px wide with `-mx-1` and a 20px text-sm line (SidebarThreadRow.tsx:672).
+            field.frame = NSRect(x: 4, y: 8, width: 204, height: 20)
             box.addSubview(field)
             field.layoutSubtreeIfNeeded()
             return box
