@@ -999,7 +999,8 @@ private struct Builder {
         // ChatMarkdown widens an ordered list's gutter to (digits + 2)ch when markers need two or more digits.
         var gutter = MarkdownStyle.listGutter
         if list.ordered {
-            let digits = max(String(list.start).count, String(list.start + max(list.items.count - 1, 0)).count)
+            // `orderedListGutterStyle` over the item values (4928 ChatMarkdown.tsx, #33820).
+            let digits = list.items.indices.map { String(list.items[$0].number ?? list.start + $0).count }.max() ?? String(list.start).count
             if digits > 1 { gutter = CGFloat(digits + 2) * TextLine(NSAttributedString(string: "0", attributes: [.font: body])).width }
         }
         var out = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
@@ -1025,7 +1026,7 @@ private struct Builder {
                 let top = y + baseline - CGFloat(ascent - 3 * (ascent - ascent * 2 / 3) / 2) / 2
                 out.items.append(.symbol(min(inner.ulDepth, 3) - 1, CGRect(x: gutter - 8 - size, y: top, width: size, height: size), context.color))
             } else if item.task == nil, let baseline = content.baseline {
-                let marker = NSAttributedString(string: markerText(list, index: index, context: inner), attributes: [
+                let marker = NSAttributedString(string: markerText(list, index: index, number: item.number, context: inner), attributes: [
                     .font: list.ordered ? NSFont.monospacedDigitSystemFont(ofSize: MarkdownStyle.fontSize, weight: .regular) : body,
                     .foregroundColor: context.color])
                 out.items.append(.glyphs(marker, baselineRight: CGPoint(x: gutter, y: y + baseline)))
@@ -1041,10 +1042,10 @@ private struct Builder {
     }
 
     /// The marker text Chromium paints outside the item: the counter or symbol plus a space.
-    func markerText(_ list: MarkdownList, index: Int, context: Context) -> String {
+    func markerText(_ list: MarkdownList, index: Int, number: Int? = nil, context: Context) -> String {
         guard list.ordered else { return ["\u{2022} ", "\u{25E6} ", "\u{25AA} "][min(context.ulDepth, 3) - 1] }
-        let n = list.start + index
-        switch context.olDepth {
+        let n = number ?? list.start + index
+        switch list.decimal ? 1 : context.olDepth {
         case 1: return "\(n). "
         case 2: return "\(Self.alpha(n)). "
         default: return "\(Self.roman(n)). "

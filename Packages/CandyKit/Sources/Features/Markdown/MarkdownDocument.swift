@@ -23,7 +23,9 @@ public struct MarkdownDocument: Sendable, Equatable {
         let markdown = keepingWindowsPathEscapes(hidden?.text ?? source)
         // Source positions cost about 15% of the parse (a 1,000-line reply on the huge thread's cached open),
         // and only loose lists need them.
-        let positions = mayHaveLooseList(markdown)
+        // Sent messages keep the numbers written on list items (#33820), which only source positions show.
+        let keepsNumbers = preservesLineBreaks && mayHaveOrderedList(markdown)
+        let positions = keepsNumbers || mayHaveLooseList(markdown)
         let options = AttributedString.MarkdownParsingOptions(
             allowsExtendedAttributes: true, interpretedSyntax: .full, failurePolicy: .returnPartiallyParsedIfPossible,
             appliesSourcePositionAttributes: positions)
@@ -41,7 +43,38 @@ public struct MarkdownDocument: Sendable, Equatable {
             where line.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) { blank.insert(index + 1) }
             builder.root.markLooseLists(blank: blank)
         }
+        if keepsNumbers {
+            let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false)
+            builder.root.keepWrittenNumbers(lines: lines)
+            return containedBlocks(builder.root).map(decimalLists)
+        }
         return containedBlocks(builder.root)
+    }
+
+    /// A line starting with up to nine digits and `.` or `)`, after indentation and quote markers.
+    static func mayHaveOrderedList(_ text: Substring) -> Bool {
+        var atLineStart = true, digits = 0
+        for c in text.utf8 {
+            if c == UInt8(ascii: "\n") { atLineStart = true; digits = 0; continue }
+            guard atLineStart else { continue }
+            if c >= 48 && c <= 57 { digits += 1; if digits > 9 { atLineStart = false }; continue }
+            if digits > 0 { if c == UInt8(ascii: ".") || c == UInt8(ascii: ")") { return true }; atLineStart = false; continue }
+            if c != UInt8(ascii: " ") && c != UInt8(ascii: "\t") && c != UInt8(ascii: ">") { atLineStart = false }
+        }
+        return false
+    }
+
+    /// `.user-message-markdown ol { list-style-type: decimal }` (4928 index.css): nested lists count in digits too.
+    private static func decimalLists(_ block: MarkdownBlock) -> MarkdownBlock {
+        switch block {
+        case .list(var list):
+            if list.ordered { list.decimal = true }
+            list.items = list.items.map { var item = $0; item.blocks = item.blocks.map(decimalLists); return item }
+            return .list(list)
+        case .blockquote(let children): return .blockquote(children.map(decimalLists))
+        case .alert(let kind, let children): return .alert(kind, children.map(decimalLists))
+        default: return block
+        }
     }
 
     /// `remarkKeepWindowsPaths` (834f0e3a1b, shared/src/markdownPipeline.ts:258-300): CommonMark reads the `\.` in
@@ -290,7 +323,12 @@ public struct MarkdownDocument: Sendable, Equatable {
         case .header(let level):
             return [.heading(level: level, node.runs)]
         case .orderedList, .unorderedList:
-            let items = node.children.compactMap(\.node).map(listItem(from:))
+            var items = node.children.compactMap(\.node).map(listItem(from:))
+            if case .orderedList = node.kind {
+                for (i, child) in node.children.compactMap(\.node).enumerated() {
+                    if case .listItem(let ordinal) = child.kind { items[i].number = ordinal }
+                }
+            }
             let start = node.children.compactMap(\.node).first.flatMap { item -> Int? in
                 if case .listItem(let ordinal) = item.kind { return ordinal }
                 return nil
@@ -542,7 +580,7 @@ extension MarkdownBlock {
         case .paragraph(let r), .heading(_, let r): return runs(r)
         case .list(let list):
             return list.items.enumerated().map { i, item in
-                let mark = item.task.map { $0 ? "checked, " : "unchecked, " } ?? (list.ordered ? "\(list.start + i). " : "")
+                let mark = item.task.map { $0 ? "checked, " : "unchecked, " } ?? (list.ordered ? "\(item.number ?? list.start + i). " : "")
                 return mark + item.blocks.map(\.plainText).joined(separator: "\n")
             }.joined(separator: "\n")
         case .blockquote(let blocks), .alert(_, let blocks): return blocks.map(\.plainText).joined(separator: "\n")
@@ -591,6 +629,8 @@ public struct MarkdownList: Sendable, Equatable {
     public var ordered: Bool
     public var start: Int
     public var items: [MarkdownListItem]
+    /// Sent messages draw every ordered level in digits.
+    public var decimal = false
     /// CommonMark's loose list: a blank line between two items or between two blocks of one item.
     /// react-markdown then wraps every item's text in a `<p>` with its margins.
     public var loose = false
@@ -600,6 +640,9 @@ public struct MarkdownListItem: Sendable, Equatable {
     /// nil for a plain item, else whether the task box is checked.
     public var task: Bool?
     public var blocks: [MarkdownBlock]
+    /// An ordered item's number: CommonMark's count from the first marker, or in a sent message the number written on it.
+    public var number: Int?
+    public init(task: Bool?, blocks: [MarkdownBlock], number: Int? = nil) { self.task = task; self.blocks = blocks; self.number = number }
 }
 
 public struct MarkdownTable: Sendable, Equatable {
@@ -699,6 +742,29 @@ private struct Node {
     var loose = false
 
     /// Sets `loose` on every list with a blank source line between two items or between two blocks of one item.
+    /// `keepOrderedListNumbers` (4928 shared/markdownOrderedListNumbers.ts:22-41): an ordered item keeps the number
+    /// written on its first line, and the next item counts on from it.
+    mutating func keepWrittenNumbers(lines: [Substring]) {
+        if case .orderedList = kind {
+            for index in children.indices {
+                guard case .node(var item) = children[index], case .listItem = item.kind,
+                      let line = item.lines?.lowerBound, line >= 1, line <= lines.count else { continue }
+                let body = lines[line - 1].drop { $0 == " " || $0 == "\t" || $0 == ">" }
+                let digits = body.prefix { $0.isASCII && $0.isNumber }
+                if (1...9).contains(digits.count), let mark = body.dropFirst(digits.count).first, mark == "." || mark == ")", let n = Int(digits) {
+                    item.kind = .listItem(n)
+                    children[index] = .node(item)
+                }
+            }
+        }
+        for index in children.indices {
+            if case .node(var child) = children[index] {
+                child.keepWrittenNumbers(lines: lines)
+                children[index] = .node(child)
+            }
+        }
+    }
+
     mutating func markLooseLists(blank: Set<Int>) {
         func gap(_ a: ClosedRange<Int>?, _ b: ClosedRange<Int>?) -> Bool {
             guard let a, let b, b.lowerBound > a.upperBound + 1 else { return false }

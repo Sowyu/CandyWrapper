@@ -154,7 +154,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 70f475f511 | #28516 | thread | feat(clients): surface child approvals in parent threads | port |
+| 70f475f511 | #28516 | thread | feat(clients): surface child approvals in parent threads | left (thread-2): needs a watch per approving child through `watchThread`, `PendingRequests.derive` on each, and a card list above the composer shell, outside the banner stack, reusing PendingApprovalInlineView, plus a spec case and reference. The banner's Open approval works meanwhile |
 
 ## Port group usage-page (5)
 
@@ -897,7 +897,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8f0d66de5f | #26109 | connections | fix(web): servers still restarting after an app update no longer offer the update again | port |
 | 7cd9a73b2f | #24493 | connections | fix(web): thread alerts missed during a disconnect fire on reconnect | port |
 | aa46f7ada4 | #25591 | connections | fix(client-runtime): re-pairing at a new address uses the new token | port |
-| 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | port |
+| 95d4da5a93 | #28592 | connections | fix(clients): open a delegated child's approval on the environment it runs in | already in CandyWrapper: the child input banner opens the child's scoped thread id, which carries its own environment (Features/Thread/ThreadLineageController `updateChildInputs`) |
 | 322f6544df | #30498 | connections | feat(web): show a newly created pairing link without expanding the client list | port |
 | d520d5bb85 | #26464 | connections | fix(web): show saved service access with Local environment off | port |
 | dff0b1159b | #25198 | connections | fix(connect): show why relay unlink failed | port |
@@ -1510,7 +1510,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | port |
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
 | d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check ignores the end line |
-| d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | port |
+| d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | ported: sent messages keep each ordered item's written number and draw every level in digits; the gutter widens by the numbers shown (thread-2, MarkdownDocument `keepWrittenNumbers`). Left: copying a list keeps CommonMark's numbers (markdown-clipboard.ts) |
 | 43915a4064 | #34095 | thread | fix(web): question panel header text sits centered in its row | port |
 | ccc7b2d96f | #33352 | thread | fix(web): MCP App cards no longer flash white in dark mode while the app loads | port |
 | 32fdad5f49 | #32151 | thread | fix(web): timeline minimap preview no longer steals hover or jumps around | port |

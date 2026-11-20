@@ -63,4 +63,19 @@ struct ThreadCatchUp4928Tests {
         #expect(model.providerBadge(instanceId: "codex_work", ring: .white)?.size == .small)
         #expect(model.providerBadge(instanceId: "claudeAgent", ring: .white) == nil)
     }
+
+    /// #33820: a sent message keeps the numbers written on its list items, in digits at every level; replies count
+    /// from the first marker.
+    @Test func sentListsKeepWrittenNumbers() {
+        func numbers(_ text: String, user: Bool) -> [Int?] {
+            guard case .list(let list)? = MarkdownDocument(parsing: text, preservesLineBreaks: user).blocks.first else { return [] }
+            return list.items.map(\.number)
+        }
+        #expect(numbers("3. a\n5. b\n9. c", user: true) == [3, 5, 9])
+        #expect(numbers("3. a\n5. b\n9. c", user: false) == [3, 4, 5])
+        guard case .list(let outer)? = MarkdownDocument(parsing: "1. Outer\n   1. Nested\n   7. Skipped", preservesLineBreaks: true).blocks.first,
+              case .list(let inner)? = outer.items.first?.blocks.last else { Issue.record("no nested list"); return }
+        #expect(outer.decimal && inner.decimal)
+        #expect(inner.items.map(\.number) == [1, 7])
+    }
 }
