@@ -127,12 +127,14 @@ public enum ProvidersLogic {
     /// saved order, then the server's.
     public static func displayModels(live: [ServerProviderModel], custom: [(slug: String, name: String, raw: JSONValue)],
                                      favorites: Set<String>, hidden: Set<String>, order: [String]) -> [DisplayModel] {
-        var models = live.filter { !$0.isCustom }.map { DisplayModel(slug: $0.slug, name: $0.name, isCustom: false, capabilities: capabilities($0)) }
+        // Reasoning is the norm, so only its absence is labeled, and only when another model has it.
+        let flag = live.contains { $0.optionDescriptors.contains(where: \.isReasoningControl) }
+        var models = live.filter { !$0.isCustom }.map { DisplayModel(slug: $0.slug, name: $0.name, isCustom: false, capabilities: capabilities($0, flagMissingReasoning: flag)) }
         // A custom entry with a built-in slug only renames that built-in on the server, so the built-in row already
         // shows it (ProviderInstanceCard.tsx:183-199, T3 3105 ffb4af8d5).
         let builtIn = Set(models.map(\.slug))
         models += custom.filter { !builtIn.contains($0.slug) }.map { c in
-            DisplayModel(slug: c.slug, name: c.name, isCustom: true, capabilities: live.first { $0.slug == c.slug }.map(capabilities) ?? [])
+            DisplayModel(slug: c.slug, name: c.name, isCustom: true, capabilities: live.first { $0.slug == c.slug }.map { capabilities($0, flagMissingReasoning: false) } ?? [])
         }
         let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
         let original = Dictionary(models.enumerated().map { ($1.slug, $0) }, uniquingKeysWith: { a, _ in a })
@@ -151,15 +153,17 @@ public enum ProvidersLogic {
             + sorted.filter { !favorites.contains($0.slug) && isHidden($0) }
     }
 
-    /// `describeModelCapabilities`.
-    static func capabilities(_ m: ServerProviderModel) -> [String] {
+    /// `describeModelCapabilities` (ProviderModelsSection.tsx:39-67): Fast mode, then No reasoning for a discovered
+    /// model without a reasoning control while others have one. Custom models and the alias slugs prove nothing.
+    static func capabilities(_ m: ServerProviderModel, flagMissingReasoning: Bool) -> [String] {
         let d = m.optionDescriptors
         var labels: [String] = []
         if d.contains(where: { $0.id == "fastMode" || ($0.id == "serviceTier" && $0.type == .select && $0.options.contains { $0.id == "fast" || $0.label == "Fast" }) }) {
             labels.append("Fast mode")
         }
-        if d.contains(where: { $0.id == "thinking" }) { labels.append("Thinking") }
-        if d.contains(where: { $0.type == .select && ["reasoningEffort", "effort", "reasoning", "variant"].contains($0.id) }) { labels.append("Reasoning") }
+        if flagMissingReasoning, !m.isCustom, !["default", "auto"].contains(m.slug), !d.contains(where: \.isReasoningControl) {
+            labels.append("No reasoning")
+        }
         return labels
     }
 
@@ -1331,6 +1335,7 @@ final class ProviderListRow: ControlView {
     }
 
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     /// `min-h-18 py-3`: the name line, `mt-0.5`, and up to two status lines.
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -1340,7 +1345,8 @@ final class ProviderListRow: ControlView {
     }
 
     private func restyle() {
-        Motion.setBackground(fill, isSelected ? Themed.color(\.muted, 0.45).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil)
+        // `bg-foreground/[0.06]` selected, `hover:bg-muted/25` (ProviderInstanceCard.tsx:1178).
+        Motion.setBackground(fill, isSelected ? Themed.color(\.foreground, 0.06).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.muted, 0.25).cgColor(in: self) : nil)
         let dim: CGFloat = !enabled && !isSelected && !state.hoverOrPressed ? 0.6 : 1
         // `opacity-60 transition-opacity group-hover:opacity-100` (ProviderInstanceCard.tsx:918-922).
         for v in [icon, name, version, status] as [NSView] { HoverReveal.fade(v, to: dim) }

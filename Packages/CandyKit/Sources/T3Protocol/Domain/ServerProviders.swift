@@ -74,6 +74,14 @@ public struct ProviderOptionDescriptor: Codable, Hashable, Sendable {
     public var options: [ProviderOptionChoice]
     public var currentValue: ProviderOptionValue?
     public var promptInjectedValues: [String]?
+    /// 4928's `role: "reasoning"` marks a select as the reasoning control (contracts model.ts:31).
+    public var role: String?
+
+    /// `isReasoningControl` (client-runtime modelTraits.ts:12-23).
+    public var isReasoningControl: Bool {
+        (type == .select && role == "reasoning")
+            || ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level", "thinking"].contains(id)
+    }
 
     public init(id: String, label: String, description: String? = nil, type: Kind, options: [ProviderOptionChoice] = [],
                 currentValue: ProviderOptionValue? = nil, promptInjectedValues: [String]? = nil) {
@@ -81,7 +89,7 @@ public struct ProviderOptionDescriptor: Codable, Hashable, Sendable {
         self.currentValue = currentValue; self.promptInjectedValues = promptInjectedValues
     }
 
-    private enum CodingKeys: String, CodingKey { case id, label, description, type, options, currentValue, promptInjectedValues }
+    private enum CodingKeys: String, CodingKey { case id, label, description, type, options, currentValue, promptInjectedValues, role }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -92,6 +100,7 @@ public struct ProviderOptionDescriptor: Codable, Hashable, Sendable {
         options = try c.decodeIfPresent([ProviderOptionChoice].self, forKey: .options) ?? []
         currentValue = try c.decodeIfPresent(ProviderOptionValue.self, forKey: .currentValue)
         promptInjectedValues = try c.decodeIfPresent([String].self, forKey: .promptInjectedValues)
+        role = try c.decodeIfPresent(String.self, forKey: .role)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -103,6 +112,7 @@ public struct ProviderOptionDescriptor: Codable, Hashable, Sendable {
         if type == .select { try c.encode(options, forKey: .options) }
         try c.encodeIfPresent(currentValue, forKey: .currentValue)
         try c.encodeIfPresent(promptInjectedValues, forKey: .promptInjectedValues)
+        try c.encodeIfPresent(role, forKey: .role)
     }
 }
 
