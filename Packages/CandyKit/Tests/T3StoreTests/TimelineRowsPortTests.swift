@@ -684,4 +684,24 @@ struct ToolCallVisibilityTests {
         #expect(ids("hideSuccessful") == ["failed", "running", "thinking", "m"])
         #expect(ids("hideAll") == ["thinking", "m"])
     }
+
+    /// Zen (MessagesTimeline.logic.ts:1527-1551): each ended turn's final answer and the prompts; the running turn's
+    /// answer waits, errors stay.
+    @Test func zenShowsFinalAnswersOnly() {
+        let at: T3Timestamp = "2026-01-01T00:00:00Z"
+        let entries: [TimelineEntry] = [
+            message("u1", role: .user, at: at),
+            message("a1", role: .assistant, run: "r1", at: at),
+            work("cmd", at: at) { $0.itemType = .commandExecution; $0.runId = "r1" },
+            message("a2", role: .assistant, run: "r1", at: at),
+            message("u2", role: .user, at: at),
+            work("boom", at: at) { $0.tone = .error; $0.runId = "r2" },
+            message("a3", role: .assistant, run: "r2", at: at),
+        ]
+        var input = TimelineRowsInput(entries: entries, latestRun: TimelineLatestRun(runId: "r2", status: .running, startedAt: at), isWorking: true)
+        #expect(TimelineRows.filteringToolCalls(entries, visibility: "zen", input: input).map(\.id) == ["u1", "a2", "u2", "boom"])
+        input.isWorking = false
+        input.latestRun = nil
+        #expect(TimelineRows.filteringToolCalls(entries, visibility: "zen", input: input).map(\.id) == ["u1", "a2", "u2", "boom", "a3"])
+    }
 }

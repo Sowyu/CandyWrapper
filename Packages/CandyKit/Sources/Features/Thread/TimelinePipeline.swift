@@ -79,7 +79,8 @@ final class TimelinePipeline: @unchecked Sendable {
         // a filtered thread, and the switch back, take the full row pass.
         // ponytail: a full pass per streaming update while tool calls are hidden; filter inside the patch if long threads lag
         if request.toolCallVisibility != "showAll" || shownVisibility != "showAll" {
-            if let entries = source?.entries { source?.entries = TimelineRows.filteringToolCalls(entries, visibility: request.toolCallVisibility) }
+            if let input = source { source?.entries = TimelineRows.filteringToolCalls(input.entries, visibility: request.toolCallVisibility, input: input) }
+            source?.zen = request.toolCallVisibility == "zen"
             if request.toolCallVisibility != shownVisibility || request.toolCallVisibility != "showAll" { changed = nil; prepended = nil }
         }
         shownVisibility = request.toolCallVisibility

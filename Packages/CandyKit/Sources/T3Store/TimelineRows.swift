@@ -134,6 +134,9 @@ public struct TimelineRowsInput: Sendable {
     public var turnDiffSummaries: [TurnDiffSummary] = []
     /// A `/compact` runs and its compaction has not completed (`isCompacting`, ChatView.tsx:3597-3619).
     public var isCompacting = false
+    /// "Tool calls in chat" is Zen: entries were filtered to final answers (`filteringToolCalls`), so turns
+    /// don't fold and the working row leaves once the answer lands (MessagesTimeline.logic.ts:1574, 1669-1671, 1872-1877).
+    public var zen = false
 
     public init(
         entries: [TimelineEntry], latestRun: TimelineLatestRun? = nil, runningRunId: RunId? = nil,
@@ -639,12 +642,54 @@ public enum TimelineRows {
         return entry.toolLifecycleStatus == .completed && !WorkLog.displayIndicatesFailure(entry)
     }
 
-    /// `timelineRowEntries`' filter (MessagesTimeline.logic.ts:1525-1560) for everything but `zen`.
-    // ponytail: `zen` filters like `hideAll`; port its final-answer-only pass (L:1527-1551) and its fold skip when someone uses it
-    public static func filteringToolCalls(_ entries: [TimelineEntry], visibility: String) -> [TimelineEntry] {
+    /// `timelineRowEntries`' filter (4928 MessagesTimeline.logic.ts:1514-1560). Zen keeps the prompts, each turn's
+    /// final answer once the turn moved past it, answers to a steer, kept replies and the work that needs the user.
+    public static func filteringToolCalls(_ entries: [TimelineEntry], visibility: String, input: TimelineRowsInput? = nil) -> [TimelineEntry] {
         guard visibility != "showAll" else { return entries }
-        let mode = visibility == "hideSuccessful" ? "hideSuccessful" : "hideAll"
-        return entries.filter { entry in entry.work.map { !hiddenByToolCallVisibility($0, mode) } ?? true }
+        guard visibility == "zen" else {
+            return entries.filter { entry in entry.work.map { !hiddenByToolCallVisibility($0, visibility) } ?? true }
+        }
+        let answering = input?.isWorking == true && input?.latestRun?.turnEnded != true
+        let answeringRunId = answering ? unsettledRunId(input?.latestRun, runningRunId: input?.runningRunId) : nil
+        let answeringFrom = answering ? lastResponseBoundaryIndex(entries) + 1 : entries.count
+        let terminalIds = terminalAssistantMessageIds(entries)
+        let steerAnswers = inFlightSteerAnswerIds(entries)
+        let retained = completeSupersededReplyEntryIds(entries)
+        let pending = Set(input?.pendingApprovals.map(\.requestId) ?? [])
+        return entries.enumerated().filter { index, entry in
+            guard let message = entry.message else { return shownAsFinalAnswerOnly(entry, pendingApprovalRequestIds: pending) }
+            return message.role != .assistant || steerAnswers.contains(message.id) || retained.contains(entry.id)
+                || (terminalIds.contains(message.id) && index < answeringFrom && (answeringRunId == nil || message.runId != answeringRunId))
+        }.map(\.element)
+    }
+
+    /// `workShownAsFinalAnswerOnly` (L:1444-1462): subagent cards hide; pending approvals, answered questions,
+    /// compactions, wakes and errors stay.
+    static func shownAsFinalAnswerOnly(_ entry: TimelineEntry, pendingApprovalRequestIds: Set<String>) -> Bool {
+        if case .event(let row) = entry.kind { return row.item.type != .subagent }
+        guard let work = entry.work else { return true }
+        if let item = work.projectedItem?.item, item.type == .approvalRequest, let id = item.requestId, pendingApprovalRequestIds.contains(id) { return true }
+        return work.questionAnswer != nil || work.sourceActivityKind == "context-compaction" || startsResponse(entry)
+            || work.tone == .error || work.sourceActivityKind == "runtime.error"
+            || (work.itemType == .error && work.toolLifecycleStatus != .completed)
+    }
+
+    /// `deriveInFlightSteerAnswerIds` (L:1464-1483): the first reply after a steer, once another reply follows it.
+    static func inFlightSteerAnswerIds(_ entries: [TimelineEntry]) -> Set<MessageId> {
+        var ids = Set<MessageId>(), awaitingReply = false, candidate: MessageId?
+        for entry in entries {
+            if entry.work?.itemType == .reasoning { continue }
+            let reply = entry.message.flatMap { $0.role == .assistant ? $0 : nil }
+            if let candidate, reply != nil { ids.insert(candidate) }
+            candidate = nil
+            if let m = entry.message, m.role == .user {
+                awaitingReply = m.inputIntent == .steer || m.inputIntent == .promotedQueuedToSteer
+            } else if let reply, awaitingReply {
+                candidate = reply.id
+                awaitingReply = false
+            }
+        }
+        return ids
     }
 
     /// `settleSupersededReasoning`: a later entry ends thinking even without a completion.
@@ -689,7 +734,7 @@ public enum TimelineRows {
             : activeVisualResponseRunIds(entries, unsettledRunId: unsettled, isWorking: input.isWorking)
         let runlessWorkActive = input.isWorking && input.runlessWorkActive
         // Live runless work keeps only the last prompt's runless turn open, and that prompt is later.
-        let folds = turnFolds(
+        let folds = input.zen ? [:] : turnFolds(
             entries, terminalIds: terminalIds, latestRun: input.latestRun, unfoldedRunIds: activeResponseRunIds.union(failed),
             runlessWorkActive: runlessWorkActive && !head, liveSubagentEntryIds: liveSubagents,
             completeSupersededReplyEntryIds: completeReplies)
@@ -814,8 +859,11 @@ public enum TimelineRows {
             let paths = WorkLog.viewedImagePaths(grouped)
             if !paths.isEmpty { rows.append(TimelineRow(id: "\(groupId):viewed-images", createdAt: createdAt, kind: .viewedImages(paths: paths))) }
         }
+        // `zenAnswerLanded` (L:1872-1877): the ended run's answer already shows, so no working row follows it.
+        let endedRunId = input.latestRun?.turnEnded == true ? input.latestRun?.runId : nil
+        let zenAnswerLanded = input.zen && endedRunId != nil && (entries.lastIndex { runId($0) == endedRunId } ?? -1) >= activeTurnHeaderIndex
         func appendWorkingRow() {
-            if compactionOnlyRunFinished { return }
+            if compactionOnlyRunFinished || zenAnswerLanded { return }
             if runningCompactionRunId != nil, activeCompactionRunId == nil { return }
             rows.append(TimelineRow(id: workingRowId, createdAt: compactionStartedAt ?? input.activeTurnStartedAt, kind: .working(compacting: compactingLabel)))
         }
