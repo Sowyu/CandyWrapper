@@ -35,6 +35,11 @@ public final class EmptyView: DSView {
         didSet { oldValue?.removeFromSuperview(); illustration.map(addSubview); invalidateIntrinsicContentSize(); needsLayout = true }
     }
 
+    /// `EmptyMedia` as a sibling of `EmptyHeader` (IssuesPage.tsx:489-500): the root's gap joins the media's
+    /// `mb-6`, where most pages nest the media inside the header.
+    public var mediaOutsideHeader = false { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
+    private var mediaSpacing: CGFloat { size.metrics.mediaGap + (mediaOutsideHeader ? size.metrics.gap : 0) }
+
     private let titleLabel = TextBlockView()
     private let descriptionLabel = TextBlockView()
     private let media: MediaView?
@@ -70,7 +75,7 @@ public final class EmptyView: DSView {
 
     private func headerHeight(_ width: CGFloat) -> CGFloat {
         let m = size.metrics, w = textWidth(width)
-        return (media == nil ? 0 : 36 + m.mediaGap) + (illustration.map { $0.intrinsicContentSize.height + m.gap } ?? 0)
+        return (media == nil ? 0 : 36 + mediaSpacing) + (illustration.map { $0.intrinsicContentSize.height + m.gap } ?? 0)
             + titleLabel.height(forWidth: w)
             + (hasMessage ? 4 + descriptionLabel.height(forWidth: w) : 0)
     }
@@ -100,7 +105,7 @@ public final class EmptyView: DSView {
         var y = ((bounds.height - stackHeight(width)) / 2).rounded()
         if let media {
             media.frame = NSRect(x: ((width - 36) / 2).rounded(), y: y, width: 36, height: 36)
-            y += 36 + m.mediaGap
+            y += 36 + mediaSpacing
         }
         if let illustration {
             let s = illustration.intrinsicContentSize

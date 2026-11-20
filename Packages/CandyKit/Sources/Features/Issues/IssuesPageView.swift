@@ -190,7 +190,9 @@ public final class IssuesPageView: DSView {
                 empty.content = ButtonRow([b])
                 bodyView = empty
             case .noTrackers:
-                bodyView = EmptyView(title: "No trackers to read", message: "Add a project whose remote is on a supported tracker.", icon: .circleDot)
+                let empty = EmptyView(title: "No trackers to read", message: "Add a project whose remote is on a supported tracker.", icon: .circleDot)
+                empty.mediaOutsideHeader = true
+                bodyView = empty
             case .list:
                 bodyView = nil
             }
