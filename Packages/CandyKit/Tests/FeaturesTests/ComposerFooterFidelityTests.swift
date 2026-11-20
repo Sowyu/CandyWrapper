@@ -42,7 +42,10 @@ struct ComposerFooterFidelityTests {
                 let canvas = SidebarSearchFidelityTests.Canvas(frame: .zero)
                 let p = try PickersFidelityTests.pickers()
                 if native["kind"] == "cluster" {
-                    let iconOnly = Int(native["iconOnly"]!)!, hidden = Int(native["hidden"]!)!
+                    // Since 4928 the effort follows the model's name and Permissions is the only resting block
+                    // (ComposerControlsBar.tsx:167-185, 218-219), so a 3824 case asking for two blocks gets one.
+                    let blocks = p.controlsView.measurement.blockWidths.count
+                    let iconOnly = min(Int(native["iconOnly"]!)!, blocks), hidden = min(Int(native["hidden"]!)!, blocks)
                     if native["bars"] == "true" { p.traitsButton.icon = ComposerEffortGlyphView(.init(count: 4, filled: 2, label: "Medium", special: false)); p.traitsButton.title = ""; p.traitsButton.paddingOverride = (2, 4); p.traitsButton.mutedLabel = false }
                     let v = Self.fitted(p, iconOnly: iconOnly, hidden: hidden)
                     #expect(v.fit == ComposerFooterLayout.Fit(hiddenCount: hidden, iconOnlyCount: iconOnly))
@@ -83,9 +86,10 @@ struct ComposerFooterFidelityTests {
         #expect(mean < 0.05)
     }
 
-    /// 3824 ComposerFooterControls.tsx:111-116 and composerFooterLayout.ts:53-75,109-117.
-    /// Replacing compact permissions with overflow costs 2px, so the old overflow-access
-    /// screenshot state cannot fit at any width. Keep a geometry check beside the reachable cases.
+    /// 4928 useRestingComposerControlsLayout.ts and restingComposerControlsMeasurement.ts with Permissions as
+    /// the only resting block (ComposerControlsBar.tsx:167-185): the effort moved into the model trigger.
+    /// Replacing the icon-only permissions chip with the overflow button costs 2px, so the cluster goes
+    /// straight from the icon-only chip to overflow. Keep a geometry check beside the reachable cases.
     @Test func overflowSkipsPermissionsOnlyState() throws {
         for dark in [false, true] {
             let p = try PickersFidelityTests.pickers()
@@ -93,12 +97,13 @@ struct ComposerFooterFidelityTests {
             v.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             v.hidesPermissions = false
             let m = v.measurement
-            let before = ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 2)
-            let intermediate = ComposerFooterLayout.width(m, hidden: 1, fixed: m.naturalFixedWidth, iconOnly: 2)
+            #expect(m.blockWidths.count == 1)
+            let before = ComposerFooterLayout.width(m, hidden: 0, fixed: m.naturalFixedWidth, iconOnly: 1)
+            let intermediate = ComposerFooterLayout.width(m, hidden: 1, fixed: m.naturalFixedWidth, iconOnly: 1)
             #expect(intermediate >= before)
             v.frame = NSRect(x: 0, y: 0, width: before - 0.5, height: 28)
             v.layoutSubtreeIfNeeded()
-            #expect(v.fit.hiddenCount == 2 && v.fit.iconOnlyCount == 2)
+            #expect(v.fit.hiddenCount == 1 && v.fit.iconOnlyCount == 1)
             print("composer-overflow", dark ? "dark" : "light", "both icons", before, "permissions only hidden", intermediate, "overflow at", v.frame.width)
         }
     }
