@@ -128,18 +128,20 @@ CandyWrapper is built on two Macs. Check which one you're on with `id -un`: `mrm
 
 - It's a Mac14,12 with an M2 Pro, 32 GB of RAM, macOS 27.2.1 and about 1.8 TB free. The only user is `administrator`, uid 501, and the user works on its screen directly.
 - Never take the screen lock, click, type, record or launch the app here unless the user says the screen is free.
-- Xcode is not installed yet, only the Command Line Tools with Swift 6.4.2. `swift build` works. `xcodebuild`, `scripts/build-test-app` and the three XCTest files in DesignSystemTests need Xcode. [Bring-up notes](docs/research/bringup-2026-11-19.md).
+- Xcode 27.2 is installed and selected, with its license accepted, so `xcodebuild`, `scripts/build-test-app` and `scripts/test` all work. `scripts/test` loads the Command Line Tools' TestingMacros plugin only when `xcode-select -p` points at the Command Line Tools. [Bring-up notes](docs/research/bringup-2026-11-19.md).
 - Homebrew lives in /opt/homebrew with node and gh. xcodegen 2.46.0 is in `~/CandyWrapper-research/tools/xcodegen`.
 - T3 starts agents in worktrees under `~/.t3/worktrees`, and LocalServerIntegrationTests refuses a server home under `~/.t3`. Build and test from a second worktree in /tmp, like `git worktree add --detach /tmp/cw-<task> HEAD`.
 - The live T3 runtimes are in `~/.t3/runtime/versions`. Start sandbox servers from the unpacked releases in `~/CandyWrapper-research/runtimes` with `T3_BIN`.
-- sudo asks for a password here, so `scripts/run-app` and anything else that calls `sudo launchctl asuser` stops at the prompt.
+- Passwordless sudo works. Use it only for what your task needs. `scripts/run-app` runs the app in the console user's GUI session, `sudo launchctl asuser 501 sudo -u administrator` here.
+- Screen Recording and Accessibility are granted to the live T3 runtime, `~/.t3/runtime/versions/0.1.11-nightly.20261119.4928/t3`, and not to anything else yet.
+- xcodebuild once raised a login Keychain dialog while it resolved Sparkle and waited on it, so `scripts/build-test-app` uses system git. If a build sits at 0% CPU, run `sample <pid> 1` and look for `SecKeychain` before you wait longer.
 - `.git/info/secret-patterns` is missing, so the push hook refuses to run until the user supplies it.
 
 ### The remote Mac mini M4 (user mrm)
 
 - It's a remote Mac mini M4 from MyRemoteMac with macOS 27 and 16 GB of RAM. It has no battery and no display.
 - The GUI session (user mrm) draws to a virtual screen, and the user may be watching it over Screen Sharing.
-- Run GUI commands inside that session with `sudo launchctl asuser 502 sudo -u mrm <cmd>`. `scripts/run-app` does it for the app.
+- Run GUI commands inside that session with `sudo launchctl asuser 502 sudo -u mrm <cmd>`. `scripts/run-app` finds that session itself.
 - Passwordless sudo works. Use it only for what your task needs.
 - Don't touch the provider's pf rules, fail2ban or LaunchDaemons.
 - Xcode 27 is installed. There's no node, npm or bun. Python is `/usr/bin/python3` (3.9) or `/opt/homebrew/bin/python3` (3.14).
