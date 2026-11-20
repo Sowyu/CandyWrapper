@@ -953,6 +953,24 @@ struct ComposerRichTextT3InlineTests {
         #expect(editor.expandedText == prefix + "`hello world` next `typed`")
     }
 
+    /// #27457 (composer-rich-text-doc.test.ts at 4928): a dead-key layout types each backtick through marked text.
+    @Test(arguments: [("do ", "do ", "xyz"), ("a ` ", "a ` `xyz`", "")])
+    func formatsAPairWhoseBackticksCameFromADeadKey(_ row: (prefix: String, plain: String, code: String)) {
+        let editor = makeEditor()
+        type(editor, row.prefix)
+        for _ in 0..<2 {
+            editor.setMarkedText("`", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+            editor.insertText("`", replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        let offset = (row.prefix as NSString).length
+        editor.setSelectedRange(NSRange(location: offset + 1, length: 0))
+        type(editor, "xyz")
+        #expect(editor.string == row.prefix + "`xyz`")
+        editor.setSelectedRange(NSRange(location: offset + 5, length: 0))
+        #expect(editor.string == row.plain + row.code)
+        #expect(codeText(editor) == row.code)
+    }
+
     /// #23940 (composer-rich-text-doc.test.ts at 4928): the opening tick typed last formats the code before the closing one.
     @Test(arguments: ["", "this is a "])
     func formatsCodeWhenTheOpeningTickIsTypedLast(_ prefix: String) {
@@ -1008,5 +1026,79 @@ struct ComposerRichTextT3InlineTests {
         editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
         #expect(editor.expandedText == before)
         #expect(codeText(editor).isEmpty)
+    }
+}
+
+/// #22997, composer-block-shortcuts.test.ts "composer list normalization" at 4928 (8f4166b28c): a list marker an edit
+/// completes later turns its line into a list item.
+@MainActor struct ComposerListNormalizationTests {
+    private func insert(_ editor: ComposerEditor, _ text: String, at location: Int) {
+        editor.setSelectedRange(NSRange(location: location, length: 0))
+        editor.insertText(text, replacementRange: editor.selectedRange())
+    }
+
+    @Test func convertsADashEditedOnAnEarlierLine() {
+        let editor = makeEditor()
+        editor.setText("")
+        editor.insertText("-get md", replacementRange: editor.selectedRange())
+        editor.insertText("\n", replacementRange: editor.selectedRange())
+        insert(editor, " ", at: 1)
+        editor.setSelectedRange(NSRange(location: (editor.string as NSString).length, length: 0))
+        #expect(lineKinds(editor).first == "bulletList")
+        #expect(editor.expandedText == "- get md\n")
+    }
+
+    @Test(arguments: ["[link](url)", "[ordinary text]", "[x]text"])
+    func convertsADashBeforeExistingBracketPrefixedText(_ text: String) {
+        let editor = makeEditor()
+        editor.setText(text)
+        insert(editor, "- ", at: 0)
+        #expect(lineKinds(editor) == ["bulletList"])
+        #expect(editor.expandedText == "- \(text)")
+    }
+
+    @Test(arguments: ["- ", "* ", "+ ", "3) ", "4. ", "- [ ] ", "- [x] "])
+    func convertsAMarkerInsertedInFrontOfExistingText(_ marker: String) {
+        let editor = makeEditor()
+        editor.setText("existing text")
+        insert(editor, marker, at: 0)
+        #expect(lineKinds(editor) == [marker.contains("[") ? "taskList" : marker.first!.isNumber ? "orderedList" : "bulletList"])
+        #expect(editor.expandedText == marker + "existing text")
+    }
+
+    @Test(arguments: ["a - b", "-x", "-"])
+    func leavesTextAsAParagraph(_ text: String) {
+        let editor = makeEditor()
+        editor.setText("")
+        editor.insertText(text, replacementRange: editor.selectedRange())
+        #expect(lineKinds(editor) == ["paragraph"])
+        #expect(editor.string == text)
+    }
+
+    @Test func keepsTheDashGestureAvailableUntilATaskMarkerIsComplete() {
+        let editor = makeEditor()
+        editor.setText("")
+        for c in "- [x]" {
+            editor.insertText(String(c), replacementRange: editor.selectedRange())
+            #expect(lineKinds(editor) == ["paragraph"])
+        }
+        editor.insertText(" ", replacementRange: editor.selectedRange())
+        #expect(lineKinds(editor) == ["taskList"])
+        #expect(editor.expandedText.hasPrefix("- [x]"))
+    }
+
+    @Test(arguments: ["**- x**", "*-* x", "~~- x~~"])
+    func leavesAFormattedMarkerAsText(_ value: String) {
+        let editor = makeEditor()
+        editor.setText(value)
+        insert(editor, "a", at: (editor.string as NSString).length)
+        #expect(lineKinds(editor) == ["paragraph"])
+    }
+
+    @Test func doesNotTurnAnInlineCodeMarkerIntoAList() {
+        let editor = makeEditor()
+        editor.setText("`-` x")
+        insert(editor, " ", at: 1)
+        #expect(lineKinds(editor) == ["paragraph"])
     }
 }

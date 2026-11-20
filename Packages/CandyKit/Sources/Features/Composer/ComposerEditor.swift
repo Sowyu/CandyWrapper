@@ -160,6 +160,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             undoManager?.removeAllActions()
         }
         isChipifying = true
+        sourceShown = false
         let text = richTextEnabled ? ComposerRichTextStyler.collapseBlockSeparators(text) : text
         textStorage?.setAttributedString(NSAttributedString(string: text, attributes: baseAttributes))
         applyStyle()
@@ -269,10 +270,25 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     override func insertText(_ string: Any, replacementRange: NSRange) {
         typedInsert = !clipboardEdit
         defer { typedInsert = false }
+        var replacementRange = replacementRange
+        // Text typed beside shown source, outside its markers, goes into the parsed text, so it records and coalesces
+        // as plain typing does. Only edits between the markers need `beginSourceEdit`.
+        if sourceShown, !hasMarkedText(), let storage = textStorage {
+            let at = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
+            let edge = at.length == 0 && ComposerMarkdownSource.regions(storage).contains { at.location == $0.location || at.location == NSMaxRange($0) }
+            if edge, typingAttributes[ComposerMarkdownSource.key] == nil {
+                collapseShownSource()
+                if replacementRange.location != NSNotFound { replacementRange = selectedRange() }
+                typingAttributes = caretAttributes([])
+            }
+        }
         let range = replacementRange.location == NSNotFound ? (hasMarkedText() ? markedRange() : selectedRange()) : replacementRange
         if surroundSelection(range, with: (string as? String) ?? (string as? NSAttributedString)?.string) { return }
         if formatCodeBeforeClosingTick(range, typed: (string as? String) ?? (string as? NSAttributedString)?.string) { return }
-        let opensPair = richTextEnabled && !hasMarkedText() && range.length == 0 && ((string as? String) ?? (string as? NSAttributedString)?.string) == "`"
+        // A dead-key backtick commits through marked text, replacing its marked tick (`composedCodePair`, #27457,
+        // composer-rich-text-doc.ts at 4928).
+        let plainInsert = hasMarkedText() ? range.length <= 1 : range.length == 0
+        let opensPair = richTextEnabled && plainInsert && ((string as? String) ?? (string as? NSAttributedString)?.string) == "`"
             && codePair(at: range.location - 1) == nil && typedPairCanOpen(before: range.location)
         // Text typed inside a typed pair joins it; anywhere else it stays out.
         if let id = codePair(at: range.location - 1), codePair(at: NSMaxRange(range)) == id { typingAttributes[.composerCodePair] = id }
@@ -346,9 +362,20 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let before = (storage.string as NSString).substring(with: NSRange(location: start, length: caret - start))
         guard before.range(of: "(^|[^`])`$", options: .regularExpression) != nil else { return false }
         let tick = caret - 1
-        return storage.attribute(.composerCodeBlock, at: tick, effectiveRange: nil) == nil
-            && ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: tick, effectiveRange: nil)).isEmpty
+        guard storage.attribute(.composerCodeBlock, at: tick, effectiveRange: nil) == nil,
+              ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: tick, effectiveRange: nil)).isEmpty else { return false }
+        // `literalBackticksBefore` (#27457): the tick before only opens a pair when the lone ticks before it pair up.
+        // Code text never pairs and a chip starts the count again.
+        var lone = 0
+        storage.enumerateAttributes(in: NSRange(location: start, length: caret - start)) { attrs, sub, _ in
+            if attrs[.attachment] != nil { lone = 0; return }
+            guard !ComposerRichTextStyler.marks(attrs[.composerMarks]).contains(.code) else { return }
+            let text = (storage.string as NSString).substring(with: sub) as NSString
+            lone += Self.loneTick.numberOfMatches(in: text as String, range: NSRange(location: 0, length: text.length))
+        }
+        return lone % 2 == 1
     }
+    nonisolated(unsafe) private static let loneTick = try! NSRegularExpression(pattern: "(?<!`)`(?!`)")
 
     /// The caret moved, with no edit, to just after a typed pair's closing backtick: a filled, plain pair becomes
     /// inline code and the caret types plain text after it. Doubled backticks on either side keep it literal.
@@ -380,6 +407,10 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         } else if !isChipifying, richTextEnabled {
             // Undo and IME composition skip the styler; the layout still follows the text.
             refreshBlockInfo()
+        }
+        if !isChipifying {
+            if undoManager?.isUndoing != true, undoManager?.isRedoing != true { normalizeMarkdownSource(typed: true) }
+            endSourceEdit()
         }
         highlightCodeBlocks(deferLong: true)
         onTextChange?()
@@ -446,9 +477,14 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
 
     /// Typing attributes for the caret's line: its paragraph style, and a heading's font and color.
     private func caretAttributes(_ marks: [ComposerRichText.Mark]) -> [NSAttributedString.Key: Any] {
+        ComposerRichTextStyler.attributes(marks, base: lineBase(at: selectedRange().location))
+    }
+
+    /// The base attributes of the line holding `location`: its paragraph style, and a heading's font and color.
+    private func lineBase(at location: Int) -> [NSAttributedString.Key: Any] {
         var base = baseAttributes
         if richTextEnabled, let storage = textStorage, storage.length > 0 {
-            let caret = min(selectedRange().location, storage.length)
+            let caret = min(location, storage.length)
             let start = lineStart(caret)
             if start < storage.length, (storage.string as NSString).character(at: start) != 10 {
                 let attrs = storage.attributes(at: start, effectiveRange: nil)
@@ -460,7 +496,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
                 }
             }
         }
-        return ComposerRichTextStyler.attributes(marks, base: base)
+        return base
     }
 
     private func chipify(registerUndo: Bool) {
@@ -548,6 +584,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         attributes[.composerMarks] = nil
         attributes[.composerCodeBlock] = nil
         attributes[.composerCodePair] = nil
+        attributes[ComposerMarkdownSource.key] = nil
         attributes[.backgroundColor] = nil
         attributes[.strikethroughStyle] = nil
         attributes[.font] = Self.font
@@ -732,6 +769,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             }
         }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        if !textChanging, !isChipifying, !normalizingSource { sourceUndoOpen = false }
+        if !stillSelecting, !textChanging, !isChipifying, normalizeMarkdownSource(typed: false) { return }
         defer { selectionMoved() }
         guard richTextEnabled, !stillSelecting, !hasMarkedText(), ranges.count == 1, ranges[0].rangeValue.length == 0,
               let storage = textStorage else { return }
@@ -744,6 +783,11 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         guard storage.attribute(.composerCodeBlock, at: source, effectiveRange: nil) == nil else { return }
         let marks = ComposerRichTextStyler.marks(storage.attribute(.composerMarks, at: source, effectiveRange: nil))
         typingAttributes = caretAttributes(marks)
+        // Inside shown source, typed text joins it; on its edge it stays out (the source mark is not inclusive).
+        if caret > 0, caret < storage.length, let origin = storage.attribute(ComposerMarkdownSource.key, at: caret - 1, effectiveRange: nil),
+           storage.attribute(ComposerMarkdownSource.key, at: caret, effectiveRange: nil) != nil {
+            typingAttributes[ComposerMarkdownSource.key] = origin
+        }
     }
 
     /// The Markdown copy writes (`serializeSelection`): across lines, the first line keeps its
@@ -786,6 +830,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// Pasted rich text arrives as plain text with our style; its tokens become chips, and a T3
     /// fragment in the HTML flavor brings the records behind its links.
     override func paste(_ sender: Any?) {
+        collapseShownSource()
         let pboard = NSPasteboard.general
         let bypass = pasteAsTextPending
         pasteAsTextPending = false
@@ -875,8 +920,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             if kind != lastEditKind || kind == "other" || now - lastEditAt > 1 { breakUndoCoalescing() }
             lastEditKind = kind; lastEditAt = now
         }
+        let began = beginSourceEdit()
         let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
-        if allowed { textChanging = true }
+        if allowed { textChanging = true } else if began { endSourceEdit() }
         return allowed
     }
 
@@ -972,6 +1018,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         }
         let returnKeys: Set<UInt16> = [36, 76]
         if returnKeys.contains(event.keyCode) {
+            // A line break or a list split parses shown source first, so both halves keep their styles.
+            if !hasMarkedText() { collapseShownSource() }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             let key = ComposerLogic.Key(isReturn: true, shift: flags.contains(.shift), option: flags.contains(.option),
                                         mod: flags.contains(.command), control: flags.contains(.control),
@@ -1037,6 +1085,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     func toggleMark(_ mark: ComposerRichText.Mark) {
+        collapseShownSource()
         let range = selectedRange()
         guard let storage = textStorage else { return }
         if range.length == 0 {
@@ -1148,6 +1197,24 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
                     MainActor.assumeIsolated { self?.focusChanged() }
                 }
             }
+            // The history holds the parsed text: undo and redo run on it, and the caret shows source again after.
+            for name in [NSNotification.Name.NSUndoManagerWillUndoChange, NSNotification.Name.NSUndoManagerWillRedoChange] {
+                keyObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { [weak self] note in
+                    let sender = (note.object as AnyObject?).map(ObjectIdentifier.init)
+                    MainActor.assumeIsolated { if let self, let undo = self.undoManager, sender == ObjectIdentifier(undo) { self.collapseShownSource() } }
+                })
+            }
+            for name in [NSNotification.Name.NSUndoManagerDidUndoChange, NSNotification.Name.NSUndoManagerDidRedoChange] {
+                keyObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: nil) { [weak self] note in
+                    let sender = (note.object as AnyObject?).map(ObjectIdentifier.init)
+                    // The manager still reports undoing while it posts this, so the caret's source shows on the next pass.
+                    RunLoop.main.perform {
+                        MainActor.assumeIsolated {
+                            if let self, let undo = self.undoManager, sender == ObjectIdentifier(undo) { _ = self.normalizeMarkdownSource(typed: false) }
+                        }
+                    }
+                })
+            }
         }
         updateCaret(restart: true)
     }
@@ -1155,6 +1222,137 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     override func didAddSubview(_ subview: NSView) {
         super.didAddSubview(subview)
         (subview as? NSTextInsertionIndicator)?.displayMode = .hidden
+    }
+
+    // MARK: Markdown source (composer-markdown-source.ts at 4928, #30421)
+
+    /// Source is shown somewhere in the text, so edits go through `beginSourceEdit`.
+    private var sourceShown = false
+    private var normalizingSource = false
+    /// An edit made while source shows: the parsed text and selection before it. The history only ever holds
+    /// parsed text, so the edit runs unrecorded and `endSourceEdit` records it as one parsed before and after.
+    private var sourceEdit: (text: NSAttributedString, selection: NSRange)?
+    /// The last recorded step is such an edit that typing may still extend, as text view typing coalesces.
+    private var sourceUndoOpen = false
+
+    /// Shows styled text the selection touches as Markdown and parses source it left (`normalizeMarkdownSource`).
+    /// It records nothing: the history never sees shown source. True when it moved the selection.
+    @discardableResult
+    private func normalizeMarkdownSource(typed: Bool) -> Bool {
+        guard richTextEnabled, !normalizingSource, !hasMarkedText(), window?.firstResponder === self,
+              undoManager?.isUndoing != true, undoManager?.isRedoing != true, let storage = textStorage else { return false }
+        let selection = selectedRange()
+        // Styled runs never cross a line, so only the selection's lines are read.
+        func lines(_ r: NSRange) -> NSRange {
+            let from = lineStart(min(r.location, storage.length)), to = lineEnd(min(NSMaxRange(r), storage.length))
+            return NSRange(location: from, length: min(storage.length, to) - from)
+        }
+        var styled = ComposerMarkdownSource.styledRanges(storage, within: lines(selection)).filter { ComposerMarkdownSource.touches(selection, $0) }
+        guard sourceShown || !styled.isEmpty else { return false }
+        let takesBefore = caretTakesMarksBefore
+        normalizingSource = true
+        defer { normalizingSource = false }
+        let before = storage.length
+        var start = selection.location, end = NSMaxRange(selection)
+        storage.beginEditing()
+        for region in ComposerMarkdownSource.regions(storage).reversed() {
+            if ComposerMarkdownSource.touches(selection, region) {
+                // Delimiters typed beside kept source join it.
+                if let origin = storage.attribute(ComposerMarkdownSource.key, at: max(region.location, min(NSMaxRange(region) - 1, start)), effectiveRange: nil)
+                    ?? storage.attribute(ComposerMarkdownSource.key, at: region.location, effectiveRange: nil) {
+                    storage.enumerateAttribute(ComposerMarkdownSource.key, in: region) { value, sub, _ in
+                        if value == nil { storage.addAttribute(ComposerMarkdownSource.key, value: origin, range: sub) }
+                    }
+                }
+                continue
+            }
+            let dropped = ComposerMarkdownSource.collapse(region, in: storage, lineBase: lineBase(at: region.location))
+            func map(_ p: Int) -> Int { p <= region.location ? p : p - dropped.filter { region.location + $0 < p }.count }
+            start = map(start); end = map(end)
+        }
+        let mapped = NSRange(location: start, length: end - start)
+        styled = ComposerMarkdownSource.styledRanges(storage, within: lines(mapped)).filter { ComposerMarkdownSource.touches(mapped, $0) }
+        var insertions: [ComposerMarkdownSource.Insertion] = []
+        for range in styled.reversed() {
+            guard let source = ComposerMarkdownSource.source(of: range, in: storage) else { continue }
+            insertions += ComposerMarkdownSource.reveal(range, source, in: storage)
+        }
+        let regions = ComposerMarkdownSource.regions(storage)
+        for region in regions { ComposerMarkdownSource.restyle(region, in: storage, lineBase: lineBase(at: region.location)) }
+        storage.endEditing()
+        sourceShown = !regions.isEmpty
+        let empty = mapped.length == 0
+        let inside = { (x: ComposerMarkdownSource.Insertion) in typed && empty && (x.closing ? takesBefore : !takesBefore) }
+        let newStart = ComposerMarkdownSource.map(start, through: insertions, inside: inside)
+        let newEnd = empty ? newStart : ComposerMarkdownSource.map(end, through: insertions, inside: { _ in false })
+        let next = NSRange(location: newStart, length: newEnd - newStart)
+        guard storage.length != before || next != selection else { return false }
+        setSelectedRange(next)
+        return true
+    }
+
+    /// Parses all shown source, as the history knows the text (`collapseShownMarkdownSource`), keeping the selection.
+    private func collapseShownSource() {
+        guard sourceShown, !normalizingSource, let storage = textStorage else { return }
+        normalizingSource = true
+        defer { normalizingSource = false }
+        let parsed = parsedCopy(storage, selection: selectedRange())
+        storage.setAttributedString(parsed.text)
+        sourceShown = false
+        setSelectedRange(parsed.selection)
+    }
+
+    /// The text with all shown source parsed, and `selection` mapped onto it.
+    private func parsedCopy(_ storage: NSAttributedString, selection: NSRange) -> (text: NSAttributedString, selection: NSRange) {
+        let copy = NSMutableAttributedString(attributedString: storage)
+        var start = selection.location, end = NSMaxRange(selection)
+        for region in ComposerMarkdownSource.regions(copy).reversed() {
+            let dropped = ComposerMarkdownSource.collapse(region, in: copy, lineBase: lineBase(at: region.location))
+            func map(_ p: Int) -> Int { p <= region.location ? p : p - dropped.filter { region.location + $0 < p }.count }
+            start = map(start); end = map(end)
+        }
+        return (copy, NSRange(location: start, length: end - start))
+    }
+
+    /// An edit starts while source shows: the history stops recording until `endSourceEdit`.
+    private func beginSourceEdit() -> Bool {
+        guard sourceShown, sourceEdit == nil, !isChipifying, !normalizingSource, allowsUndo, let undoManager, let storage = textStorage,
+              !undoManager.isUndoing, !undoManager.isRedoing else {
+            if !isChipifying, !normalizingSource, sourceEdit == nil { sourceUndoOpen = false }
+            return false
+        }
+        sourceEdit = parsedCopy(storage, selection: selectedRange())
+        if lastEditKind == "other" { sourceUndoOpen = false }
+        breakUndoCoalescing()
+        undoManager.disableUndoRegistration()
+        return true
+    }
+
+    /// Records the edit `beginSourceEdit` opened as one step between the parsed text before and after it.
+    private func endSourceEdit() {
+        guard let edit = sourceEdit, let storage = textStorage else { return }
+        sourceEdit = nil
+        undoManager?.enableUndoRegistration()
+        let after = parsedCopy(storage, selection: selectedRange())
+        guard !after.text.isEqual(to: edit.text) else { return }
+        if !sourceUndoOpen { registerSourceUndo(to: edit) }
+        sourceUndoOpen = lastEditKind != "other"
+    }
+
+    private func registerSourceUndo(to target: (text: NSAttributedString, selection: NSRange)) {
+        undoManager?.registerUndo(withTarget: self) { editor in
+            MainActor.assumeIsolated {
+                guard let storage = editor.textStorage else { return }
+                let now = editor.parsedCopy(storage, selection: editor.selectedRange())
+                editor.registerSourceUndo(to: now)
+                storage.setAttributedString(target.text)
+                editor.sourceShown = false
+                editor.sourceUndoOpen = false
+                editor.setSelectedRange(NSRange(location: min(target.selection.location, storage.length),
+                                                length: min(target.selection.length, max(0, storage.length - target.selection.location))))
+                editor.didChangeText()
+            }
+        }
     }
 
     // MARK: Caret and selection band

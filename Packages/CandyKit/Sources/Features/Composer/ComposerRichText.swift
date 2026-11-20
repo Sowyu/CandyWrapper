@@ -10,26 +10,46 @@ enum ComposerRichText {
         var marks: [Mark]
         var atomic = false
     }
-    private struct Frame { var delimiter: String; var mark: Mark; var spans: [Span] = [] }
+    /// A parsed run and the source unit each of its units came from.
+    private struct Piece { var text: String; var marks: [Mark]; var units: [Int] }
+    private struct Frame { var delimiter: String; var start: Int; var mark: Mark; var spans: [Piece] = [] }
 
     /// `typing` false reads a whole draft, as `buildTiptapContent` does, where `_x_` is italic. Typing
     /// and pasting keep a single `_` literal: the composer's italic rules only take `*`, so names like
     /// `node_modules` or `_build_` stay as typed (composer-rich-text-doc.ts:136-148, bb76f1233c).
     static func parse(_ text: String, typing: Bool = false) -> [Span] {
+        pieces(text, typing: typing, track: false).map { Span(text: $0.text, marks: $0.marks) }
+    }
+
+    /// `inlineMarkdownUnitMarks` (composer-rich-text.ts:188 at 4928, #30421): each source unit's marks, or nil
+    /// for a delimiter the parse drops.
+    static func unitMarks(_ text: String, typing: Bool = false) -> [[Mark]?] {
+        var result = [[Mark]?](repeating: nil, count: text.utf16.count)
+        for piece in pieces(text, typing: typing, track: true) { for unit in piece.units { result[unit] = piece.marks } }
+        return result
+    }
+
+    /// `track` records each unit's source index, which the typing path does not need.
+    private static func pieces(_ text: String, typing: Bool, track: Bool) -> [Piece] {
         let units = Array(text.utf16)
         let literalRuns = literalUnderscoreRuns(text)
-        var root: [Span] = [], stack: [Frame] = []
+        var root: [Piece] = [], stack: [Frame] = []
         func slice(_ a: Int, _ b: Int) -> String { String(decoding: units[a..<min(b, units.count)], as: UTF16.self) }
-        func push(_ text: String, _ marks: [Mark]) {
+        func push(_ text: String, _ marks: [Mark], _ from: [Int]) {
             guard !text.isEmpty else { return }
             if stack.isEmpty {
-                if root.last?.marks == marks { root[root.count - 1].text += text }
-                else { root.append(Span(text: text, marks: marks)) }
+                if root.last?.marks == marks { root[root.count - 1].text += text; root[root.count - 1].units += from }
+                else { root.append(Piece(text: text, marks: marks, units: from)) }
             } else {
                 let n = stack.count - 1
-                if stack[n].spans.last?.marks == marks { stack[n].spans[stack[n].spans.count - 1].text += text }
-                else { stack[n].spans.append(Span(text: text, marks: marks)) }
+                if stack[n].spans.last?.marks == marks {
+                    stack[n].spans[stack[n].spans.count - 1].text += text; stack[n].spans[stack[n].spans.count - 1].units += from
+                } else { stack[n].spans.append(Piece(text: text, marks: marks, units: from)) }
             }
+        }
+        func push(_ a: Int, _ b: Int, _ marks: [Mark]) {
+            let b = min(b, units.count)
+            push(slice(a, b), marks, track ? Array(a..<max(a, b)) : [])
         }
         func whitespace(_ i: Int) -> Bool {
             i >= 0 && i < units.count && UnicodeScalar(units[i]).map { CharacterSet.whitespacesAndNewlines.contains($0) } == true
@@ -51,7 +71,7 @@ enum ComposerRichText {
             let c = units[i]
             if c == 92 {
                 let count = i + 2 < units.count && (0xD800...0xDBFF).contains(units[i + 1]) ? 3 : 2
-                push(slice(i, i + count), []); i += min(count, units.count - i); continue
+                push(i, i + count, []); i += min(count, units.count - i); continue
             }
             if c == 96 {
                 var end = i + 1
@@ -62,20 +82,23 @@ enum ComposerRichText {
                 if end == i + 1, close.location != NSNotFound, close.location > end,
                    !slice(i, close.location).contains("\n"),
                    close.location + 1 == units.count || units[close.location + 1] != 96 {
-                    push(slice(end, close.location), [.code]); i = close.location + 1
-                } else { push(run, []); i = end }
+                    // Typed ticks around only spaces stay a literal pair, as Tiptap's code rule wants text
+                    // (`(?!\s+`)`), so a later tick does not reuse the closing one (#27457).
+                    if typing, slice(end, close.location).allSatisfy(\.isWhitespace) { push(i, close.location + 1, []); i = close.location + 1; continue }
+                    push(end, close.location, [.code]); i = close.location + 1
+                } else { push(i, end, []); i = end }
                 continue
             }
             if c != 42 && c != 95 && c != 126 {
                 // Keep surrogate pairs together when appending literal text.
                 var end = i + 1
                 while end < units.count, ![92, 96, 42, 95, 126].contains(units[end]) { end += 1 }
-                push(slice(i, end), []); i = end; continue
+                push(i, end, []); i = end; continue
             }
             var end = i
             while end < units.count, units[end] == c { end += 1 }
             // Underscores inside a URL, path or file name are text (#36363).
-            if literalRuns.contains(i) { push(slice(i, end), []); i = end; continue }
+            if literalRuns.contains(i) { push(i, end, []); i = end; continue }
             let canClose = i > 0 && !whitespace(i - 1) && (c != 95 || !word(at: end))
             let canOpen = end < units.count && !whitespace(end) && (c != 95 || !word(before: i))
             while i < end {
@@ -84,20 +107,20 @@ enum ComposerRichText {
                 if !nestedBold, canClose, let top,
                    slice(i, min(end, i + top.delimiter.utf16.count)) == top.delimiter {
                     stack.removeLast()
-                    for span in top.spans { push(span.text, [top.mark] + span.marks) }
+                    for span in top.spans { push(span.text, [top.mark] + span.marks, span.units) }
                     i += top.delimiter.utf16.count
                 } else if canOpen && (c != 126 || end - i >= 2) {
                     let length = c == 126 || end - i >= 2 ? 2 : 1
-                    if typing, c == 95, length == 1 { push(slice(i, end), []); i = end; continue }
+                    if typing, c == 95, length == 1 { push(i, end, []); i = end; continue }
                     let mark: Mark = c == 126 ? .strike : length == 2 ? .bold : .italic
-                    if stack.contains(where: { $0.mark == mark }) { push(slice(i, end), []); i = end; continue }
-                    stack.append(Frame(delimiter: slice(i, i + length), mark: mark)); i += length
-                } else { push(slice(i, end), []); i = end }
+                    if stack.contains(where: { $0.mark == mark }) { push(i, end, []); i = end; continue }
+                    stack.append(Frame(delimiter: slice(i, i + length), start: i, mark: mark)); i += length
+                } else { push(i, end, []); i = end }
             }
         }
         while let frame = stack.popLast() {
-            push(frame.delimiter, [])
-            for span in frame.spans { push(span.text, span.marks) }
+            push(frame.start, frame.start + frame.delimiter.utf16.count, [])
+            for span in frame.spans { push(span.text, span.marks, span.units) }
         }
         return root
     }
