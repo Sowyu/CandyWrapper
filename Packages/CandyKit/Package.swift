@@ -26,7 +26,7 @@ let package = Package(
         .target(name: "DesignSystem", exclude: ["Icons/LICENSE-lucide.txt", "Icons/LICENSE-hugeicons.txt"], resources: [.copy("Resources/surface-grain.rgba")], swiftSettings: sizeOptimized),
         // Wire and domain types from docs/protocol.md. No I/O.
         .target(name: "T3Protocol", swiftSettings: sizeOptimized),
-        // Bearer HTTP and the WebSocket RPC session, Foundation only, so the Linux helper shares them.
+        // Bearer HTTP and the WebSocket RPC session, Foundation only.
         .target(name: "T3Transport", dependencies: ["T3Protocol"], swiftSettings: sizeOptimized),
         // Transport: HTTP auth, T3 Connect, reconnect supervisor, Keychain. Re-exports T3Transport.
         .target(name: "T3Client", dependencies: ["T3Protocol", "T3Transport"], swiftSettings: sizeOptimized),
@@ -35,10 +35,8 @@ let package = Package(
         // Reads and edits the MCP servers and skills of Claude Code and Codex in a home folder. Foundation only, so the
         // Linux helper's `config` command and the app share it.
         .target(name: "AgentConfig", swiftSettings: sizeOptimized),
-        // The always-on Orchestrator relay for macOS and Linux (docs/orchestrator-helper.md). Foundation only.
-        // libcurl's WebSocket frames for the helper on Linux (CurlRPCSocket); only imported there or with CANDY_CURL_WS.
-        .systemLibrary(name: "CCurl"),
-        .executableTarget(name: "CandyHelper", dependencies: ["T3Protocol", "T3Transport", "T3Store", "AgentConfig", "CCurl"], swiftSettings: sizeOptimized),
+        // The helper for macOS and Linux: the Connectors tab's `config` command (docs/connectors.md). Foundation only.
+        .executableTarget(name: "CandyHelper", dependencies: ["AgentConfig"], swiftSettings: sizeOptimized),
         // Screens built from DesignSystem components and fed by T3Store (sidebar, timeline, composer...).
         .target(name: "Features", dependencies: ["DesignSystem", "T3Store", "T3Protocol", "AgentConfig", .product(name: "SwiftTerm", package: "SwiftTerm")], resources: [.copy("Resources/candy-town.gray"), .copy("Resources/pele.global.js.lzma"), .copy("Resources/LICENSE-pele.txt"), .copy("Resources/native-licenses.json"),
                          .copy("Resources/SymbolsNerdFontMono-Regular.ttf"), .copy("Resources/LICENSE-symbols-nerd-font.txt"),
@@ -49,7 +47,6 @@ let package = Package(
         .testTarget(name: "T3ClientTests", dependencies: ["T3Client", "T3Transport"]),
         .testTarget(name: "T3StoreTests", dependencies: ["T3Store"]),
         .testTarget(name: "AgentConfigTests", dependencies: ["AgentConfig"]),
-        .testTarget(name: "CandyHelperTests", dependencies: ["CandyHelper"]),
         .testTarget(name: "FeaturesTests", dependencies: ["Features", "DesignSystem", "T3Store", "T3Protocol", .product(name: "SwiftTerm", package: "SwiftTerm")], exclude: ["Fixtures"]),
     ]
 )
