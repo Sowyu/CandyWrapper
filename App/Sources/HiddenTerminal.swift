@@ -3,13 +3,12 @@ import T3Client
 import T3Protocol
 import T3Store
 
-/// A T3 terminal no one sees, for the Connectors tab's `config` command (docs/connectors.md) and the one-time removal
-/// of the old Orchestrator relay (`OrchestratorCleanup`).
+/// A T3 terminal no one sees, for the one-time removal of the old Orchestrator relay (`OrchestratorCleanup`).
 @MainActor
 enum HiddenTerminal {
-    /// Opens a terminal no one sees, types `command` in slices a PTY's small input queue keeps up with, answers
-    /// `CWH-READY` with `input`, and returns the marker lines once a result arrives. The terminal and its history go.
-    static func run(_ environments: Environments, session: ShellSession, env: String, thread local: String, cwd: String, command: String, input: String?) async -> [HelperInstall.Line] {
+    /// Opens a terminal no one sees, types `command` in slices a PTY's small input queue keeps up with, and returns the
+    /// marker lines once a result arrives. The terminal and its history go.
+    static func run(_ environments: Environments, session: ShellSession, env: String, thread local: String, cwd: String, command: String) async -> [HelperInstall.Line] {
         let terminal = "candywrapper-helper-\(UUID().uuidString.prefix(8).lowercased())"
         let base: [String: JSONValue] = ["threadId": .string(local), "terminalId": .string(terminal)]
         func with(_ extra: [String: JSONValue]) -> JSONValue { .object(base.merging(extra) { a, _ in a }) }
@@ -37,16 +36,10 @@ enum HiddenTerminal {
             // Wait for the shell's first prompt before typing.
             for _ in 0..<40 where await !output.reader.started { try await Task.sleep(for: .milliseconds(250)) }
             try await type(command)
-            try await Task.sleep(for: .milliseconds(40))
-            var sentInput = input == nil
-            // ponytail: 3 minutes covers a 25 MB download on a slow line; raise it if installs time out there
+            // ponytail: 3 minutes covers a slow `uninstall` on a busy machine; raise it if the cleanup times out there
             for _ in 0..<720 {
                 try await Task.sleep(for: .milliseconds(250))
                 let lines = await output.reader.lines
-                if !sentInput, lines.contains(.ready), let input {
-                    sentInput = true
-                    try await type(input)
-                }
                 if lines.contains(where: { if case .ok = $0 { true } else if case .failed = $0 { true } else { false } }) { return lines }
             }
         } catch {}

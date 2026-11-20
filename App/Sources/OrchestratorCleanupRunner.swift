@@ -66,7 +66,7 @@ final class OrchestratorCleanupRunner {
         if isHome, helpers.map({ !$0.isEmpty }) ?? true {
             // Runs the installed 1.14 binary's `uninstall`; "not installed" is fine too. T3 checks nothing about the thread id.
             let lines = await HiddenTerminal.run(environments, session: session, env: env, thread: "candywrapper-cleanup", cwd: "/",
-                                                 command: HelperInstall.uninstallCommand(), input: nil)
+                                                 command: HelperInstall.uninstallCommand())
             let removed: Bool = if case .ok? = lines.last { true } else { false }
             if !removed, helpers?.isEmpty == false { ok = false }
             NSLog("orchestrator cleanup: helper uninstall on %@: %@", env, removed ? "ok" : "no answer")
