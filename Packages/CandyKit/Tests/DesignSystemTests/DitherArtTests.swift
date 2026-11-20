@@ -98,6 +98,53 @@ struct DitherArtTests {
         #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / DitherArt.dot).rounded(.up)))
     }
 
+    /// Gradient: no picture, a canvas over the top left only, accent dots at its top left corner and the ground at its
+    /// far edge; the art shows on a new thread and hides on every other page.
+    @MainActor @Test func gradientDrawsAccentDotsAtTheTopLeftOnly() throws {
+        let bg = 8.0 / 255, accent = [0.25, 0.5, 0.88]
+        let image = try #require(DitherArt.render(.init(url: nil, width: 300, height: 200, background: [bg, bg, bg], scale: 2,
+                                                        tint: accent, dark: true)))
+        let rep = NSBitmapImageRep(cgImage: image)
+        func rgb(_ x: Int, _ y: Int) -> [Int] {
+            let c = rep.colorAt(x: x, y: y)!.usingColorSpace(.sRGB)!
+            return [c.redComponent, c.greenComponent, c.blueComponent].map { Int(($0 * 255).rounded()) }
+        }
+        // The first dot, at the top left: the accent's hue mixed into the ground, blue strongest, never brighter than
+        // its share allows.
+        let dot = rgb(0, 0)
+        #expect(dot[2] > dot[0] && dot[2] > 8 && dot[2] < Int(accent[2] * 255 * 0.6))
+        // The gap between dots and the canvas's far corner are the same gray ground (read back through a color
+        // conversion, so not exactly 8).
+        let ground = rgb(299, 199)
+        #expect(ground[0] == ground[1] && ground[1] == ground[2] && ground[0] <= 10)
+        #expect(rgb(2, 2) == ground)
+
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var input = ThemeRuntimeInput(light: ThemeDefinition.dither.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
+                                      dark: ThemeDefinition.dither.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
+        input.ditherLight = true; input.ditherDark = true; input.ditherGradient = true
+        ThemeRuntime.apply(input)
+        let shell = SidebarLayoutView(defaults: UserDefaults(suiteName: "cw.dither-gradient.\(UUID().uuidString)")!)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        window.contentView = shell
+        defer { window.contentView = nil }
+        shell.layoutSubtreeIfNeeded()
+        let art = try #require(shell.main.subviews.first { $0 is DitherArtView } as? DitherArtView)
+        let request = try #require(art.requestForTesting)
+        #expect(request.url == nil && request.tint != nil)
+        #expect(request.width == Int((shell.main.bounds.width * DitherArt.gradientReach.width).rounded(.up)))
+        // No page registered: the heavy-scrim page, where Gradient shows the plain ground.
+        #expect(art.layer?.sublayers?.first?.isHidden == true)
+        let page = NSView(frame: shell.main.bounds)
+        shell.main.addSubview(page)
+        DitherArtView.setEmphasis(.hero, from: page)
+        defer { DitherArtView.setEmphasis(nil, from: page) }
+        #expect(art.layer?.sublayers?.first?.isHidden == false)
+        #expect(art.scrimAlphaForTesting == 0)
+    }
+
     /// "Use desktop" never leaves the panel blank: a nil desktop URL or a file that won't decode still renders art,
     /// and a `.madesktop`, which macOS's own wallpapers are, renders its still thumbnail.
     @Test func unreadableOrMissingPicturesStillRenderArt() throws {

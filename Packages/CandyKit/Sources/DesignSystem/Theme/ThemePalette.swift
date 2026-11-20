@@ -60,21 +60,23 @@ public struct ThemeDefinition: Equatable, Sendable {
     public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Redesign (Experimental)", appearance: .light,
                                                colors: capyLightColors, variants: [.dark: capyDarkColors])
 
-    /// Dither's palette: Capy's default theme, its hover and selected fills translucent overlays like Capy's `--secondary`, from its stylesheet (`--bg`, `--panel`, `--card`, `--popover`, the text
-    /// mixes and the teal `--primary`, docs/research in ~/CandyWrapper-research/capy-design.md). Near-black cool grays,
-    /// the chrome a step darker than the panel, and teal for the focus ring, selection and send button.
+    /// Dither's palette, after Capy's desktop app in dark (the user's screenshots, 2026-11-21: window #000, panel
+    /// #050505, composer #0f0f0f, selected row #1a1a1a, hairline #141414). The user found the earlier #131314 to
+    /// #202021 grays flat ("less grey"): near-black ground, surfaces one small step up, menus a step more, hairlines
+    /// doing the separating. Hover and selected fills stay translucent overlays like Capy's `--secondary`; teal for
+    /// the focus ring, selection and send button.
     static let capyDarkColors: [ThemeColorRole: String] = CandyTheme3669.darkColors.merging([
-        .canvas: "#131314", .chrome: "#0a0a0b", .toolbar: "#0a0a0b", .toolbarBorder: "#1d1d1e", .toolbarControl: "#181819",
-        .toolbarControlHover: "#ffffff14", .surface: "#181819", .surfaceRaised: "#202021", .surfaceOverlay: "#202021",
-        .text: "#f5f5f5", .textMuted: "#aaaaab", .border: "#232324", .input: "#2a2a2b", .focus: "#2b948b",
+        .canvas: "#080808", .chrome: "#030303", .toolbar: "#030303", .toolbarBorder: "#141414", .toolbarControl: "#0f0f0f",
+        .toolbarControlHover: "#ffffff14", .surface: "#0e0e0e", .surfaceRaised: "#0f0f0f", .surfaceOverlay: "#141414",
+        .text: "#f5f5f5", .textMuted: "#aaaaab", .border: "#1d1d1d", .input: "#262626", .focus: "#2b948b",
         .accent: "#2b948b", .accentForeground: "#ffffff", .secondary: "#ffffff14", .secondaryForeground: "#f5f5f5",
-        .muted: "#1c1c1d", .mutedForeground: "#aaaaab", .placeholder: "#616162", .secondaryLabel: "#848485",
+        .muted: "#161616", .mutedForeground: "#aaaaab", .placeholder: "#616162", .secondaryLabel: "#848485",
         .iconMuted: "#686869", .accentSurface: "#ffffff14", .accentSurfaceForeground: "#f5f5f5",
-        .messageSurface: "#202021", .messageForeground: "#f5f5f5", .messageAction: "#2b948b",
-        .messageActionForeground: "#ffffff", .messageActionHover: "#258178", .codeBackground: "#0f0f10",
-        .sidebar: "#0a0a0b", .sidebarForeground: "#f5f5f5", .sidebarMutedForeground: "#848485",
-        .sidebarControlSurface: "#141415", .sidebarRowHover: "#ffffff0f", .sidebarRowActive: "#ffffff17",
-        .sidebarRowSelected: "#ffffff17", .sidebarBorder: "#0a0a0b", .terminalBackground: "#0f0f10",
+        .messageSurface: "#1e1e1e", .messageForeground: "#f5f5f5", .messageAction: "#2b948b",
+        .messageActionForeground: "#ffffff", .messageActionHover: "#258178", .codeBackground: "#0c0c0c",
+        .sidebar: "#030303", .sidebarForeground: "#f5f5f5", .sidebarMutedForeground: "#848485",
+        .sidebarControlSurface: "#0f0f0f", .sidebarRowHover: "#ffffff0f", .sidebarRowActive: "#ffffff1a",
+        .sidebarRowSelected: "#ffffff1a", .sidebarBorder: "#030303", .terminalBackground: "#0c0c0c",
         .terminalCursor: "#2b948b", .terminalSelection: "#1f3d3a",
     ]) { $1 }
     /// Light departs from Capy where its grays fail WCAG AA over the art: muted text, placeholders and labels reach

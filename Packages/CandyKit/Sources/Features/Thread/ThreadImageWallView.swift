@@ -253,7 +253,7 @@ final class GalleryTileView: ControlView {
         thumb.layer?.cornerCurve = .continuous
         addSubview(thumb)
         // The strip lives inside the picture's clip, so it takes the picture's corners.
-        shade.colors = [Themed.black(0).cgColor, Themed.black(Double(Tokens.Surface.resting)).cgColor]
+        shade.colors = [Themed.black(0).cgColor, Themed.black(Double(Tokens.Surface.shade)).cgColor]
         shade.opacity = 0
         thumb.layer?.addSublayer(shade)
         caption.alphaValue = 0
@@ -413,7 +413,7 @@ final class GalleryViewerView: DSView {
 
     private func restyle() {
         // Opaque: a see-through veil let the wall's header read through the count.
-        layer?.backgroundColor = Themed.color(\.background, Double(Tokens.Surface.opaque)).cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
     }
 
     /// The veil returns to the wall; the picture and the controls keep their clicks.

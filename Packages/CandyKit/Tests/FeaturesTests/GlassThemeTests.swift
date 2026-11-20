@@ -44,7 +44,7 @@ struct GlassThemeTests {
         defaults.set(dither.id, forKey: "theme.preference")
         let (input, _) = ThemeLibrary(defaults: defaults).runtimeInput(client: .defaults)
         #expect(!input.glassLight && !input.glassDark && input.ditherLight && input.ditherDark)
-        #expect(input.dark?.colors[.sidebar] == "#0a0a0b" && input.dark?.colors[.messageAction] == "#2b948b")
+        #expect(input.dark?.colors[.sidebar] == "#030303" && input.dark?.colors[.messageAction] == "#2b948b")
         #expect(input.ditherPicture == DitherPicture.path)
         defaults.set(ThemeDefinition.glass.id, forKey: "theme.preference")
         let (glass, _) = ThemeLibrary(defaults: defaults).runtimeInput(client: .defaults)

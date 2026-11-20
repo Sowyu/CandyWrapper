@@ -4,20 +4,24 @@ import AppKit
 /// docs/research/redesign-system.md argues for each value. RedesignTokenGuardTests fails when Redesign drawing code
 /// writes a corner radius, a shadow or a surface opacity as a literal anywhere but this file.
 public enum RedesignTokens {
-    /// One corner per job, on continuous corners (`SmoothCorners`).
+    /// One corner for every surface and one for what sits inside them, on continuous corners (`SmoothCorners`). The
+    /// user, 2026-11-21: "make all corner radiuses the same", with a tight corner like corner-radius-target.png
+    /// (a circular 7.5pt, measured at 2x).
     public enum Radius {
-        /// Buttons, inputs, rows, tabs, chips and the 30pt pills.
-        public static let control: CGFloat = 8
-        /// Cards, bubbles, code blocks, tables, banners and popovers.
-        public static let card: CGFloat = 12
-        /// The composer, the details card, the content panel and modals.
-        public static let panel: CGFloat = 16
+        /// Cards, bubbles, code blocks, tables, banners, menus, popovers, the pills, the composer, the content panel,
+        /// modals and inputs.
+        public static let card: CGFloat = 8
+        /// The same corner, named for the large surfaces: the composer, the details card, the content panel, modals.
+        public static let panel: CGFloat = card
+        /// What sits inside a surface: buttons, menu rows, sidebar rows, tabs, chips and segmented selections.
+        /// Concentric with `card` at a 2pt inset, the segmented track's.
+        public static let control: CGFloat = nested(in: card, inset: 2)
         /// The window's own corner, measured on macOS 27 for a titled window without a toolbar: a continuous 16, on
         /// this Mac at 1x and in the user's 2x capture (2026-10-22).
         /// ponytail: measured constant, read it from the window if a macOS release changes the frame's corner
         public static let window: CGFloat = 16
         /// The tight corner where two user bubbles of a burst meet.
-        public static let joined: CGFloat = 6
+        public static let joined: CGFloat = 3
         /// The concentric corner for a shape `inset` inside one with corner `outer`, so both curves run parallel.
         public static func nested(in outer: CGFloat, inset: CGFloat) -> CGFloat { max(2, outer - inset) }
         /// A dot, a ring or a line with round ends: half its height. A shape, not a step on the scale.
@@ -67,29 +71,32 @@ public enum RedesignTokens {
         }
     }
 
-    /// The glass recipes: a 12pt backdrop blur (`Tokens.LengthPx.glassBlur`), a fill and a 1pt rim.
+    /// Solid surfaces: an opaque fill, a 1pt hairline rim and the token shadow. Redesign draws no backdrop blur (the
+    /// user, 2026-11-21: "in redesign no more blurs its no premium").
     public enum Surface {
-        /// Surfaces that rest on the picture: the composer, the pills, the header pill, cards.
-        public static let resting: CGFloat = 0.62
-        /// Layers over content, which must hide sharp text under them: menus, popovers, toasts, modals.
-        public static let floating: CGFloat = 0.82
-        /// A card on a surface, in the text color: code blocks, tables, user bubbles, tool output.
+        /// A card on a surface, in the text color over the panel's ground: code blocks, tables, tool output.
         public static let inset: CGFloat = 0.05
-        /// The 1pt rim on every glass surface and card, in the text color.
+        /// The 1pt rim on every surface and card, in the text color.
         public static let rim: CGFloat = 0.08
         /// Increase Contrast's rim.
         public static let rimContrast: CGFloat = 0.24
-        /// Under Reduce Transparency the backdrop is off, so fills go opaque, as system materials do.
-        public static let opaque: CGFloat = 1
+        /// The black at the foot of the gradient that keeps a caption readable over a picture (the agent gallery).
+        public static let shade: CGFloat = 0.62
 
-        /// The glass fill for `alpha` (`resting` or `floating`), opaque when the blur is off.
-        @MainActor public static func fill(_ alpha: CGFloat, in view: NSView) -> CGColor {
+        /// The fill of a surface that rests on the ground: the composer, the pills, the header pill, Settings.
+        @MainActor public static func fill(in view: NSView) -> CGColor {
             let dark = view.effectiveAppearance.isDark
-            return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view).copy(alpha: blurs ? alpha : opaque)!
+            return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view)
         }
 
-        /// The fill of a card on a surface: a step in the text color.
-        public nonisolated static func insetFill(dark: Bool) -> NSColor { dark ? Themed.white(inset) : Themed.black(inset) }
+        /// The fill of a card on a surface: a step in the text color over the panel's ground, opaque so the picture
+        /// never shows through it.
+        public nonisolated static func insetFill(dark: Bool) -> NSColor {
+            let g = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.srgb
+            let a = Double(inset), top: Double = dark ? 1 : 0
+            func mix(_ c: Double) -> CGFloat { CGFloat(c * (1 - a) + top * a) }
+            return NSColor(srgbRed: mix(g.x), green: mix(g.y), blue: mix(g.z), alpha: 1)
+        }
 
         /// The rim in the text color.
         public nonisolated static func rim(dark: Bool) -> NSColor {
@@ -97,19 +104,11 @@ public enum RedesignTokens {
             return dark ? Themed.white(a) : Themed.black(a)
         }
 
-        /// Reduce Transparency turns the system backdrop off, so `BackdropBlurView` draws nothing. "Ignore Reduce
-        /// Transparency" brings the glass back, as the user asked (2026-10-28).
-        @MainActor public static var blurs: Bool {
-            !ThemeRuntime.reducesTransparency(system: reduceTransparencyOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
-        }
-        /// Tests pin the setting here.
-        @MainActor public static var reduceTransparencyOverride: Bool?
-
         nonisolated static var increaseContrast: Bool { NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
     }
 
-    /// A card on a surface (code blocks, tables, user bubbles, tool output): the inset fill, the rim, card corners,
-    /// no shadow and no blur of its own.
+    /// A card on a surface (code blocks, tables, tool output): the opaque inset fill, the rim, card corners, no
+    /// shadow.
     public enum Card {
         public static let radius = Radius.card
         public static let fill = NSColor(name: nil) { Surface.insetFill(dark: $0.isDark) }
@@ -162,14 +161,13 @@ public enum DitherChrome {
         return (1 - x) * (1 - x)
     }
 
-    /// T3's radius for a box, under Dither: small controls 8, cards, popovers and bubbles 12, `rounded-3xl`
-    /// surfaces 16 like the composer; hairline rounding and full pills unchanged.
+    /// T3's radius for a box, under Dither: small controls take the control corner, everything from cards up the one
+    /// surface corner; hairline rounding and full pills unchanged.
     public static func radius(_ stock: CGFloat) -> CGFloat {
         switch stock {
         case ..<5: return stock
         case ..<9: return controlRadius
-        case ..<20: return cardRadius
-        case ..<30: return panelRadius
+        case ..<30: return cardRadius
         default: return stock
         }
     }

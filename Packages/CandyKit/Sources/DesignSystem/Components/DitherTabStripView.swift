@@ -46,8 +46,6 @@ public final class DitherTabStripView: TopbarDragView {
     public var showsTabs = true { didSet { if showsTabs != oldValue { needsLayout = true } } }
     private var views: [TabView] = []
     private let plus = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconSm)
-    /// The thread's rows scroll on under the strip, so the tabs and + sit on a blur. It shows nothing over the bare art.
-    private let plusFrost = BackdropBlurView()
     static let tabWidth: CGFloat = 200, gap: CGFloat = 4
     /// The tabs' height; the header pill beside them matches it and shares their midline.
     public static let tabHeight: CGFloat = 28
@@ -56,8 +54,6 @@ public final class DitherTabStripView: TopbarDragView {
         super.init(frame: frameRect)
         plus.setAccessibilityLabel("New thread")
         plus.action = { [weak self] in self?.onNew?() }
-        plusFrost.cornerRadius = DitherChrome.controlRadius
-        addSubview(plusFrost)
         addSubview(plus)
         // A tab group, as VoiceOver knows NSTabView's: the tabs are its radio buttons.
         setAccessibilityElement(true)
@@ -103,7 +99,6 @@ public final class DitherTabStripView: TopbarDragView {
             reserve = size.width + right + 8
         }
         plus.isHidden = !showsTabs
-        plusFrost.isHidden = !showsTabs
         let room = max(0, bounds.width - contentStart - 40 - reserve)
         let shown = !showsTabs ? 0..<0 : Self.window(count: views.count, selected: views.firstIndex { $0.tab.id == selected }, room: room)
         let count = CGFloat(shown.count)
@@ -116,7 +111,6 @@ public final class DitherTabStripView: TopbarDragView {
             x += max(Self.minTabWidth, width) + Self.gap
         }
         plus.frame = NSRect(x: x + 2, y: (bounds.height - 24) / 2, width: 24, height: 24)
-        plusFrost.frame = plus.frame
         if drag != nil {
             drag?.rest = views.map(\.frame)
             layoutDrag()
@@ -246,7 +240,6 @@ public final class DitherTabStripView: TopbarDragView {
         var image: NSImage? { didSet { picture.image = image; picture.isHidden = image == nil; icon.isHidden = image != nil; picture.needsDisplay = true } }
         private let label: LabelView
         private let close = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
-        private let frost = BackdropBlurView()
         /// The working grid in the close button's slot, made the first time the thread works.
         private var grid: DotGridSpinnerView?
 
@@ -260,7 +253,7 @@ public final class DitherTabStripView: TopbarDragView {
             close.action = { [weak self] in self?.onClose?() }
             picture.imageScaling = .scaleProportionallyUpOrDown
             picture.isHidden = true
-            [frost, icon, picture, label, close].forEach(addSubview)
+            [icon, picture, label, close].forEach(addSubview)
             if tab.activity != nil { let g = DotGridSpinnerView(); grid = g; addSubview(g) }
             setAccessibilityRole(.radioButton)
             setAccessibilityLabel(tab.title)
@@ -348,8 +341,6 @@ public final class DitherTabStripView: TopbarDragView {
 
         override func layout() {
             super.layout()
-            frost.frame = bounds
-            frost.cornerRadius = DitherChrome.controlRadius
             icon.frame = NSRect(x: 10, y: (bounds.height - 14) / 2, width: 14, height: 14)
             picture.frame = icon.frame
             let closeX = bounds.width - 6 - 16

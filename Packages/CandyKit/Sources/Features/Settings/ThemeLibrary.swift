@@ -375,6 +375,7 @@ public final class ThemeLibrary {
         input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
         input.ditherDim = client.int("ditherBackgroundDim")
         input.ditherBlur = client.string("redesignBackground") == "blur"
+        input.ditherGradient = client.string("redesignBackground") == "gradient"
         input.ignoreReduceTransparency = client.bool("ignoreReduceTransparency")
         let accent = DitherAccent.named(client.string("ditherAccent"))
         input.ditherAccent = accent.id

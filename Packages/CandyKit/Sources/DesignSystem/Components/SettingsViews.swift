@@ -310,12 +310,11 @@ public final class SettingsGroupView: BoxView {
     private func restyle() {
         var box = BoxStyle()
         if variant == .grouped, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            // Dither (after Capy's settings cards): a translucent fill a step lighter than the page, so the art
-            // under the page faintly shows through, ringed by a faint light 1pt rim. Measured on Capy in dark:
-            // the card reads #222 over art averaging #1c1d1e, the rim #2b2a2b.
+            // Dither (after Capy's settings cards): an opaque fill a step lighter than the page, ringed by the 1pt
+            // hairline rim.
             box.radius = DitherChrome.cardRadius
             box.border = NSColor(name: nil) { RedesignTokens.Surface.rim(dark: $0.isDark) }
-            box.fill = Themed.pick(light: Themed.color(\.card, RedesignTokens.Surface.floating), dark: Self.ditherDarkCard)
+            box.fill = Themed.pick(light: Themed.color(\.card), dark: RedesignTokens.Card.fill)
         } else if variant == .grouped {
             box.radius = DesignGeometry.radius(14, in: self)
             box.border = Themed.color(\.contrastBorder, 0.6)
@@ -336,9 +335,6 @@ public final class SettingsGroupView: BoxView {
     }
 
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle(); needsLayout = true }
-
-    /// Capy's settings card in dark, #222223, at the floating glass's fill over the Settings page's scrim.
-    static let ditherDarkCard = NSColor(srgbRed: 0x22 / 255, green: 0x22 / 255, blue: 0x23 / 255, alpha: RedesignTokens.Surface.floating)
 
     /// The rows' dividers: T3's border/50, or under Dither Capy's hairline (`--border-1`, black 11% in light where
     /// Capy rings its cards with that shadow).

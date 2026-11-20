@@ -129,9 +129,10 @@ public enum WindowGlass {
         "--toolbar-border", "--contrast-toolbar-border",
     ]
 
-    /// `palette` with its surfaces turned into frosted panes and its light fills into overlays.
+    /// `palette` with its surfaces turned into frosted panes and its light fills into overlays. Redesign passes
+    /// `panes: false`: its surfaces stay opaque (the user, 2026-11-21: "in redesign no more blurs").
     nonisolated static func frosted(_ palette: Palette, dark: Bool, sidebar: Bool, opacity: Double,
-                                    lines: Bool = false) -> Palette {
+                                    lines: Bool = false, panes: Bool = true) -> Palette {
         let members = palette.members
         let base = sidebar ? palette.sidebar : palette.background
         return Palette(members: { i in
@@ -144,7 +145,7 @@ public enum WindowGlass {
                 return line.withAlpha(c.srgb.w)
             }
             guard c.srgb.w >= 1 else { return c }
-            if let level = paneMembers[name] { return c.withAlpha(paneAlpha(level, dark: dark, opacity: opacity)) }
+            if panes, let level = paneMembers[name] { return c.withAlpha(paneAlpha(level, dark: dark, opacity: opacity)) }
             if !dark, tintMembers.contains(name) { return overlay(c, over: base) }
             return c
         })
@@ -188,24 +189,6 @@ public enum WindowGlass {
         return NSColor(name: nil) { resolve(ThemeRuntime.framesPanes(dark: $0.isDark) ? frost : stock, in: $0) }
     }
 
-    /// A message bubble's blur in Dither, where the bubble sits over the art: puts a within-window blur under `view`'s
-    /// subviews while Dither shows and takes it out otherwise. Pass the blur it returned last time.
-    @MainActor
-    public static func syncBubbleBlur(_ blur: BackdropBlurView?, in view: NSView, radius: CGFloat) -> BackdropBlurView? {
-        // Blur's picture is soft already, so a bubble there gets no blur of its own.
-        let on = view.window != nil && ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) && !ThemeRuntime.ditherBlur
-        guard on else { blur?.removeFromSuperview(); return nil }
-        let made = blur ?? {
-            let b = BackdropBlurView(frame: view.bounds)
-            b.autoresizingMask = [.width, .height]
-            view.addSubview(b, positioned: .below, relativeTo: nil)
-            b.layer?.zPosition = -1
-            return b
-        }()
-        made.cornerRadius = radius
-        return made
-    }
-
     /// Puts the hairline edge and top highlight on a layer-painted pane (a selected row, the composer) while classic
     /// Glass frosts `view`, and takes them off otherwise. Pass what it returned last time.
     @MainActor
@@ -246,14 +229,15 @@ public enum WindowGlass {
 
     /// A floating pane's blur (menus, popovers, dialogs, toasts): puts a within-window blur under `view`'s subviews
     /// while classic Glass frosts it and takes it out otherwise. Floating panes cover sharp text, which a tint alone
-    /// leaves legible through the glass. Pass the blur it returned last time; size it in `layout`.
+    /// leaves legible through the glass. Redesign's panes are opaque and get none. Pass the blur it returned last
+    /// time; size it in `layout`.
     @MainActor
     public static func syncPaneBlur(_ blur: BackdropBlurView?, in view: NSView, radius: CGFloat) -> BackdropBlurView? {
-        let on = view.window != nil && ThemeRuntime.framesPanes(dark: view.effectiveAppearance.isDark)
+        let on = view.window != nil && ThemeRuntime.isGlass(dark: view.effectiveAppearance.isDark)
         if on, blur == nil {
             let made = BackdropBlurView(frame: view.bounds)
             made.autoresizingMask = [.width, .height]
-            made.cornerRadius = ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? DitherChrome.radius(radius) : radius
+            made.cornerRadius = radius
             view.addSubview(made, positioned: .below, relativeTo: nil)
             // Under the view's own box decoration layer too, so the border and highlight stay sharp.
             made.layer?.zPosition = -1
@@ -263,7 +247,7 @@ public enum WindowGlass {
             blur.removeFromSuperview()
             return nil
         }
-        blur?.cornerRadius = ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? DitherChrome.radius(radius) : radius
+        blur?.cornerRadius = radius
         return blur
     }
 

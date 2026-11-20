@@ -3,8 +3,8 @@ import DesignSystem
 import QuartzCore
 
 /// Settings and Usage's route surface (3814 AppRouteModal.tsx:40-64). The underlying route stays mounted.
-/// Redesign keeps its own chrome on the same behavior: the pill's frosted fill, rim and shadow, no sidebar band, and a
-/// heavier scrim in place of the blur under Reduce Transparency.
+/// Redesign keeps its own chrome on the same behavior: the pill's solid fill, rim and shadow, no sidebar band, and a
+/// plain scrim with no blur.
 public final class AppRouteModalView: DSView {
     public let surface = DSView()
     private let popup = DSView()
@@ -35,6 +35,7 @@ public final class AppRouteModalView: DSView {
         decoration.outset = 80
         popup.layer?.addSublayer(decoration)
         addSubview(popup)
+        pill.ground = true
         popup.addSubview(pill)
         popup.addSubview(surface)
         navigationBackground.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
@@ -144,10 +145,8 @@ public final class AppRouteModalView: DSView {
 
     public override func updateLayer() {
         if isDither {
-            // Without the blur the route would read through the 62% tint, so it takes the art's heavy page scrim (DitherArt.pageScrim).
-            let blurs = DitherPill.blurs
-            blurred.isHidden = !blurs
-            tint.backgroundColor = Themed.color(\.background, blurs ? (effectiveAppearance.isDark ? 0.64 : 0.6) : 0.92).cgColor(in: self)
+            blurred.isHidden = true
+            tint.backgroundColor = Themed.color(\.background, effectiveAppearance.isDark ? 0.72 : 0.6).cgColor(in: self)
             decoration.boxStyle = BoxStyle()
             divider.backgroundColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
             navigationBackground.backgroundColor = nil

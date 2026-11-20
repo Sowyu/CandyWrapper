@@ -7,32 +7,22 @@ import T3Protocol
 
 /// The open subagent panel floats over the timeline, so a changed-files card can scroll under it. In Redesign dark at
 /// Glass opacity 10% with no background picture, the card's labels must not read through the panel (the user's
-/// 1.14.10 screenshot, 2026-10-28). Reduce Transparency turns the backdrop blur off, and offscreen renders draw none
-/// either, so the render matches that case. Run alone: theme globals belong to the whole test process.
+/// 1.14.10 screenshot, 2026-10-28). Redesign's surfaces are opaque and draw no blur. Run alone: theme globals belong
+/// to the whole test process.
 @MainActor
 struct SubagentPanelOverlapTests {
     static let out = FileManager.default.temporaryDirectory.appendingPathComponent("subagent-panel-overlap")
 
-    /// With Reduce Transparency forced on, the pill fill is opaque, and "Ignore Reduce Transparency" brings back 62% live.
-    @Test func ignoreReduceTransparencyBringsBackTheGlassFill() {
-        let previous = ThemeRuntime.input
-        defer { ThemeRuntime.apply(previous); DitherPill.reduceTransparencyOverride = nil }
-        DitherPill.reduceTransparencyOverride = true
+    /// Redesign's surfaces are opaque whatever Reduce Transparency says (the user, 2026-11-21: "no more blurs").
+    @Test func pillFillIsOpaque() {
         let probe = NSView(frame: NSRect(x: 0, y: 0, width: 10, height: 10))
         probe.appearance = NSAppearance(named: .darkAqua)
-        var input = previous
-        for ignore in [false, true, false] {
-            input.ignoreReduceTransparency = ignore
-            ThemeRuntime.apply(input)
-            #expect(DitherPill.blurs == ignore)
-            #expect(DitherPill.fill(in: probe).alpha == (ignore ? 0.62 : 1))
-        }
+        #expect(DitherPill.fill(in: probe).alpha == 1)
     }
 
-    @Test(arguments: [true, false]) func panelHidesTheChangedFilesCardUnderIt(reduceTransparency: Bool) throws {
+    @Test func panelHidesTheChangedFilesCardUnderIt() throws {
         let previous = ThemeRuntime.input
-        defer { ThemeRuntime.apply(previous); DitherPill.reduceTransparencyOverride = nil }
-        DitherPill.reduceTransparencyOverride = reduceTransparency
+        defer { ThemeRuntime.apply(previous) }
         var input = ThemeRuntimeInput(
             light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
             dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!), glassOpacity: 10)
@@ -67,11 +57,9 @@ struct SubagentPanelOverlapTests {
             root.addSubview(panel)
             return Snapshot.image(of: root, size: size, scale: 2, dark: true)
         }
-        // With the blur on, the fill stays at Redesign's 62% so the baseline holds; the blur hides the card.
         let probe = SubagentStripPanelTests.panel(rows)
         probe.appearance = NSAppearance(named: .darkAqua)
-        #expect(DitherPill.fill(in: probe).alpha == (reduceTransparency ? 1 : 0.62))
-        guard reduceTransparency else { return }
+        #expect(DitherPill.fill(in: probe).alpha == 1)
 
         let stacked = render(card: true), alone = render(card: false)
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)

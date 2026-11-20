@@ -244,7 +244,7 @@ public final class DitherArtView: NSView {
     /// cropped or short by a few dots until the new one renders.
     private func placeArt() {
         guard let shown else { return }
-        let unit = DitherArt.unit(blur: shown.blur)
+        let unit = shown.unit
         let w = CGFloat(shown.width) * unit, h = CGFloat(shown.height) * unit
         art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
     }
@@ -293,7 +293,10 @@ public final class DitherArtView: NSView {
         let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
-        let alpha = DitherArt.scrim(page, display, light: !dark)
+        // Gradient: the dots show on a new thread only, with no scrim; every other page is the plain ground.
+        let gradient = ThemeRuntime.ditherGradient
+        if art.isHidden != (gradient && page != .hero) { art.isHidden = gradient && page != .hero }
+        let alpha = gradient ? 0 : DitherArt.scrim(page, display, light: !dark)
         if loggedScrim != alpha {
             DitherArt.log.notice("scrim \(alpha) on \(String(describing: page), privacy: .public): reduce transparency \(display.reduceTransparency), increase contrast \(display.increaseContrast), dark \(dark)")
         }
@@ -302,7 +305,7 @@ public final class DitherArtView: NSView {
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // The veil follows the column through a live resize, so it never animates.
-        let veil = DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
+        let veil = gradient ? 0 : DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
         if veil > 0, bounds.width >= 1, let front, let column = Self.columns.object(forKey: front)?.rectValue {
             let lane = convert(column, from: front)
             let xs = (0...64).map { bounds.width * CGFloat($0) / 64 }
@@ -330,16 +333,28 @@ public final class DitherArtView: NSView {
             return
         }
         let dark = effectiveAppearance.isDark
-        let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
-        let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
+        let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false)
+        let background = palette.background
         let scale = window.backingScaleFactor
-        let blur = ThemeRuntime.ditherBlur, unit = DitherArt.unit(blur: blur)
+        let blur = ThemeRuntime.ditherBlur
         art.magnificationFilter = blur ? .linear : .nearest
-        let request = DitherArt.Request(url: url, width: Int((rect.width / unit).rounded(.up)),
+        let request: DitherArt.Request
+        if ThemeRuntime.ditherGradient {
+            // No picture: the canvas covers only the top left, where the dots are; the ground shows past it.
+            let accent = palette.primary
+            request = DitherArt.Request(url: nil, width: Int((rect.width * DitherArt.gradientReach.width / DitherArt.gradientUnit).rounded(.up)),
+                                        height: Int((rect.height * DitherArt.gradientReach.height / DitherArt.gradientUnit).rounded(.up)),
+                                        background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
+                                        tint: [accent.srgb.x, accent.srgb.y, accent.srgb.z], dark: dark)
+        } else {
+            let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
+            let unit = DitherArt.unit(blur: blur)
+            request = DitherArt.Request(url: url, width: Int((rect.width / unit).rounded(.up)),
                                         height: Int((rect.height / unit).rounded(.up)),
                                         background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
                                         fallbacks: [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url },
                                         blur: blur)
+        }
         guard request != shown, request != pending else { return }
         pending = request
         debounce?.cancel()
@@ -475,6 +490,66 @@ public enum DitherArt {
         var fallbacks: [URL] = []
         /// Blurred and smooth instead of dithered (`ThemeRuntime.ditherBlur`); the canvas is in `blurPixel`s.
         var blur = false
+        /// Gradient (`ThemeRuntime.ditherGradient`): no picture, halftone dots in this sRGB accent over the top left;
+        /// the canvas is in `gradientUnit`s and covers `gradientReach` of the panel.
+        var tint: [Double]?
+        var dark = true
+
+        /// Points per canvas pixel.
+        var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : DitherArt.unit(blur: blur) }
+    }
+
+    /// Gradient's canvas pixel, in points. Its dots sit on a grid of `gradientPitch` pixels, as Capy's 2pt dots on a
+    /// 3pt grid do.
+    public nonisolated static let gradientUnit: CGFloat = 1
+    nonisolated static let gradientPitch = 3
+    /// How much of the panel Gradient's canvas covers from the top left. Capy's fades to the ground about two thirds
+    /// across and a third down (the user's recording, 2026-11-21).
+    nonisolated static let gradientReach = CGSize(width: 0.75, height: 0.6)
+
+    /// Gradient's halftone: an elliptical fade from the top left corner to nothing at the canvas's edges, in square
+    /// dots on a 3px grid that shrink from 2px to 1px and thin out in Bayer order as it fades, each dot the accent
+    /// mixed into the ground. The dots stay dim, so text over them reads as it does over the ground.
+    nonisolated static func gradient(_ request: Request, tint: [Double]) -> CGImage? {
+        let w = request.width, h = request.height
+        guard w > 0, h > 0, tint.count == 3,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+              let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return nil }
+        let bg = request.background.count == 3 ? request.background.map { $0 * 255 } : [0, 0, 0]
+        let accent = tint.map { $0 * 255 }
+        // How much of the accent a dot takes at full strength and at the fade's edge: dim in dark like Capy's navy
+        // (#26314b at most), fainter in light, where dark dots on a pale ground read stronger.
+        let (peak, edge) = request.dark ? (0.45, 0.22) : (0.3, 0.12)
+        let pitch = gradientPitch
+        ctx.setFillColor(CGColor(srgbRed: bg[0] / 255, green: bg[1] / 255, blue: bg[2] / 255, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+        // Row 0 of the buffer is the top of the canvas.
+        let cells = (x: (w + pitch - 1) / pitch, y: (h + pitch - 1) / pitch)
+        for cy in 0..<cells.y {
+            for cx in 0..<cells.x {
+                let px = Double(cx * pitch) + 1, py = Double(cy * pitch) + 1
+                let d = ((px / Double(w)) * (px / Double(w)) + (py / Double(h)) * (py / Double(h))).squareRoot()
+                // Nearly linear, so the dots stay dense across the top before thinning out (pass 1's 1.4 faded out
+                // within a fifth of the panel on screen).
+                let strength = pow(max(0, 1 - d), 0.85)
+                guard strength > 0 else { continue }
+                // Two dot sizes and none, dithered: 2 is a 2 x 2 dot, 1 a single pixel.
+                let threshold = (Double(bayer[(cy & 7) * 8 + (cx & 7)]) + 0.5) / 64
+                let scaled = strength * 2, low = scaled.rounded(.down)
+                let size = Int(scaled - low > threshold ? low + 1 : low)
+                guard size > 0 else { continue }
+                let share = edge + (peak - edge) * strength
+                let color = (0..<3).map { UInt8(min(max(bg[$0] + (accent[$0] - bg[$0]) * share, 0), 255).rounded()) }
+                for dy in 0..<min(size, h - cy * pitch) {
+                    for dx in 0..<min(size, w - cx * pitch) {
+                        let i = ((cy * pitch + dy) * w + cx * pitch + dx) * 4
+                        for c in 0..<3 { data[i + c] = color[c] }
+                    }
+                }
+            }
+        }
+        return ctx.makeImage()
     }
 
     nonisolated static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
@@ -516,6 +591,7 @@ public enum DitherArt {
     nonisolated static func render(_ request: Request) -> CGImage? {
         let w = request.width, h = request.height
         guard w > 0, h > 0 else { log.error("no art: the canvas is \(w) x \(h) dots"); return nil }
+        if let tint = request.tint { return gradient(request, tint: tint) }
         if request.url == nil { log.notice("no chosen or desktop picture") }
         for url in [request.url].compactMap({ $0 }) + request.fallbacks {
             let t0 = Date()

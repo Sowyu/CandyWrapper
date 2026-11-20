@@ -72,8 +72,10 @@ struct DitherShapeTests {
     }
 
     @Test func cornersFollowOneScaleAndNestConcentrically() {
-        // T3's controls, cards and `rounded-3xl` surfaces (the composer's and the details card's 22) map to 8, 12, 16.
-        #expect([4, 6, 10, 18, 22, 24, 999].map(DitherChrome.radius) == [4, 8, 12, 12, 16, 16, 999])
+        // T3's controls map to the control corner, 6, and cards and `rounded-3xl` surfaces (the composer's and the
+        // details card's 22) to the one surface corner, 8 (the user, 2026-11-21: "make all corner radiuses the same").
+        #expect([4, 6, 10, 18, 22, 24, 999].map(DitherChrome.radius) == [4, 6, 8, 8, 8, 8, 999])
+        #expect(DitherChrome.controlRadius == DitherChrome.nested(in: DitherChrome.cardRadius, inset: 2))
         // A shape `inset` inside another takes the outer corner less the inset, never under 2 (redesign-system.md).
         #expect(DitherChrome.nested(in: DitherChrome.windowRadius, inset: 8) == 8)
         #expect(DitherChrome.nested(in: 8, inset: 8) == 2)

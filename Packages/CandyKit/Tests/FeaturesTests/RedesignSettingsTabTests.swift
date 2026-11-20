@@ -47,6 +47,10 @@ import T3Protocol
         #expect(!library().runtimeInput(client: old).0.ditherBlur)
         let blur = ClientSettings(decoding: .object(["redesignBackground": .string("blur")]))
         #expect(library().runtimeInput(client: blur).0.ditherBlur)
+        let gradient = ClientSettings(decoding: .object(["redesignBackground": .string("gradient")]))
+        #expect(gradient.string("redesignBackground") == "gradient")
+        #expect(library().runtimeInput(client: gradient).0.ditherGradient)
+        #expect(!library().runtimeInput(client: gradient).0.ditherBlur)
     }
 
     @Test func searchFindsTheTabAndEveryRow() {

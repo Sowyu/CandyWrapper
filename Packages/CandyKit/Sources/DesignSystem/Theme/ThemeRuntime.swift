@@ -54,6 +54,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherDim = 35
     /// Redesign's "Background": the picture blurred behind the whole window instead of dithered in the main panel.
     public var ditherBlur = false
+    /// Redesign's "Background" is Gradient: no picture, a halftone in the accent at the top left of a new thread.
+    public var ditherGradient = false
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
     /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
@@ -81,6 +83,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var ditherDim: CGFloat = 0.35
     /// Redesign's "Background" is Blur: the picture blurred behind the whole window (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherBlur = false
+    /// Redesign's "Background" is Gradient: accent dots on a new thread, plain ground everywhere else (`DitherArtView`).
+    nonisolated(unsafe) public private(set) static var ditherGradient = false
     /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
     nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
@@ -115,7 +119,7 @@ public enum ThemeRuntime {
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
             || next.glassLight != old.glassLight || next.glassDark != old.glassDark
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
-            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark || next.ditherLight || next.ditherDark))
+            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark))
             || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
             || (next.ditherBlur != old.ditherBlur && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
@@ -134,6 +138,10 @@ public enum ThemeRuntime {
         }
         if next.ditherBlur != old.ditherBlur {
             ditherBlur = next.ditherBlur
+            changed = true
+        }
+        if next.ditherGradient != old.ditherGradient {
+            ditherGradient = next.ditherGradient
             changed = true
         }
         if next.ditherAccent != old.ditherAccent {
@@ -242,8 +250,8 @@ public enum ThemeRuntime {
                     return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
                 })
             }
-            // Dither: the main panel's cards, bubbles and popovers become frosted panes over its art. The sidebar and
-            // the panel's own background stay solid.
+            // Dither: the main panel's lines become white overlays over its art; its cards, bubbles and popovers stay
+            // opaque, as do the sidebar and the panel's own background.
             // Its muted text keeps 4.5:1 over the brightest dot behind the chat column, in any theme's colors.
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
                 let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
@@ -255,7 +263,7 @@ public enum ThemeRuntime {
                     return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
                 })
                 return WindowGlass.frosted(readable, dark: dark, sidebar: false, opacity: Double(input.glassOpacity) / 100,
-                                           lines: true)
+                                           lines: true, panes: false)
             }
             guard dark ? input.glassDark : input.glassLight else { return palette }
             let opacity = Double(input.glassOpacity) / 100

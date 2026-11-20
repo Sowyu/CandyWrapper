@@ -16,6 +16,7 @@ enum RedesignPickerSettings {
 /// stay visible and inert, except Ignore Reduce Transparency, which the Glass theme reads too.
 public final class RedesignSettingsView: SettingsPageBase {
     static let offReason = "Turn on Redesign to change this."
+    static let gradientReason = "Gradient uses no picture. Choose Picture or Blur to change this."
     private let library: ThemeLibrary
     private var themeObserver: Int?
     /// The master switch, bound to the theme picker's setting.
@@ -36,7 +37,8 @@ public final class RedesignSettingsView: SettingsPageBase {
                             control: master)
         binder.add { [weak master] in master?.isOn = library.isRedesignOn }
 
-        let look: [SettingsRowView] = [pictureRow(), backgroundRow(), dimRow(), accentRow()]
+        let picture = pictureRow(), dim = dimRow()
+        let look: [SettingsRowView] = [picture, backgroundRow(), dim, accentRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture, Glass and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
@@ -51,6 +53,9 @@ public final class RedesignSettingsView: SettingsPageBase {
             guard let self else { return }
             let off = library.isRedesignOn ? nil : Self.offReason
             for r in self.gated where r.inertReason != off { r.inertReason = off }
+            // Gradient shows no picture, so the picture's own settings do nothing.
+            let pictureOff = off ?? (self.client.string("redesignBackground") == "gradient" ? Self.gradientReason : nil)
+            for r in [picture, dim] where r.inertReason != pictureOff { r.inertReason = pictureOff }
         }
         items = [
             section(nil, "Theme", [masterRow]),
@@ -82,14 +87,16 @@ public final class RedesignSettingsView: SettingsPageBase {
         return r
     }
 
-    /// How Redesign draws its picture: dithered in the main panel, as before, or blurred behind the whole window (the
-    /// user, 2026-11-21: "either full blur or full dither").
+    /// How Redesign draws its background: the picture dithered in the main panel, as before, the picture blurred behind
+    /// the whole window (the user, 2026-11-21: "either full blur or full dither"), or accent dots with no picture at the
+    /// top of a new thread, like Capy ("add a dither option without an image").
     private func backgroundRow() -> SettingsRowView {
-        let key = "redesignBackground", values = ["dither", "blur"]
-        let toggle = ToggleGroupView(variant: .segmented, items: [("Dither", nil), ("Blur", nil)], selected: 0)
+        let key = "redesignBackground", values = ["dither", "blur", "gradient"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Picture", nil), ("Blur", nil), ("Gradient", nil)], selected: 0)
         toggle.setAccessibilityLabel("Background")
         let r = row("redesign-background", title: "Background",
-                    detail: "Dither draws the picture in dots behind the chat. Blur softens it behind the whole window.", control: toggle)
+                    detail: "Picture draws your picture in dots behind the chat. Blur softens it behind the whole window. Gradient uses no picture: accent-colored dots fade in at the top of a new thread.",
+                    control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
             // Clicking the pressed segment unpresses it; the choice stays.
