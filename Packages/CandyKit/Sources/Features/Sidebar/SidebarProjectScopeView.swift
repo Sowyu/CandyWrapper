@@ -16,13 +16,15 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
         var projectIcon: ProjectIconSource? = nil
         /// `ProjectEnvironmentBadge`: a remote member's machine and its "On" or "Also on" text.
         var badge: Badge? = nil
+        var pinned = false
+        /// `canPinProjectGroup`: every member's server keeps pins and this connection may change it.
+        var canPin = false
     }
 
     struct Badge: Equatable { var machine: String; var description: String }
 
     static let maxWidth: CGFloat = 288, searchHeight: CGFloat = 43, maxHeight: CGFloat = 368
 
-    let items: [Item]
     private(set) var selectedKeys: Set<String> = []
     var selectedKey: String? { selectedKeys.first }
     let minimumWidth: CGFloat
@@ -32,6 +34,8 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
 
     var onSelect: (@MainActor (String?) -> Void)?
     var onSettings: (@MainActor (String) -> Void)?
+    /// A row's pin button or the pin shortcut: the group's key and whether it should now be pinned.
+    var onTogglePin: (@MainActor (String, Bool) -> Void)?
 
     let search = InputView(placeholder: "Search projects...", size: .sm)
     private let searchIcon = IconView(name: .search, size: 16)
@@ -45,19 +49,27 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     /// (DraftHeroHeadline.tsx:184-190 in 2994), which has no settings buttons and is never the selection.
     enum Extra { case allProjects, addProject }
     let extra: Extra
+    /// The rows in the order they had when the popup opened; pinning from a row keeps them in place
+    /// (`useOrderWhileOpen`, Sidebar.tsx at 4928).
+    private(set) var items: [Item]
 
     init(groups: [SidebarModel.ProjectGroup], selectedKey: String?, minimumWidth: CGFloat,
-         environments: SidebarEnvironments = SidebarEnvironments(), extra: Extra = .allProjects, selectedKeys: [String]? = nil) {
+         environments: SidebarEnvironments = SidebarEnvironments(), extra: Extra = .allProjects, selectedKeys: [String]? = nil,
+         canPin: (SidebarModel.ProjectGroup) -> Bool = { _ in false }) {
         self.extra = extra
+        // Archived projects leave the picker and pinned ones lead it (`pickableProjectGroups`, #26154).
+        let groups = ProjectOrganization.pickable(groups)
         // Badges only while the projects span environments (Sidebar.tsx:2608-2611).
         let badges = SidebarEnvironments.span(groups)
         let projects = groups.map { group in
             Item(key: group.key, label: group.label, projectTitle: group.representative.title,
                  projectIcon: ProjectIconSource(group.representative),
-                 badge: badges ? environments.badge(group).map { Badge(machine: $0.machine, description: $0.description) } : nil)
+                 badge: badges ? environments.badge(group).map { Badge(machine: $0.machine, description: $0.description) } : nil,
+                 pinned: group.pinned, canPin: canPin(group))
         }
         items = extra == .allProjects ? [Item(key: nil, label: "All projects")] + projects : projects + [Item(key: nil, label: "Add project")]
-        // `selectedProjectScopeItem` falls back to "All projects" when the key's group is gone.
+        // `selectedProjectScopeItem` falls back to "All projects" when the key's group is gone; an archived
+        // project's scope reads as all projects.
         self.selectedKeys = Set((selectedKeys ?? selectedKey.map { [$0] } ?? []).filter { key in groups.contains { $0.key == key } })
         self.minimumWidth = minimumWidth
         shown = items
@@ -105,12 +117,23 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
             row.onHover = { [weak self] in self?.highlighted = i }
             row.action = { [weak self] in self?.choose(i) }
             row.onSettings = { [weak self] key in self?.onSettings?(key) }
+            row.onTogglePin = { [weak self] key in self?.togglePin(key) }
             list.addSubview(row)
             return row
         }
         emptyLabel.isHidden = !shown.isEmpty
         if let h = highlighted, h >= rows.count { highlighted = nil }
         needsLayout = true
+    }
+
+    /// Flips a row's pin in place and asks the owner to write it.
+    func togglePin(_ key: String) {
+        guard let i = items.firstIndex(where: { $0.key == key }), items[i].canPin else { return }
+        items[i].pinned.toggle()
+        let pinned = items[i].pinned
+        shown = Self.filter(items, query: query)
+        reload()
+        onTogglePin?(key, pinned)
     }
 
     private func choose(_ i: Int) {
@@ -203,8 +226,11 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
 }
 
 /// `ComboboxItem` with `hideIndicator` (combobox.tsx:186-212): `min-h-7 px-2 py-1 rounded-sm text-sm`, content
-/// `gap-2`. Selected `bg-foreground/8`, highlighted `bg-accent text-accent-foreground`. Project rows end in a
-/// ghost-muted `icon-xs` settings button (`ml-auto`, `size-3.5` icon).
+/// `gap-2`. Selected `bg-foreground/8`, highlighted `bg-accent text-accent-foreground`. In the sidebar a project row
+/// is the favicon, the label, the machine badge, then `ProjectRowActions` at the end: the settings button, shown on
+/// the highlighted row, and the pin column, which keeps its 24pt whether or not the project can pin, so rows line up
+/// and "All projects" is as tall as the rest (Sidebar.tsx:3120-3190, ProjectComboboxRow.tsx, #29639, #29704). The
+/// draft picker's rows end in the pin, then the badge (DraftHeroHeadline.tsx:276-307).
 final class ScopeRowView: ControlView {
     let item: SidebarProjectScopeView.Item
     let selected: Bool
@@ -216,15 +242,21 @@ final class ScopeRowView: ControlView {
     private let label = LabelView()
     private let badge: EnvironmentMachineGlyphView?
     private let settings: ButtonView?
+    private let pin: ProjectPinSlot?
+    /// The sidebar's `ProjectRowActions` column: a pin slot on every row, kept even when there is no pin.
+    private let actionsColumn: Bool
     var isHighlighted: () -> Bool = { false }
     var onHover: (@MainActor () -> Void)?
     var onSettings: (@MainActor (String) -> Void)?
+    var onTogglePin: (@MainActor (String) -> Void)?
 
     init(item: SidebarProjectScopeView.Item, selected: Bool, extra: SidebarProjectScopeView.Extra = .allProjects) {
         self.item = item
         self.selected = selected
         folder = IconView(name: extra == .allProjects ? .folder : .folderPlus, size: 16)
         settings = item.key == nil || extra == .addProject ? nil : ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
+        pin = item.key != nil && item.canPin ? ProjectPinSlot(name: item.label, pinned: item.pinned) : nil
+        actionsColumn = extra == .allProjects
         badge = item.badge.map { _ in EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14)) }
         super.init(frame: .zero)
         scalesWhenPressed = false
@@ -253,6 +285,10 @@ final class ScopeRowView: ControlView {
             settings.action = { [weak self] in self?.onSettings?(key) }
             addSubview(settings)
         }
+        if let pin, let key = item.key {
+            pin.onToggle = { [weak self] in self?.onTogglePin?(key) }
+            addSubview(pin)
+        }
         layer?.addSublayer(selectedCircle)
         addSubview(selectedMark)
         setAccessibilityRole(.menuItem)
@@ -260,7 +296,10 @@ final class ScopeRowView: ControlView {
         restyle()
     }
 
-    var naturalWidth: CGFloat { 16 + 16 + 8 + ceil(label.textWidth) + (badge == nil ? 0 : 8 + 14) + (settings == nil ? 0 : 8 + 24) }
+    var naturalWidth: CGFloat {
+        let actions: CGFloat = actionsColumn ? (settings == nil ? 24 : 48) : (pin == nil ? 0 : 24)
+        return 16 + 16 + 8 + ceil(label.textWidth) + (badge == nil ? 0 : 8 + 14) + (actions == 0 ? 0 : 8 + actions)
+    }
 
     override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
@@ -268,8 +307,8 @@ final class ScopeRowView: ControlView {
         restyle()
     }
 
-    /// `py-1` around the 24pt settings button makes project rows 32pt; "All projects" stays at `min-h-7`.
-    var height: CGFloat { settings == nil ? 28 : 32 }
+    /// `py-1` around the 24pt actions makes rows 32pt; a draft picker row with no pin stays at `min-h-7`.
+    var height: CGFloat { actionsColumn || pin != nil ? 32 : 28 }
 
     func restyle() {
         needsDisplay = true
@@ -295,6 +334,9 @@ final class ScopeRowView: ControlView {
         selectedCircle.cornerRadius = 8
         CATransaction.commit()
         label.color = lit ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
+        // `pointer-fine:invisible pointer-fine:in-data-highlighted:visible`; an unpinned pin is `opacity-0` off the highlight.
+        settings?.isHidden = !lit
+        pin?.revealed = lit
         folder.strokeColor = Themed.color(\.contrastMutedForeground)
         badge?.color = Themed.color(\.contrastMutedForeground)
         setAccessibilitySelected(selected)
@@ -309,8 +351,74 @@ final class ScopeRowView: ControlView {
         selectedCircle.frame = CGRect(x: 14, y: (h - 16) / 2 + 6, width: 16, height: 16)
         selectedMark.frame = CGRect(x: 18, y: (h - 16) / 2 + 10, width: 8, height: 8)
         var right = bounds.width - 8
-        if let settings { settings.frame = NSRect(x: right - 24, y: (h - 24) / 2, width: 24, height: 24); right -= 24 + 8 }
+        let y24 = (h - 24) / 2
+        if actionsColumn {
+            // `ml-auto flex`: settings, then the pin or its `size-6` stand-in.
+            pin?.frame = NSRect(x: right - 24, y: y24, width: 24, height: 24)
+            right -= 24
+            if let settings { settings.frame = NSRect(x: right - 24, y: y24, width: 24, height: 24); right -= 24 }
+            right -= 8
+            // The label is `min-w-0 truncate` and the badge follows it (`gap-2`).
+            let badgeRoom: CGFloat = badge == nil ? 0 : 8 + 14
+            let labelW = max(0, min(ceil(label.textWidth), right - 32 - badgeRoom))
+            label.frame = NSRect(x: 32, y: (h - 20) / 2, width: labelW, height: 20)
+            badge?.frame = NSRect(x: 32 + labelW + 8, y: (h - 14) / 2, width: 14, height: 14)
+            return
+        }
         if let badge { badge.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 8 }
+        if let pin { pin.frame = NSRect(x: right - 24, y: y24, width: 24, height: 24); right -= 24 + 8 }
         label.frame = NSRect(x: 32, y: (h - 20) / 2, width: max(0, right - 32), height: 20)
+    }
+}
+
+/// `ProjectPinButton` (ProjectPinButton.tsx:24-73): a ghost-muted `icon-xs` button with a 14pt pin. A pinned project
+/// always shows it and turns it to pin-off under the pointer (`group-hover/pin`); an unpinned one shows it only on the
+/// highlighted row. It stays out of the tab order and keeps the press from choosing the row.
+final class ProjectPinSlot: DSView {
+    let button = ButtonView(nil, icon: .pin, variant: .ghostMuted, size: .iconXs)
+    let pinned: Bool
+    var onToggle: (@MainActor () -> Void)?
+    /// The row is highlighted.
+    var revealed = false { didSet { if revealed != oldValue { sync() } } }
+    private(set) var hovered = false { didSet { if hovered != oldValue { sync() } } }
+    private var area: NSTrackingArea?
+
+    init(name: String, pinned: Bool) {
+        self.pinned = pinned
+        super.init(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        button.iconSize = 14
+        button.toolTip = pinned ? "Unpin \(name)" : "Pin \(name)"
+        button.setAccessibilityElement(false)
+        button.action = { [weak self] in self?.onToggle?() }
+        addSubview(button)
+        sync()
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    private func sync() {
+        button.icon = pinned && hovered ? .pinOff : .pin
+        button.alphaValue = pinned || revealed ? 1 : 0
+    }
+
+    override func layout() {
+        super.layout()
+        button.frame = bounds
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let area { removeTrackingArea(area) }
+        let new = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(new)
+        area = new
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+    // A row rebuilt or a popup closed under a still pointer, or the window losing focus, ends the hover.
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow !== window { hovered = false }
     }
 }

@@ -484,6 +484,30 @@ final class ThreadController {
             let badge = ProviderBadge.shows(entry, in: catalog)
             return (entry.driver, badge ? "\(model) \u{00B7} \(entry.displayName)" : model, history, badge ? ProviderBadge.accent(entry) : nil)
         }
+        // Project pins (4928 #26154, useProjectGroupUpdate.ts): offered where every member's server keeps them and this
+        // connection may change it; the write goes to each member in turn and the first failure says so.
+        sidebar.actions.canPinProject = { [weak self, weak environments] group in
+            guard let self, let environments else { return false }
+            return group.members.allSatisfy { member in
+                let env = member.id.environmentId
+                return env.flatMap { self.composer.config($0) }?.capabilities.contains(ProjectOrganization.capability) == true
+                    && environments.canOperate(env)
+            }
+        }
+        sidebar.actions.setProjectPinned = { [weak self, weak environments] group, pinned in
+            Task { [weak self] in
+                for member in group.members {
+                    guard let env = member.id.environmentId, let environments else { return }
+                    do {
+                        _ = try await environments.request(env, "projects.mutate", ProjectOrganization.update(projectId: member.id.localId.rawValue, pinned: pinned))
+                    } catch {
+                        let message = (error as? RPCClientError)?.typedError?.fields["message"]?.stringValue ?? "An error occurred."
+                        _ = self?.panel.toasts.show(ToastView(title: pinned ? "Failed to pin project" : "Failed to unpin project", message: message, kind: .error))
+                        return
+                    }
+                }
+            }
+        }
         checkoutStatus = SidebarCheckoutStatus(environments: environments) { [weak sidebar] in sidebar?.checkoutBranchChanged() }
         sidebar.actions.checkoutBranch = { [weak self] env, cwd in self?.checkoutStatus.branch(environmentId: env, cwd: cwd) }
         // Scratch rows name their machine; the sidebar learns each environment's scratch folder from its config.
