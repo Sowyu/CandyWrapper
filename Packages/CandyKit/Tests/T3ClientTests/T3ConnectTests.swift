@@ -535,7 +535,7 @@ struct T3ConnectAuthorizerTests {
         serveHappyPath()
         let socket = try await makeAuthorizer().authorizeSocket(environmentId: "env-1")
         #expect(socket.url.absoluteString == "wss://prod-abc.tunnel.example/ws?wsTicket=dGlja2V0.c2ln&clientSurface=desktop"
-            + "&clientAppVersion=1.2.3&clientDeviceType=desktop&clientOs=macOS&connectionMethod=relay&orchestrationProtocol=2")
+            + "&clientAppVersion=1.2.3&clientDeviceType=desktop&clientOs=macOS&connectionMethod=relay&orchestrationProtocol=2&frameParts=1")
         #expect(socket.token.accessToken == "eat-1")
         #expect(socket.token.label == "Studio")
         #expect(http.requests.map { "\($0.httpMethod!) \($0.url!.path)" } == [

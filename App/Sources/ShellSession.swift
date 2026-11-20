@@ -64,9 +64,8 @@ final class ShellSession {
         let http = EnvironmentHTTP(baseURL: baseURL)
         let identity = ClientIdentity(appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0", connectionMethod: connectionMethod)
         self.init(environmentId: environmentId, http: http, token: token, cached: cached,
-                  supervisor: ConnectionSupervisor(dependencies: .init(
-                    connect: ConnectionSupervisor.directConnector(http: http, environmentId: environmentId, identity: identity,
-                                                                  token: { token }))))
+                  supervisor: ConnectionSupervisor(dependencies: .direct(http: http, environmentId: environmentId, identity: identity,
+                                                                         token: { token })))
     }
 
     /// A T3 Connect session: the socket comes from `authorizer` over the tunnel at `baseURL`, and every

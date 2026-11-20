@@ -5,6 +5,8 @@ import T3Protocol
 public enum Backoff {
     public static let baseMilliseconds = 1_000
     public static let maxMilliseconds = 300_000
+    /// The first retry after a live session drops (SESSION_LOSS_RETRY_DELAY_MS, supervisor.ts:48), jittered to 125-250 ms.
+    public static let sessionLossMilliseconds = 250
     /// A session that stayed up this long resets the ladder.
     public static let resetAfter: Duration = .seconds(30)
     /// Someone is approving this device on the host, so check back soon (4928 supervisor.ts:49-52).
@@ -189,15 +191,67 @@ public actor ConnectionSupervisor {
         public var now: @Sendable () -> ContinuousClock.Instant
         /// Uniform in [0, 1).
         public var random: @Sendable () -> Double
+        /// Asks the host for its public descriptor over a fresh request: true when it answered as this environment.
+        /// A probe still unanswered after 500 ms uses it to tell a dead socket from a slow one (supervisor.ts:745-790).
+        /// Nil skips that check, and the probe deadline decides.
+        public var checkHost: (@Sendable () async -> Bool)?
+        /// Loopback or LAN, where a live socket answers within 3 s and a silent one is replaced at once
+        /// (supervisor.ts:707-708, 730-737).
+        public var answersQuickly: Bool
+        /// Runs before the reconnect that follows a socket which died without a close: drop pooled HTTP
+        /// connections, which usually died with it.
+        public var transportLost: @Sendable () async -> Void
 
         public init(connect: @escaping @Sendable () async throws -> RPCConnection,
                     sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
                     now: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now },
-                    random: @escaping @Sendable () -> Double = { Double.random(in: 0..<1) }) {
+                    random: @escaping @Sendable () -> Double = { Double.random(in: 0..<1) },
+                    checkHost: (@Sendable () async -> Bool)? = nil,
+                    answersQuickly: Bool = false,
+                    transportLost: @escaping @Sendable () async -> Void = {}) {
             self.connect = connect
             self.sleep = sleep
             self.now = now
             self.random = random
+            self.checkHost = checkHost
+            self.answersQuickly = answersQuickly
+            self.transportLost = transportLost
+        }
+
+        /// A direct route's dependencies: `checkHost` reads the descriptor with T3's 2.5 s route check timeout
+        /// (driver.ts:61, 186-207), `answersQuickly` follows the host, and a dead socket resets `http`'s pool.
+        public static func direct(http: EnvironmentHTTP, environmentId: String?, identity: ClientIdentity,
+                                  token: @escaping @Sendable () async throws -> String) -> Dependencies {
+            return Dependencies(
+                connect: ConnectionSupervisor.directConnector(http: http, environmentId: environmentId, identity: identity, token: token),
+                checkHost: {
+                    // Its own session each time: a pooled connection to a host whose socket went silent is likely dead
+                    // too, and the check would wait out its timeout on it.
+                    let session = URLSession(configuration: EnvironmentHTTP.defaultSession.configuration)
+                    defer { session.finishTasksAndInvalidate() }
+                    var check = EnvironmentHTTP(baseURL: http.baseURL, session: session)
+                    check.timeout = 2.5
+                    guard let descriptor = try? await check.descriptor() else { return false }
+                    return environmentId == nil || descriptor.environmentId == environmentId
+                },
+                answersQuickly: RouteKind.answersQuickly(http.baseURL),
+                transportLost: { http.resetConnections() })
+        }
+    }
+
+    /// T3's route kinds for probe timing (connection/routes.ts `connectionRouteKind`).
+    public enum RouteKind {
+        /// Loopback and private LAN addresses, and `.local` names.
+        public static func answersQuickly(_ url: URL) -> Bool {
+            guard let host = url.host?.lowercased() else { return false }
+            if host == "localhost" || host == "::1" || host.hasSuffix(".local") { return true }
+            let octets = host.split(separator: ".").compactMap { Int($0) }
+            guard octets.count == 4, host.split(separator: ".").count == 4 else { return host.hasPrefix("fe80:") || host.hasPrefix("fd") }
+            switch (octets[0], octets[1]) {
+            case (127, _), (10, _), (192, 168), (169, 254): return true
+            case (172, 16...31): return true
+            default: return false
+            }
         }
     }
 
@@ -227,6 +281,8 @@ public actor ConnectionSupervisor {
     private var timerID = 0
     private var timerTask: Task<Void, Never>?
     private var probeTask: Task<Void, Never>?
+    /// The last socket died without a close, so the next attempt resets pooled HTTP connections first.
+    private var transportSuspect = false
     private var pingTask: Task<Void, Never>?
     private var observers: [UUID: AsyncStream<ConnectionState>.Continuation] = [:]
     private var connectionWaiters: [UUID: (after: Int, continuation: CheckedContinuation<(RPCConnection, Int)?, Never>)] = [:]
@@ -286,7 +342,7 @@ public actor ConnectionSupervisor {
     public func retryNow() {
         failures = 0; backoffFailures = 0; approvalWaits = 0
         skipNextDelay = false
-        if connection != nil { probe(timeout: Self.quickProbeTimeout); return }
+        if connection != nil { probe(.retry); return }
         cancelAttempt()
         evaluate()
     }
@@ -296,10 +352,10 @@ public actor ConnectionSupervisor {
         online = isOnline
         if isOnline {
             failures = 0; backoffFailures = 0; approvalWaits = 0
-            if connection != nil { probe(timeout: Self.quickProbeTimeout) } else { cancelTimer(); evaluate() }
+            if connection != nil { probe(.retry) } else { cancelTimer(); evaluate() }
         } else if connection != nil {
             // A loopback session can survive losing the network. Probe before dropping it.
-            probe(timeout: Self.quickProbeTimeout)
+            probe(.retry)
         } else {
             cancelAttempt()
             evaluate()
@@ -314,7 +370,7 @@ public actor ConnectionSupervisor {
         guard online else { return }
         failures = 0; backoffFailures = 0; approvalWaits = 0
         if connection != nil {
-            probe(timeout: Self.quickProbeTimeout)
+            probe(.networkChanged)
         } else if attemptTask == nil {
             cancelTimer()
             evaluate()
@@ -332,7 +388,7 @@ public actor ConnectionSupervisor {
         if reason == .applicationActive { appActive = true; applyWatch() }
         failures = 0; backoffFailures = 0; approvalWaits = 0
         if connection != nil {
-            probe(timeout: reason == .systemWake ? Self.quickProbeTimeout : Self.probeTimeout)
+            probe(reason == .systemWake ? .retry : .foreground)
             startPinging()
         } else if attemptTask == nil {
             cancelTimer()
@@ -441,7 +497,11 @@ public actor ConnectionSupervisor {
         state.attempt = failures + 1
         setPhase(.connecting)
         let connect = deps.connect
+        let resetTransport = transportSuspect
+        transportSuspect = false
+        let transportLost = deps.transportLost
         attemptTask = Task {
+            if resetTransport { await transportLost() }
             let result: Result<RPCConnection, Error>
             do {
                 result = .success(try await withTimeout(Self.establishTimeout,
@@ -502,24 +562,31 @@ public actor ConnectionSupervisor {
         pingTask?.cancel()
         pingTask = nil
         if let connectedAt, deps.now() - connectedAt >= Backoff.resetAfter { failures = 0; backoffFailures = 0; approvalWaits = 0 }
+        if case .transport(.pingTimedOut) = reason { transportSuspect = true }
         if desired && online {
-            scheduleRetry(reason.description, ConnectionFailureInfo(reason: "transport", blocked: false, detail: reason.description))
+            // The first loss of a live session retries almost at once; the ladder still counts it (supervisor.ts:1286-1298).
+            scheduleRetry(reason.description, ConnectionFailureInfo(reason: "transport", blocked: false, detail: reason.description),
+                          firstLoss: failures == 0)
         } else {
             evaluate()
         }
     }
 
-    private func scheduleRetry(_ detail: String, _ info: ConnectionFailureInfo) {
+    private func scheduleRetry(_ detail: String, _ info: ConnectionFailureInfo, firstLoss: Bool = false) {
         state.lastFailure = detail
         state.failure = info
         // Approval waits count as attempts but not toward backoff, so a later outage starts low (4928 supervisor.ts:1185-1305).
         let pending = info.reason == ConnectionFailureInfo.approvalPendingReason
         if pending { approvalWaits += 1 }
         let awaitingApproval = pending && approvalWaits <= Backoff.approvalPendingFastRetries
-        if !awaitingApproval { backoffFailures += 1 }
+        // The quick retry after a lost session doesn't climb the ladder either, so a server that is still restarting
+        // gets its next try on the first rung (1-2 s) instead of the second (2-4 s). T3 counts it (supervisor.ts:1286-1294);
+        // a host that keeps dropping sessions still climbs, since only the first loss after 30 s up is quick.
+        if !awaitingApproval && !firstLoss { backoffFailures += 1 }
         failures += 1
         let ladder = awaitingApproval ? 0 : Backoff.delayMilliseconds(failureCount: backoffFailures - 1, random: deps.random())
-        let milliseconds = pending ? max(Backoff.approvalPendingMilliseconds, ladder) : ladder
+        let milliseconds = pending ? max(Backoff.approvalPendingMilliseconds, ladder)
+            : firstLoss ? Int((Double(Backoff.sessionLossMilliseconds) * (0.5 + deps.random() / 2)).rounded()) : ladder
         let delay: Duration = skipNextDelay ? .zero : .milliseconds(milliseconds)
         skipNextDelay = false
         state.attempt = failures + 1
@@ -541,22 +608,87 @@ public actor ConnectionSupervisor {
         evaluate()
     }
 
-    private func probe(timeout: Duration) {
+    /// What asked for a probe; each gets T3's deadline (supervisor.ts:710-743).
+    enum ProbeKind {
+        /// Returning to the app: 15 s, and one missed probe is asked again, since a busy host can miss one
+        /// (#24309, supervisor.ts:819-822, 885-892).
+        case foreground
+        /// Retry, wake, the network going offline: 3 s.
+        case retry
+        /// Another network path: 3 s on loopback and LAN, 15 s elsewhere, where a tailnet or VPN can be slower.
+        case networkChanged
+    }
+
+    private func probe(_ kind: ProbeKind) {
         guard let connection, probeTask == nil else { return }
         let generation = state.generation
+        let quick = deps.answersQuickly
+        let timeout: Duration = switch kind {
+        case .foreground: Self.probeTimeout
+        case .retry: Self.quickProbeTimeout
+        case .networkChanged: quick ? Self.quickProbeTimeout : Self.probeTimeout
+        }
+        let checkHost = deps.checkHost
         probeTask = Task {
-            // Any answer, even a typed failure or Die from an older server, proves the socket works.
-            var alive = true
-            do {
-                _ = try await withTimeout(timeout, error: RPCTransportError.pingTimedOut) {
-                    try await connection.request("server.probe")
-                }
-            } catch let e as RPCClientError where !e.isTransport {
-                alive = true
-            } catch {
-                alive = false
-            }
+            let alive = await Self.runProbe(connection, timeout: timeout, toleratesMiss: kind == .foreground,
+                                            checkHost: checkHost, replaceAtOnce: quick && kind != .foreground)
             await self.probeFinished(generation, alive: alive)
+        }
+    }
+
+    /// `server.probe` against its deadline, raced with the silent socket check. Any answer, even a typed failure or
+    /// Die from an older server, proves the socket works.
+    ///
+    /// The silent socket check (supervisor.ts:745-790): a probe still unanswered after 500 ms asks the host for its
+    /// descriptor over a fresh request, again each second until it answers. If the host answers while the socket
+    /// delivered no frame, the socket is dead: replaced at once on loopback and LAN, and 2.5 s after the check
+    /// started elsewhere, where one lost packet can stall a live socket. T3's foreground probe skips this check
+    /// because its 5 s pings already watch an idle socket; CandyWrapper sends none, so the foreground probe runs it
+    /// with the 2.5 s wait on every route. Frame parts keep a big frame from looking silent.
+    static func runProbe(_ connection: RPCConnection, timeout: Duration, toleratesMiss: Bool,
+                         checkHost: (@Sendable () async -> Bool)?, replaceAtOnce: Bool) async -> Bool {
+        await withTaskGroup(of: Bool?.self) { group in
+            group.addTask {
+                for attempt in 0..<(toleratesMiss ? 2 : 1) {
+                    do {
+                        _ = try await withTimeout(timeout, error: RPCTransportError.pingTimedOut) {
+                            try await connection.request("server.probe")
+                        }
+                        return true
+                    } catch let e as RPCClientError where !e.isTransport {
+                        return true
+                    } catch RPCTransportError.pingTimedOut where attempt == 0 && toleratesMiss {
+                        continue
+                    } catch {
+                        return false
+                    }
+                }
+                return false
+            }
+            if let checkHost {
+                group.addTask {
+                    let started = ContinuousClock.now
+                    do { try await Task.sleep(for: .milliseconds(500)) } catch { return nil }
+                    let before = await connection.inboundFrames
+                    while await !checkHost() {
+                        if await connection.inboundFrames != before { return nil }
+                        do { try await Task.sleep(for: .seconds(1)) } catch { return nil }
+                    }
+                    if !replaceAtOnce {
+                        let remaining = .milliseconds(2500) - (ContinuousClock.now - started)
+                        if remaining > .zero { do { try await Task.sleep(for: remaining) } catch { return nil } }
+                    }
+                    // nil leaves the decision to the probe: the socket delivered something.
+                    return await connection.inboundFrames == before ? false : nil
+                }
+            }
+            for await result in group {
+                if let result {
+                    group.cancelAll()
+                    return result
+                }
+            }
+            return true
         }
     }
 
@@ -565,6 +697,7 @@ public actor ConnectionSupervisor {
         guard generation == state.generation, let conn = connection, !alive else { return }
         // T3 reconnects at once after a failed probe, then resumes the normal ladder.
         skipNextDelay = true
+        transportSuspect = true
         await conn.close(reason: "health check failed")
         // connectionClosed runs from the close watcher.
     }

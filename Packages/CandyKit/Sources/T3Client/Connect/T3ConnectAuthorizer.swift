@@ -274,6 +274,8 @@ public actor T3ConnectAuthorizer {
             URLQueryItem(name: "clientOs", value: "macOS"),
             URLQueryItem(name: "connectionMethod", value: "relay"),
             URLQueryItem(name: "orchestrationProtocol", value: String(T3Protocol.orchestrationProtocolVersion)),
+            // Large frames arrive in parts on 4928 servers; older ones ignore it (rpc/session.ts:250).
+            URLQueryItem(name: "frameParts", value: "1"),
         ]
         guard let url = c.url else { throw DPoPError.invalidURL(wsBaseUrl) }
         return url
