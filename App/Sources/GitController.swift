@@ -332,6 +332,9 @@ final class GitController {
         return BranchToolbarLogic.previousWorktree(threads, currentWorktreePath: target.worktreePath)
     }
 
+    /// The environment row's trailing workspace icon, rebuilt only when the icon changes.
+    private var trailingFolder: (IconDefinition, IconView)?
+
     private func folderIcon(_ target: Target) -> IconDefinition {
         if target.envMode == .worktree { return IconName.folderGit2.definition }
         return (target.worktreePath != nil ? IconName.folderGit : IconName.folder).definition
@@ -416,7 +419,16 @@ final class GitController {
         guard let target else { card.showsVersionControl = false; return }
         let label = BranchToolbarLogic.workspaceLabel(mode: target.envMode, worktreePath: target.worktreePath, modeLocked: !target.isDraft)
         let env = environmentOption
-        card.runContext.icons = env != nil ? [EnvironmentMachineIcon.definition(env!.machine), folderIcon(target)] : [folderIcon(target)]
+        // With an environment, the workspace icon trails the label so every row's label starts on the same edge
+        // (BranchToolbar.tsx:262-272 at 4928, "Trailing in the panel").
+        card.runContext.icons = env != nil ? [EnvironmentMachineIcon.definition(env!.machine)] : [folderIcon(target)]
+        if env == nil {
+            card.runContext.trailing = nil
+        } else if trailingFolder?.0 != folderIcon(target) || card.runContext.trailing !== trailingFolder?.1 {
+            let view = IconView(definition: folderIcon(target), size: 16, color: Themed.color(\.contrastMutedForeground))
+            trailingFolder = (folderIcon(target), view)
+            card.runContext.trailing = view
+        }
         card.runContext.text = env?.label ?? label
         card.runContext.kind = target.isDraft && runOnChoices || target.isDraft ? .select : .locked
         card.runContext.tooltipText = (target.envMode == .worktree && target.worktreePath == nil) ? label : target.cwd

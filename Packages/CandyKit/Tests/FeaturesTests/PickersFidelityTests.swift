@@ -101,6 +101,8 @@ struct PickersFidelityTests {
         dock.footer.update(descriptors: p.current.descriptors, runtimeMode: p.current.runtimeMode)
         if effortFocused {
             dock.focusEffort(levelsOnly: false)
+            // The capture reached the levels with the keyboard (Right), so the focus is visible.
+            dock.column.focusVisible = true
         } else {
             // The capture focuses the search field on open (blue underline).
             var focused = view.search.state

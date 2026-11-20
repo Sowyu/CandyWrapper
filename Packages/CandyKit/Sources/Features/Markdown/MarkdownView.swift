@@ -1682,8 +1682,9 @@ private final class MarkdownLinkHitView: NSView, HoverSyncClient {
     weak var owner: MarkdownView?
     var url: URL? {
         didSet {
-            // A pull request link shows its card instead of the URL.
-            tooltip.text = hasPreview ? "" : url?.absoluteString ?? ""
+            // A pull request link shows its card instead of the URL. A quote card is `AssistantCitationEmbed`, which
+            // replaces the link and has no URL tooltip (AssistantCitationChip.tsx:117 at 4928).
+            tooltip.text = hasPreview || citation != nil ? "" : url?.absoluteString ?? ""
             window?.invalidateCursorRects(for: self)
         }
     }

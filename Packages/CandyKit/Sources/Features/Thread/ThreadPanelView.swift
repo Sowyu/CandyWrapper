@@ -1738,7 +1738,10 @@ public final class ThreadPanelView: DSView {
             ? [sorted.last!] + sorted.dropLast() : sorted
         let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
                                                  lazyChildInputBanner.loaded, lazyGoalBanner.loaded, lazyBackgroundWorkBanner.loaded, lazyRecoveryBanner.loaded,
-                                                 lazyBranchBanner.loaded, usageLimitsBanner]
+                                                 lazyBranchBanner.loaded, usageLimitsBanner,
+                                                 // Left out, a thread's `/clear` or reply banner stayed where it was laid out after the route
+                                                 // moved to a new thread (screen pass 2026-11-20, item 3).
+                                                 lazyFreshSessionBanner.loaded, lazyReplyBanner.loaded, lazyFallbackBanner.loaded]
         for case let view? in candidates where !ordered.contains(where: { $0.view === view }) { view.isHidden = true }
         bannerStack.update(ordered)
         let front = ordered.first
@@ -2004,7 +2007,10 @@ public final class ThreadPanelView: DSView {
         // Show what is placed, hide the rest, all floating.
         let candidates: [ComposerBannerView?] = [environmentBanner, lazyNoticeBanner.loaded, lazyServerUpdateBanner.loaded,
                                                  lazyChildInputBanner.loaded, lazyGoalBanner.loaded, lazyBackgroundWorkBanner.loaded, lazyRecoveryBanner.loaded,
-                                                 lazyBranchBanner.loaded, usageLimitsBanner]
+                                                 lazyBranchBanner.loaded, usageLimitsBanner,
+                                                 // Left out, a thread's `/clear` or reply banner stayed where it was laid out after the route
+                                                 // moved to a new thread (screen pass 2026-11-20, item 3).
+                                                 lazyFreshSessionBanner.loaded, lazyReplyBanner.loaded, lazyFallbackBanner.loaded]
         for case let view? in candidates + ditherDockViews where view !== commandMenu && view !== lazyStashMenu.loaded {
             view.placement = .floating
             view.joinsAbove = false

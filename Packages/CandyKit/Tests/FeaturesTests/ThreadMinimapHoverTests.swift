@@ -62,6 +62,28 @@ struct ThreadMinimapHoverTests {
         #expect(host.popups.isEmpty, "the card closes")
         #expect(try pixels(map) == resting, "the rail is back to rest")
     }
+    /// Screen pass 2026-11-20: hover a turn, then move right over the messages or onto the card and rest there. The
+    /// fisheye and the card stayed, because the hover area kept a 352pt band and the card. At 4928 the card is
+    /// display-only (TimelineMinimap.tsx:229) and the hit strip at most 40pt wide (MessagesTimeline.logic.ts:482-497),
+    /// so both points have left the strip and the card closes.
+    @Test func theHoverAreaEndsAtTheStripAndItsArrows() throws {
+        let (window, map) = makeRail()
+        let host = try #require(map.popupHost)
+        defer { host.closeAll(); map.removeFromSuperview(); window.close() }
+        window.makeFirstResponder(map)
+        for _ in 0..<5 { map.keyDown(with: key(125, in: window)) }
+        let card = try #require(host.popups.first?.content)
+        let content = try #require(window.contentView)
+        // HoverSync enters and exits the rail by the sibling view that carries the rail's tracking area.
+        let zone = try #require(content.subviews.first { $0 !== map && $0.trackingAreas.contains { $0.owner === map } })
+        host.layoutSubtreeIfNeeded()
+        let cardRect = content.convert(card.bounds, from: card)
+        #expect(cardRect.width >= 300, "the card is laid out")
+        #expect(!zone.frame.contains(NSPoint(x: cardRect.midX, y: cardRect.midY)), "a pointer resting on the card has left the strip")
+        #expect(!zone.frame.contains(NSPoint(x: map.frame.maxX + 40, y: map.frame.midY)), "a pointer over the messages has left the strip")
+        #expect(zone.frame.contains(NSPoint(x: map.frame.minX - 2, y: map.frame.maxY + 16)), "the arrows keep their own hover")
+    }
+
     enum Theme: CaseIterable { case standard, redesign, glass }
 
     /// T3's resting strips are dim and the strips of turns on screen bright. In every theme, over the background behind

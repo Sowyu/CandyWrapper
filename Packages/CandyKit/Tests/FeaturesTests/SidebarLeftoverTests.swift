@@ -66,6 +66,38 @@ struct SidebarLeftoverTests {
 
     // MARK: Hover card (SidebarThreadTooltip)
 
+    /// Screen pass 2026-11-20, item 6: a right-click opened the row's menu, and the card due 150ms after the hover
+    /// opened beside it. Base UI's tooltip closes on the press that opens the menu (reference 20).
+    @Test func hoverCardStaysShutWhileAMenuIsOpen() async throws {
+        let c = content()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 255, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = c
+        c.frame = NSRect(x: 0, y: 0, width: 255, height: 900)
+        c.layoutSubtreeIfNeeded()
+        c.list.layoutSubtreeIfNeeded()
+        let host = PopupHost.host(for: window)
+        defer { host.closeAll(); window.contentView = nil; window.close() }
+        let row = try #require(c.list.rowView("thread:r1"))
+        func hover(_ type: NSEvent.EventType) throws {
+            let event = try #require(NSEvent.enterExitEvent(with: type, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                            context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+            if type == .mouseEntered { row.mouseEntered(with: event) } else { row.mouseExited(with: event) }
+        }
+        // Without a menu the hover opens the card.
+        try hover(.mouseEntered)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(host.popups.contains { $0.isPassive }, "the hover opens the card")
+        try hover(.mouseExited)
+        try await Task.sleep(for: .milliseconds(450))
+        // A quick right-click: the menu opens before the card's 150ms delay ends.
+        try hover(.mouseEntered)
+        ThemedItemContextMenu.show([ThreadMenuItem("pin", "Pin thread")], in: row, at: NSPoint(x: 20, y: 10)) { _ in }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!host.popups.contains { $0.isPassive }, "no card beside the menu")
+        #expect(host.popups.contains { !$0.isPassive }, "the menu stays")
+    }
+
     @Test func hoverCardShowsProjectBranchTerminalsAndProvider() throws {
         let c = content()
         c.state.environments = SidebarEnvironments(primaryId: nil, labels: [:], machines: [:])

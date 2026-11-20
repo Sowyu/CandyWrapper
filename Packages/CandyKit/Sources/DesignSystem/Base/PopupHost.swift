@@ -259,7 +259,7 @@ public final class OpenPopup {
     /// Moves keyboard focus back to the trigger on close (menus, select, popover).
     let returnsFocus: Bool
     /// Tooltips never take keys and never close other popups.
-    var isPassive = false
+    public internal(set) var isPassive = false
     /// Combobox: pressing the trigger (its input) leaves the popup open.
     public var keepsOpenOnTriggerPress = false
     /// Child popups (submenus) close with their parent.

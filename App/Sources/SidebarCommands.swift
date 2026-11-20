@@ -936,18 +936,6 @@ final class SidebarCommands {
                 }
                 sidebar?.clearSelection()
             }
-        case "turn-into-project":
-            // Sidebar.tsx and useThreadActionMenu.ts at 4928 (#26767): a toast either way; the shell stream moves the row.
-            guard let env = id.environmentId else { return }
-            let title = thread.title
-            Task {
-                do {
-                    _ = try await environments.request(env, ProjectCommands.createFromThreadMethod, ProjectCommands.createFromThread(id.localId))
-                    toast("Project created", title, .success)
-                } catch {
-                    fail("Could not turn thread into a project", error)
-                }
-            }
         case "mark-unread":
             for id in ids { simple(id, ThreadCommands.markUnread(id.localId), failure: nil) }
             sidebar?.clearSelection()
