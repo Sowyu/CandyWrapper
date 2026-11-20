@@ -1014,27 +1014,27 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
 | 5b89a53585 | #25588 | pr/git | feat(pull-requests): manage GitHub maintainer edits | ported (panels-2): "Allow edits from maintainers" checkbox in the ⋯ menu, `pullRequests.update` `maintainerCanModify`; the hint wraps at 320pt with "Saving…" under it (panels-3, MenuItem.subtitleWrapWidth) |
-| 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | left (panels-2): not checked |
-| a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | left (panels-2): not checked |
+| 9d38d68d04 | #23225 | pr/git | fix(web): wait for fresh diff pages in review guides | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
+| a8d6b0e66b | #22522 | pr/git | fix(web): mouse Back/Forward over a streamed preview navigate the preview | ported (panels-3): the mouse's back and forward buttons over a streamed tab move its history, with #30882 (ServerBrowserView.onThumbNavigate) |
 | 1c99a55444 | #23577 | pr/git | fix(web): report invalid preview addresses | left (panels-2): not checked |
 | 13f9bc4e55 | #23678 | pr/git | fix(web): label inherited worktree cleanup modes correctly | left (panels-2): not checked |
-| be43da4c0d | #23732 | pr/git | fix(web): PDF previews keep their page when the agent responds | left (panels-2): not checked |
+| be43da4c0d | #23732 | pr/git | fix(web): PDF previews keep their page when the agent responds | skip (panels-3): CandyWrapper hands this format to Quick Look |
 | 3e7277e7e8 | #23742 | pr/git | fix(web): release discarded draft image previews after Undo expires | left (panels-2): not checked |
 | 64968b3109 | #24060 | pr/git | fix(web): a branch restore in one thread no longer blocks another thread | left (panels-2): not checked |
 | bc216e4675 | #24081 | pr/git | fix(web): closed preview sessions no longer keep syncing for the rest of the session | left (panels-2): not checked |
 | e9dd8a68ee | #24117 | pr/git | fix(clients): offer Commit when the branch is behind upstream | left (panels-2): not checked |
-| c9246445e0 | #24189 | pr/git | fix(web): long guide Next buttons wrap instead of overflowing | left (panels-2): not checked |
+| c9246445e0 | #24189 | pr/git | fix(web): long guide Next buttons wrap instead of overflowing | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | f5bc64b7b7 | #24489 | pr/git | fix(web): deleting a thread no longer offers to remove a shared worktree | left (panels-2): not checked |
 | 9474bcbae1 | #25303 | pr/git | fix(web): preserve trailing whitespace in review diffs | left (panels-2): not checked |
 | e428a2c1f5 | #26060 | pr/git | fix(web,mobile): pull request text breaks lines when providers do | left (panels-2): not checked |
 | 4dd2f735f2 | #26441 | pr/git | fix(web): Load balancing and PR sharing name the route in use | left (panels-2): not checked |
-| 6e72f540f6 | #26563 | pr/git | fix(prs): classify generated files and evals correctly | left (panels-2): not checked |
+| 6e72f540f6 | #26563 | pr/git | fix(prs): classify generated files and evals correctly | ported (panels-3): ChangedFileKind follows 4928's generated and evals rules for the hide-tests filter; the PR breakdown itself comes from the server |
 | 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | left (panels-2): not checked |
-| a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | left (panels-2): not checked |
-| e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | left (panels-2): not checked |
+| a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | n/a (panels-3): the address field draws with the UI font, which has no "://" ligature |
+| e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | left (not reached in composer-3): from @xl (576pt) T3 shows the wide strip layout, machine, separator and the worktree picker (`BranchToolbarEnvModeSelector`), which CW has no control for yet; needs a 4928 reference capture |
 | 45d29b45fe | #22382 | pr/git | fix(web): a refused review shows GitHub's reason | left (panels-2): not checked |
-| 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | left (panels-2): not checked |
+| 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | n/a (panels-3): React render flicker |
 | a24ec905c8 | #28070 | pr/git | fix(web): machine label no longer shifts between one and many machines | left (panels-2): not checked |
 | 793bbf47b3 | #28077 | pr/git | fix(web): long titles no longer overflow the pull request list tooltip | left (panels-2): not checked |
 | 78aa0d5ca5 | #27925 | pr/git | feat(mcp): unlink every PR in given states with one call | n/a: T3's MCP tools, which run on the server |
@@ -1046,7 +1046,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | left (panels-2): resizable Changes and PR Code file lists, 5.1 |
 | b50d8a1b15 | #28573 | pr/git | fix(web): add spacing above PR detail metadata | left (panels-2): not checked |
 | 82b10d546c | #28665 | pr/git | fix(web): align pull request file viewed checkboxes | left (panels-2): not checked |
-| f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | left (panels-2): not checked |
+| f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | skip (panels-3): CandyWrapper hands this format to Quick Look |
 | 5b5bd169e0 | #26077 | pr/git | fix(web): PR merge buttons stay in place while the stack loads | left (panels-2): not checked |
 | 7816a0fa81 | #27434 | pr/git | fix(web): Enter selects the first branch search result | left (panels-2): not checked |
 | 716e1c071c | #28439 | pr/git | fix(web): Changes row no longer shows +0 while Diff has edits | left (panels-2): not checked |
@@ -1069,18 +1069,18 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | d929e726f2 | #31741 | pr/git | fix(pr): GitCafe attachments render in pull request bodies | left (panels-2): not checked |
 | c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | ported (panels-2): the reviewer picker asks the host with `query` past a truncated page where `reviewers.searchCandidates`, with T3's four truncation notes |
 | 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | left (panels-2): not checked |
-| e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | left (panels-2): not checked |
-| cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | left (panels-2): not checked |
+| e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | n/a (panels-3): CandyWrapper has no preview annotation tool |
+| cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 0aae72244e | #31814 | pr/git | fix(web): keep change totals aligned beside the label | left (panels-2): not checked |
 | 0a2f59056b | #31858 | pr/git | fix(web): improve Changes row text and spacing | left (panels-2): not checked |
 | 32a0531748 | #25988 | pr/git | fix(web): PR bodies keep before/after video tables intact | left (panels-2): not checked |
-| e74b410e29 | #29642 | pr/git | fix(web): keybinding settings recognize the previewOpen condition | left (panels-2): not checked |
+| e74b410e29 | #29642 | pr/git | fix(web): keybinding settings recognize the previewOpen condition | left (panels-3): keybinding settings in Features/Settings, held for the Settings agent |
 | 75200f45c6 | #29678 | pr/git | fix(web): thread navigation shortcuts honor previewFocus and previewOpen conditions | left (panels-2): not checked |
-| daa6984fd6 | #30392 | pr/git | fix(web): review findings handed to a thread no longer end in a broken character | left (panels-2): not checked |
+| daa6984fd6 | #30392 | pr/git | fix(web): review findings handed to a thread no longer end in a broken character | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 6647b0a761 | #30812 | pr/git | fix(web): rich text previews keep paragraphs that end with a backslash | left (panels-2): not checked |
-| 8ab427c607 | #33113 | pr/git | fix(web): settings say custom instructions cover pull request descriptions | left (panels-2): not checked |
+| 8ab427c607 | #33113 | pr/git | fix(web): settings say custom instructions cover pull request descriptions | left (panels-3): settings copy in Features/Settings, held for the Settings agent |
 | a88a0adfa1 | #34003 | pr/git | fix(web): keep HTML previews anchored when accordions expand | left (panels-2): not checked |
-| 44e894ffd7 | #34017 | pr/git | fix(web): preserve search result titles in drag previews | left (panels-2): not checked |
+| 44e894ffd7 | #34017 | pr/git | fix(web): preserve search result titles in drag previews | n/a (panels-3): HTML drag previews of search results; CandyWrapper drags no search results |
 | 8fc6fd01d7 | #33949 | pr/git | fix(web): preserve previews during attachment preparation | left (panels-2): not checked |
 | d152d2c824 | #30150 | pr/git | fix(client-runtime): a search query pasted from github.com lists pull requests again | ported (panels-2): GitHub's own qualifiers (is, state, repo, org, user, sort, archived) are ignored, two different authors name none, a negated draft flips, PullRequestListLogic.parseQuery |
 | 4ca10398b1 | #34140 | pr/git | fix(web): tighter outdated-conversation cards in the PR code panel | left (panels-2): not checked |
@@ -1090,7 +1090,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8cbc95923a | #34168 | pr/git | fix(web): files marked Viewed stay folded when a pull request's Code tab opens again | ported (panels-3): Viewed marks that load after the diff fold their files, the reader's fold wins, PullRequestCodeView.applyFolds |
 | 75b22bf56c | #30620 | pr/git | fix(web): dismiss image path tooltips after preview and scroll | left (panels-2): not checked |
 | 8c9af5418a | #31972 | pr/git | fix(web): disable the git actions menu when nothing in it is usable | left (panels-2): not checked |
-| 1bdf470328 | #34048 | pr/git | fix(web): project actions auto-open Preview in web clients | left (panels-2): not checked |
+| 1bdf470328 | #34048 | pr/git | fix(web): project actions auto-open Preview in web clients | n/a (panels-3): web clients only |
 | 49bab9936e | #19553 | pr/git | fix(web): Changes row matches the diff comparison | left (panels-2): not checked |
 | fcddd737e2 | #22208 | pr/git | fix(web): don't save retention age until committed | left (panels-2): not checked |
 | 27188274e7 | #26992 | pr/git | fix(web): pull request search keeps partial-word matches after GitHub answers | left (panels-2): not checked |
@@ -1100,11 +1100,11 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 9411a71ec0 | #34509 | pr/git | fix(web): dismissing the pull request checkout toast stops the handoff | left (panels-2): not checked |
 | 8214342385 | #32283 | pr/git | fix(web): collapsed PR comments no longer show raw HTML | left (panels-2): not checked |
 | afe0528039 | #34727 | pr/git | fix(web): keep git action loading rows at idle height | left (panels-2): not checked |
-| fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | left (panels-2): not checked |
+| fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | skip (panels-3): CandyWrapper hands this format to Quick Look |
 | 3a30b011c3 | #34734 | pr/git | fix(web): cancelled PR checks show a gray stop sign instead of the failed X | ported (panels-2): cancelled checks wear `octagon-x` in muted/70, PullRequestStyle.checkStatus |
-| 3bd7b04544 | #34796 | pr/git | fix(web): Escape and tool keys work as soon as preview annotation starts | left (panels-2): not checked |
+| 3bd7b04544 | #34796 | pr/git | fix(web): Escape and tool keys work as soon as preview annotation starts | n/a (panels-3): CandyWrapper has no preview annotation tool |
 | 0ac41eecad | #34878 | pr/git | fix(web): sidebar rows drop a branch and worktree that were deleted | left (panels-2): not checked |
-| ee90bdc940 | #34992 | pr/git | fix(web): CSV/TSV and large-text previews say "1 row", "1 column" and "1 line" | left (panels-2): not checked |
+| ee90bdc940 | #34992 | pr/git | fix(web): CSV/TSV and large-text previews say "1 row", "1 column" and "1 line" | n/a (panels-3): CandyWrapper shows CSV, TSV and large text as code, with no row, column or line counts |
 | abbd967c4b | #35111 | pr/git | fix(web): PR comment hover excerpts no longer end in a replacement character | left (panels-2): not checked |
 | bf8e5e61b6 | #35066 | pr/git | fix(web): a failed page in the floating browser preview shows the error instead of a blank panel | left (panels-2): not checked |
 | 167d41c094 | #35376 | pr/git | fix(web): a numeric author or labels in the URL no longer crashes Pull Requests | left (panels-2): not checked |
