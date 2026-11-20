@@ -512,7 +512,7 @@ public enum ComposerMenus {
     public static func emptyText(kind: ComposerTriggerKind, loading: Bool, pullRequestsAvailable: Bool = true,
                                  pullRequestsFailed: Bool = false, query: String = "") -> String {
         if loading {
-            return kind == .skill ? "Searching workspace skills..." : kind == .pullRequest ? "Finding pull request..." : "Searching workspace files..."
+            return kind == .skill || kind == .slashCommand ? "Searching workspace skills..." : kind == .pullRequest ? "Finding pull request..." : "Searching workspace files..."
         }
         switch kind {
         case .skill: return "No skills found. Try / to browse provider commands."

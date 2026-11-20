@@ -3456,6 +3456,8 @@ extension ComposerController {
         var exactPullRequestTask: Task<Void, Never>?
         /// `server.refreshProviders` requests by `env|instance|cwd`, at most one per TTL (5 minutes).
         var workspaceRefresh: [String: Date] = [:]
+        /// Workspace snapshot asks still in flight (`isProviderWorkspaceSnapshotScanning`, #28209).
+        var workspaceScanning: Set<String> = []
         var pullRequestsSupported: [String: Bool] = [:]
     }
 
@@ -3620,10 +3622,10 @@ extension ComposerController {
                                                  showSkills: ClientSettingsStore.shared.current.bool("showSkillsInSlashMenu"),
                                                  compactAvailable: compact, freshSessionAvailable: freshSessionCommandAvailable,
                                                  sideChat: sideChatSlash?())
-            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: false))
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .slashCommand, loading: workspaceSkillsScanning))
         case .skill:
             let items = ComposerMenus.skillItems(query: trigger.query, provider: providerKey, skills: provider?.skills(cwd: cwd) ?? [])
-            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .skill, loading: false))
+            return .init(items: items, emptyText: ComposerMenus.emptyText(kind: .skill, loading: workspaceSkillsScanning))
         case .path:
             let threads = ComposerMenus.threadItems(query: trigger.query, threads: menuThreads,
                                                     excluding: currentThreadScopedId, browse: browsingThreads)
@@ -3823,6 +3825,13 @@ extension ComposerController {
         return errors.contains { $0["projectId"]?.stringValue == projectId }
     }
 
+    /// The skill and command menus say they are searching while this provider's workspace skills are asked for
+    /// (#28209, ChatComposer.tsx and useProviderWorkspaceSnapshotRefresh.ts at 4928).
+    private var workspaceSkillsScanning: Bool {
+        guard let env = targetEnvironmentId, let cwd = menuCwd, let provider = menuProvider else { return false }
+        return menuState.workspaceScanning.contains("\(env)|\(provider.instanceId.rawValue)|\(cwd)")
+    }
+
     /// `server.refreshProviders` for the composer's provider and cwd when the workspace snapshot is
     /// missing or older than its TTL (ChatComposer.tsx:2214-2300). The reply carries the providers.
     fileprivate func refreshWorkspaceSnapshot() {
@@ -3833,11 +3842,15 @@ extension ComposerController {
         if let snapshot = provider.workspaceSnapshot(cwd), snapshot.slashCommandsPending != true,
            let checked = T3Timestamp(snapshot.checkedAt).date, Date().timeIntervalSince(checked) < ttl { return }
         menuState.workspaceRefresh[key] = Date()
+        menuState.workspaceScanning.insert(key)
         let supervisor = shell.supervisor
         let payload = workspaceRefreshInput(env: env, instance: provider.instanceId.rawValue, cwd: cwd)
         Task { [weak self] in
             let reply = try? await supervisor.request("server.refreshProviders", payload: payload)
-            guard let self, environments.session(env) === shell else { return }
+            guard let self else { return }
+            menuState.workspaceScanning.remove(key)
+            if panel.menus.isOpen { panel.menus.reload() }
+            guard environments.session(env) === shell else { return }
             guard let providers = try? reply?["providers"]?.decode(as: [ServerProvider].self) else {
                 menuState.workspaceRefresh.removeValue(forKey: key)
                 return
@@ -4075,6 +4088,29 @@ extension ComposerController {
         }
         panel.queue.attachmentMediaURL = panel.model.attachmentMediaURL
         panel.queue.onExpandImage = { [weak self] items, index in self?.presentPreview(items, index: index) }
+        // `replacePromptFromHistory` (ChatComposer.tsx, composerPromptHistory.ts at 4928, #31314): a recalled prompt
+        // brings its thread and machine records, so its mentions stay chips for the machine they name.
+        composer.runsDraftLocally = { [weak self] text in
+            guard let self else { return false }
+            if case .thread = target, onSideChat != nil, sideChatDisabledReason?() == nil, SideChats.parseCommand(text) != nil { return true }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // `holdsOnlyText`: no attachments, contexts or reply.
+            guard currentAttachments.isEmpty, ComposerContext.referencedIds(trimmed).isEmpty,
+                  draftKey.flatMap({ replyTargets[$0] }) == nil else { return false }
+            return (usageLimitsOffered && UsageLimitsLogic.isUsageLimitsCommand(trimmed))
+                || (pickers.current.entry?.driver == "codex" && pickers.currentMultiple == nil && ComposerLogic.isCodexFeedbackCommand(trimmed))
+                || (freshSessionCommandAvailable && ComposerMenus.isClearCommand(trimmed))
+        }
+        composer.onHistoryRecall = { [weak self] id in
+            guard let self, let message = projection.flatMap({ p in TimelineRowsInput(projection: p).entries.lazy.compactMap { entry -> ChatMessage? in
+                if case .message(let m, _) = entry.kind, m.id.rawValue == id { return m }
+                return nil
+            }.first }) ?? optimistic.first(where: { $0.id.rawValue == id }),
+                  case .array(let records)? = message.context?["records"] else { return }
+            for record in records where ["thread", "environment"].contains(record["kind"]?.stringValue ?? "") {
+                if let contextId = record["contextId"]?.stringValue { menuState.records[contextId] = record }
+            }
+        }
         panel.model.attachmentImage = { [weak self] id, side, cover in
             guard let source = await self?.attachmentSource(id) else { return nil }
             return await ComposerImageIO.thumbnail(source, side: side, cover: cover, measurementKey: id)
@@ -4631,6 +4667,8 @@ extension ComposerController {
         refresh()
         guard !images.isEmpty else { return }
         preparingImages[key, default: 0] += images.count
+        // The chips go where the images were pasted, not where the caret is once they are ready (#35528, #37010).
+        let mark = imagesGetChips ? composer.markInsertionPoint() : nil
         let work = Self.attachmentWorkDirectory
         let generation = preparingGenerations[key, default: 0]
         Task { [weak self] in
@@ -4653,12 +4691,17 @@ extension ComposerController {
             // `cancelPreparingComposerImages` (preparingComposerImages.ts at 4928): a discarded draft stays discarded.
             guard preparingGenerations[key, default: 0] == generation else {
                 for a in prepared { try? FileManager.default.removeItem(at: a.fileURL) }
+                if let mark { composer.dropInsertionMark(mark) }
                 return
             }
             preparingImages[key, default: images.count] -= images.count
             draftAttachments[key, default: []] += prepared
-            if imagesGetChips, key == draftKey, !prepared.isEmpty {
-                composer.insertAtCaret(prepared.map(\.reference).joined(separator: " ") + " ")
+            if let mark {
+                if key == draftKey, !prepared.isEmpty {
+                    composer.insert(prepared.map(\.reference).joined(separator: " ") + " ", at: mark)
+                } else {
+                    composer.dropInsertionMark(mark)
+                }
             }
             for a in prepared { startUpload(a.id, key: key) }
             // Only failures are reported here, so a later error is never cleared by this one.

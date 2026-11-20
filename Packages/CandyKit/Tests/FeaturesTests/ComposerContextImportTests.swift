@@ -96,3 +96,32 @@ struct ComposerContextImportTests {
         #expect(plan.attachments.first?.record["source"]?["appName"] == .string("Notes"))
     }
 }
+
+/// `composerAttachmentInsertion.ts` at 4928: a pasted image's chip lands where it was pasted, before text typed
+/// there since (#35528), and overlapping pastes keep their order (#37010).
+@MainActor
+struct ComposerInsertionMarkTests {
+    @Test func preparedChipsLandAtThePastePointInPasteOrder() {
+        let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 400, height: 80))
+        composer.text = "hello world"
+        composer.editor.setSelectedRange(NSRange(location: 6, length: 0))
+        let first = composer.markInsertionPoint(), second = composer.markInsertionPoint()
+        composer.editor.insertText("Z", replacementRange: composer.editor.selectedRange())
+        composer.editor.setSelectedRange(NSRange(location: 7, length: 0))
+        composer.insert("B ", at: second)
+        composer.insert("A ", at: first)
+        #expect(composer.text == "hello A B Zworld")
+        #expect(composer.editor.selectedRange().location == 11, "the caret stays after what the user typed: \(composer.editor.selectedRange())")
+    }
+
+    @Test func aChangedPrefixFallsBackToTheCaret() {
+        let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 400, height: 80))
+        composer.text = "abc"
+        composer.editor.setSelectedRange(NSRange(location: 3, length: 0))
+        let mark = composer.markInsertionPoint()
+        composer.text = "xyz"
+        composer.editor.setSelectedRange(NSRange(location: 1, length: 0))
+        composer.insert("Q", at: mark)
+        #expect(composer.text == "x Qyz")
+    }
+}
