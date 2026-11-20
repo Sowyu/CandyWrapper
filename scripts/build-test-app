@@ -19,8 +19,8 @@ cd "$(dirname "$0")/.."
 scripts/preflight >&2
 # Xcode's own source control reads github.com credentials from the Keychain while it resolves Sparkle, and on
 # a Mac with no saved login that stops the build at a Keychain dialog. System git with the pinned
-# Package.resolved never asks.
-xcodebuild -scmProvider system -disableAutomaticPackageResolution -project CandyWrapper.xcodeproj -scheme CandyWrapper -configuration Debug \
+# Package.resolved never asks, and netrc keeps package authorization out of the Keychain too.
+xcodebuild -scmProvider system -packageAuthorizationProvider netrc -disableAutomaticPackageResolution -project CandyWrapper.xcodeproj -scheme CandyWrapper -configuration Debug \
   -derivedDataPath "/tmp/cw-dd-$task" PRODUCT_BUNDLE_IDENTIFIER="dev.candywrapper.test.$task" \
   CANDY_URL_SCHEME="candywrapper-$task" "$@" build -quiet >&2
 echo "/tmp/cw-dd-$task/Build/Products/Debug/CandyWrapper.app"
