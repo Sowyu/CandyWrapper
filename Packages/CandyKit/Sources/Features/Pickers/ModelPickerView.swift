@@ -156,17 +156,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences,
                                        expandedSubProviders: expandedSubProviders)
-        if stacked, !searching {
-            // The tallest tab sets the height, so switching tabs never moves the popup's top edge.
-            let tabs: [ModelPickerRail] = sections.showsRail ? [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) } : [rail]
-            tallestTabHeight = tabs.map { tab in
-                let rows = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
-                                               rail: tab, query: "", expandedLegacy: expandedLegacy,
-                                               selectedKeys: selectedKeys, preferences: preferences,
-                                               expandedSubProviders: expandedSubProviders).rows
-                return stackedListHeight(rows: rows.count, cardHeight: cardHeight(for: tab))
-            }.max() ?? 0
-        } else if !capy, !searching {
+        if !capy, !searching {
             // T3 3814 ModelPickerContent.tsx:583-610,832-836 fits the tallest eligible tab.
             let tabs: [ModelPickerRail] = [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) }
             tallestTabHeight = tabs.map { tab in
@@ -222,13 +212,6 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         let info = DitherProviderCardInfo(entry)
         if card?.info == info { return }
         card = DitherProviderCardView(info: info, onManage: onManage.map { open in { open(id) } })
-    }
-
-    private func cardHeight(for tab: ModelPickerRail) -> CGFloat? {
-        guard case .instance(let id) = tab, let entry = catalog.entry(id) else { return nil }
-        let info = DitherProviderCardInfo(entry)
-        if let card, card.info == info { return card.preferredHeight }
-        return DitherProviderCardView(info: info, onManage: nil).preferredHeight
     }
 
     /// The list's height in the stacked layout: the card and its hairline, the rows, and the padding under them.
@@ -386,7 +369,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         if stacked {
             // Content height; the host caps the popup at the space above the composer and the list scrolls.
             if let frozenHeight { return CGSize(width: Self.stackedWidth, height: frozenHeight) }
-            let list = max(stackedListHeight(rows: sections.rows.count, cardHeight: card?.preferredHeight), tallestTabHeight)
+            let list = stackedListHeight(rows: sections.rows.count, cardHeight: card?.preferredHeight)
             return CGSize(width: Self.stackedWidth, height: tabsH + searchH + list + footerHeight)
         }
         if docked { return CGSize(width: Self.width(capy), height: capy ? Self.capyHeight : Self.maxHeight) }
