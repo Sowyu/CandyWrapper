@@ -67,8 +67,10 @@ final class RightPanelView: DSView {
     public var onSideChatShown: ((ThreadId?) -> Void)?
     private var shownSideChat: ThreadId?
     /// `sideChatsOffered` and why one can't start now (ChatView.tsx:2847-2885): the + menu's Side chat row.
-    public var sideChatOffered = false
-    public var sideChatDisabledReason: String?
+    public var sideChatOffered = false { didSet { syncLauncherSideChat() } }
+    public var sideChatDisabledReason: String? { didSet { syncLauncherSideChat() } }
+    /// The launcher lists Side chat where the + menu does (RightPanelTabs.tsx:410-422, passed at :1635-1654).
+    private func syncLauncherSideChat() { lazyLauncher.set(\.sideChat, sideChatOffered ? sideChatDisabledReason == nil : nil) }
     let add = ButtonView(nil, icon: .plus, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private var tabs: [PanelTabView] = []
     /// The tab list (`ScrollArea` with hidden scrollbars): clips at `pr-28`, the room the window's
@@ -630,6 +632,8 @@ final class SurfaceLauncherView: DSView {
     var pullRequestsAvailable = false { didSet { if pullRequestsAvailable != oldValue { rebuild() } } }
     var browserAvailable = false { didSet { if browserAvailable != oldValue { rebuild() } } }
     var terminalAvailable = false { didSet { if terminalAvailable != oldValue { rebuild() } } }
+    /// Nil where side chats are not offered; false while one can't start yet.
+    var sideChat: Bool? { didSet { if sideChat != oldValue { rebuild() } } }
     var browserProfiles: [(id: String, name: String)] = [] { didSet { rebuild() } }
     var onPick: ((RightPanelSurface.Kind) -> Void)?
     var onPickBrowserProfile: ((String) -> Void)?
@@ -649,7 +653,7 @@ final class SurfaceLauncherView: DSView {
         rows.forEach { $0.removeFromSuperview() }
         rows = Self.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable, pullRequestAvailable: pullRequestAvailable,
                             pullRequestsAvailable: pullRequestsAvailable, browserAvailable: browserAvailable,
-                            terminalAvailable: terminalAvailable).map { action in
+                            terminalAvailable: terminalAvailable, sideChat: sideChat).map { action in
             // The profile chooser beside the Browser row, once there is a choice (RightPanelTabs.tsx:526-555).
             let profiles = action.kind == .browser && browserProfiles.count > 1 ? browserProfiles : []
             let row = LauncherRow(action, profiles: profiles)
@@ -666,7 +670,7 @@ final class SurfaceLauncherView: DSView {
         guard !isHiddenOrHasHiddenAncestor, window != nil,
               let action = Self.actions(filesAvailable: filesAvailable, diffAvailable: diffAvailable, pullRequestAvailable: pullRequestAvailable,
                                         pullRequestsAvailable: pullRequestsAvailable, browserAvailable: browserAvailable,
-                            terminalAvailable: terminalAvailable)
+                            terminalAvailable: terminalAvailable, sideChat: sideChat)
                 .first(where: { $0.shortcut.lowercased() == characters.lowercased() }), let kind = action.kind else { return false }
         onPick?(kind)
         return true
