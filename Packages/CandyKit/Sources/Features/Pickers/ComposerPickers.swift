@@ -501,7 +501,7 @@ public final class ComposerPickers {
     public static let modes: [RuntimeMode: ModeInfo] = [
         .approvalRequired: ModeInfo(label: "Supervised", description: "Ask before commands and file changes.", icon: .lock),
         .autoAcceptEdits: ModeInfo(label: "Auto-accept edits", description: "Auto-approve edits, ask before other actions.", icon: .penLine),
-        .auto: ModeInfo(label: "Auto", description: "Supported providers approve routine actions; others still ask.", icon: .sparkles),
+        .auto: ModeInfo(label: "Auto", description: "Supported providers approve routine actions; others still ask.", icon: .shieldCheck),
         .fullAccess: ModeInfo(label: "Full access", description: "Allow commands and edits without prompts.", icon: .lockOpen),
     ]
     /// Full access with `UnrestrictedAccess` on, for the new-thread strip and other labels outside the picker.
