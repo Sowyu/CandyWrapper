@@ -1247,7 +1247,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b2e86d7902 | #35100 | settings | fix(web): an invalid provider setting is refused at its field instead of taking the provider offline | ported (settings-2): a refused value stays in the field marked invalid with "Enter a valid value. It was not saved." (ProvidersSettingsView.swift `ValidatedFieldControl`, `Field.pattern`) |
 | 32f3d8b160 | #35116 | settings | fix(client-runtime): Diagnostics Resource History keeps updating while open | port |
 | a30cb3283a | #35161 | settings | fix(web): Esc in the keybindings search clears it without closing Settings | port |
-| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | left (panels-2): needs the `screenReaderWindowTitle` client setting and its Settings switch (Features/Settings), then status first in the window title (branding.logic.ts, Sidebar.logic.ts resolveWindowTitleThreadStatus) |
+| 1d218d1525 | #34697 | settings | feat(web): screen reader window title leads with the thread's status and name | ported (panels-5): WindowTitle ports resolveWindowTitle and resolveWindowTitleThreadStatus; the window now reads project / thread, and with Settings > Behavior > Screen reader window title, status: thread - project. Left: the Settings search catalog entry |
 | 4f555c746c | #28584 | settings | fix(web): choosing a project icon again re-reads it from disk | port |
 | 817b92f13a | #24110 | settings | fix(pi): stop offering extension-only models for text generation | port |
 | 141de5e9f4 | #25513 | settings | fix(web): a dismissed provider banner stays dismissed when you switch threads | port |

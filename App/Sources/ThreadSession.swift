@@ -1154,6 +1154,7 @@ final class ThreadController {
         // A forced open reloads the thread already showing, as after a reconnect.
         if !force, opensElsewhere?(id) == true { return }
         sidebar?.state.activeThreadId = id
+        defer { onOpenThreadChange?() }
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)
         guard force || id != session?.threadId || panel.isDraft || noActiveThread.superview != nil else { return }
         OpenTiming.begin(id.rawValue)
@@ -1386,6 +1387,8 @@ final class ThreadController {
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
     var openThreadId: ThreadId? { panel.isDraft ? nil : session?.threadId }
+    /// The open thread changed, for the window title (#34697).
+    var onOpenThreadChange: (() -> Void)?
 
     /// The thread view is back after Settings or a utility page: T3 mounts ChatView again, which focuses
     /// the composer unless the terminal is open (ChatView.tsx:6837-6845).
@@ -1738,6 +1741,7 @@ final class ThreadController {
         files.show(nil)
         panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
         sidebar?.state.activeThreadId = nil
+        onOpenThreadChange?()
         noActiveThread.frame = panel.bounds
         // Under `NoProjectsHero` when that shows too.
         if noProjectsHero.superview === panel {

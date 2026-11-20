@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var environments: Environments?
     private var server: ServerController?
     private var threads: ThreadController?
+    private var windowTitle: WindowTitleController?
     private var ditherTabs: DitherTabsController?
     private var settings: SettingsController?
     private var sidebarCommands: SidebarCommands?
@@ -248,6 +249,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showAccount()
         let threads = ThreadController(sidebar: sidebar, window: window, environments: environments)
         self.threads = threads
+        let windowTitle = WindowTitleController(window: window, sidebar: sidebar, environments: environments) { [weak threads] in threads?.openThreadId }
+        threads.onOpenThreadChange = { [weak windowTitle] in windowTitle?.update() }
+        self.windowTitle = windowTitle
         threads.files.serverConfig = { [weak composer = threads.composer] env in composer?.config(env) }
         let main: NSView = Self.threadPreview() ?? threads.panel
         let layout = SidebarLayoutView(sidebarContent: sidebar, mainContent: main)
