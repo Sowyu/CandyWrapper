@@ -5,14 +5,14 @@ import DesignSystem
 /// round as they are, with their ghost hover fill. Hover or a click shows the breakdown. The digits roll only
 /// when the figure changes.
 public final class ThreadCostPillView: ControlView {
-    /// Nil hides the pill: no usage yet, or a turn on a model without a price.
+    /// Nil hides the pill: no priced usage yet.
     public var breakdown: ThreadCostEstimate.Breakdown? {
         didSet {
             guard breakdown != oldValue else { return }
-            let text = breakdown.map { ThreadCostEstimate.label($0.usd) } ?? ""
+            let text = breakdown?.label ?? ""
             // A thread switch sets the figure without rolling; a change on the same thread rolls.
             digits.set(prefix: "", value: text, animated: oldValue != nil && breakdown != nil)
-            setAccessibilityValue(text)
+            setAccessibilityValue(text.replacingOccurrences(of: "≥ ", with: "at least "))
             invalidateIntrinsicContentSize()
             needsLayout = true
             digits.needsLayout = true
@@ -109,7 +109,7 @@ final class ThreadCostDetailsView: DSView {
             for c in cells { c.lineHeight = 16; addSubview(c) }
             rows.append((cells, indent))
         }
-        row("API cost estimate", "", ThreadCostEstimate.label(b.usd), strong: true)
+        row("API cost estimate", "", b.label, strong: true)
         let t = b.tokens
         row("Input", tokens(max(0, t.input - t.cached - t.cacheWrite)), money(b.inputUSD))
         row("Cached input", tokens(t.cached), money(b.cachedUSD))
@@ -136,8 +136,9 @@ final class ThreadCostDetailsView: DSView {
         var text = b.models.isEmpty ? "" : "Priced as \(b.models.joined(separator: ", ")). "
         if !b.subagents.isEmpty { text += "Includes subagents' own tokens, each at its own model's price. " }
         func subagents(_ n: Int) -> String { n == 1 ? "1 subagent" : "\(n) subagents" }
-        if b.subagentsUnpriced > 0 {
-            text += "\(subagents(b.subagentsUnpriced)) left out: no price for \(b.unpricedModels.joined(separator: ", ")). "
+        if !b.unpricedModels.isEmpty { text += "Turns on \(b.unpricedModels.joined(separator: ", ")) left out: no price. " }
+        if b.partialTurns > 0 {
+            text += b.partialTurns == 1 ? "1 turn counted from a partial report. " : "\(b.partialTurns) turns counted from a partial report. "
         }
         if b.subagentsUnread > 0 { text += "\(subagents(b.subagentsUnread)) left out: usage couldn't be read." }
         return text.trimmingCharacters(in: .whitespaces)

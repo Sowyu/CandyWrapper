@@ -16,12 +16,14 @@ public enum ThreadCostEstimate {
     }
 
     // ponytail: a fixed table of the Claude and GPT models in use on 2026-10-22, from LiteLLM's
-    // model_prices_and_context_window.json (the list T3's usage page prices from); unknown models hide the figure.
+    // model_prices_and_context_window.json (the list T3's usage page prices from); turns on unknown models count nothing and mark the figure a lower bound.
     // Read the server's price table (usagePricing.ts) once the wire exposes it, or when prices change.
     static let prices: [String: Price] = [
+        // platform.claude.com/docs/en/about-claude/pricing, read 2026-11-20.
+        "claude-fable-5-2": Price(input: 8, cachedInput: 0.2, output: 40),
         "claude-fable-5-1": Price(input: 10, cachedInput: 0.25, output: 50),
         "claude-opus-5-5": Price(input: 4, cachedInput: 0.2, output: 20),
-        "claude-sonnet-5-5": Price(input: 2, cachedInput: 0.2, output: 10),
+        "claude-sonnet-5-5": Price(input: 2, cachedInput: 0.1, output: 10), // cache hits $0.10, same page 2026-11-20
         "claude-fable-5": Price(input: 10, cachedInput: 1, output: 50),
         "claude-opus-5": Price(input: 5, cachedInput: 0.5, output: 25),
         "claude-sonnet-5": Price(input: 2, cachedInput: 0.2, output: 10),
@@ -39,6 +41,9 @@ public enum ThreadCostEstimate {
         "gpt-5.6-sol": Price(input: 4, cachedInput: 0.4, output: 20),
         "gpt-5.6-terra": Price(input: 2, cachedInput: 0.2, output: 12),
         "gpt-5.6-luna": Price(input: 0.2, cachedInput: 0.02, output: 1.2),
+        // developers.openai.com/api/docs/pricing, standard tier under 272K context, read 2026-11-20.
+        "gpt-5.5": Price(input: 5, cachedInput: 0.5, output: 30),
+        "gpt-5.4-mini": Price(input: 0.75, cachedInput: 0.075, output: 4.5),
     ]
 
     /// The price of `model`, ignoring a `[1m]` context tag and a date suffix such as `-20251001`.
@@ -72,10 +77,14 @@ public enum ThreadCostEstimate {
         public var subagents: [Subagent] = []
         /// Subagent threads left out because their projection couldn't be read.
         public var subagentsUnread = 0
-        /// Subagent threads left out because a turn ran on a model without a price.
-        public var subagentsUnpriced = 0
-        /// Models without a price, in order of first use: this thread's own in `own(_:)`, its subagents' in the tree.
+        /// Models without a price, in order of first use, this thread's and its subagents'. Their turns count nothing.
         public var unpricedModels: [String] = []
+        /// Ended turns without totals, counted from their latest request alone.
+        public var partialTurns = 0
+        /// The figure leaves something out, so the real cost is at least `usd`.
+        public var isLowerBound: Bool { !unpricedModels.isEmpty || partialTurns > 0 || subagentsUnread > 0 }
+        /// "$1.23", or "≥ $1.23" when it is a lower bound.
+        public var label: String { (isLowerBound ? "≥ " : "") + ThreadCostEstimate.label(usd) }
         /// This thread's own turns.
         public var ownUSD: Double { inputUSD + cachedUSD + cacheWriteUSD + outputUSD }
         public var subagentsUSD: Double { subagents.reduce(0) { $0 + $1.usd } }
@@ -105,31 +114,29 @@ public enum ThreadCostEstimate {
         }
     }
 
-    /// The thread's estimate in USD, or nil when it has no usage or any turn ran on a model without a price.
+    /// The thread's estimate in USD over its priced turns, or nil when no turn has a price.
     public static func usd(_ projection: ThreadProjection?) -> Double? { breakdown(projection)?.usd }
 
     /// The thread's estimate by kind of token, nil as `usd` is.
     public static func breakdown(_ projection: ThreadProjection?) -> Breakdown? {
         guard let projection else { return nil }
         let b = own(projection)
-        guard b.unpricedModels.isEmpty, !b.models.isEmpty else { return nil }
+        guard !b.models.isEmpty else { return nil }
         return b
     }
 
     /// The open thread's estimate with every subagent thread under it, each priced by its own models. Subagent
     /// turns count in their own threads only: T3 scopes a turn's totals to the main agent (providerRuntime.ts:321-331).
-    /// Nil when the thread's own turns can't be priced, nothing has usage yet, or a subagent's first read is in flight,
+    /// Nil when nothing priced has usage yet or a subagent's first read is in flight,
     /// so the figure appears once with its subagents instead of jumping when they arrive.
     public static func breakdown(_ projection: ThreadProjection, id: ThreadId, children: (ThreadId) -> [SubagentThread]) -> Breakdown? {
         var result = own(projection)
-        guard result.unpricedModels.isEmpty else { return nil }
         var seen: Set<ThreadId> = [id], reading = false
         func walk(_ parent: ThreadId) {
             for child in children(parent) where seen.insert(child.id).inserted {
-                if let b = child.own, !b.unpricedModels.isEmpty {
-                    result.subagentsUnpriced += 1
+                if let b = child.own {
                     for m in b.unpricedModels where !result.unpricedModels.contains(m) { result.unpricedModels.append(m) }
-                } else if let b = child.own {
+                    result.partialTurns += b.partialTurns
                     if !b.models.isEmpty { result.subagents.append(Subagent(title: child.title, models: b.models, tokens: b.tokens, usd: b.ownUSD)) }
                 } else if child.reading {
                     reading = true
@@ -162,6 +169,7 @@ public enum ThreadCostEstimate {
                 if !result.unpricedModels.contains(model) { result.unpricedModels.append(model) }
                 continue
             }
+            if turn["turnTokenUsage"]?["inputTokens"]?.doubleValue == nil { result.partialTurns += 1 }
             result.add(tokens, price, model: model)
         }
         return result

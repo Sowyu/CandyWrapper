@@ -79,11 +79,12 @@ import T3Protocol
         #expect(result.subagents.map(\.title) == ["A", "B"])
         #expect(result.subagents.map(\.models) == [["claude-haiku-5-5"], ["claude-sonnet-5-5"]])
         #expect(abs(result.subagentsUSD - 2.15) < 1e-9 && abs(result.usd - 6.15) < 1e-9)
-        #expect(result.subagentsUnread == 1 && result.subagentsUnpriced == 1)
+        #expect(result.subagentsUnread == 1 && result.unpricedModels == ["muse-spark-1.3"] && result.isLowerBound)
         #expect(ThreadCostDetailsView.note(result) == "Priced as claude-opus-5-5. Includes subagents' own tokens, each at its own model's price. "
-            + "1 subagent left out: no price for muse-spark-1.3. 1 subagent left out: usage couldn't be read.")
-        // The open thread on a model without a price hides the figure, as before.
-        #expect(ThreadCostEstimate.breakdown(try thread("muse-spark-1.3", input: 1, output: 1), id: root) { tree[$0] ?? [] } == nil)
+            + "Turns on muse-spark-1.3 left out: no price. 1 subagent left out: usage couldn't be read.")
+        // The open thread on a model without a price still shows its priced subagents, as a lower bound.
+        let unpricedRoot = try #require(ThreadCostEstimate.breakdown(try thread("muse-spark-1.3", input: 1, output: 1), id: root) { tree[$0] ?? [] })
+        #expect(abs(unpricedRoot.usd - 2.15) < 1e-9 && unpricedRoot.label == "≥ $2.15")
     }
 
     @Test func aThreadWithNoUsageOfItsOwnStillShowsItsSubagents() throws {
@@ -147,5 +148,26 @@ import T3Protocol
         // A failed read shows the thread's own figure and says a subagent was left out.
         let failed = try #require(ThreadCostEstimate.breakdown(p, id: "env:root") { _ in [.init(id: "env:a", title: "A", own: nil)] })
         #expect(abs(failed.usd - 4) < 1e-9 && failed.subagentsUnread == 1)
+    }
+
+    @Test func unpricedAndPartialTurnsMakeTheFigureALowerBound() throws {
+        var p = try thread("claude-opus-5-5", input: 1_000_000, output: 0)
+        // All priced, all with totals: the plain figure, as before.
+        let plain = try #require(ThreadCostEstimate.breakdown(p))
+        #expect(!plain.isLowerBound && plain.label == "$4.00" && ThreadCostDetailsView.note(plain) == "Priced as claude-opus-5-5.")
+        // A turn on an unpriced model and a turn that ended without totals: the priced sum, at least.
+        p.providerTurns.append(.object(["status": .string("interrupted"),
+                                        "tokenUsage": .object(["inputTokens": .number(500_000), "outputTokens": .number(0)])]))
+        let mixed = try #require(ThreadCostEstimate.breakdown(p))
+        #expect(mixed.partialTurns == 1 && abs(mixed.usd - 6) < 1e-9 && mixed.label == "≥ $6.00")
+        #expect(ThreadCostDetailsView.note(mixed) == "Priced as claude-opus-5-5. 1 turn counted from a partial report.")
+        let unknown = try #require(ThreadCostEstimate.breakdown(p, id: "env:root") { _ in
+            [.init(id: "env:a", title: "A", own: ThreadCostEstimate.own(try! self.thread("muse-spark-1.3", input: 10, output: 10)))]
+        })
+        #expect(unknown.unpricedModels == ["muse-spark-1.3"] && unknown.label == "≥ $6.00")
+        #expect(ThreadCostDetailsView.note(unknown).hasSuffix("Turns on muse-spark-1.3 left out: no price. 1 turn counted from a partial report."))
+        // Nothing priced at all: no figure.
+        #expect(ThreadCostEstimate.breakdown(try thread("muse-spark-1.3", input: 1_000_000, output: 0)) == nil)
+        #expect(ThreadCostEstimate.breakdown(try thread("muse-spark-1.3", input: 1, output: 1), id: "env:root") { _ in [] } == nil)
     }
 }
