@@ -187,13 +187,16 @@ final class GalleryMasonryView: DSView {
             measuring.insert(pixelKey)
             let load = loader(image)
             Task { [weak self] in
-                let result = await ImageDecodeCache.load(key: memoryKey, side: side, loader: load)
+                // The loader itself, not the cache's shared request: a cache clear (Force Reload) cancels those, and a
+                // cancelled measure must not read as a failed picture.
+                let image = await load(side)
                 guard let self else { return }
                 self.measuring.remove(pixelKey)
-                if let result {
+                if let image {
+                    ImageDecodeCache.store(image, side: side, key: memoryKey)
                     // A loader that measured nothing on the way (a kept copy) still gives the proportions.
                     if self.images.first(where: { $0.pixelKey == pixelKey })?.naturalSize == nil {
-                        MarkdownImages.record(CGSize(width: result.image.width, height: result.image.height), for: key)
+                        MarkdownImages.record(CGSize(width: image.width, height: image.height), for: key)
                     }
                 } else {
                     self.failed.insert(pixelKey)

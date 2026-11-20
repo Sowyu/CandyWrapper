@@ -59,8 +59,15 @@ import T3Store
 
     @Test func galleryTilesAndLargePictureHaveNoPathTooltip() throws {
         let image = GalleryImage(source: .file("/tmp/kept.png"), threadId: "t", agent: "Main", entryId: "e", at: "2026-10-23T10:00:00Z")
+        // The masonry places a picture once its size is known; the signed URL usually brings it.
+        MarkdownImages.record(CGSize(width: 800, height: 600), for: image.key)
+        let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 700, height: 600), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.contentView = nil; window.close() }
+        window.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 700, height: 600))
         let view = ThreadImageGalleryView()
         view.frame = NSRect(origin: .zero, size: ThreadImageGalleryView.size)
+        window.contentView!.addSubview(view)
         view.images = [image]
         view.layoutSubtreeIfNeeded()
         var all: [NSView] = []
