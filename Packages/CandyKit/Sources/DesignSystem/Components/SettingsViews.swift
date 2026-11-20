@@ -74,6 +74,14 @@ public final class SettingsRowView: DSView {
     public var fill: NSColor? { didSet { needsDisplay = true } }
     /// A 14pt glyph before the title (`inline-flex items-center gap-2`), such as the Archive page's spinner.
     public var titleIcon: NSView? { didSet { oldValue?.removeFromSuperview(); titleIcon.map(addSubview); needsLayout = true } }
+    /// The title icon's size and gap; a text generator row uses a 20pt mark and `gap-2.5`.
+    public var titleIconSize: CGFloat = 14 { didSet { needsLayout = true } }
+    public var titleIconGap: CGFloat = 8 { didSet { needsLayout = true } }
+    /// `ps-*` on the description, to line it up with a title after an icon.
+    public var detailInset: CGFloat = 0 { didSet { needsLayout = true } }
+    /// Room the title's line box gains above the text when a taller inline icon sits on its baseline (a 20pt mark
+    /// in a 20pt `text-sm` line adds about 5pt). The icon starts at the top of the line box.
+    public var titleLead: CGFloat = 0 { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     private let inertCover = InertCoverView()
 
     private let titleLabel = LabelView()
@@ -169,7 +177,7 @@ public final class SettingsRowView: DSView {
             return statusText.height(forWidth: w) + (statusLinkPlacement(w)?.ownLine == true ? 16 : 0)
         }
         func textHeight(_ w: CGFloat) -> CGFloat {
-            20 + (hasDetail ? 4 + detailHeight(w) : 0) + (status == nil ? 0 : 4 + 2 + statusHeight(w))
+            titleLead + 20 + (hasDetail ? 4 + detailHeight(w) : 0) + (status == nil ? 0 : 4 + 2 + statusHeight(w))
         }
         if width >= 512 {
             // grid-cols-[minmax(0,1fr)_auto] gap-8 items-center, and a select trigger takes min-w-40 (settingsLayout.tsx:538,567).
@@ -180,8 +188,8 @@ public final class SettingsRowView: DSView {
             let th = textHeight(textWidth)
             let rowHeight = max(th, controlSize.height)
             let textY = top + (rowHeight - th) / 2
-            return Frames(title: NSRect(x: Self.paddingX, y: textY, width: textWidth, height: 20),
-                          detail: NSRect(x: Self.paddingX, y: textY + 24, width: min(detailLimit, textWidth), height: detailHeight(textWidth)),
+            return Frames(title: NSRect(x: Self.paddingX, y: textY + titleLead, width: textWidth, height: 20),
+                          detail: NSRect(x: Self.paddingX, y: textY + titleLead + 24, width: min(detailLimit, textWidth), height: detailHeight(textWidth)),
                           control: NSRect(x: width - Self.paddingX - controlSize.width, y: top + (rowHeight - controlSize.height) / 2,
                                           width: controlSize.width, height: controlSize.height),
                           status: NSRect(x: Self.paddingX, y: textY + th - statusHeight(textWidth), width: textWidth, height: statusHeight(textWidth)),
@@ -193,8 +201,8 @@ public final class SettingsRowView: DSView {
         // the start; a `w-full` one (inputs, sliders, selects without an intrinsic width) fills the row.
         let hasOwnWidth = control.map { $0.intrinsicContentSize.width != NSView.noIntrinsicMetric } ?? false
         let stackedWidth = hasOwnWidth ? min(inner, controlSize.width) : inner
-        return Frames(title: NSRect(x: Self.paddingX, y: top, width: inner, height: 20),
-                      detail: NSRect(x: Self.paddingX, y: top + 24, width: min(detailLimit, inner), height: detailHeight(inner)),
+        return Frames(title: NSRect(x: Self.paddingX, y: top + titleLead, width: inner, height: 20),
+                      detail: NSRect(x: Self.paddingX, y: top + titleLead + 24, width: min(detailLimit, inner), height: detailHeight(inner)),
                       control: NSRect(x: Self.paddingX, y: controlY, width: stackedWidth, height: controlSize.height),
                       status: NSRect(x: Self.paddingX, y: top + th - statusHeight(inner), width: inner, height: statusHeight(inner)),
                       height: (control == nil ? top + th : controlY + controlSize.height) + footerHeight(width))
@@ -230,8 +238,9 @@ public final class SettingsRowView: DSView {
             return s.width == NSView.noIntrinsicMetric ? NSSize(width: 20, height: 20) : s
         }
         let slots = accessories.reduce(0) { $0 + size($1).width + 6 }
-        let iconInset: CGFloat = titleIcon == nil ? 0 : 14 + 8
-        titleIcon?.frame = NSRect(x: f.title.minX, y: f.title.minY + 3, width: 14, height: 14)
+        let iconInset: CGFloat = titleIcon == nil ? 0 : titleIconSize + titleIconGap
+        titleIcon?.frame = NSRect(x: f.title.minX, y: f.title.minY - titleLead + (20 + titleLead - titleIconSize) / 2,
+                                  width: titleIconSize, height: titleIconSize)
         let titleWidth = min(ceil(titleLabel.textWidth) + 1, max(0, f.title.width - slots - iconInset))
         titleLabel.frame = NSRect(x: f.title.minX + iconInset, y: f.title.minY, width: titleWidth, height: 20)
         var ax = f.title.minX + iconInset + titleWidth + 6
@@ -241,7 +250,7 @@ public final class SettingsRowView: DSView {
             a.frame = NSRect(x: ax, y: f.title.minY + (20 - s.height) / 2, width: s.width, height: s.height)
             ax += s.width + 6
         }
-        detailText.frame = f.detail
+        detailText.frame = NSRect(x: f.detail.minX + detailInset, y: f.detail.minY, width: max(0, f.detail.width - detailInset), height: f.detail.height)
         layoutDetailLink()
         if let row = detailView as? SettingsGroupRow {
             row.frame = f.detail

@@ -686,8 +686,15 @@ final class SettingsModelPickerControl: DSView {
     private var catalog: ProviderCatalog {
         let target = context.scope.target
         let settings = target.flatMap { t in context.scope.environments.first { $0.id == t.environmentId }?.settings }
-        return ProviderCatalog(context.providers, settings: settings, projectId: target?.projectId)
+        guard Self.textKeys.contains(key) else { return ProviderCatalog(context.providers, settings: settings, projectId: target?.projectId) }
+        // The text pickers also offer the environment's text generators (useTextGenerationTargets, textGenerators.ts:294-349).
+        let env = target?.environmentId ?? context.scope.primaryId
+        let envSettings = context.scope.environments.first { $0.id == env }?.settings
+        let selected = [key, "textGenerationModelSelection"].compactMap { try? context.scope.values[$0].decode(as: ModelSelection.self) }
+        let providers = context.textGenerationProviders(environment: env, settings: envSettings, selected: selected)
+        return ProviderCatalog(providers, settings: settings, projectId: target?.projectId)
     }
+    static let textKeys: Set<String> = ["textGenerationModelSelection", "sourceControlWriterModelSelection"]
 
     /// The selection shown: the setting, else the first ready provider's default (`resolveDefaultProviderModelSelection`).
     private var selection: (ProviderInstanceEntry, String)? {

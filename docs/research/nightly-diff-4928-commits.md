@@ -619,7 +619,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| eb97d82156 | #33147 | pr/git | feat: text generators let model APIs write titles, commits, and transcript cleanup | port; needs wire: text generator settings |
+| eb97d82156 | #33147 | pr/git | feat: text generators let model APIs write titles, commits, and transcript cleanup | ported (settings-5): Text generators section on Providers with the Connect and Use it wizard, Show models and Remove; `server.listTextGeneratorModels`; generators join the text generation and commit message pickers. The key goes to the server in `server.updateSettings` like the usage hub key; voice cleanup and 1Password secret sources left out |
 
 ## New feature model-mentions (1)
 

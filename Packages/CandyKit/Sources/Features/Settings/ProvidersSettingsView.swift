@@ -279,6 +279,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     private let usageProviders = SettingsSectionView(title: "Usage providers", rows: [])
     private let addHub = ButtonView("Add hub", icon: .plus, variant: .outline, size: .xs)
     private var updatingCursor = false
+    private lazy var textGenerators = TextGeneratorsSection(context: context)
 
     private struct ListInput: Equatable {
         var row: ProvidersLogic.Row
@@ -337,7 +338,10 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         addHub.action = { [weak self] in self?.openAddHub() }
         var advancedRows: [any SettingsGroupRow] = [healthRow!]
         if !DesignGeometry.usesClassic(self) { advancedRows.append(idleCompactionRow()) }
-        body = [placeholder, providers, usageProviders, section(nil, "Advanced", advancedRows)]
+        // Text generators sit between Usage providers and Advanced (ProviderSettingsPanel.tsx:1148-1165 at 4928).
+        textGenerators.host = self
+        anchors["text-generators"] = textGenerators.section
+        body = [placeholder, providers, usageProviders, textGenerators.section, section(nil, "Advanced", advancedRows)]
         providers.add.action = { [weak self] in self?.openAddProvider() }
         providers.addRow.action = { [weak self] in self?.openAddProvider() }
         providers.refresh.action = { [weak self] in self?.refreshProviders() }
@@ -452,6 +456,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         (healthRow.accessories.last as? ResetSlot)?.isShown = seconds != preset && env.canWrite
         health.isEnabled = env.canWrite
         updateUsageProviders(env, settings: s)
+        textGenerators.update(env, settings: s)
     }
 
     private func openAddProvider() {
