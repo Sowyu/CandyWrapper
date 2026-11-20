@@ -143,6 +143,9 @@ public final class SettingsRowView: DSView {
 
     static let paddingX: CGFloat = 16, paddingY: CGFloat = 12
 
+    /// `[&_[data-slot=select-trigger]]:min-w-40` reaches a select anywhere in the control.
+    static func containsSelect(_ view: NSView) -> Bool { view is SelectView || view.subviews.contains(where: containsSelect) }
+
     private struct Frames { var title, detail, control: NSRect; var status = NSRect.zero; var height: CGFloat }
 
     private func frames(width: CGFloat) -> Frames {
@@ -168,8 +171,8 @@ public final class SettingsRowView: DSView {
             20 + (hasDetail ? 4 + detailHeight(w) : 0) + (status == nil ? 0 : 4 + 2 + statusHeight(w))
         }
         if width >= 512 {
-            // grid-cols-[minmax(0,1fr)_minmax(10rem,auto)] gap-8 items-center
-            let controlColumn = control == nil ? 0 : max(160, controlSize.width)
+            // grid-cols-[minmax(0,1fr)_auto] gap-8 items-center, and a select trigger takes min-w-40 (settingsLayout.tsx:538,567).
+            let controlColumn = control == nil ? 0 : Self.containsSelect(control!) ? max(160, controlSize.width) : controlSize.width
             let textWidth = max(0, inner - controlColumn - (control == nil ? 0 : 32))
             let th = textHeight(textWidth)
             let rowHeight = max(th, controlSize.height)

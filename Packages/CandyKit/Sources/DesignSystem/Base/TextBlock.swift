@@ -40,11 +40,18 @@ public struct TextBlockLayout {
         }
         var lines = ranges.map { TextLine(line: CTTypesetterCreateLine(typesetter, $0)) }
         if maxLines > 0, lines.count > maxLines {
-            let start = ranges[maxLines - 1].location
-            let rest = CTTypesetterCreateLine(typesetter, CFRange(location: start, length: length - start))
-            let attributes = string.attributes(at: 0, effectiveRange: nil)
+            // Blink's line-clamp keeps the last visible line as it wrapped and appends the ellipsis; only when that
+            // doesn't fit does it cut the line's end to make room.
+            let range = ranges[maxLines - 1]
+            let attributes = string.attributes(at: range.location, effectiveRange: nil)
             let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: attributes))
-            let last = CTLineCreateTruncatedLine(rest, Double(width), .end, ellipsis) ?? rest
+            let text = NSMutableAttributedString(attributedString: string.attributedSubstring(from: NSRange(location: range.location, length: range.length)))
+            while let c = text.string.last, c.isWhitespace { text.deleteCharacters(in: NSRange(location: text.length - 1, length: 1)) }
+            let content = CTLineCreateWithAttributedString(text)
+            text.append(NSAttributedString(string: "\u{2026}", attributes: attributes))
+            let whole = CTLineCreateWithAttributedString(text)
+            let last = CTLineGetTypographicBounds(whole, nil, nil, nil) <= Double(width) ? whole
+                : CTLineCreateTruncatedLine(content, Double(width), .end, ellipsis) ?? content
             lines = Array(lines.prefix(maxLines - 1)) + [TextLine(line: last)]
         }
         self.lines = lines
