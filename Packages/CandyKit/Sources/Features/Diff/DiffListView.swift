@@ -195,10 +195,11 @@ public final class DiffListView: DSView {
 
     /// Shows a parsed diff with every file collapsed or expanded (T3's `diffFilesCollapsed`
     /// setting, default true).
-    public func setDiff(_ diff: UnifiedDiff, collapsedByDefault: Bool = true) {
+    /// `folds` overrides the default per file path, as T3's per-scope store does (DiffPanel.tsx:678-692).
+    public func setDiff(_ diff: UnifiedDiff, collapsedByDefault: Bool = true, folds: [String: Bool] = [:]) {
         clearContextLoads()
         self.diff = diff
-        collapsed = collapsedByDefault ? Set(diff.files.indices) : []
+        collapsed = Set(diff.files.indices.filter { folds[diff.files[$0].path] ?? collapsedByDefault })
         highlighter.reset(diff)
         for view in visible.values { recycle(view) }
         visible = [:]

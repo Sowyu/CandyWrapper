@@ -104,4 +104,16 @@ struct FileListWidthTests {
         #expect(FileListWidth.saved == 300)
         #expect(pane.width(row: 1000) == 300)
     }
+
+    /// Screen pass 3, item 10: a reload (an app switch, a refresh) keeps the files the user opened, as T3's per-scope
+    /// store does (DiffPanel.tsx:678-692), instead of folding every file again.
+    @Test func reloadKeepsTheFilesTheUserOpened() {
+        let file: (String) -> String = { name in "diff --git a/\(name) b/\(name)\n--- a/\(name)\n+++ b/\(name)\n@@ -1 +1 @@\n-a\n+b\n" }
+        let diff = UnifiedDiff(file("a.txt") + file("b.txt"))
+        let list = DiffListView(frame: NSRect(x: 0, y: 0, width: 460, height: 600))
+        list.setDiff(diff, collapsedByDefault: true)
+        #expect(list.collapsed == [0, 1])
+        list.setDiff(diff, collapsedByDefault: true, folds: ["a.txt": false])
+        #expect(list.collapsed == [1])
+    }
 }
