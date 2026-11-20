@@ -500,6 +500,12 @@ public enum PullRequestDetailLogic {
         case comments([TimelineEvent])
     }
 
+    /// `canReactPullRequestComment` (4928 client-runtime pullRequestReactions.ts, #36171): GitCafe takes
+    /// no reactions on a review.
+    public static func canReact(_ d: PullRequestDetail, kind: String) -> Bool {
+        d.capabilities.reactions == true && !(d.provider == "gitcafe" && kind == "review")
+    }
+
     /// `chatSubject` (4928 PullRequestSummaryTab.tsx:254): whether Add to chat has words to hand
     /// over, from the comment's whole conversation when it heads one.
     public static func chatSubject(_ c: PullRequestComment, _ d: PullRequestDetail) -> Bool {

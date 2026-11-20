@@ -453,7 +453,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | left (panels-2): Forgejo and Gitea /pulls/ links, needs the change request URL parser in T3Protocol RepositoryIdentity+PullRequests |
+| b0f0c44d22 | #37703 | pr/git | fix(shared): open Forgejo and Gitea /pulls/ tab and commit links | ported (panels-5): PullRequestAnchor reads /pulls/ tab and commit links at 4928; ChangeRequestURL already parsed /pulls/ |
 
 ## Port group keybindings-unassign (1)
 
@@ -1068,7 +1068,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 444921eb71 | #30483 | pr/git | fix(gitlab): merge requests can edit their labels | free with the runtime (panels-4): GitLab label edits are server side; CW's label picker already sends them |
 | d929e726f2 | #31741 | pr/git | fix(pr): GitCafe attachments render in pull request bodies | left (panels-4): GitCafe attachment rendering in PR bodies, needs the PR media rewrite (pullRequestMarkdown.ts) |
 | c52df24d28 | #22489 | pr/git | fix(prs): reviewer menu searches past the first page and keeps GitLab's requested reviewers | ported (panels-2): the reviewer picker asks the host with `query` past a truncated page where `reviewers.searchCandidates`, with T3's four truncation notes |
-| 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | left (panels-4): CRLF normalisation of PR bodies before markdown parse (pullRequestMarkdown.ts); one line in PullRequestTabs once checked against MarkdownDocument |
+| 4821696509 | #30352 | pr/git | fix(client-runtime): pull request bodies with CRLF line endings keep their code blocks whole | left (panels-5, checked): it fixes the fence check in splitPullRequestBody (pullRequestMarkdown.ts), which CW does not have; it comes with the PR media rewrite (#36660) |
 | e5193ac0a2 | #30345 | pr/git | fix(web): preview annotation chip labels no longer end in a broken character | n/a (panels-3): CandyWrapper has no preview annotation tool |
 | cae7e5cc57 | #30717 | pr/git | fix(review-guide): preserve excerpt line terminators | n/a (panels-3): CandyWrapper has no review guide view, only its settings rows |
 | 0aae72244e | #31814 | pr/git | fix(web): keep change totals aligned beside the label | ported (panels-4): totals stay right-aligned after the base label in the Changes row (DetailsRowControl layout) |
@@ -1131,14 +1131,14 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 2a1caac438 | #34446 | pr/git | fix(web): NVDA browse mode reads the current thread's branch, not the previous one | n/a (panels-4): NVDA browse mode; VoiceOver reads the AX value as it changes |
 | a9fd0b2511 | #36466 | pr/git | fix(web): copying a file preview selection returns the selected lines after scrolling | already in CandyWrapper (panels-4): NSTextView copies the selected range regardless of scroll |
 | 34cf030e5e | #27882 | pr/git | fix(web): pull requests error names the environment that failed | left (panels-4): PR list errors should name the failed environment; PullRequestsPage keeps one failure string |
-| 058eea9246 | #36171 | pr/git | fix(pr): hide unsupported GitCafe review reactions | left (panels-4): PR reaction permissions; PullRequestReactionBarView takes canReact from the detail |
+| 058eea9246 | #36171 | pr/git | fix(pr): hide unsupported GitCafe review reactions | ported (panels-5): PullRequestDetailLogic.canReact hides reactions on GitCafe reviews in Summary cards |
 | 0516493a91 | #36528 | pr/git | fix(web): align status text and tighten pull request menu spacing | left (panels-4): status text alignment across the git menu, banner and PR row; no 4928 reference for those states |
 | 70be20493b | #24151 | pr/git | fix: re-ticking a file after a push no longer shows it Viewed | left (panels-4): re-ticking after a push; needs the viewed-files revision field in PullRequestDetailLogic.isFileViewed |
 | 1159aa2991 | #36660 | pr/git | fix(client-runtime): preserve PR reference links across embedded media | left (panels-4): PR reference links across embedded media, part of the PR media rewrite |
 | 92c91aac8f | #28095 | pr/git | fix(client-runtime): keep inherited qualifier values as PR search text | n/a (panels-4): a JS prototype lookup bug; Swift dictionaries have no inherited keys (PullRequestListLogic.reviewValues) |
 | a575d45286 | #28575 | pr/git | fix(web,server): the branch label no longer flips back after a switch | left (panels-4): branch hold after a switch so the label doesn't flip back; needs BranchHold in GitController |
 | 3d9aeaf757 | #36738 | pr/git | fix(shared): preview semicolon-separated CSV files as tables | ported (panels-4): CSV previews detect semicolon-separated files (DelimitedTable.csvDelimiter) |
-| c342f3dec2 | #29867 | pr/git | fix(web): settled threads no longer offer a PR watch the server refuses | left (panels-4): hide the PR watch for settled threads; needs threadPullRequestCompatibility in PullRequestWatchToggle |
+| c342f3dec2 | #29867 | pr/git | fix(web): settled threads no longer offer a PR watch the server refuses | ported (panels-5): the Linked items row menu offers no new watch on settled, archived or subagent threads (canStartWatch) |
 | 732198d3a9 | #36786 | pr/git | fix(web): a disabled Push names the real reason when there are local changes | ported (panels-4): disabled Push and Create PR name the real reason with local changes (GitActionsLogic.disabledReason) |
 | 170c1f7e2d | #29845 | pr/git | fix(web): Push on the default branch no longer offers a feature branch the server rejects | ported (panels-4): Push and Create PR on the default branch say a feature branch can't be named (GitActionsLogic.featureBranchUnavailableReason) |
 | 49eb9c8adc | #29871 | pr/git | fix(web,mobile): pull request project filter lists pinned projects first | left (panels-4): pinned projects first in the PR project filter, after the Sidebar agent's pin work lands |

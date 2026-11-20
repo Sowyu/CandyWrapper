@@ -80,3 +80,18 @@ struct PullRequestCommentLineBreakTests {
         #expect(!PullRequestDetailLogic.hardLineBreaks("gitlab"))
     }
 }
+
+/// #36171: GitCafe takes no reactions on a review.
+@MainActor
+struct PullRequestReactionPermissionTests {
+    @Test func gitCafeReviewsTakeNoReactions() throws {
+        var d = try PullRequestFixtures.detail()
+        d.capabilities.reactions = true
+        #expect(PullRequestDetailLogic.canReact(d, kind: "review"))
+        d.provider = "gitcafe"
+        #expect(!PullRequestDetailLogic.canReact(d, kind: "review"))
+        #expect(PullRequestDetailLogic.canReact(d, kind: "issue-comment"))
+        d.capabilities.reactions = nil
+        #expect(!PullRequestDetailLogic.canReact(d, kind: "issue-comment"))
+    }
+}

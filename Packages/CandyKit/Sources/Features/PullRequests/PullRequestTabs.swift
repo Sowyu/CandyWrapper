@@ -510,7 +510,7 @@ final class CommentsItem: DSView, StackItem {
                       replyCount: Int = 0, replies: PullRequestReplyList? = nil, more: PullRequestMoreRepliesLine? = nil) -> CommentCard {
         let card = CommentCard(c, nowMs: nowMs, cwd: d.workspaceRoot,
                                canEdit: PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: c.kind, hostAnswer: c.canEdit),
-                               canReact: d.capabilities.reactions == true, editing: editingId == c.id,
+                               canReact: PullRequestDetailLogic.canReact(d, kind: c.kind), editing: editingId == c.id,
                                collapsed: collapsed, open: openIds.contains(c.id), reply: reply,
                                replyCount: replyCount, replies: replies, moreReplies: more,
                                addsToChat: onAddToChat != nil && !reply && PullRequestDetailLogic.chatSubject(c, d),

@@ -980,6 +980,9 @@ final class ThreadPullRequestsController {
             detail.show(environmentId: target.environmentId ?? env, target: target)
         case .pullRequests:
             panel.linkedPullRequestsView.onWatch = capabilities.has(env, "threadPullRequestWatch") ? { [weak self] link, w in self?.watch(link, w) } : nil
+            // The server refuses new watches on settled, archived and subagent threads (4928 threadPullRequestCompatibility.ts, #29867).
+            panel.linkedPullRequestsView.canStartWatch = thread.archivedAt == nil && thread.settledAt == nil
+                && thread.settledOverride != .settled && thread.lineage.relationshipToParent != .subagent
             panel.linkedPullRequestsView.set(links, nowMs: TimestampFormat.nowMs())
             panel.linkedPullRequestsView.setIssues(issues, states: issueStates)
         case .issue(let target):
