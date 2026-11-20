@@ -40,7 +40,12 @@ public enum FontRuntime {
     public static var smoothing: Bool { smoothingOverride ?? configuredSmoothing }
     public static var input: FontRuntimeInput { state.withLock { $0.input } }
     @MainActor public private(set) static var generation = 0
-    @MainActor public static func apply(_ next: FontRuntimeInput) {
+    @MainActor public static func apply(_ input: FontRuntimeInput) {
+        // #26559 (appearanceFonts.ts at 4928): without Advanced typography the prompt follows the interface,
+        // its family and `text-sm` of the interface size; only Advanced gives it its own.
+        var adjusted = input
+        if !adjusted.advanced { adjusted.promptFamily = ""; adjusted.promptSize = 14 * adjusted.interfaceSize / 16 }
+        let next = adjusted
         let changed = state.withLock { s -> Bool in
             guard s.input != next else { return false }
             s.input = next

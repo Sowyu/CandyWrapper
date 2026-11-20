@@ -4074,6 +4074,7 @@ extension ComposerController {
             await self?.mediaAttachmentURL(id)
         }
         panel.queue.attachmentMediaURL = panel.model.attachmentMediaURL
+        panel.queue.onExpandImage = { [weak self] items, index in self?.presentPreview(items, index: index) }
         panel.model.attachmentImage = { [weak self] id, side, cover in
             guard let source = await self?.attachmentSource(id) else { return nil }
             return await ComposerImageIO.thumbnail(source, side: side, cover: cover, measurementKey: id)
