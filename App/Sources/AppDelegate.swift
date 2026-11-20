@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
     private var connectors: ConnectorsController?
+    /// Removes what the deleted Orchestrator left behind, once (`OrchestratorCleanup`).
+    private var orchestratorCleanup: OrchestratorCleanupRunner?
     /// Built on the first Cmd+Q hold.
     private var quitOverlay: QuitHoldOverlayView?
     /// The spec's performance HUD, toggled by the hidden menu item below or the palette.
@@ -303,6 +305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let anchor = event.type == .rightMouseDown ? nil : NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4)
             commands?.showThreadMenu(id, event: event, view: view, anchor: anchor, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
+        orchestratorCleanup = OrchestratorCleanupRunner(environments: environments)
         let connectors = ConnectorsController(environments: environments)
         self.connectors = connectors
         connectors.toast = { [weak settings] title, message, kind in settings?.toast(title, message, kind) }

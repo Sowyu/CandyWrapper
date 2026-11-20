@@ -53,6 +53,7 @@
 		940F19905C851EDA3FE6A6C9 /* PeerLinkDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFD350D71DAD207A7E9B05B /* PeerLinkDialog.swift */; };
 		95C9CA154F0B56C69199D763 /* ComposerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56396DA448A1952FDC05BF3E /* ComposerController.swift */; };
 		9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */; };
+		963C097AA6C3D750DACAC01B /* OrchestratorCleanupRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7318B65DB9406DB10EF7F6C /* OrchestratorCleanupRunner.swift */; };
 		97342C236009A10B64F606ED /* ThemeBackgroundController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CAB676BFFD511C6E001D2F7 /* ThemeBackgroundController.swift */; };
 		98518441987B7F297A77A955 /* RuntimeUpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */; };
 		98CCAAC39B10C1248C984732 /* T3Protocol in Frameworks */ = {isa = PBXBuildFile; productRef = A244FA9F04D77F15EAC9B9AD /* T3Protocol */; };
@@ -142,6 +143,7 @@
 		CB23CCA031F2AB693BDD07D9 /* CandyKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CandyKit; path = Packages/CandyKit; sourceTree = SOURCE_ROOT; };
 		CDA413FF2F602E6306049C36 /* ServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerController.swift; sourceTree = "<group>"; };
 		E6328A5E8DA411428DDB1363 /* DesktopManagedController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopManagedController.swift; sourceTree = "<group>"; };
+		E7318B65DB9406DB10EF7F6C /* OrchestratorCleanupRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrchestratorCleanupRunner.swift; sourceTree = "<group>"; };
 		E7E2D8C10B9281F25A01815B /* SettingsHostAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsHostAccess.swift; sourceTree = "<group>"; };
 		EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeOnboardingController.swift; sourceTree = "<group>"; };
 		EB27CF39529D632C5DF41F67 /* ThreadAutomationsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreadAutomationsController.swift; sourceTree = "<group>"; };
@@ -220,6 +222,7 @@
 				37909056866A108B1B58D3C6 /* MainWindow.swift */,
 				A98B927FAF401715860CDC17 /* MenuBarController.swift */,
 				71BA027EC2BDC6A0154A676E /* OpenInController.swift */,
+				E7318B65DB9406DB10EF7F6C /* OrchestratorCleanupRunner.swift */,
 				FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */,
 				7D6B2CDA8C1F9CE6535E0281 /* PaletteCommands.swift */,
 				8DFD350D71DAD207A7E9B05B /* PeerLinkDialog.swift */,
@@ -422,6 +425,7 @@
 				54C4D215B2B1BC4CFEDB0F22 /* MainWindow.swift in Sources */,
 				083F1349CB27E53849FF66AD /* MenuBarController.swift in Sources */,
 				D97D87BA1FC8BBAB38BFE647 /* OpenInController.swift in Sources */,
+				963C097AA6C3D750DACAC01B /* OrchestratorCleanupRunner.swift in Sources */,
 				9609FDB88DD924EBE32D30CA /* PaletteAddProject.swift in Sources */,
 				27D7A20860C5FC0743F11294 /* PaletteCommands.swift in Sources */,
 				940F19905C851EDA3FE6A6C9 /* PeerLinkDialog.swift in Sources */,
