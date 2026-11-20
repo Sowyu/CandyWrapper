@@ -1,0 +1,33 @@
+{
+  "tracker": "github", "host": "github.com", "scope": "acme/demo-repo", "key": "42", "displayKey": "#42",
+  "title": "Sidebar badge opens the wrong panel", "url": "https://github.com/acme/demo-repo/issues/42",
+  "author": {"login": "octo-reader", "name": "Octo Reader"},
+  "state": {"category": "open", "name": "Open"},
+  "createdAt": "2026-11-10T09:00:00.000Z", "updatedAt": "2026-11-18T09:00:00.000Z", "closedAt": null,
+  "assignees": [{"login": "octo-reader"}], "labels": [{"name": "bug", "color": "d73a4a"}],
+  "commentCount": 3, "projectId": "demo", "projectTitle": "demo-repo",
+  "writable": true,
+  "capabilities": {"create": true, "edit": true, "comment": true, "labels": true, "assignees": true, "reactions": true,
+                   "templates": true, "linkedPullRequests": true, "events": true, "search": true},
+  "viewerPermissions": {"setState": true, "comment": true, "edit": true, "labels": true, "assignees": true},
+  "states": [{"category": "open", "name": "Open"},
+             {"category": "closed", "name": "Closed", "closeReason": "completed"},
+             {"category": "closed", "name": "Closed as not planned", "closeReason": "not_planned"}],
+  "viewer": "octo-reader",
+  "body": "Clicking the issue badge opens **pull requests**.\n\n- Expected: the issue panel",
+  "reactions": [{"content": "+1", "count": 2, "actors": ["octo-reader", "someone"], "viewerHasReacted": true}],
+  "comments": [
+    {"id": "c2", "author": {"login": "someone"}, "body": "Seen it too.", "createdAt": "2026-11-12T09:00:00.000Z",
+     "url": "https://github.com/acme/demo-repo/issues/42#issuecomment-2", "reactions": []},
+    {"id": "c3", "author": {"login": "octo-reader"}, "body": "Fix is up.", "createdAt": "2026-11-18T09:00:00.000Z", "url": null}
+  ],
+  "commentsCursor": "b2xkZXI=",
+  "events": [
+    {"id": "e1", "kind": "labeled", "actor": {"login": "octo-reader"}, "createdAt": "2026-11-10T09:05:00.000Z", "detail": "bug"},
+    {"id": "e2", "kind": "assigned", "actor": {"login": "octo-reader"}, "createdAt": "2026-11-11T09:00:00.000Z", "detail": "octo-reader"}
+  ],
+  "linkedPullRequests": [
+    {"repository": "acme/demo-repo", "number": 43, "title": "Open the issue panel from the badge",
+     "url": "https://github.com/acme/demo-repo/pull/43", "state": "open", "isDraft": false, "closesIssue": true}
+  ]
+}
