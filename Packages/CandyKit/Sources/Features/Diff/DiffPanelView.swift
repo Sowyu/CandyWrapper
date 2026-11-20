@@ -333,11 +333,9 @@ public final class DiffPanelView: DSView {
     }
     public let list = DiffListView()
     private let scroll: ScrollAreaView
-    private let fileTree = FileTreeView()
-    private let treeTitle = LabelView("Files", font: DSFont.ui(12, weight: .medium))
-    private let treeCount = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
-    private let treeExpansion = ButtonView(nil, icon: .chevronsDownUp, variant: .ghost, size: .iconXs)
-    private let treeScroll: ScrollAreaView
+    /// The Changes list, an aside on the right that resizes (4928 DiffPanel.tsx:1568-1581, #28244).
+    private let treeScroll = FileListPane(sizing: .changes, resizeLabel: "Resize Changes files", listLabel: "Changes files")
+    private var fileTree: FileTreeView { treeScroll.tree }
     /// The find widget floating over the files (@pierre/diffs' search panel).
     let findWidget = DiffFindWidget()
     private var find: InputView { findWidget.field }
@@ -371,7 +369,6 @@ public final class DiffPanelView: DSView {
 
     public override init(frame frameRect: NSRect) {
         scroll = ScrollAreaView(documentView: list, scrollbars: .native) // `overflow-auto` (DiffPanel.tsx:1178)
-        treeScroll = ScrollAreaView(documentView: fileTree)
         super.init(frame: frameRect)
         scopeButton.trailingIcon = .chevronDown
         scopeButton.iconSize = 14
@@ -406,14 +403,14 @@ public final class DiffPanelView: DSView {
         }
         wrapToggle.onPressedChange = { [weak self] in self?.wrapOverride = $0; self?.wrapLines = $0 }
         whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0 }
-        treeToggle.onPressedChange = { [weak self] shown in self?.treeScroll.isHidden = !shown; self?.needsLayout = true }
-        treeScroll.isHidden = true
-        treeExpansion.iconSize = 14
-        treeExpansion.action = { [weak self] in
-            guard let self else { return }
-            _ = self.fileTree.model.setAllExpanded(!self.fileTree.model.allExpanded)
-            self.needsLayout = true
+        // Remembered across panels (`t3code.diffFileTreeOpen`, DiffPanel.tsx:123, 238-242).
+        treeToggle.onPressedChange = { [weak self] shown in
+            UserDefaults.standard.set(shown, forKey: "t3code.diffFileTreeOpen")
+            self?.treeScroll.isHidden = !shown; self?.needsLayout = true
         }
+        treeToggle.isPressed = UserDefaults.standard.bool(forKey: "t3code.diffFileTreeOpen")
+        treeScroll.isHidden = !treeToggle.isPressed
+        treeScroll.onWidthChange = { [weak self] in self?.needsLayout = true }
         list.onVisibleFile = { [weak self] path in self?.fileTree.selectedPath = path }
         fileTree.onOpenFile = { [weak self] path in self?.fileTree.selectedPath = path; self?.list.reveal(path: path) }
         findWidget.isHidden = true
@@ -444,6 +441,7 @@ public final class DiffPanelView: DSView {
         }
         headerBorder.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(headerBorder)
+
         recordedText.isEditable = false
         recordedText.drawsBackground = false
         recordedText.textContainerInset = NSSize(width: 12, height: 12)
@@ -459,7 +457,7 @@ public final class DiffPanelView: DSView {
         message.alignment = .center
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
-        [treeTitle, treeCount, treeExpansion, treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle, message, errorLine,
+        [treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle, message, errorLine,
          compareHead, compareArrow, baseRefButton, truncatedNotice, omittedNotice, findWidget].forEach(addSubview)
         baseRefButton.trailingIcon = .chevronDown
         baseRefButton.iconSize = 14
@@ -842,6 +840,9 @@ public final class DiffPanelView: DSView {
 
     private var baseRefTitle = ""
 
+    /// `FileExplorerPane`'s width: the saved one clamped to this row, or min(256, 40%), at least 160.
+    var treeWidth: CGFloat { treeScroll.isHidden ? 0 : treeScroll.width(row: bounds.width) }
+
     /// The xs button's label font (12px medium).
     private static func textWidth(_ text: String) -> CGFloat {
         TextLine(NSAttributedString(string: text, attributes: [.font: DSFont.ui(12, weight: .medium)])).width
@@ -997,28 +998,18 @@ public final class DiffPanelView: DSView {
         headerBorder.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         headerBorder.isHidden = inlineHeader
         treeScroll.isHidden = !treeToggle.isPressed || !recordedScroll.isHidden
-        let treeWidth: CGFloat = treeScroll.isHidden ? 0 : min(220, bounds.width * 0.35)
-        for view in [treeTitle, treeCount, treeExpansion] { view.isHidden = treeScroll.isHidden }
-        treeTitle.frame = NSRect(x: 12, y: bodyTop + 6, width: 60, height: 16)
-        treeCount.text = String(fileTree.model.directories.values.flatMap { $0 }.filter { !$0.isDirectory }.count)
-        treeCount.frame = NSRect(x: treeWidth - 62, y: bodyTop + 6, width: 24, height: 16)
-        treeExpansion.frame = NSRect(x: treeWidth - 32, y: bodyTop + 2, width: 24, height: 24)
-        treeExpansion.icon = fileTree.model.allExpanded ? .chevronsDownUp : .chevronsUpDown
-        treeExpansion.toolTip = fileTree.model.allExpanded ? "Collapse all folders" : "Expand all folders"
-        treeExpansion.setAccessibilityLabel(treeExpansion.toolTip)
-        treeExpansion.isHidden = treeScroll.isHidden || fileTree.model.directoryPaths.isEmpty
-        treeScroll.frame = NSRect(x: 0, y: bodyTop + 40, width: treeWidth, height: max(0, bounds.height - bodyTop - 40))
+        let treeWidth = treeScroll.isHidden ? 0 : treeScroll.place(in: NSRect(x: 0, y: bodyTop, width: bounds.width, height: max(0, bounds.height - bodyTop)), host: self)
         // The size-limit notice: `border-b border-border/70 bg-muted/40 px-3 py-1.5 text-2xs` over the files.
         let bar: CGFloat = 6 + 16.5 + 6 + 1
         let sizeBar: CGFloat = truncatedNotice.isHidden ? 0 : bar, omittedHeight: CGFloat = omittedNotice.isHidden ? 0 : bar
         let notice = sizeBar + omittedHeight
-        truncatedBar.frame = CGRect(x: treeWidth, y: bodyTop, width: bounds.width - treeWidth, height: sizeBar)
+        truncatedBar.frame = CGRect(x: 0, y: bodyTop, width: bounds.width - treeWidth, height: sizeBar)
         truncatedBottom.frame = CGRect(x: 0, y: sizeBar - 1, width: bounds.width - treeWidth, height: 1)
-        truncatedNotice.frame = NSRect(x: treeWidth + 12, y: bodyTop + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
-        omittedBar.frame = CGRect(x: treeWidth, y: bodyTop + sizeBar, width: bounds.width - treeWidth, height: omittedHeight)
+        truncatedNotice.frame = NSRect(x: 12, y: bodyTop + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
+        omittedBar.frame = CGRect(x: 0, y: bodyTop + sizeBar, width: bounds.width - treeWidth, height: omittedHeight)
         omittedBottom.frame = CGRect(x: 0, y: omittedHeight - 1, width: bounds.width - treeWidth, height: 1)
-        omittedNotice.frame = NSRect(x: treeWidth + 12, y: bodyTop + sizeBar + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
-        scroll.frame = NSRect(x: treeWidth, y: bodyTop + notice, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop - notice))
+        omittedNotice.frame = NSRect(x: 12, y: bodyTop + sizeBar + 6, width: max(0, bounds.width - treeWidth - 24), height: 16.5)
+        scroll.frame = NSRect(x: 0, y: bodyTop + notice, width: bounds.width - treeWidth, height: max(0, bounds.height - bodyTop - notice))
         recordedScroll.frame = NSRect(x: 0, y: bodyTop + notice, width: bounds.width, height: max(0, bounds.height - bodyTop - notice))
         if !recordedScroll.isHidden, wrapLines {
             recordedText.setFrameSize(NSSize(width: recordedScroll.contentSize.width, height: max(recordedScroll.contentSize.height, recordedText.frame.height)))

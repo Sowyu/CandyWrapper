@@ -1043,7 +1043,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 85133dc578 | #23129 | pr/git | fix(web): PR diffs list a `.logic.test.ts` file beside the source it covers | left (panels-4): CW lists PR files in host order; needs T3's import-ordered orderDiffFiles (pullRequestFileOrder.logic.ts:142) first |
 | 3331b93937 | #23156 | pr/git | fix(web): show linked pull request state in command palette rows | left (panels-4): command palette thread rows, outside these areas |
 | 665351fc39 | #24118 | pr/git | fix(web): show readable errors when a stack action fails | ported (panels-4): stack merge and rebase failures show the host's reason or what usually stops each (PullRequestsController) |
-| 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | left (panels-2): resizable Changes and PR Code file lists, 5.1 |
+| 9ff0fac0f4 | #28244 | pr/git | fix(web): make Changes and PR Code file lists resizable | ported (panels-5): the Changes list moves to the right as T3 has it and both lists resize from a drag handle with keys, sharing the saved `t3code:diff-file-tree-width`; PR Code gains its file tree toggle and list (FileListPane) |
 | b50d8a1b15 | #28573 | pr/git | fix(web): add spacing above PR detail metadata | left (panels-4): ThreadDetailsPrRow metadata spacing; the row has no component reference to check mt-1.5 against |
 | 82b10d546c | #28665 | pr/git | fix(web): align pull request file viewed checkboxes | ported (panels-4): the Viewed tick sits in a fixed 72pt box so Viewed and Changed line up (DiffRowViews FileHeaderRow) |
 | f482dc5c57 | #25496 | pr/git | fix(web): PDF previews keep their page across thread switches | skip (panels-3): CandyWrapper hands this format to Quick Look |

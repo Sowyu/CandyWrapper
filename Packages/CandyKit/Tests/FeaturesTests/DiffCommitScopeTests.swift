@@ -47,3 +47,42 @@ struct DiffCommitScopeTests {
         #expect(await eventually(seconds: 5) { panel.commitsMenuForTesting == nil })
     }
 }
+
+/// #28244: the Changes and PR Code lists start at a responsive width and keep a chosen one
+/// (4928 FileExplorerPane.browser.test.tsx).
+@MainActor
+struct FileListWidthTests {
+    @Test func initialWidthsInANarrowRow() {
+        #expect(FileListWidth.bounds(row: 420, .changes).initial == 168)
+        #expect(FileListWidth.bounds(row: 420, .pullRequestCode).initial == 192)
+        #expect(FileListWidth.bounds(row: 1000, .changes).initial == 256)
+        #expect(FileListWidth.bounds(row: 1000, .pullRequestCode).initial == 320)
+        // The default never shrinks to leave the diff its 256.
+        #expect(FileListWidth.bounds(row: 420, .changes).max == 168)
+        #expect(FileListWidth.bounds(row: 2000, .changes).max == 560)
+    }
+
+    @Test func savedWidthIsClampedToTheRow() {
+        #expect(FileListWidth.width(row: 1000, .changes, saved: 400) == 400)
+        #expect(FileListWidth.width(row: 1000, .changes, saved: 900) == 560)
+        #expect(FileListWidth.width(row: 1000, .pullRequestCode, saved: 100) == 192)
+        #expect(FileListWidth.width(row: 1000, .changes, saved: nil) == 256)
+    }
+
+    @Test func paneSitsOnTheRightAndTheHandleResizesIt() {
+        let saved = FileListWidth.saved
+        defer { FileListWidth.saved = saved }
+        FileListWidth.saved = nil
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 600))
+        let pane = FileListPane(sizing: .changes, resizeLabel: "Resize Changes files", listLabel: "Changes files")
+        host.addSubview(pane)
+        #expect(pane.place(in: host.bounds, host: host) == 256)
+        #expect(pane.frame.minX == 744)
+        #expect(pane.handle.frame.midX == 744)
+        #expect(pane.handle.accessibilityRole() == .splitter)
+        pane.handle.onResize?(300)
+        pane.handle.onCommit?()
+        #expect(FileListWidth.saved == 300)
+        #expect(pane.width(row: 1000) == 300)
+    }
+}
