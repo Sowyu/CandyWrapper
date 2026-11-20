@@ -39,7 +39,7 @@ You only do this once. I sign CandyWrapper with a personal Apple developer certi
 
 ### If you have 1.14.14 or older
 
-Download the newest DMG from [Releases](https://github.com/Sowyu/CandyWrapper-native/releases) and install it by hand, once. The app's own updater can't do this step for you.
+Download the newest DMG from [Releases](https://github.com/Sowyu/CandyWrapper/releases) and install it by hand, once. The app's own updater can't do this step for you.
 
 The Mac I built releases on was returned, and the key that signs updates went with it. Newer versions are signed with a new key, and 1.14.14 and older only trust the old one, so they refuse the update. After one manual install the app updates itself again. Your settings, drafts and paired machines stay as they are.
 
