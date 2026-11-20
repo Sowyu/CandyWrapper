@@ -4,17 +4,19 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
-/// Redesign's image gallery card, under the tab band's pill: a grid of what the agents looked at, newest first, and
-/// one picture large after a click. Only the cells on screen exist, and each decodes its thumbnail off the main thread
-/// at cell size through the timeline's loader (`MarkdownImages`). Thumbnails and large views share the decode cache
-/// (`ImageDecodeCache`), so a reopened gallery shows its pictures in the first frame.
-// ponytail: thumbnails share the 48 MB decode NSCache with the timeline; give the gallery its own LRU if it evicts timeline images
+/// Redesign's image gallery card, under the tab band's pill: a masonry of what the agents looked at, newest first, and
+/// one picture large after a click, fitted to the card. Only the tiles near the visible rect exist, and each decodes off
+/// the main thread at its size through the timeline's loader (`MarkdownImages`). Tiles and large views share the decode
+/// cache (`ImageDecodeCache`), so a reopened gallery shows its pictures in the first frame.
+// ponytail: tiles share the 48 MB decode NSCache with the timeline; give the gallery its own LRU if it evicts timeline images
 public final class ThreadImageGalleryView: DSView {
-    /// The widest and tallest the card gets; past `size.height` the grid scrolls.
+    /// The card's width and its default tallest; `maxHeight` replaces the height with the room the window has.
     static let size = NSSize(width: 540, height: 470)
     /// The empty state's height.
     static let minHeight: CGFloat = 160
-    static let inset: CGFloat = 10, gap: CGFloat = 8, columns = 4, header: CGFloat = 36, caption: CGFloat = 18
+    static let inset: CGFloat = 10, gap: CGFloat = 8, header: CGFloat = 36, footer: CGFloat = 36
+    /// The large picture's body never gets shorter than this, so its footer and arrows keep their room.
+    static let minBody: CGFloat = 120
 
     /// Newest first. Setting it keeps the picture shown large, by its identity.
     public var images: [GalleryImage] = [] {
@@ -26,6 +28,8 @@ public final class ThreadImageGalleryView: DSView {
             reload()
         }
     }
+    /// The tallest the card may grow, from the window's room below the pill. Defaults to `size.height`.
+    public var maxHeight: CGFloat = ThreadImageGalleryView.size.height { didSet { if maxHeight != oldValue { reload() } } }
     /// Every source of a tile failed.
     public var onFailed: ((GalleryImage) -> Void)?
     /// A tile's downloaded bytes hashed to this.
@@ -34,18 +38,23 @@ public final class ThreadImageGalleryView: DSView {
     public var onResize: (() -> Void)?
     public var onOpenInThread: ((GalleryImage) -> Void)?
     public var onReveal: ((GalleryImage) -> Void)?
+    /// "Open gallery": the full gallery, on the picture shown large if there is one.
+    public var onOpenGallery: ((GalleryImage?) -> Void)?
     /// Whether "Reveal in Finder" applies: a host file on this Mac.
     public var canReveal: ((GalleryImage) -> Bool)?
 
-    private let title = LabelView("Agent images", font: DSFont.ui(13, weight: .semibold), color: Themed.color(\.foreground))
-    private let count = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    let title = LabelView("Agent images", font: DSFont.ui(13, weight: .medium), color: Themed.color(\.foreground))
+    let count = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let back = ButtonView(nil, icon: .arrowLeft, variant: .ghost, size: .iconXs)
+    let expand = ButtonView(nil, icon: .maximize2, variant: .ghost, size: .iconXs)
     private let previous = ButtonView(nil, icon: .chevronLeft, variant: .ghost, size: .iconXs)
     private let next = ButtonView(nil, icon: .chevronRight, variant: .ghost, size: .iconXs)
-    private let grid = GalleryGridView()
+    let grid = GalleryMasonryView(metrics: .init(inset: NSEdgeInsets(top: 4, left: ThreadImageGalleryView.inset, bottom: ThreadImageGalleryView.inset,
+                                                                   right: ThreadImageGalleryView.inset),
+                                                 gap: ThreadImageGalleryView.gap, minColumn: 150, radius: RedesignTokens.Radius.control))
     private lazy var scroll = ScrollAreaView(documentView: grid, scrollFade: true)
     private let empty = TextBlockView("No images yet", font: DSFont.ui(12), lineHeight: 17, color: Themed.color(\.mutedForeground))
-    private let picture = AsyncImageView()
+    let picture = AsyncImageView()
     private let detail = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let openInThread = ButtonView("Open in thread", icon: .arrowUpRight, variant: .ghost, size: .xs)
     private let reveal = ButtonView("Reveal in Finder", icon: .folderOpen, variant: .ghost, size: .xs)
@@ -56,20 +65,31 @@ public final class ThreadImageGalleryView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(origin: .zero, size: Self.size))
         empty.alignment = .center
+        count.alignment = .right
         picture.cover = false
         picture.cacheable = true
         picture.fallback.text = "Loading…"
-        picture.layer?.cornerRadius = 8
+        picture.layer?.cornerRadius = RedesignTokens.Radius.control
+        picture.layer?.cornerCurve = .continuous
+        picture.onLoad = { [weak self] in self?.pictureMeasured() }
         detail.truncation = .middle
-        for view in [title, count, back, previous, next, scroll, empty, picture, detail, openInThread, reveal] as [NSView] { addSubview(view) }
-        grid.loader = { [weak self] image in
+        for view in [title, count, back, expand, previous, next, scroll, empty, picture, detail, openInThread, reveal] as [NSView] { addSubview(view) }
+        scroll.scrollsHorizontally = false
+        grid.widthHint = Self.size.width
+        grid.makeLoader = { [weak self] image in
             Self.loader(image, onHash: { hash in self?.onHash?(image, hash) }) { self?.onFailed?(image) }
         }
+        grid.onContentHeight = { [weak self] in self?.resizeToFit() }
         back.toolTip = "Back to all images"
         back.setAccessibilityLabel("Back to all images")
+        expand.toolTip = "Open gallery"
+        expand.setAccessibilityLabel("Open gallery")
         previous.toolTip = "Previous image"
+        previous.setAccessibilityLabel("Previous image")
         next.toolTip = "Next image"
+        next.setAccessibilityLabel("Next image")
         back.action = { [weak self] in self?.large = nil }
+        expand.action = { [weak self] in self?.onOpenGallery?(self?.shown) }
         previous.action = { [weak self] in self?.step(-1) }
         next.action = { [weak self] in self?.step(1) }
         openInThread.action = { [weak self] in self?.shown.map { self?.onOpenInThread?($0) } }
@@ -82,17 +102,30 @@ public final class ThreadImageGalleryView: DSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    public override var intrinsicContentSize: NSSize { NSSize(width: Self.size.width, height: Self.height(tiles: images.count, large: large != nil)) }
+    public override var intrinsicContentSize: NSSize { NSSize(width: Self.size.width, height: wantedHeight) }
     public override var fittingSize: NSSize { intrinsicContentSize }
 
-    /// As tall as its rows of tiles, between `minHeight` and `size.height`; a picture shown large takes the full height.
-    static func height(tiles: Int, large: Bool) -> CGFloat {
-        guard !large else { return size.height }
-        let w = ((size.width - 2 * inset - CGFloat(columns - 1) * gap) / CGFloat(columns)).rounded(.down)
-        let cell = (w * 0.75).rounded() + caption
-        let rows = (tiles + columns - 1) / columns
-        let grid = rows == 0 ? 0 : 4 + CGFloat(rows) * (cell + gap) + inset
-        return min(size.height, max(minHeight, header + grid))
+    /// The tallest the card gets here: the window's room, at least the empty state.
+    private var cap: CGFloat { max(Self.minHeight, maxHeight) }
+
+    /// The area a large picture may fill: the card's width inside its inset, and its tallest body.
+    var pictureArea: CGSize {
+        CGSize(width: Self.size.width - 2 * Self.inset, height: max(Self.minBody, cap - Self.header - Self.footer))
+    }
+
+    /// The large picture's size by the fit rule (`GalleryLayout.fit`); the whole area while its size isn't known.
+    var pictureSize: CGSize {
+        let area = pictureArea
+        guard let natural = shown?.naturalSize else { return area }
+        return GalleryLayout.fit(natural, in: area, scale: window?.backingScaleFactor ?? 2)
+    }
+
+    /// The grid: as tall as its masonry, with 4:3 for pictures not measured yet. A large picture: its header, its
+    /// fitted height and its footer. Both between `minHeight` and the window's room.
+    var wantedHeight: CGFloat {
+        if shown != nil { return min(cap, Self.header + max(Self.minBody, pictureSize.height) + Self.footer) }
+        guard !images.isEmpty else { return Self.minHeight }
+        return min(cap, max(Self.minHeight, Self.header + grid.estimatedHeight))
     }
 
     private var shown: GalleryImage? { large.flatMap { images.indices.contains($0) ? images[$0] : nil } }
@@ -112,6 +145,23 @@ public final class ThreadImageGalleryView: DSView {
         self.large = (large + delta + images.count) % images.count
     }
 
+    /// The picture's pixels arrived, and with them its natural size if the signed URL didn't carry one.
+    private func pictureMeasured() {
+        if let image = shown, image.naturalSize == nil, let cg = picture.image {
+            MarkdownImages.record(CGSize(width: cg.width, height: cg.height), for: image.key)
+        }
+        resizeToFit()
+        needsLayout = true
+    }
+
+    private func resizeToFit() {
+        let height = wantedHeight
+        guard frame.height != height else { return }
+        setFrameSize(NSSize(width: Self.size.width, height: height))
+        invalidateIntrinsicContentSize()
+        onResize?()
+    }
+
     private func reload() {
         let image = shown
         if large != nil, image == nil { large = nil; return }
@@ -120,6 +170,7 @@ public final class ThreadImageGalleryView: DSView {
         scroll.isHidden = !gridShown || images.isEmpty
         empty.isHidden = !gridShown || !images.isEmpty
         title.isHidden = !gridShown
+        expand.isHidden = images.isEmpty
         for view in [back, previous, next, picture, detail, openInThread] as [NSView] { view.isHidden = gridShown }
         previous.isHidden = gridShown || images.count < 2
         next.isHidden = previous.isHidden
@@ -130,15 +181,11 @@ public final class ThreadImageGalleryView: DSView {
                         loader: Self.loader(image, onHash: { [weak self] hash in self?.onHash?(image, hash) }) { [weak self] in self?.onFailed?(image) },
                         preview: ImageDecodeCache.preview(for: image.pixelKey), loadingText: "Loading…")
             detail.text = Self.caption(image, long: true) + " · " + Self.name(image)
+            picture.setAccessibilityLabel(Self.name(image) + ", " + Self.caption(image))
         } else {
             grid.images = images
         }
-        let height = Self.height(tiles: images.count, large: image != nil)
-        if frame.height != height {
-            setFrameSize(NSSize(width: Self.size.width, height: height))
-            invalidateIntrinsicContentSize()
-            onResize?()
-        }
+        resizeToFit()
         needsLayout = true
     }
 
@@ -147,19 +194,33 @@ public final class ThreadImageGalleryView: DSView {
         let i = Self.inset, w = bounds.width
         let headerMid = (Self.header / 2).rounded()
         back.frame = NSRect(x: i - 2, y: headerMid - 12, width: 24, height: 24)
-        title.frame = NSRect(x: i + 4, y: headerMid - 9, width: 120, height: 18)
-        let countX = large == nil ? title.frame.maxX : back.frame.maxX + 6
-        count.frame = NSRect(x: countX, y: headerMid - 9, width: 140, height: 18)
+        title.frame = NSRect(x: i + 4, y: headerMid - 9, width: 160, height: 18)
+        // The grid's count sits on the card's right padding, the large view's after the back arrow.
+        let countWidth = ceil(count.intrinsicContentSize.width)
+        if large == nil {
+            count.alignment = .right
+            count.frame = NSRect(x: w - i - 4 - countWidth, y: headerMid - 9, width: countWidth, height: 18)
+            expand.frame = NSRect(x: count.frame.minX - 8 - 24, y: headerMid - 12, width: 24, height: 24)
+        } else {
+            count.alignment = .left
+            count.frame = NSRect(x: back.frame.maxX + 6, y: headerMid - 9, width: 140, height: 18)
+        }
         next.frame = NSRect(x: w - i - 22, y: headerMid - 12, width: 24, height: 24)
         previous.frame = NSRect(x: next.frame.minX - 26, y: headerMid - 12, width: 24, height: 24)
+        if large != nil { expand.frame = NSRect(x: (previous.isHidden ? next.frame.maxX - 24 : previous.frame.minX - 30), y: headerMid - 12, width: 24, height: 24) }
         let body = NSRect(x: 0, y: Self.header, width: w, height: bounds.height - Self.header)
         scroll.frame = body
+        scroll.layoutSubtreeIfNeeded()
+        grid.fitWidth()
         let emptyWidth = w - 8 * i, emptyHeight = empty.height(forWidth: emptyWidth)
         empty.frame = NSRect(x: 4 * i, y: (body.midY - emptyHeight / 2).rounded(), width: emptyWidth, height: emptyHeight)
-        // Large view: the picture fits above a footer with its caption and actions.
-        let footer: CGFloat = 36
-        picture.frame = NSRect(x: i, y: body.minY, width: w - 2 * i, height: body.height - footer)
-        picture.requestedSide = Int((max(picture.frame.width, picture.frame.height) * (window?.backingScaleFactor ?? 2)).rounded(.up))
+        // Large view: the picture at its fitted size, centred between the header and the footer.
+        let footer = Self.footer
+        let room = NSRect(x: i, y: body.minY, width: w - 2 * i, height: max(1, body.height - footer))
+        let size = pictureSize
+        let fitted = NSSize(width: min(size.width, room.width), height: min(size.height, room.height))
+        picture.frame = NSRect(x: (room.midX - fitted.width / 2).rounded(), y: (room.midY - fitted.height / 2).rounded(), width: fitted.width, height: fitted.height)
+        picture.requestedSide = Int((max(fitted.width, fitted.height) * (window?.backingScaleFactor ?? 2)).rounded(.up))
         let buttonsY = bounds.height - footer + (footer - 24) / 2
         var x = w - i
         for button in [reveal, openInThread] where !button.isHidden {
@@ -201,7 +262,7 @@ public final class ThreadImageGalleryView: DSView {
         let loaders: [AsyncImageView.Loader] = image.attempts.map { attempt in
             switch attempt {
             case .stored(let stored): MarkdownImages.assetLoader(key: stored.key, resource: stored.resource, onFile: onFile)
-            case .kept(let thread, let item): MarkdownImages.keptLoader(thread: thread, item: item)
+            case .kept(let thread, let item): MarkdownImages.keptLoader(thread: thread, item: item, sizeKey: image.key)
             case .source:
                 if let resource = image.resource { MarkdownImages.assetLoader(key: image.key, resource: resource, onFile: onFile) }
                 else if case .url(let url) = image.source { MarkdownImages.loader(.direct(url)) }
@@ -217,132 +278,5 @@ public final class ThreadImageGalleryView: DSView {
             await failed()
             return nil
         }
-    }
-}
-
-/// The grid's document: it lays out every cell's frame but keeps views only for the rows on screen.
-final class GalleryGridView: DSView {
-    var images: [GalleryImage] = [] { didSet { if images != oldValue { cells.values.forEach { $0.removeFromSuperview() }; cells = [:]; resize() } } }
-    var onSelect: ((Int) -> Void)?
-    var loader: ((GalleryImage) -> AsyncImageView.Loader)?
-    private var cells: [Int: GalleryCellView] = [:]
-    private var observer: NSObjectProtocol?
-
-    private var cellSize: NSSize {
-        let g = ThreadImageGalleryView.self
-        let w = ((bounds.width - 2 * g.inset - CGFloat(g.columns - 1) * g.gap) / CGFloat(g.columns)).rounded(.down)
-        return NSSize(width: max(40, w), height: max(40, w * 0.75).rounded() + g.caption)
-    }
-
-    func frame(of index: Int) -> NSRect {
-        let g = ThreadImageGalleryView.self, size = cellSize
-        let row = index / g.columns, column = index % g.columns
-        return NSRect(x: g.inset + CGFloat(column) * (size.width + g.gap), y: 4 + CGFloat(row) * (size.height + g.gap),
-                      width: size.width, height: size.height)
-    }
-
-    private func resize() {
-        guard let clip = enclosingScrollView?.contentView else { return }
-        let rows = (images.count + ThreadImageGalleryView.columns - 1) / ThreadImageGalleryView.columns
-        let height = 4 + CGFloat(rows) * (cellSize.height + ThreadImageGalleryView.gap) + ThreadImageGalleryView.inset
-        let size = NSSize(width: clip.bounds.width, height: max(clip.bounds.height, height))
-        if frame.size != size { setFrameSize(size) }
-        tile()
-    }
-
-    override func viewDidMoveToSuperview() {
-        super.viewDidMoveToSuperview()
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-        guard let clip = enclosingScrollView?.contentView else { return }
-        clip.postsBoundsChangedNotifications = true
-        observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tile() }
-        }
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        resize()
-    }
-
-    override func layout() {
-        super.layout()
-        resize()
-    }
-
-    /// Cells for the visible rows and one row either side; the rest go, with their pixels.
-    func tile() {
-        let visible = visibleRect.insetBy(dx: 0, dy: -cellSize.height)
-        let wanted = Set(images.indices.filter { frame(of: $0).intersects(visible) })
-        for (index, cell) in cells where !wanted.contains(index) { cell.removeFromSuperview(); cells[index] = nil }
-        for index in wanted {
-            let cell = cells[index] ?? {
-                let cell = GalleryCellView()
-                cell.action = { [weak self] in self?.onSelect?(index) }
-                addSubview(cell)
-                cells[index] = cell
-                return cell
-            }()
-            cell.frame = frame(of: index)
-            cell.show(images[index], loader: loader?(images[index]) ?? ThreadImageGalleryView.loader(images[index]))
-        }
-    }
-}
-
-/// A thumbnail and its caption: which agent saw it and when.
-final class GalleryCellView: ControlView {
-    private let thumb = AsyncImageView()
-    private let caption = LabelView("", font: DSFont.ui(11), color: Themed.color(\.mutedForeground))
-    private let ring = CALayer()
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        scalesWhenPressed = false
-        thumb.cacheable = true
-        thumb.layer?.cornerRadius = 6
-        caption.lineHeight = 14
-        addSubview(thumb)
-        addSubview(caption)
-        ring.cornerRadius = 7
-        ring.borderWidth = 1.5
-        layer?.addSublayer(ring)
-        setAccessibilityRole(.button)
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    func show(_ image: GalleryImage, loader: @escaping AsyncImageView.Loader) {
-        thumb.set(key: image.pixelKey, fallbackText: "", loader: loader, loadingText: "")
-        caption.text = ThreadImageGalleryView.caption(image)
-        setAccessibilityLabel(ThreadImageGalleryView.name(image) + ", " + caption.text)
-    }
-
-    override func layout() {
-        super.layout()
-        let imageHeight = bounds.height - ThreadImageGalleryView.caption
-        thumb.frame = NSRect(x: 0, y: 0, width: bounds.width, height: imageHeight)
-        caption.frame = NSRect(x: 1, y: imageHeight + 3, width: bounds.width - 2, height: 14)
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        ring.frame = thumb.frame.insetBy(dx: -1, dy: -1)
-        CATransaction.commit()
-        restyle()
-    }
-
-    override func stateDidChange(from old: State) {
-        super.stateDidChange(from: old)
-        restyle()
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        restyle()
-    }
-
-    private func restyle() {
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        ring.borderColor = state.hovered || state.focusVisible ? Themed.color(\.ring).cgColor(in: self) : nil
-        thumb.layer?.backgroundColor = Themed.color(\.muted).cgColor(in: self)
-        caption.color = Themed.color(state.hovered ? \.foreground : \.mutedForeground)
-        CATransaction.commit()
     }
 }

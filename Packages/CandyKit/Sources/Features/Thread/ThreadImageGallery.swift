@@ -271,6 +271,9 @@ public final class ThreadImageGalleryController {
     private var lookedAt: [ThreadId: Int64] = [:]
     private var popup: OpenPopup?
     private weak var view: ThreadImageGalleryView?
+    /// The full gallery while it shows; nil holds nothing.
+    public private(set) var wall: ThreadImageWallView?
+    private weak var wallFocus: NSResponder?
 
     /// The gallery opened: read children that changed since their last read.
     public var onOpen: (() -> Void)?
@@ -297,6 +300,7 @@ public final class ThreadImageGalleryController {
     public func update(threadId: ThreadId?, projection: ThreadProjection?) {
         if threadId != self.threadId {
             close()
+            closeWall(animated: false)
             self.threadId = threadId
             children = [:]
             names = [:]
@@ -370,11 +374,13 @@ public final class ThreadImageGalleryController {
         if shown != images { images = shown }
         // Nothing left to show: the same as a thread without images, so the button hides and an open card closes.
         if images.isEmpty, isOpen { close() }
+        if images.isEmpty, wall != nil { closeWall() }
         pill.galleryCount = images.count
         let since = threadId.flatMap { lookedAt[$0] } ?? .max
         pill.galleryUnseen = !isOpen && ThreadImageGallery.unseen(images, sinceMs: since) > 0
         pill.gallery.isPressed = isOpen
         view?.images = images
+        wall?.images = images
     }
 
     /// Nothing left to load it from: every source failed, or the file is gone with no server or kept copy.
@@ -406,6 +412,8 @@ public final class ThreadImageGalleryController {
             guard let self, let popup = self.popup, let window = self.pill.window else { return }
             PopupHost.host(for: window).reposition(popup)
         }
+        view.maxHeight = Self.cardRoom(below: pill, in: window)
+        view.onOpenGallery = { [weak self] image in self?.openWall(showing: image) }
         view.images = images
         view.onOpenInThread = { [weak self] image in self?.close(); self?.onOpenInThread?(image) }
         view.onReveal = { [weak self] image in self?.onReveal?(image) }
@@ -430,5 +438,117 @@ public final class ThreadImageGalleryController {
         guard let popup else { return }
         guard let window = pill.window else { return }
         PopupHost.host(for: window).close(popup, returnFocus: false)
+    }
+
+    /// The card's tallest: the window's room below the pill, less the popup's offset and a bottom margin.
+    static func cardRoom(below pill: NSView, in window: NSWindow) -> CGFloat {
+        let bottom = pill.convert(pill.bounds, to: nil).minY
+        return (bottom - 6 - RedesignTokens.Space.l).rounded(.down)
+    }
+
+    public var isWallOpen: Bool { wall != nil }
+
+    /// ⌥⌘I and the card's "Open gallery".
+    public func toggleWall() {
+        if wall != nil { closeWall() } else { openWall(showing: nil) }
+    }
+
+    /// The full gallery over the thread panel: its header, timeline and right panel, with the sidebar still beside it.
+    /// `showing` opens that picture large on top of the wall.
+    public func openWall(showing image: GalleryImage?) {
+        guard wall == nil, !images.isEmpty, let window = pill.window, let host = Self.wallHost(for: pill) else { return }
+        close()
+        let wall = ThreadImageWallView(frame: host.bounds)
+        wall.autoresizingMask = [.width, .height]
+        wall.layer?.cornerRadius = host.layer?.cornerRadius ?? 0
+        wall.layer?.cornerCurve = .continuous
+        wall.layer?.masksToBounds = true
+        wall.images = images
+        wall.onClose = { [weak self] in self?.closeWall() }
+        wall.onHash = { [weak self] image, hash in self?.recordHash(image, hash) }
+        wall.onFailed = { [weak self] failed in for image in failed { self?.markFailed(image) } }
+        wall.onOpenInThread = { [weak self] image in self?.closeWall(animated: false); self?.onOpenInThread?(image) }
+        wallFocus = window.firstResponder
+        host.addSubview(wall)
+        self.wall = wall
+        if let image, let index = images.firstIndex(where: { $0.pixelKey == image.pixelKey }) { wall.openViewer(at: index) }
+        window.makeFirstResponder(wall)
+        ThreadImageWallView.fade(wall, in: true, rise: true) {}
+        pill.galleryUnseen = false
+        onOpen?()
+    }
+
+    /// Closes the full gallery and lets go of every tile and decode it held, once its fade ends.
+    public func closeWall(animated: Bool = true) {
+        guard let wall else { return }
+        self.wall = nil
+        if let id = threadId { lookedAt[id] = TimestampFormat.nowMs() }
+        let window = wall.window
+        let finish: @MainActor () -> Void = { [weak self] in
+            wall.releaseImages()
+            wall.removeFromSuperview()
+            self?.sync()
+        }
+        if let focus = wallFocus, let window, (focus as? NSView)?.window === window { window.makeFirstResponder(focus) }
+        else { window?.makeFirstResponder(nil) }
+        if animated { ThreadImageWallView.fade(wall, in: false, rise: true, done: finish) } else { finish() }
+    }
+
+    /// The window's thread panel, beside the sidebar; the pill floats over it in a band of its own, so it is found in
+    /// the window rather than above the pill. The content view when there is none, as in tests.
+    static func wallHost(for pill: NSView) -> NSView? {
+        guard let content = pill.window?.contentView else { return nil }
+        var queue: [NSView] = [content]
+        while !queue.isEmpty {
+            let view = queue.removeFirst()
+            if view is ThreadPanelView, !view.isHiddenOrHasHiddenAncestor { return view }
+            queue += view.subviews
+        }
+        return content
+    }
+}
+
+/// The gallery's geometry, kept apart from views so tests can check it.
+public enum GalleryLayout {
+    /// The one-image view's size for a picture: as large as `area` allows with its proportions kept, never past its own
+    /// pixels (`natural` in pixels, shown at `scale` pixels per point), unless that leaves it under a third of `area`,
+    /// in which case it grows to that third or to the fit, whichever is smaller.
+    public static func fit(_ natural: CGSize, in area: CGSize, scale: CGFloat) -> CGSize {
+        guard natural.width > 0, natural.height > 0, area.width > 0, area.height > 0 else { return area }
+        let fill = min(area.width / natural.width, area.height / natural.height)
+        var s = min(fill, 1 / max(scale, 1))
+        let third = area.width * area.height / 3
+        if natural.width * natural.height * s * s < third { s = min(fill, (third / (natural.width * natural.height)).squareRoot()) }
+        return CGSize(width: max(1, (natural.width * s).rounded()), height: max(1, (natural.height * s).rounded()))
+    }
+
+    /// Columns for a content `width`: as many as fit at `minColumn` wide, never fewer than two.
+    public static func columns(width: CGFloat, minColumn: CGFloat, gap: CGFloat) -> Int {
+        max(2, Int(((width + gap) / (minColumn + gap)).rounded(.down)))
+    }
+
+    /// A masonry of `aspects` (height over width), in order, each into the shortest column so far, leftmost on a tie.
+    /// Frames start at the origin of a `width`-wide area; `height` is the tallest column without its last gap.
+    public static func masonry(aspects: [CGFloat], width: CGFloat, columns: Int, gap: CGFloat) -> (frames: [CGRect], height: CGFloat) {
+        let n = max(1, columns)
+        let column = max(1, ((width - CGFloat(n - 1) * gap) / CGFloat(n)).rounded(.down))
+        var tops = [CGFloat](repeating: 0, count: n)
+        var frames: [CGRect] = []
+        frames.reserveCapacity(aspects.count)
+        for aspect in aspects {
+            let c = tops.indices.min { tops[$0] < tops[$1] || (tops[$0] == tops[$1] && $0 < $1) }!
+            let h = max(1, (column * aspect).rounded())
+            frames.append(CGRect(x: CGFloat(c) * (column + gap), y: tops[c], width: column, height: h))
+            tops[c] += h + gap
+        }
+        return (frames, max(0, (tops.max() ?? 0) - gap))
+    }
+}
+
+extension GalleryImage {
+    /// The picture's natural pixel size, once a signed URL or a decode measured it.
+    @MainActor public var naturalSize: CGSize? {
+        if let stored, let size = MarkdownImages.sizes[stored.key] { return size }
+        return MarkdownImages.sizes[key]
     }
 }

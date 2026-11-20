@@ -255,25 +255,19 @@ struct ThreadImageGalleryTests {
         #expect(ThreadImageGallery.merge([[kept, served, other], [output]]).count == 4)
     }
 
-    /// The card is as tall as its rows, between the empty state's minimum and the old fixed height, past which it scrolls.
-    @Test func cardHeightFollowsItsRows() {
-        let h = ThreadImageGalleryView.height
-        let max = ThreadImageGalleryView.size.height, min = ThreadImageGalleryView.minHeight
-        #expect(h(0, false) == min)
-        let one = h(2, false), two = h(5, false)
-        #expect(one > min && one < two && two < max)
-        #expect(h(4, false) == one && h(8, false) == two)
-        // A row is a tile and its caption plus the gap: 93 + 18 + 8 at 540 wide.
-        #expect(two - one == 119)
-        #expect(h(53, false) == max)
-        #expect(h(2, true) == max)
+    /// The grid card is as tall as its masonry, between the empty state's minimum and the window's room.
+    @Test func cardHeightFollowsItsMasonry() {
         let view = ThreadImageGalleryView()
+        #expect(view.frame.height == ThreadImageGalleryView.minHeight)
         view.images = Self.fakeImages().prefix(2).map { $0 }
-        #expect(view.frame.height == one && view.intrinsicContentSize.height == one)
+        let two = view.frame.height
+        #expect(two > ThreadImageGalleryView.minHeight && view.intrinsicContentSize.height == two)
         var resized = 0
         view.onResize = { resized += 1 }
         view.images = Self.fakeImages()
-        #expect(view.frame.height == h(10, false) && resized == 1)
+        #expect(view.frame.height > two && resized == 1)
+        view.maxHeight = 300
+        #expect(view.frame.height == 300)
     }
 
     // MARK: Offscreen renders for review, written only with GALLERY_SNAPSHOTS=<dir>.
@@ -347,15 +341,15 @@ struct ThreadImageGalleryTests {
             return (window, root, gallery)
         }
         defer { window.contentView = nil }
-        let cells = { gallery.subviews.compactMap { $0 as? ScrollAreaView }.first?.scrollView.documentView?.subviews.compactMap { $0 as? GalleryCellView } ?? [] }
-        await Self.pump { !cells().isEmpty && cells().allSatisfy { ($0.subviews.first as? AsyncImageView)?.image != nil } }
+        let cells = { Array(gallery.grid.tiles.values) }
+        await Self.pump { cells().count == 10 && cells().allSatisfy { $0.thumb.image != nil } }
         let picture = withTheme(input) {
             Self.save(root, "progress-02-grid-offscreen.png", dir: dir)
 
             _ = gallery.handleKey(.right) // nothing: grid mode
             cells().first { $0.frame.minX > 100 }?.action?()
             root.layoutSubtreeIfNeeded()
-            return gallery.subviews.compactMap { $0 as? AsyncImageView }.first!
+            return gallery.picture
         }
         await Self.pump { picture.loadedSide > 0 }
         withTheme(input) {
