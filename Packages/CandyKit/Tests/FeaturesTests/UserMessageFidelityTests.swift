@@ -16,7 +16,7 @@ struct UserMessageFidelityTests {
     static let ceilings: FidelityCeilings = [
         "userMessage": .init(0.06),
     ]
-    static let harnessed: Set<String> = ["burst", "file-card", "model-switch"]
+    static let harnessed: Set<String> = ["burst", "file-card", "model-switch", "quote-card"]
 
     static func row(_ text: String, next: Bool = false, previous: Bool = false, attachments: [JSONValue] = []) -> UserMessageRowView {
         let message = ChatMessage(id: MessageId("m-\(text.count)-\(next)-\(previous)"), role: .user, text: text,
@@ -45,6 +45,14 @@ struct UserMessageFidelityTests {
             let file: JSONValue = .object(["id": .string("file-1"), "type": .string("file"), "name": .string(native["name"]!),
                                            "mimeType": .string("text/plain"), "sizeBytes": .number(Double(native["bytes"]!)!)])
             let v = row("", attachments: [file])
+            v.frame = NSRect(x: 8, y: 8, width: width, height: v.height(forWidth: width))
+            return [v]
+        case "quote":
+            // The spec's card quotes with context on both sides (AssistantCitationChip.tsx:59-150).
+            let citation = ThreadAssistantCitation(environmentId: "e", threadId: "t", messageId: "m", text: native["text"]!, start: 40,
+                                                   end: 40 + native["text"]!.count, prefix: "the loader reads the file, then ",
+                                                   suffix: " before it", comment: native["comment"])
+            let v = row(citation.markdown)
             v.frame = NSRect(x: 8, y: 8, width: width, height: v.height(forWidth: width))
             return [v]
         default:
