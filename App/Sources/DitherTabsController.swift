@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 
 /// Dither's tab strip and history buttons (after Capy). Each tab shows one route from the window's `RouteHistory`: a
-/// thread, the new-thread draft, Pull requests or the Orchestrator; Settings and Usage float over the tab's route.
+/// thread, the new-thread draft, Pull requests or Issues; Settings and Usage float over the tab's route.
 /// Like Capy and a browser, navigating shows the new route in the current tab; + and Cmd-click open a new one, and a route already open in another tab switches there.
 /// Back and forward step through the history. Tabs last for this run only. The Experimental Tabs switch hides them
 /// and their entry points; while it is off the list stands still, so turning it on brings back the same tabs.
@@ -33,8 +33,6 @@ final class DitherTabsController {
         self.newThread = newThread
         sidebar.onListChange = { [weak self] in self?.sync() }
         history.onChange = { [weak self] in self?.sync() }
-        // The Orchestrator's tab shows its name, which a rename changes.
-        OrchestratorStore.shared.observe { [weak self] in self?.sync() }
         strip.onSelect = { [weak self] key in self?.select(key) }
         strip.onClose = { [weak self] key in self?.close(key) }
         strip.onMove = { [weak self] key, index in
@@ -110,7 +108,6 @@ final class DitherTabsController {
             case .pullRequests: return .init(id: key, title: "Pull requests", icon: .gitPullRequestArrow)
             case .issues: return .init(id: key, title: "Issues", icon: .circleDot)
             case .usage: return .init(id: key, title: "Usage", icon: .chartNoAxesColumn)
-            case .orchestrator: return .init(id: key, title: OrchestratorStore.shared.config.displayName, icon: .workflow)
             }
         }
         strip.selected = list.selectedKey

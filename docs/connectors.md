@@ -4,7 +4,7 @@ Redesign's Settings > Connectors lists the MCP servers and skills that Claude Co
 
 ## How a machine is read and changed
 
-1. The app opens a hidden T3 terminal on the machine (`HiddenTerminal`, the same path the helper's install uses, docs/orchestrator-helper.md section 2). T3 doesn't check the terminal's thread id, and the folder is `/`.
+1. The app opens a hidden T3 terminal on the machine (`HiddenTerminal`). T3 doesn't check the terminal's thread id, and the folder is `/`.
 2. It types `HelperInstall.configCommand`. The line reuses `$d/versions/<version>/candywrapper-helper` when this app's helper release is there, or downloads it and checks its SHA-256 first. It installs no service.
 3. `candywrapper-helper config get` prints `CWH-CONFIG <base64 JSON>` and `CWH-RESULT ok config`. `config set` turns echo off, prints `CWH-READY`, reads the changes as base64 JSON lines of at most 512 characters ending in a lone dot, applies them and prints the new snapshot.
 4. `ConnectorsController` runs one command at a time per machine and hands the snapshot to `ConnectorsStore`. Nothing is cached between launches.
@@ -36,6 +36,6 @@ Claude can only turn a user server off per project (`disabledMcpServers` inside 
 
 ## Not done yet
 
-- A machine that's offline misses a change made under Every machine. The helper can't replay it: its sessions hold only `orchestration:*` scopes, not `terminal:operate`.
+- A machine that's offline misses a change made under Every machine. Nothing replays it when the machine comes back.
 - Skills in `~/.codex/skills`, project-scope servers and `.mcp.json` aren't listed.
 - The first run on a machine downloads the helper, which needs this release published. Each change takes a few seconds, the time a terminal needs to open.

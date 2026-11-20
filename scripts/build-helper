@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds the CandyWrapper Helper's three downloads (docs/orchestrator-helper.md): a universal macOS binary and static
+# Builds the CandyWrapper Helper's three downloads (docs/connectors.md): a universal macOS binary and static
 # Linux x86_64 and arm64 binaries, each in candywrapper-helper-<version>-<platform>.tar.gz with a VERSION file, and
 # SHA256SUMS beside them. The CandyWrapper client pins those sums.
 # Usage: scripts/build-helper <version> <out-folder> [--sign]

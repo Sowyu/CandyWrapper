@@ -162,7 +162,6 @@ extension SettingsController {
         case .notifications, .general: .general
         case .appearance: .appearance
         case .keyboard: .keybindings
-        case .orchestrator: .orchestrator
         case .models: .providers
         case .connectors: .connectors
         case .threads: .threads
@@ -256,7 +255,6 @@ extension SettingsController {
         case .licenses: SettingsOpenSourceLicensesView(context: c)
         case .voice: VoiceSettingsView(context: c)
         case .scheduledTasks: ScheduledTasksSettingsView(context: c)
-        case .orchestrator: OrchestratorSettingsView(context: c)
         case .connectors: ConnectorsSettingsView(context: c)
         case .experimental: ExperimentalSettingsView(context: c)
         case .redesign: RedesignSettingsView(context: c)
@@ -323,11 +321,7 @@ extension SettingsController {
         let primary = environments.primaryId.flatMap { composer?.config($0) }
         c.serverKeybindings = primary?.keybindings ?? []
         c.keybindingsConfigPath = primary?.keybindingsConfigPath
-        // The Orchestrator's settings ride on a task of their own (OrchestratorSettingsSync); it isn't one you run.
-        c.scheduledTasks = ScheduledTasksStore.shared.lists.mapValues { load in
-            guard case .loaded(let tasks) = load else { return load }
-            return .loaded(tasks.filter { $0.title != OrchestratorSettingsSync.title })
-        }
+        c.scheduledTasks = ScheduledTasksStore.shared.lists
     }
 
     /// `useMemberProjectFiles` (SettingsScopeContext.tsx:20-55): each selected checkout's t3.json, so file-backed

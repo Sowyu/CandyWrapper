@@ -31,10 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var welcomeOnboarding: WelcomeOnboardingController?
     private var snapShots: SnapShotController?
     private var openIn: OpenInController?
-    private var orchestrator: OrchestratorController?
     private var connectors: ConnectorsController?
-    /// The Orchestrator's "while closed" schedule was handed to T3 for this quit.
-    private var orchestratorHandedOff = false
+    /// Removes what the deleted Orchestrator left behind, once (`OrchestratorCleanup`).
+    private var orchestratorCleanup: OrchestratorCleanupRunner?
     /// Built on the first Cmd+Q hold.
     private var quitOverlay: QuitHoldOverlayView?
     /// The spec's performance HUD, toggled by the hidden menu item below or the palette.
@@ -157,15 +156,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard confirmDitherQuit() else { returnFromCancelledQuit(); return .terminateCancel }
             asked = true
         }
-        // Any quit (the menu, the Dock, a logout) first turns the Orchestrator's "while closed" schedule on. The run loop
-        // turns until its machine answered, at most a second and a half, so nothing cancels the quit.
-        if !orchestratorHandedOff, let orchestrator, orchestrator.needsQuitHandOff {
-            orchestratorHandedOff = true
-            var handedOff = false
-            orchestrator.handOffBeforeQuit { handedOff = true }
-            let deadline = Date().addingTimeInterval(1.6)
-            while !handedOff, Date() < deadline { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05)) }
-        }
         return finishQuit(installing: installing, asked: asked)
     }
 
@@ -178,8 +168,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func cancelQuit() {
         returnFromCancelledQuit()
-        // CandyWrapper stays open, so the schedule goes back off.
-        if orchestratorHandedOff { orchestratorHandedOff = false; orchestrator?.quitCancelled() }
     }
 
     /// Set by Cmd-Q and the Quit menu item, so a logout, `kill` or a test snapshot quits without asking.
@@ -317,18 +305,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let anchor = event.type == .rightMouseDown ? nil : NSPoint(x: 0, y: view.isFlipped ? view.bounds.maxY + 4 : -4)
             commands?.showThreadMenu(id, event: event, view: view, anchor: anchor, rename: { [weak threads] in threads?.panel.header.beginTitleRename() })
         }
-        let orchestrator = OrchestratorController(environments: environments, sidebar: sidebar, threads: threads)
-        self.orchestrator = orchestrator
-        orchestrator.showPane = { [weak commands] view in commands?.openUtilityPage(.orchestrator, view: view) }
-        orchestrator.closePane = { [weak commands] in commands?.closeUtilityPage() }
-        orchestrator.openSettings = { [weak settings] in settings?.open(.orchestrator) }
-        orchestrator.toast = { [weak threads] title, message, kind in threads?.panel.toasts.show(ToastView(title: title, message: message, kind: kind)) }
+        orchestratorCleanup = OrchestratorCleanupRunner(environments: environments)
         let connectors = ConnectorsController(environments: environments)
         self.connectors = connectors
         connectors.toast = { [weak settings] title, message, kind in settings?.toast(title, message, kind) }
-        commands.onOrchestratorHidden = { [weak orchestrator] in orchestrator?.paneClosed() }
-        commands.extraMenuItems = { [weak orchestrator] id in orchestrator?.menuItems(id) ?? [] }
-        commands.performExtra = { [weak orchestrator] choice, id in orchestrator?.perform(choice, id) ?? false }
         sidebar.actions.openSettings = { [weak settings] in settings?.open() }
         sidebar.accountRow.onOpenMachines = { [weak settings] in settings?.open(.connections) }
         sidebar.actions.openAutomations = { [weak settings] in settings?.show(.scheduledTasks) }
@@ -452,9 +432,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installNotifications(window: NSWindow, environments: Environments, threads: ThreadController, commands: SidebarCommands,
                                       settings: SettingsController) {
         let coordinator = ThreadNotificationCoordinator(environments: environments, window: window)
-        coordinator.openThread = { [weak self, weak threads, weak settings, weak commands] in
+        coordinator.openThread = { [weak threads, weak settings, weak commands] in
             guard settings?.isOpen != true else { return nil }
-            if let id = self?.orchestrator?.visibleThreadId, let env = id.environmentId { return (env, id.localId) }
             guard commands?.isUtilityPageOpen != true, let id = threads?.openThreadId, let env = id.environmentId else { return nil }
             return (env, id.localId)
         }
@@ -604,7 +583,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .pullRequests: return .pullRequests
                 case .issues: return .issues
                 case .usage: return .usage
-                case .orchestrator: return .orchestrator
                 }
             }
             switch threads?.composer.target {
@@ -662,9 +640,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 settings.close(); commands.openUtilityPage(.issues)
             case .usage:
                 settings.close(); commands.openUtilityPage(.usage)
-            case .orchestrator:
-                guard let orchestrator = self.orchestrator, OrchestratorStore.shared.isActive else { return false }
-                settings.close(); orchestrator.open()
             }
             return true
         }

@@ -74,9 +74,6 @@ final class SidebarCommands {
     /// `/projects/$projectKey` for a group key, set by the app.
     var openProjectSettings: (String) -> Void = { _ in }
 
-    /// Redesign's own thread menu rows (the Orchestrator's Keep out) and what choosing one does; true when handled.
-    var extraMenuItems: (ThreadId) -> [ThreadMenuItem] = { _ in [] }
-    var performExtra: (String, ThreadId) -> Bool = { _, _ in false }
 
     /// Thread menu items this client does not have yet.
     static let unbuiltMenuItems: Set<String> = []
@@ -710,11 +707,9 @@ final class SidebarCommands {
                 worktreePath: thread.worktreePath, projectRoot: snapshot?.projects.first { $0.id == thread.projectId }?.workspaceRoot,
                 scratchRoot: config.scratchWorkspaceRoot, capabilities: config.capabilities)
         }
-        var items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
-        if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) { items += extraMenuItems(id) }
+        let items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
         let choose: @MainActor (String) -> Void = { [weak self, weak sidebar] choice in
             if choice == "rename", let rename { rename(); return }
-            if self?.performExtra(choice, id) == true { return }
             if choice == "open-new-tab" { sidebar?.onOpenInNewTab?(id); return }
             self?.perform(choice, id: id, thread: thread, group: group, presets: presets)
         }
@@ -1080,13 +1075,11 @@ final class SidebarCommands {
 
     // MARK: Pull Requests and Usage
 
-    enum UtilityPage { case pullRequests, issues, usage, orchestrator }
+    enum UtilityPage { case pullRequests, issues, usage }
 
     /// The sidebar offers Issues once a connected server can list them (SidebarChrome.tsx:296).
     func syncIssuesEntry() { sidebar?.showsIssues = issuesSupported }
 
-    /// The Orchestrator's pane left the main area (Redesign).
-    var onOrchestratorHidden: () -> Void = {}
 
     /// Settings floats over the current utility page; only a floating Usage gives way.
     func prepareForSettings() {
@@ -1094,8 +1087,8 @@ final class SidebarCommands {
         usageModal?.close(animated: false)
     }
 
-    /// Pull Requests and Redesign's Orchestrator replace the thread panel; Usage floats above the current route.
-    func openUtilityPage(_ page: UtilityPage, view custom: NSView? = nil) {
+    /// Pull Requests and Issues replace the thread panel; Usage floats above the current route.
+    func openUtilityPage(_ page: UtilityPage) {
         guard let layout, let sidebar else { return }
         closeSettings()
         if page == .usage, let window {
@@ -1120,19 +1113,16 @@ final class SidebarCommands {
             return
         }
         if let usageModal { recordUsageModalClose = false; usageModal.close(animated: false) }
-        let view: NSView = custom ?? (page == .issues ? issuesPage.container : pullRequestsPage.container)
+        let view: NSView = page == .issues ? issuesPage.container : pullRequestsPage.container
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .issues && page != .issues { issuesPage.didHide() }
-        if utilityKind == .orchestrator && utilityPage != nil && page != .orchestrator { onOrchestratorHidden() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
         layout.mainContent = view
         utilityPage = view
         utilityKind = page
-        // Clears the active row and draft while the page shows. The Orchestrator opens like a thread: the sidebar
-        // keeps its list, buttons and footer, and its own row shows it's open.
-        sidebar.isOnUtilityPage = page != .orchestrator
-        sidebar.showsOtherPage = page == .orchestrator
+        // Clears the active row and draft while the page shows.
+        sidebar.isOnUtilityPage = true
         if page == .pullRequests {
             pullRequestsPage.didShow()
             window?.makeFirstResponder(pullRequestsPage.container)
@@ -1151,17 +1141,14 @@ final class SidebarCommands {
         guard let layout, let page = utilityPage else { return }
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .issues { issuesPage.didHide() }
-        let wasOrchestrator = utilityKind == .orchestrator
         page.removeFromSuperview()
         utilityPage = nil
         utilityKind = nil
         layout.mainContent = threads.panel
         sidebar?.isOnUtilityPage = false
-        sidebar?.showsOtherPage = false
         sidebar?.state.activeThreadId = threads.openThreadId
         threads.composer.syncSidebarDrafts()
         threads.focusComposerOnReturn()
-        if wasOrchestrator { onOrchestratorHidden() }
         if record { onRouteChange?() }
     }
 

@@ -1,8 +1,7 @@
 import Foundation
 
-/// What a CandyWrapper client types into a hidden T3 terminal on the Orchestrator's machine to install, update, renew
-/// or remove the helper, and how it reads the answer (docs/orchestrator-helper.md, sections 2 and 6). Shared so the Mac
-/// and the Android app type the same thing.
+/// What a CandyWrapper client types into a hidden T3 terminal to run the helper's `config` command (docs/connectors.md)
+/// or remove an old Orchestrator relay helper, and how it reads the answer.
 public enum HelperInstall {
     /// A helper build: its version, where its downloads live and each platform's SHA-256 (scripts/build-helper).
     public struct Release: Codable, Equatable, Sendable {
@@ -13,22 +12,10 @@ public enum HelperInstall {
         public init(version: String, baseURL: URL, sums: [String: String]) { self.version = version; self.baseURL = baseURL; self.sums = sums }
     }
 
-    /// One machine the helper should reach, with a fresh one-time pairing code.
-    public struct Pairing: Equatable, Sendable {
-        public var machineId: String
-        public var label: String
-        public var url: URL
-        public var code: String
-        public init(machineId: String, label: String, url: URL, code: String) { self.machineId = machineId; self.label = label; self.url = url; self.code = code }
-    }
-
-    /// The scopes a helper session gets: enough to read and prompt threads and hold the task, nothing more.
-    public static let scopes = ["orchestration:read", "orchestration:operate"]
-
-    /// The pairing code's label, which T3 shows for the helper's session (Connections) and which tells clients its version.
+    /// The label the old relay helper's sessions carried, "CandyWrapper Helper <version> on <machine>".
     public static func sessionLabel(version: String, home: String) -> String { "CandyWrapper Helper \(version) on \(home)" }
 
-    /// The version in a helper session's label, nil for any other session.
+    /// The version in an old relay helper session's label, nil for any other session.
     public static func version(fromSessionLabel label: String) -> String? {
         guard label.hasPrefix("CandyWrapper Helper "), let on = label.range(of: " on ") else { return nil }
         return String(label[label.index(label.startIndex, offsetBy: "CandyWrapper Helper ".count)..<on.lowerBound])
@@ -37,10 +24,7 @@ public enum HelperInstall {
     /// One line for whatever shell the terminal runs: everything inside `sh -c '…'`, which zsh, bash and fish all
     /// accept, and a leading space keeps it out of history where the shell honours that. The markers are built from
     /// parts, so the shell echoing this line never reads as a result. `testHome` sets `CANDY_HELPER_HOME`.
-    public static func installCommand(_ release: Release, homeId: String, testHome: String? = nil) -> String {
-        " sh -c '\(fetch(release, testHome: testHome))exec \"$f/candywrapper-helper\" install --home \(quoteless(homeId))'\n"
-    }
-
+    ///
     /// Runs `candywrapper-helper config get|set` from this release's folder on any machine, downloading and checking
     /// that version first when it isn't there, without installing a service (docs/connectors.md). `configHome` sets
     /// `--config-home` for a test home.
@@ -72,7 +56,8 @@ public enum HelperInstall {
         """
     }
 
-    /// Removes the helper through its own `uninstall`, or says it wasn't there.
+    /// Removes an Orchestrator relay helper that CandyWrapper 1.14 or older installed, through that installed binary's own
+    /// `uninstall` (it stops the service and deletes its tokens and files), or says it wasn't there.
     public static func uninstallCommand(testHome: String? = nil) -> String {
         let data = testHome.map { "d=\(quoteless($0));export CANDY_HELPER_HOME=\"$d\";" }
             ?? #"case "$(uname -s)" in Darwin) d="$HOME/Library/Application Support/CandyWrapper Helper";; *) d="${XDG_DATA_HOME:-$HOME/.local/share}/candywrapper-helper";; esac;"#
@@ -80,13 +65,9 @@ public enum HelperInstall {
         return " sh -c '\(script)'\n"
     }
 
-    /// What goes to `install` once it printed its ready line: one tab-separated line per machine, then a lone dot.
-    public static func pairingInput(_ pairings: [Pairing]) -> String {
-        pairings.map { [$0.machineId, clean($0.label), $0.url.absoluteString, $0.code].joined(separator: "\t") }.joined(separator: "\n") + "\n.\n"
-    }
 
     public enum Line: Equatable, Sendable {
-        /// `install` turned echo off and waits for the pairing lines.
+        /// `config set` turned echo off and waits for the changes.
         case ready
         case ok(String)
         case failed(String)
@@ -133,6 +114,4 @@ public enum HelperInstall {
 
     /// No quote, backslash, dollar or backtick can reach the shell from a value; ids, versions and URLs never need one.
     static func quoteless(_ s: String) -> String { String(s.unicodeScalars.filter { !"'\"\\$`".unicodeScalars.contains($0) && $0.value >= 0x20 }) }
-    /// A label can't carry a tab or a line break into the pairing input.
-    static func clean(_ s: String) -> String { s.replacingOccurrences(of: "\t", with: " ").replacingOccurrences(of: "\n", with: " ") }
 }

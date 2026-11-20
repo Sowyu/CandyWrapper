@@ -6,8 +6,6 @@ import DesignSystem
 public enum SettingsSection: String, CaseIterable, Sendable {
     case general, appearance, chat, diffs, keybindings, voice, snapShots, providers, threads, browser, devices, scheduledTasks, projects, sourceControl, worktrees, connections, access, maintenance, beta, about, archive
     case integrations, storage
-    /// Redesign's Orchestrator tab, CandyWrapper's own; never in T3's nav.
-    case orchestrator
     /// Redesign's Connectors tab, CandyWrapper's own; never in T3's nav.
     case connectors
     /// CandyWrapper's own experimental switches, so it sits last in T3's nav too.
@@ -42,7 +40,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: "Environments"
         case .beta: "Labs"
         case .archive: "Archive"
-        case .orchestrator: "Orchestrator"
         case .connectors: "Connectors"
         case .experimental: "Experimental"
         case .redesign: "Redesign"
@@ -76,7 +73,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: .server
         case .beta: .flaskConical
         case .archive: .archive
-        case .orchestrator: .workflow
         case .connectors: .plug2
         case .experimental: .flaskConical
         case .redesign: .paintbrush
@@ -144,7 +140,6 @@ public final class SettingsSidebarView: DSView {
         var groups = SettingsSection.navGroups
         if isDither {
             groups[1].sections.insert(.connectors, at: 1)
-            if OrchestratorStore.shared.config.enabled { groups[1].sections.insert(.orchestrator, at: 0) }
         }
         return groups
     }
@@ -211,7 +206,6 @@ public final class SettingsSidebarView: DSView {
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("environmentIdentificationMode") { self?.applyStage() }
         }
-        OrchestratorStore.shared.observe { [weak self] in self?.needsLayout = true }
         addSubview(brand)
         addSubview(trigger)
         search.field.setAccessibilityLabel("Search settings")
@@ -263,7 +257,7 @@ public final class SettingsSidebarView: DSView {
                 navDocument.addSubview(label)
             }
         }
-        for section in SettingsSection.navSections + [.orchestrator, .connectors] {
+        for section in SettingsSection.navSections + [.connectors] {
             let row = DitherSettingsNavRow(section.label, icon: section.icon)
             row.action = { [weak self] in self?.select(section) }
             concernRows[section] = row

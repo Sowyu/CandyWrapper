@@ -34,10 +34,9 @@ struct SidebarMultiMachineTests {
         return window
     }
 
-    /// What the list should show: a fresh build of the snapshot without the hidden threads.
+    /// What the list should show: a fresh build of the snapshot.
     func fresh(_ content: SidebarContentView) -> [SidebarItem] {
-        guard var snap = content.snapshot else { return [] }
-        snap.threads.removeAll { content.state.hiddenThreadIds.contains($0.id) }
+        guard let snap = content.snapshot else { return [] }
         return SidebarListBuilder.items(snapshot: snap, state: content.state, nowMs: content.nowMs)
     }
 
@@ -52,7 +51,6 @@ struct SidebarMultiMachineTests {
         for (i, item) in items.enumerated() {
             if case .row(let r) = item {
                 #expect(r.title == threads[r.id]?.title, "row \(r.id) shows \(r.title) after \(step)")
-                #expect(!content.state.hiddenThreadIds.contains(r.id), "hidden thread \(r.id) listed after \(step)")
             }
             if case .projectHeader(let h) = item, h.expanded {
                 let rows = items[(i + 1)...].prefix { if case .row(let r) = $0 { r.inProjectSection } else { false } }
@@ -159,11 +157,6 @@ struct SidebarMultiMachineTests {
                 ]).threads[0]
                 snap.threads.insert(new, at: rng.next(snap.threads.count + 1))
             case 6 where !snap.threads.isEmpty: snap.threads[i].updatedAt = iso(Double(rng.next(300)))
-            case 7 where !snap.threads.isEmpty:
-                // Another machine's thread, or this one's, becomes the Orchestrator's hidden thread.
-                let id = snap.threads[i].id.scoped(to: env)
-                if content.state.hiddenThreadIds.contains(id) { content.state.hiddenThreadIds.remove(id) } else { content.state.hiddenThreadIds = [id] }
-                what += " hide"
             case 8 where dither:
                 let groups = SidebarModel.buildProjectGroups(content.snapshot?.projects ?? [], preferredEnvironmentId: "mini")
                 if let key = groups.randomElement(using: &rng)?.key {

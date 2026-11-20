@@ -19,7 +19,6 @@ public struct DitherTabList {
         case .pullRequests: "pull-requests"
         case .issues: "issues"
         case .usage: "usage"
-        case .orchestrator: "orchestrator"
         }
     }
 

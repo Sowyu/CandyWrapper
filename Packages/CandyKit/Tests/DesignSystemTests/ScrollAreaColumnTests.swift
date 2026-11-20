@@ -2,7 +2,7 @@ import AppKit
 import Testing
 @testable import DesignSystem
 
-/// A column that never scrolls sideways (the Orchestrator chat): with always-shown scroll bars the vertical bar takes
+/// A column that never scrolls sideways: with always-shown scroll bars the vertical bar takes
 /// part of the width, and a document sized to the frame got a horizontal scroll bar along the bottom.
 @MainActor @Suite struct ScrollAreaColumnTests {
     @Test func aColumnKeepsTheVisibleWidth() {

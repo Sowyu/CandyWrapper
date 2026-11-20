@@ -19,7 +19,6 @@ public struct ExperimentalToggle {
 public final class ExperimentalSettingsView: SettingsPageBase {
     /// Add a feature here, one entry each.
     public static let toggles: [ExperimentalToggle] = [
-        ExperimentalToggle(title: "Orchestrator", detail: "One thread that manages every thread on its machine. It adds a pinned row to the sidebar, its own chat and an Orchestrator tab here in Settings.", needsRedesign: true, isOn: { OrchestratorStore.shared.config.enabled }, set: { on in OrchestratorStore.shared.update { $0.enabled = on } }, observe: { f in let id = OrchestratorStore.shared.observe(f); return { OrchestratorStore.shared.removeObserver(id) } }),
         ExperimentalToggle(title: "Tabs", detail: "A tab strip at the top of the window for open threads and other pages. Cmd-click a thread to open it in a new tab.", needsRedesign: true, isOn: { ThreadTabsSetting.isOn }, set: { ThreadTabsSetting.set($0) }, observe: { ThreadTabsSetting.observe($0) }),
     ]
 

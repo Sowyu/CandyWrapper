@@ -119,7 +119,7 @@ public struct ScheduledTask: Equatable, Sendable {
     public var lastRunStatus: String
     public var lastRunError: String?
     public var runCount: Int
-    /// When the server last changed the task; the Orchestrator's handoff reads it (`ScheduledTask.updatedAt`).
+    /// When the server last changed the task (`ScheduledTask.updatedAt`).
     public var updatedAt: String?
     public var webhook: ScheduledTaskWebhookEndpoint?
     /// `new_thread`, `continue` or `fresh_session` (4928 scheduledTask.ts:231). Servers before 4928 omit it.

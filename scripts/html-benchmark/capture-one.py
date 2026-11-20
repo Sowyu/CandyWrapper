@@ -8,7 +8,7 @@ assert a.tag.replace('-','').replace('_','').isalnum()
 APP=pathlib.Path('/tmp/cw-dd-html-benchmark/Build/Products/Debug/CandyWrapper.app')
 assert APP.exists() and (ROOT/'probe').exists(), 'Needs existing benchmark app and probe; this script never builds'
 assert subprocess.check_output([str(REPO/'scripts/ui/screen-lock'),'who'],text=True).startswith('html-benchmark ')
-for mode in ['thread','conductor']:
+for mode in ['thread']:
     for appearance in ['dark','light']:
         out=ROOT/a.tag/('collage-'+mode+'-'+appearance);out.mkdir(parents=True,exist_ok=True)
         assert not (out/'events.jsonl').exists(), 'Do not overwrite before captures'

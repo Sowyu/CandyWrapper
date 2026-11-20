@@ -3,8 +3,18 @@ import Testing
 @testable import DesignSystem
 @testable import Features
 
-/// Redesign's art takes the scrim of the frontmost page that shows: an open thread the light one, the Orchestrator's
-/// pane and other pages the heavy one, whatever order the pages registered in.
+/// A page that asks for the heavy scrim while it's in a window, as a full page in the thread panel's place does.
+final class HeavyPageView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        DitherArtView.setEmphasis(window == nil ? nil : .page, from: self)
+    }
+    override func viewDidHide() { super.viewDidHide(); DitherArtView.pagesMoved() }
+    override func viewDidUnhide() { super.viewDidUnhide(); DitherArtView.pagesMoved() }
+}
+
+/// Redesign's art takes the scrim of the frontmost page that shows: an open thread the light one, other pages the
+/// heavy one, whatever order the pages registered in.
 @MainActor
 struct DitherArtScrimTests {
     let display = (reduceTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
@@ -50,8 +60,8 @@ struct DitherArtScrimTests {
         _ = window
     }
 
-    /// Thread, the Orchestrator pane in its place, then the thread again, as the sidebar, tabs and a notification do.
-    @Test func scrimFollowsThePanelAndTheOrchestratorPane() {
+    /// Thread, a page in its place, then the thread again, as the sidebar, tabs and a notification do.
+    @Test func scrimFollowsThePanelAndAPage() {
         let (window, main) = host()
         let art = DitherArtView(frame: main.bounds)
         main.addSubview(art)
@@ -61,7 +71,7 @@ struct DitherArtScrimTests {
         let thread = DitherArt.scrim(.thread, display), heavy = DitherArt.scrim(.page, display)
         #expect(art.scrimAlphaForTesting == thread)
 
-        let pane = OrchestratorPaneView(frame: main.bounds)
+        let pane = HeavyPageView(frame: main.bounds)
         panel.removeFromSuperview()
         main.addSubview(pane)
         #expect(art.scrimAlphaForTesting == heavy)
@@ -80,7 +90,7 @@ struct DitherArtScrimTests {
         let thread = DitherArt.scrim(.thread, display), heavy = DitherArt.scrim(.page, display)
         let panel = ThreadPanelView(frame: main.bounds)
         main.addSubview(panel)
-        let pane = OrchestratorPaneView(frame: main.bounds)
+        let pane = HeavyPageView(frame: main.bounds)
         main.addSubview(pane)
         #expect(art.scrimAlphaForTesting == heavy)
 
@@ -100,12 +110,12 @@ struct DitherArtScrimTests {
         _ = window
     }
 
-    /// Launching into the pane: the art made after the pane already shows over a registered thread panel takes the
+    /// Launching into a page: the art made after the page already shows over a registered thread panel takes the
     /// heavy scrim at once.
-    @Test func artMadeUnderTheOpenPaneIsHeavy() {
+    @Test func artMadeUnderAnOpenPageIsHeavy() {
         let (window, main) = host()
         main.addSubview(ThreadPanelView(frame: main.bounds))
-        let pane = OrchestratorPaneView(frame: main.bounds)
+        let pane = HeavyPageView(frame: main.bounds)
         main.addSubview(pane)
         let art = DitherArtView(frame: main.bounds)
         main.addSubview(art, positioned: .below, relativeTo: nil)

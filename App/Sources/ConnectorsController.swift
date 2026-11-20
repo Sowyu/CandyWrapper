@@ -22,13 +22,21 @@ final class ConnectorsController {
     private static let configHome = ProcessInfo.processInfo.environment["CANDY_CONNECTORS_CONFIG_HOME"]
     /// T3 needs a thread id for a terminal but checks nothing about it; `/` exists on every machine.
     private static let thread = "candywrapper-connectors"
+    /// The helper build this app runs: `helper-manifest.json` in the app, which scripts/release writes, or
+    /// `CANDY_HELPER_MANIFEST` for a test build.
+    private static let release: HelperInstall.Release? = {
+        let url = ProcessInfo.processInfo.environment["CANDY_HELPER_MANIFEST"].map { URL(fileURLWithPath: $0) }
+            ?? Bundle.main.url(forResource: "helper-manifest", withExtension: "json")
+        guard let url, let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(HelperInstall.Release.self, from: data)
+    }()
 
     init(environments: Environments) {
         self.environments = environments
         store.actions.load = { [weak self] id in self?.enqueue(id, changes: nil) }
         store.actions.apply = { [weak self] id, changes in self?.enqueue(id, changes: changes) }
         store.actions.unavailable = {
-            HelperController.release == nil ? "This build of CandyWrapper doesn't include the helper, which reads and changes each machine's config." : nil
+            Self.release == nil ? "This build of CandyWrapper doesn't include the helper, which reads and changes each machine's config." : nil
         }
     }
 
@@ -42,7 +50,7 @@ final class ConnectorsController {
 
     private func run(_ env: String, changes: [AgentConfigChange]?) async {
         let label = environments.label(env) ?? env
-        guard let release = HelperController.release, let session = environments.session(env) else {
+        guard let release = Self.release, let session = environments.session(env) else {
             store.set(env, .failed("\(label) isn't connected."), endsChange: changes != nil)
             return
         }

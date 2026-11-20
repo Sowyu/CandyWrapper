@@ -1,5 +1,7 @@
 # Orchestrator (experimental, Redesign only)
 
+> Removed on 2026-11-21 at the user's request. This file is history; see `docs/research/orchestrator-removal-2026-11-21.md`.
+
 The working name was Captain. The user renamed it Orchestrator on 2026-10-23, since Captain copies Capy.
 
 There is one Orchestrator, and it is the master of every thread, across every project. That includes the threads you start yourself, not only the ones it starts. You talk to Orchestrator. It sees every thread, starts threads, prompts any of them, reads every reply, sends the next prompt and closes threads that are done. It tells you what needs you, and you change the plan by telling it in chat. Next to Orchestrator you keep bots, each with one standing job, like Grok Bot's bots. Orchestrator hands work to bots and to threads. This builds on Capy's Captains (docs.capy.ai/captains), but CandyWrapper has exactly one Orchestrator instead of one per area. This is a plan only. Nothing here is built yet.

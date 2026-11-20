@@ -1,7 +1,7 @@
 import Foundation
 import T3Protocol
 
-/// The command payloads the composer, the Orchestrator and the helper send, in one place so they stay alike.
+/// The command payloads the composer sends, in one place so they stay alike.
 public enum OrchestrationCommands {
     /// Any Encodable as a JSONValue, like a `ModelSelection`.
     public static func encode(_ input: some Encodable) -> JSONValue {
