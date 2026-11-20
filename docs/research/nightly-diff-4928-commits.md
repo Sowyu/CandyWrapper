@@ -325,7 +325,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| 3bb4544f90 | #33157 | thread | fix: secret cards show the agent's sign-in link as a button | port |
+| 3bb4544f90 | #33157 | thread | fix: secret cards show the agent's sign-in link as a button | left (thread-4): a new visible shape: an outline Open <host> button with the link under it (SecretRequestCard.tsx, secretRequestLink in client-runtime at 4928) from the item's url or a single link in the reason; needs the spec case and reference through scripts/gen-*-spec.py, then SecretRequestRowView |
 
 ## Port group welcome-page (1)
 
@@ -1429,8 +1429,8 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | c40b32a729 | #23448 | thread | fix(web): keep ACP agent logos in multi-model selections | port |
 | 3bd744fc11 | #23679 | thread | fix(web): show clipboard errors in anchored copy notifications | n/a: web clipboard API errors; NSPasteboard writes don't fail this way |
 | 17580724fc | #26067 | thread | fix(web): byte sizes just under the next unit no longer read "1024 KB" | ported (thread-3): StorageCleanupReport.formatBytes picks the unit after rounding |
-| 9ad6c7ef8b | #26145 | thread | fix(web,mobile): long links in secret requests wrap and can be copied | port |
-| 22463861cd | #26151 | thread | fix(web): clicking a secret request card focuses its field again | port |
+| 9ad6c7ef8b | #26145 | thread | fix(web,mobile): long links in secret requests wrap and can be copied | already in CandyWrapper for wrapping (thread-4): TextKit breaks a word longer than the line in SecretRequestRowView's reason. Left: copying the reason, since TextBlockView isn't selectable |
+| 22463861cd | #26151 | thread | fix(web): clicking a secret request card focuses its field again | already in CandyWrapper (thread-4): SecretRequestRowView.mouseDown focuses the field while pending, and AppKit has no pointerdown that takes focus back |
 | 1b9437f6ab | #27078 | thread | fix(web): long pending-question headers truncate instead of overflowing | skip (thread-4): the question panel is Features/Composer/Panels/QuestionPanelView, the composer agent's area |
 | 609dd0f7dd | #27144 | thread | fix(web): plain text code blocks match the text around them | ported in eceea265 |
 | 12d1e4c23c | #22339 | thread | fix(web): keep truncated Markdown task previews read-only | port |
@@ -1452,7 +1452,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 6525e4cb59 | #26232 | thread | fix(web): maximize button no longer jumps when the right panel closes | port |
 | aa8dbbe54f | #27741 | thread | fix(web): skill labels show the skill's own name | port |
 | 4ed4950b7c | #23024 | thread | fix(client): reject incomplete GitHub owner paths before lookup | skip (thread-4): outside the thread areas, for the agent working on Features/PullRequests and Issues |
-| 41b3b0b1b6 | #25002 | thread | fix(clients): background work Stop stays pending until the stopped tasks leave | port |
+| 41b3b0b1b6 | #25002 | thread | fix(clients): background work Stop stays pending until the stopped tasks leave | taken by screen-fixes-2 (thread-4 checked): Stop on background work stays Stopping while its tasks are listed, on branch screen-fixes-2 |
 | 510aa5af40 | #26095 | thread | fix(web): Arabic paragraphs with many English terms now read right to left | port |
 | b46a4edc03 | #26398 | thread | fix(web): dark-mode <picture> images load instead of showing "Image unavailable" | skip: CandyWrapper draws no raw HTML `<picture>` in replies yet; take it with raw HTML support |
 | 58f8ab47a0 | #27794 | thread | fix(web): bare URL links keep trailing underscores and tildes | ported: a bare URL takes back the trailing `_` and `~` that GFM's autolink drops (thread-2, MarkdownDocument `keepingBareLinkTails`) |
@@ -1632,7 +1632,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 0f79b4027a | #36947 | thread | fix(web): remove redundant status info icon | port |
 | d080e4eb58 | #22614 | thread | fix(web): thread details card no longer jumps mid panel animation | port |
 | 5bd2d0cb82 | #30712 | thread | fix(client-runtime): derive MCP download names before URI suffixes | port |
-| 3a87ca8c6a | #30806 | thread | fix(client-runtime): tool output no longer rounds integers beyond 2^53 | port |
+| 3a87ca8c6a | #30806 | thread | fix(client-runtime): tool output no longer rounds integers beyond 2^53 | left (thread-4): JSONValue stores numbers as Double, so tool output JSON rounds integers past 2^53; keeping the source digits needs a number case that carries its text in T3Protocol's JSONValue |
 | 6c7a87cbcb | #30387 | thread | fix(web,mobile): a late MCP app teardown no longer closes the app that replaced it | port |
 | dd3d4a4e4a | #37024 | thread | fix(web): prevent stray highlights when selecting shell commands | n/a (thread-4): browser behavior AppKit doesn't share: DOM selection highlight |
 | eb8b1f5246 | #31738 | thread | fix(client): avoid worktree setup flash after editing first message | port |
