@@ -278,8 +278,10 @@ final class SidebarBrandView: ControlView {
         ctx.setFillColor(fg.cgColor(in: self))
         ctx.fillPath()
         ctx.restoreGState()
-        ctx.saveGState()
+        // Return before the save: the modal backdrop draws the whole window into one context, and an unbalanced
+        // save there moved every sidebar view drawn after the brand by the brand's origin.
         if markOnly { return }
+        ctx.saveGState()
         ctx.setShouldSmoothFonts(FontRuntime.smoothing)
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: Self.word, attributes: [
             .font: Self.font, .kern: Self.tracking, .foregroundColor: muted]))
