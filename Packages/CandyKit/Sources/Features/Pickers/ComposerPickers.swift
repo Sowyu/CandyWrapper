@@ -227,7 +227,9 @@ public final class ComposerPickers {
         guard let docked else { return }
         switch target {
         case .effort: docked.focusEffort(levelsOnly: false)
-        case .permissions: if let trigger = docked.footer.permissions { openFooterPermissions(trigger) }
+        case .permissions:
+            docked.focusPermissions()
+            if let trigger = docked.footer.permissions { openFooterPermissions(trigger) }
         }
     }
 
