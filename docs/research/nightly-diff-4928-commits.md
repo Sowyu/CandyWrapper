@@ -337,7 +337,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). In a thread the message now shows at once with files reading "Sending…", the composer clears, and the dispatch waits for each upload, whose outcome outlives the draft; a failed upload takes the message back and restores the draft (thread-2, ComposerController `sendingUploads`). Left: a new thread's first send still waits in the composer |
+| ad9e87111f | #33092 | thread | feat(web): send messages while attachments upload | ported: Send stays enabled while uploads run and the send goes once they land; approval redirects still wait (ComposerAttachmentRules `sendBlockReason`). In a thread the message now shows at once with files reading "Sending…", the composer clears, and the dispatch waits for each upload, whose outcome outlives the draft; a failed upload takes the message back and restores the draft (thread-2, ComposerController `sendingUploads`). Left: a new thread's first send still waits in the composer; thread-4 left it because the dispatch lives in App/Sources/ComposerController (`sendingUploads`), which the composer agent owns: the new-thread path needs the same optimistic message with "Sending…" files once the thread exists |
 
 ## Port group design-icons (1)
 
@@ -1607,7 +1607,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3b18dc2935 | #25445 | thread | fix(web): manual compaction counts history beyond the loaded page | port |
 | 2fa77fbf55 | #24045 | thread | fix(web): horizontal table scrolling preserves timeline follow | port |
 | f161a4d2b5 | #28103 | thread | fix(shared): preserve literal ampersands in citation Markdown paths | port |
-| 71c2410a67 | #28929 | thread | fix(web): thread details slides in on close | left (settings-4928): PanelLayoutControls slides the details card in on close; needs a look on screen |
+| 71c2410a67 | #28929 | thread | fix(web): thread details slides in on close | left (settings-4928, thread-4): on a non-maximized close, header.toggles[0] (ThreadPanelView) should start at the panel header's right edge minus 12pt and slide home over the panel's close (SettingsPanelMotion.duration, the panel's easing), driven from panelSlide in ThreadPanelView.layout so it ends on its resting pixels; needs the screen to compare with T3 |
 | 666631e94e | #36712 | thread | fix(web): copied inline code keeps meaningful edge spaces | port |
 | e2f164d6bb | #28968 | thread | fix(web): let subagent lists pass scrolling to the details panel | port |
 | a678948483 | #28388 | thread | fix(web): pending-question digit shortcuts ignore dialogs, menus and selects | port |
