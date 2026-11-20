@@ -449,6 +449,10 @@ public enum DitherArt {
     /// over it (`ThemeRuntime.resolve`).
     nonisolated static let readableMembers: Set<String> = ["--muted-foreground", "--contrast-muted-foreground",
                                                            "--secondary-label", "--contrast-secondary-label"]
+    /// Blur: the sidebar's own text and icon colors, which sit on the picture there, plus the muted ones above.
+    nonisolated static let readableSidebarMembers: Set<String> = readableMembers.union([
+        "--sidebar-foreground", "--contrast-sidebar-foreground", "--sidebar-muted-foreground",
+        "--contrast-sidebar-muted-foreground", "--sidebar-icon-color"])
 
     nonisolated static func worstBackground(_ background: TokenColor, dark: Bool, dim: Double, veiled: Bool = true) -> Double {
         let scrim = dark ? dim : max(dim, 0.65 + 0.35 * dim)

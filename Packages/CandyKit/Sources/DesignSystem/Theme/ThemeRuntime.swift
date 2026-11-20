@@ -218,6 +218,8 @@ public enum ThemeRuntime {
                 }
             })
         }
+        // The main panel's backgrounds, which Blur's scrim lays over the picture behind the sidebar too.
+        let grounds = (light: (light?.0 ?? Tokens.light).background, dark: (dark?.0 ?? Tokens.dark).background)
         func glass(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
             // Redesign light: the sidebar's menu icons, which T3 mixes toward the sidebar, take the muted icon color
             // so they keep 3:1.
@@ -229,12 +231,14 @@ public enum ThemeRuntime {
             // Blur: the sidebar sits on the picture too, so its muted text keeps 4.5:1 over the brightest (dark) or
             // darkest (light) blurred pixel, which is never past the dots' reach.
             if sidebar, input.ditherBlur, dark ? input.ditherDark : input.ditherLight {
-                let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
+                // The scrim over the picture is the main panel's background, also behind the sidebar.
+                let ground = dark ? grounds.dark : grounds.light
+                let worst = WindowGlass.linear(DitherArt.worstBackground(ground, dark: dark,
                                                                          dim: Double(min(max(input.ditherDim, 0), 90)) / 100, veiled: false))
                 let members = palette.members
                 return Palette(members: { i in
                     let c = members[i]
-                    guard DitherArt.readableMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
+                    guard DitherArt.readableSidebarMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
                     return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
                 })
             }

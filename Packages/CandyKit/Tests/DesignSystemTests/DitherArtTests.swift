@@ -293,6 +293,25 @@ struct DitherTabStripAccessibilityTests {
         }
     }
 
+    /// Blur puts the sidebar on the picture: its text, muted text and icons keep 4.5:1 over the worst blurred pixel.
+    @Test func sidebarTextKeepsContrastOverTheBlur() {
+        for dim in [0, 35, 90] {
+            var input = ThemeRuntimeInput(light: ThemeDefinition.dither.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
+                                          dark: ThemeDefinition.dither.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
+            input.ditherLight = true; input.ditherDark = true; input.ditherDim = dim; input.ditherBlur = true
+            let palettes = ThemeRuntime.resolve(input)
+            for dark in [false, true] {
+                let p = palettes.palette(dark: dark, sidebar: true)
+                let worst = WindowGlass.linear(DitherArt.worstBackground(p.background, dark: dark, dim: Double(dim) / 100, veiled: false))
+                for c in [p.sidebarForeground, p.sidebarMutedForeground, p.sidebarIconColor] {
+                    let l = WindowGlass.luminance(c)
+                    let ratio = (max(l, worst) + 0.05) / (min(l, worst) + 0.05)
+                    #expect(ratio >= 4.5 || (dark && l > 0.999), "dim \(dim) dark \(dark): \(ratio)")
+                }
+            }
+        }
+    }
+
     /// The veil covers the chat column, eases out beside it, and is gone off a thread or under Reduce Transparency.
     @Test func veilFadesBesideTheColumn() {
         let lane: ClosedRange<CGFloat> = 300...1100
