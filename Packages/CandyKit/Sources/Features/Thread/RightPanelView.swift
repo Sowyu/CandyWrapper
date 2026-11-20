@@ -420,17 +420,19 @@ final class RightPanelView: DSView {
         super.layout()
         // `border-l border-border`; the content is `width - 1` wide right of it. Maximized, the panel
         // meets the sidebar's own border and draws none (PreviewPanelShell.tsx:114-118).
-        let edge: CGFloat = isMaximized ? 0 : 1
-        border.isHidden = isMaximized
+        // Redesign's card draws its own rim on every side, so it needs no left border.
+        let edge: CGFloat = isMaximized || isCard ? 0 : 1
+        border.isHidden = isMaximized || isCard
         border.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
-        strip.frame = NSRect(x: edge + 8, y: 0, width: max(0, bounds.width - edge - 8 - 112), height: Self.tabBarHeight)
+        let top = barTop
+        strip.frame = NSRect(x: edge + 8, y: top, width: max(0, bounds.width - edge - 8 - 112), height: Self.tabBarHeight)
         let widths = tabs.map(\.preferredWidth)
         let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24
         let overflow = total > strip.bounds.width
         scrollLeft.isHidden = !overflow; scrollRight.isHidden = !overflow
         if overflow { strip.frame.size.width = max(0, strip.frame.width - 48) }
-        scrollLeft.frame = NSRect(x: strip.frame.maxX, y: 14, width: 24, height: 24)
-        scrollRight.frame = NSRect(x: strip.frame.maxX + 24, y: 14, width: 24, height: 24)
+        scrollLeft.frame = NSRect(x: strip.frame.maxX, y: top + 14, width: 24, height: 24)
+        scrollRight.frame = NSRect(x: strip.frame.maxX + 24, y: top + 14, width: 24, height: 24)
         if revealActiveTab, let i = tabs.firstIndex(where: \.isActive) {
             let start = widths[..<i].reduce(0, +) + CGFloat(i) * 4
             let end = start + widths[i] + (i == tabs.count - 1 ? 4 + 24 : 0)
@@ -448,7 +450,7 @@ final class RightPanelView: DSView {
         }
         layoutDrag()
         add.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: 24, height: 24)
-        let content = NSRect(x: edge, y: Self.tabBarHeight, width: max(0, bounds.width - edge), height: max(0, bounds.height - Self.tabBarHeight))
+        let content = NSRect(x: edge, y: top + Self.tabBarHeight, width: max(0, bounds.width - edge), height: max(0, bounds.height - top - Self.tabBarHeight))
         lazyDiff.loaded?.frame = content
         if let files = lazyFiles.loaded, files.superview === self { files.frame = content }
         lazyFile.loaded?.frame = content
@@ -460,8 +462,22 @@ final class RightPanelView: DSView {
         device.frame = content
         sideChatHost.frame = content
         // The launcher centers against the whole panel (`pb-(--workspace-topbar-height)`).
-        lazyLauncher.loaded?.frame = NSRect(x: edge, y: Self.tabBarHeight, width: content.width, height: max(0, content.height - Self.tabBarHeight))
+        lazyLauncher.loaded?.frame = NSRect(x: edge, y: content.minY, width: content.width, height: max(0, content.height - Self.tabBarHeight))
+        // The card clips every surface to its corners, the WKWebView and the terminal included.
+        if let layer {
+            layer.cornerRadius = isCard ? RedesignTokens.Radius.panel : 0
+            layer.cornerCurve = .continuous
+            layer.masksToBounds = isCard
+            layer.borderWidth = isCard ? 1 : 0
+        }
     }
+
+    /// Redesign draws the panel as a card inset from the window (the user, 2026-11-21: "do the curve out at the corners
+    /// and also extend it upwards"): rounded, clipped, with a rim and no left border.
+    var isCard = false { didSet { if isCard != oldValue { needsLayout = true; needsDisplay = true } } }
+    /// How far the tab bar sits below the panel's top. Redesign's card reaches up into the window's tab band, so its tab
+    /// bar starts under the header pill, which floats over the card's top.
+    var barTop: CGFloat = 0 { didSet { if barTop != oldValue { needsLayout = true } } }
 
     /// Over the thread in a narrow window, where the Glass theme's clear fill would show the thread through.
     var isSheet = false { didSet { if isSheet != oldValue { needsDisplay = true } } }
@@ -470,6 +486,7 @@ final class RightPanelView: DSView {
     override func updateLayer() {
         layer?.backgroundColor = (isSheet ? Themed.color(\.background) : WindowGlass.inset).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border).cgColor(in: self)
+        layer?.borderColor = isCard ? RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor : nil
     }
 }
 

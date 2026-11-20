@@ -36,6 +36,12 @@ public final class DitherTabStripView: TopbarDragView {
         didSet { oldValue?.removeFromSuperview(); trailingAccessory.map { addSubview($0) }; needsLayout = true }
     }
 
+    /// The accessory's room from the strip's right edge.
+    public static let accessoryRight: CGFloat = 10
+    /// Moves the accessory left and down from its resting place. Redesign's right panel card sets it, so the header
+    /// pill sits concentric in the card's top right corner while the card is open.
+    public var accessoryShift: CGSize = .zero { didSet { if accessoryShift != oldValue { needsLayout = true } } }
+
     /// Off hides the tabs and + and keeps them, so they come back as they were; the accessory stays.
     public var showsTabs = true { didSet { if showsTabs != oldValue { needsLayout = true } } }
     private var views: [TabView] = []
@@ -91,9 +97,10 @@ public final class DitherTabStripView: TopbarDragView {
         var reserve: CGFloat = 0
         if let accessory = trailingAccessory, !accessory.isHidden {
             let size = accessory.intrinsicContentSize
-            accessory.frame = NSRect(x: bounds.width - 10 - size.width, y: ((bounds.height - size.height) / 2).rounded(),
+            let right = Self.accessoryRight + accessoryShift.width
+            accessory.frame = NSRect(x: bounds.width - right - size.width, y: ((bounds.height - size.height) / 2).rounded() + accessoryShift.height,
                                      width: size.width, height: size.height)
-            reserve = size.width + 10 + 8
+            reserve = size.width + right + 8
         }
         plus.isHidden = !showsTabs
         plusFrost.isHidden = !showsTabs

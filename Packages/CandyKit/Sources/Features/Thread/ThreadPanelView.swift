@@ -1304,6 +1304,16 @@ public final class ThreadPanelView: DSView {
     private var panelGhost: CALayer?
     private var terminalGhost: CALayer?
 
+    /// A still image of Redesign's card keeps its rounded corners and rim, which `cacheDisplay` does not draw.
+    private static func copyCorners(of view: NSView, to ghost: CALayer) {
+        guard let layer = view.layer, layer.cornerRadius > 0 else { return }
+        ghost.cornerRadius = layer.cornerRadius
+        ghost.cornerCurve = layer.cornerCurve
+        ghost.masksToBounds = true
+        ghost.borderWidth = layer.borderWidth
+        ghost.borderColor = layer.borderColor
+    }
+
     private func ghost(of view: NSView, replacing old: CALayer?) -> CALayer? {
         if let old { return old } // closing again mid-close keeps the image it has
         guard !view.isHidden, view.bounds.width > 0, view.bounds.height > 0,
@@ -1314,6 +1324,7 @@ public final class ThreadPanelView: DSView {
         ghost.contents = bitmap.cgImage
         ghost.contentsScale = window?.backingScaleFactor ?? 2
         ghost.frame = view.frame
+        Self.copyCorners(of: view, to: ghost)
         // Under every subview: the toggles stay on top, and nothing else covers the room the panel leaves.
         ghost.zPosition = -1
         layer?.addSublayer(ghost)
@@ -1382,6 +1393,7 @@ public final class ThreadPanelView: DSView {
         guard rightPanel.bounds.width > 0, let bitmap = rightPanel.bitmapImageRepForCachingDisplay(in: rightPanel.bounds) else { return }
         rightPanel.cacheDisplay(in: rightPanel.bounds, to: bitmap)
         let ghost = CALayer(); ghost.contents = bitmap.cgImage; ghost.frame = rightPanel.frame; ghost.zPosition = 21
+        Self.copyCorners(of: rightPanel, to: ghost)
         let backdrop = CALayer(); backdrop.frame = bounds; backdrop.zPosition = 20
         backdrop.backgroundColor = Themed.color(\.background, 0.6).cgColor(in: self)
         layer?.addSublayer(backdrop); layer?.addSublayer(ghost)
@@ -2201,12 +2213,23 @@ public final class ThreadPanelView: DSView {
         let chat = sheet ? bounds.width : max(0, bounds.width - shownPanel)
         rightPanelBackdrop.isHidden = !sheet || !rightPanelOpen
         rightPanelBackdrop.frame = bounds
-        let panelTop: CGFloat = 0
+        let ditherHeader = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        // Dither's panel sits under the tab strip band, so the timeline reaches up past the panel's top to the
+        // window's edge and its rows slide on under the band (the user: "my stuff is still getting covered").
+        let above = ditherOverhang
+        // Redesign's right panel is a card `Space.s` in from the thread, the window's right and bottom edges and the
+        // window's top, so the band's header pill floats over its clear top
+        // (the user, 2026-11-21: "do the curve out at the corners and also extend it upwards").
+        let card = ditherHeader && !isEmbedded
+        let margin = card ? RedesignTokens.Space.s : 0
+        let panelTop: CGFloat = card ? margin - above : 0
+        rightPanel.isCard = card
+        // The tab bar starts `Space.s` above the band's bottom: under the header pill and clear of it.
+        rightPanel.barTop = card ? max(0, above - 2 * margin) : 0
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
         rightPanel.layer?.zPosition = sheet ? 21 : 0
         rightPanel.isSheet = sheet
         rightPanel.isMaximized = rightPanelMaximized
-        let ditherHeader = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         updateTimelineStatus()
         placePanelToggles()
         header.syncPill()
@@ -2228,17 +2251,16 @@ public final class ThreadPanelView: DSView {
         terminalGhost?.frame.origin.y = chatHeight
         // The rows run on under the header and fade out toward the top (`fade`).
         let glass = WindowGlass.isActive(for: self)
-        // Dither's panel sits under the tab strip band, so the timeline reaches up past the panel's top to the
-        // window's edge and its rows slide on under the band (the user: "my stuff is still getting covered").
-        let above = ditherOverhang
         // In an open Redesign thread the first row starts below the rows' fade-in (the timeline mask), which is
         // measured from the timeline's top, the window's.
         let column = ditherHeader && !isDraft && !isEmbedded
         timeline.topClearance = column ? max(chatTop + above, DitherChrome.band) + RedesignTokens.Space.l : chatTop + above
         timeline.frame = NSRect(x: 0, y: -above, width: chat, height: max(0, chatHeight + above))
         // Mid-slide the panel keeps its width and runs past the window's right edge.
-        rightPanel.frame = NSRect(x: sheet ? bounds.width - panelWidth : chat, y: panelTop, width: panelWidth, height: max(0, bounds.height - panelTop))
-        panelGhost?.frame.origin.x = chat
+        let panelX = sheet ? bounds.width - panelWidth : chat + margin
+        let panelRight = sheet ? margin : 2 * margin
+        rightPanel.frame = NSRect(x: panelX, y: panelTop, width: max(0, panelWidth - panelRight), height: max(0, bounds.height - panelTop - margin))
+        panelGhost?.frame.origin.x = sheet ? chat : chat + margin
         if rightPanelSheetOpen != sheetWasOpen {
             sheetWasOpen = rightPanelSheetOpen
             if sheetWasOpen {
@@ -2254,7 +2276,7 @@ public final class ThreadPanelView: DSView {
             addSubview(panelResize)
             panelResize.onDrag = { [weak self] delta in
                 guard let self else { return }
-                self.preferredPanelWidth = RightPanelView.width(viewport: self.viewportWidth, container: self.bounds.width, preferred: self.rightPanel.frame.width + delta)
+                self.preferredPanelWidth = RightPanelView.width(viewport: self.viewportWidth, container: self.bounds.width, preferred: self.bounds.width - self.panelResize.frame.minX + delta)
                 UserDefaults.standard.set(Double(self.preferredPanelWidth), forKey: "t3code:preview-panel-width")
                 self.needsLayout = true
             }
@@ -2271,14 +2293,26 @@ public final class ThreadPanelView: DSView {
             control.layer?.zPosition = controlsAboveSheet ? 22 : 0
         }
         // `left-0 w-1`: the handle starts at the panel's edge, off the chat's scrollbar (RightPanelResizeHandle.tsx:22 at 4928, #35043).
-        panelResize.frame = NSRect(x: chat, y: panelTop, width: 4, height: max(0, bounds.height - panelTop))
+        // While the card is open the header pill sits concentric in its top right corner, `Radius.panel - Radius.control`
+        // in from both edges, and rides there with the panel's slide.
+        if let strip = header.pill.superview as? DitherTabStripView {
+            let open: CGFloat = !card ? 0 : panelSlide.isRunning && !sheet ? CGFloat(panelSlide.value) : rightPanelOpen ? 1 : 0
+            let inset = margin + RedesignTokens.Radius.panel - RedesignTokens.Radius.control
+            let rest = CGSize(width: DitherTabStripView.accessoryRight, height: ((DitherChrome.band - DitherTabStripView.tabHeight) / 2).rounded())
+            strip.accessoryShift = CGSize(width: (max(0, inset - rest.width) * open).rounded(), height: (max(0, inset - rest.height) * open).rounded())
+        }
+        // Redesign's handle fills the gap between the thread and the card.
+        panelResize.centersLine = card
+        panelResize.frame = NSRect(x: chat, y: panelTop, width: card ? margin : 4, height: max(0, rightPanel.frame.maxY - panelTop))
         if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
-            var x = bounds.width - 12 - 1
+            // On Redesign's card they sit on its tab bar, inside its right edge.
+            var x = card ? rightPanel.frame.maxX - 12 : bounds.width - 12 - 1
+            let barMid = card ? panelTop + rightPanel.barTop + RightPanelView.tabBarHeight / 2 : ThreadHeaderView.height / 2
             for control in [header.toggles[2], header.toggles[1], maximize] where control.superview === self {
                 let size = control.intrinsicContentSize
                 x -= size.width
-                control.frame = NSRect(x: x, y: ThreadHeaderView.height / 2 - size.height / 2, width: size.width, height: size.height)
+                control.frame = NSRect(x: x, y: barMid - size.height / 2, width: size.width, height: size.height)
                 x -= 4
             }
         }
