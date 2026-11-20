@@ -108,6 +108,7 @@ final class DitherTabsController {
             case .draft: return .init(id: key, title: "New thread", icon: .squarePen)
             case .settings: return .init(id: key, title: "Settings", icon: .settings)
             case .pullRequests: return .init(id: key, title: "Pull requests", icon: .gitPullRequestArrow)
+            case .issues: return .init(id: key, title: "Issues", icon: .circleDot)
             case .usage: return .init(id: key, title: "Usage", icon: .chartNoAxesColumn)
             case .orchestrator: return .init(id: key, title: OrchestratorStore.shared.config.displayName, icon: .workflow)
             }
