@@ -568,6 +568,12 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     // MARK: Writes
 
     /// `server.updateSettings` with a `providerInstanceMutation` (usePersistEnvironmentProviderInstanceMutation).
+    /// `confirmProviderInstanceRemoval` (4928 ProviderSettingsPanel.tsx): the question, then what goes.
+    private func confirmRemoval(_ question: String, _ consequence: String = "", then remove: @escaping @MainActor () -> Void) {
+        guard let confirm = context.confirm else { return remove() }
+        confirm("\(question)\nIts saved settings, including any custom binary path, will be removed.\(consequence)", true, remove)
+    }
+
     private func mutate(_ env: String, _ mutation: JSONValue, patch: [String: JSONValue] = [:], failure: String) {
         guard let request = context.request else { return }
         Task { [weak self] in
@@ -763,16 +769,24 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             let reset = ResetSlot(label: "\(ProvidersLogic.label(row.driver) ?? row.driver) provider settings")
             reset.isShown = !readOnly
             reset.frame.size = NSSize(width: 20, height: 20)
+            // Removing saved settings asks first (ProviderSettingsPanel.tsx, #29480); a default-off driver also turns off.
+            let name = displayName ?? ProvidersLogic.label(row.driver) ?? row.driver
+            let turnsOff = row.enabled && ProjectSettings.defaultDisabledDrivers.contains(row.driver)
             reset.action = { [weak self] in
-                self?.mutate(env.id, .object(["operation": .string("remove"), "instanceId": .string(row.instanceId)]), failure: "Could not reset provider instance")
+                self?.confirmRemoval("Reset the \(name) provider to its defaults?", turnsOff ? " It will also be turned off." : "") {
+                    self?.mutate(env.id, .object(["operation": .string("remove"), "instanceId": .string(row.instanceId)]), failure: "Could not reset provider instance")
+                }
             }
             actions.append(reset)
         } else if !row.isDefault {
             let delete = ButtonView(nil, icon: .trash2, variant: .ghostDestructive, size: .iconXs)
             delete.setAccessibilityLabel("Delete instance \(row.instanceId)")
             delete.isEnabled = !readOnly
+            let name = displayName ?? ProvidersLogic.label(row.driver) ?? row.driver
             delete.action = { [weak self] in
-                self?.mutate(env.id, .object(["operation": .string("remove"), "instanceId": .string(row.instanceId)]), failure: "Could not delete provider instance")
+                self?.confirmRemoval("Remove the \(name) provider instance?") {
+                    self?.mutate(env.id, .object(["operation": .string("remove"), "instanceId": .string(row.instanceId)]), failure: "Could not delete provider instance")
+                }
             }
             actions.append(delete)
         }

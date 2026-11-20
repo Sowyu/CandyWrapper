@@ -1223,7 +1223,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | b8badda42e | #24673 | settings | fix(web): interval settings save when editing ends, not per keystroke | port |
 | 4c3808a109 | #28300 | settings | fix(web): Diagnostics memory no longer reads "1024.0 MB" | port |
 | edc37c96c8 | #29382 | settings | fix(web): center authorized client settings rows | port |
-| a497f7b9a3 | #29480 | settings | fix(web): confirm before removing a provider instance's saved settings | port |
+| a497f7b9a3 | #29480 | settings | fix(web): confirm before removing a provider instance's saved settings | ported (settings-4928): Reset and Delete on a provider instance ask first, with the turned-off note for default-off drivers |
 | bff68fb6b6 | #29554 | settings | fix(shared): saving one source control token no longer drops the other hosts' tokens | port |
 | 2e39f1d7de | #31826 | settings | fix(web): settings descriptions use the full row and stay two lines | port |
 | 7f7bf263a8 | #32409 | settings | fix(web): recover ACP settings when projects change | port |
