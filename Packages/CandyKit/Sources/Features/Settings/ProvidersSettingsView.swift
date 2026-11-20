@@ -273,6 +273,13 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     private var updatingInstances: Set<String> = []
     /// The instance the editor was built for.
     private var editorInstance: String?
+    /// The open editor's Unrestricted switch, kept in step with the server while that editor stays up.
+    private weak var unrestrictedSwitchView: SwitchView?
+    private var unrestrictedSwitchInstance: String?
+    private var unrestrictedSwitch: (String, SwitchView)? {
+        get { unrestrictedSwitchView.flatMap { v in unrestrictedSwitchInstance.map { ($0, v) } } }
+        set { unrestrictedSwitchInstance = newValue?.0; unrestrictedSwitchView = newValue?.1 }
+    }
     /// The managed Codex setup and Runtime fold of the open editor, kept across rebuilds so a sign-in in
     /// progress and the fold's state survive each provider snapshot (React keeps them by key).
     private var codexViews: (key: String, setup: CodexSetupView, runtime: FoldedSettingsSectionView, fields: CodexManagedRuntimeFields)?
@@ -436,6 +443,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                 editorInstance = chosen.instanceId
                 state.drafts = environmentDrafts[chosen.instanceId]?.rows ?? []
                 editorInput = state
+            }
+            if let (id, toggle) = unrestrictedSwitch, id == chosen.instanceId, let live = liveInstance(id) {
+                toggle.isOn = UnrestrictedAccess.isOn(live)
             }
         } else {
             providers.editor = nil
@@ -986,7 +996,11 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         }
         let variablesRow = SettingsRowView(title: "Variables", detail: "API keys, base URLs, and other per-instance CLI settings.", control: SettingsControlGroup([addVariable]))
         variablesRow.footer = list.rows.isEmpty ? nil : list
-        sections.append(SettingsSectionView(title: "Environment", rows: [variablesRow]))
+        var environmentRows: [any SettingsGroupRow] = [variablesRow]
+        if let unrestricted = unrestrictedRow(row, provider: provider, env: env, displayName: displayName, readOnly: readOnly) {
+            environmentRows.insert(unrestricted, at: 0)
+        }
+        sections.append(SettingsSectionView(title: "Environment", rows: environmentRows))
 
         // Provider health changes do not rebuild the model list or its search draft.
         let resolved = context.modelPreferences?(env.id) ?? ([], .object([:]))
@@ -1070,6 +1084,35 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         }
         e.sections = sections
         return e
+    }
+
+    /// CandyWrapper's Unrestricted switch (`UnrestrictedAccess`): a Claude instance on a server that applies instance
+    /// environments. It reads and writes the same variable as the list below, and follows the server's settings.
+    private func unrestrictedRow(_ row: ProvidersLogic.Row, provider: ServerProvider?, env: SettingsScopeEnvironment,
+                                 displayName: String, readOnly: Bool) -> SettingsRowView? {
+        guard let settings = env.settings,
+              let state = UnrestrictedAccess.state(settings: .object(settings.raw), instanceId: row.instanceId, driver: row.driver,
+                                                   version: provider?.version, canManage: true) else { unrestrictedSwitch = nil; return nil }
+        let toggle = SwitchView(isOn: state.on)
+        toggle.setAccessibilityLabel(UnrestrictedAccess.label)
+        toggle.isEnabled = !readOnly
+        toggle.onChange = { [weak self, weak toggle] on in
+            guard let self else { return }
+            let write: @MainActor () -> Void = { [weak self, weak toggle] in
+                guard let self, let raw = (self.environment?.settings?.raw).map(JSONValue.object) else { return }
+                toggle?.isOn = on
+                self.mutate(env.id, UnrestrictedAccess.payload(raw, instanceId: row.instanceId, driver: row.driver, on: on)["providerInstanceMutation"]!,
+                            failure: on ? "Could not turn on Unrestricted" : "Could not turn off Unrestricted")
+            }
+            guard on else { return write() }
+            toggle?.isOn = false
+            UnrestrictedAccess.confirm(in: self.window, environment: env.id, instance: row.instanceId, machine: env.label,
+                                       provider: displayName, then: write)
+        }
+        unrestrictedSwitch = (row.instanceId, toggle)
+        return SettingsRowView(title: UnrestrictedAccess.label,
+                               detail: (state.unsupportedHint.map { $0 + " " } ?? "") + "Sets \(UnrestrictedAccess.variable)=1, so Claude Code deletes files without asking in Full access. Applies to every Full access thread on this instance, from each thread's next session. Anthropic recommends it only for throwaway containers.",
+                               control: toggle)
     }
 
     private func liveInstance(_ id: String) -> JSONValue? {
