@@ -106,6 +106,25 @@ add("hover-card", CARD, {"kind": "hover-card"}, box=False)
 add("ghost", ghost("Ship the sidebar virtualization", 1), {"kind": "ghost", "count": "1"}, box=False)
 add("ghost.many", ghost("Port the timestamp formatter", 3), {"kind": "ghost", "count": "3"}, box=False)
 
+# A regenerating title at rest (SidebarThreadRow.tsx:1080-1112 at 4928): text-muted-foreground under an
+# ActivityShimmerOverlay (chat/TimelineRowParts.tsx:46-65) whose live-activity-focus band rests left of the title
+# (index.css:587-660), so the resting frame is the plain muted title.
+GLIMMER = ('<div class="flex h-7 items-center"><span class="min-w-0 flex-1 text-start text-sm transition-opacity motion-reduce:transition-none font-medium relative truncate text-muted-foreground" dir="ltr">'
+           'Regenerating the sidebar title'
+           '<span aria-hidden="true" class="live-activity-focus pointer-events-none absolute inset-y-0 select-none"><span class="live-activity-focus-counter block">'
+           '<span class="live-activity-focus-aligned block text-foreground truncate">Regenerating the sidebar title</span></span></span></span></div>')
+add("title-glimmer", GLIMMER, {"kind": "glimmer", "title": "Regenerating the sidebar title"})
+
+# The issue badge on a thread row (SidebarThreadRow.tsx:1135-1195 at 4928): a muted InlineButton (ui/button.tsx:103-120)
+# with the circle-dot IssueGlyph (issue/issuePresentation.tsx:12) and the issue key, before its detail loads.
+INLINE = ("inline-flex shrink-0 cursor-pointer items-center gap-0.5 font-medium underline-offset-2 [text-align:var(--inline-button-text-align,center)] "
+          "[white-space:var(--inline-button-white-space,nowrap)] hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-64 "
+          "text-muted-foreground hover:text-foreground")
+ISSUE = (f'<button type="button" data-slot="inline-button" class="{INLINE}" aria-label="Issue #128: Sidebar badge">'
+         + lucide("circle-dot", "size-3 shrink-0")
+         + '<span class="max-w-16 truncate text-xs font-normal text-secondary-label tabular-nums">#128</span></button>')
+add("issue-badge", f'<div class="flex h-7 items-center">{ISSUE}</div>', {"kind": "issue-badge", "key": "#128"})
+
 # SidebarProjectFolderHeader.tsx:65-109 (#21039): open and folded rows.
 for expanded in [True, False]:
     meta = '' if expanded else '<span class="size-1.5 shrink-0 rounded-full bg-warning"></span><span class="shrink-0 text-xs tabular-nums text-sidebar-muted-foreground">3</span>'
