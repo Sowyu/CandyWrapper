@@ -1,0 +1,5 @@
+{
+  "note": "Real answers from the 4928 sandbox server (no signed-in tracker), recorded 2026-11-19 with scripts/record-transcript.swift issues.",
+  "issuesList": {"entries": [], "errors": [], "nextCursors": {}, "scopes": [], "trackers": [], "viewers": {}},
+  "issueTrackersList": {"bindings": {}, "trackers": [{"account": null, "connected": false, "credential": {"helpUrl": "https://linear.app/settings/account/security", "label": "Personal API key"}, "detail": null, "displayName": "Linear", "host": "linear.app", "scopeNoun": "team", "scopes": [], "tracker": "linear"}]}
+}

@@ -121,3 +121,14 @@ struct IssueListLogicTests {
         #expect(SavedViewsKind.issues.suggestedName(["who": .string("assigned")]) == "Issues Assigned to Me")
     }
 }
+
+extension IssueListLogicTests {
+    /// The real sandbox answer groups to nothing, which the page draws as "No trackers to read".
+    @Test func sandboxAnswerHasNoGroups() throws {
+        let root = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: Self.root.appendingPathComponent("sandbox-4928.json")))
+        guard case .object(let o) = root, let value = o["issuesList"] else { Issue.record("fixture"); return }
+        let page = IssueListLogic.HeldPage(answer: try value.decode(as: IssueListResult.self))
+        #expect(IssueListLogic.group([("sandbox", page)], query: "", sort: "updated").isEmpty)
+        #expect(IssueListLogic.hostOptions(page.answer.trackers, chosen: nil).count == 1)
+    }
+}

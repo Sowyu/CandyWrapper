@@ -86,3 +86,16 @@ struct IssueWireTests {
         #expect(IssueFailure.message(tag: "Other", fields: [:]) == nil)
     }
 }
+
+/// The real 4928 sandbox's answers (fixtures/issues/sandbox-4928.json): no tracker at all.
+struct IssueSandboxWireTests {
+    @Test func decodesTheSandboxAnswers() throws {
+        let root = try IssueWireTests.json("sandbox-4928.json")
+        guard case .object(let o) = root else { Issue.record("not an object"); return }
+        let list = try #require(o["issuesList"]).decode(as: IssueListResult.self)
+        #expect(list.trackers.isEmpty && list.entries.isEmpty && list.scopes == [])
+        let trackers = try #require(o["issueTrackersList"]).decode(as: IssueTrackerConnectionList.self)
+        #expect(trackers.trackers.first?.scopeNoun == "team" && trackers.trackers.first?.connected == false)
+        #expect(trackers.bindings.isEmpty)
+    }
+}

@@ -2,7 +2,7 @@
 //
 // Usage: swift record.swift <baseURL> <tokenFile> <outFile> <scenario> [pairingToken]
 //   tokenFile   bearer token cache for this (sandbox) server; created on first pairing.
-//   scenario    basic | turn | turn2 | threads | composer | requests | queue | git | settings
+//   scenario    basic | turn | turn2 | threads | composer | requests | queue | git | settings | issues
 // Secrets (access token, ws ticket, pairing token) and the account email are
 // redacted when the transcript is written.
 import Foundation
@@ -663,6 +663,18 @@ case "settings":
     try await request("server.getTraceDiagnostics")
     try await request("server.getProcessResourceHistory", ["windowMs": 900_000, "bucketMs": 60_000])
     await pause(6)
+
+case "issues":
+    // The 4928 Issues page's reads on a sandbox with no signed-in tracker: the list (empty or the
+    // tracker's unconfigured state), the standalone trackers, and a detail read that fails. Read-only.
+    try await request("server.getConfig")
+    try await request("issues.list", ["state": "open", "involvement": "all", "limit": 50])
+    try await request("issueTrackers.list")
+    if let project = ProcessInfo.processInfo.environment["PROJECT_ID"] {
+        try await request("issues.detail", ["projectId": project, "tracker": "github", "scope": "acme/demo-repo", "key": "1"])
+        try await request("issues.candidates", ["projectId": project, "tracker": "github", "scope": "acme/demo-repo"])
+    }
+    await pause(2)
 
 default:
     print("unknown scenario"); exit(2)
