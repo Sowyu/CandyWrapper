@@ -418,7 +418,7 @@ final class GitController {
     /// A No project thread's folder is the shared scratch root: never offer git there (4928 ThreadDetailsPanel.tsx:104-112, #34788).
     private var isScratchTarget: Bool {
         guard let target, let sidebar, let project = sidebar.snapshot?.projects.first(where: { $0.id == target.projectId }) else { return false }
-        return SidebarModel.isScratch(project, state: sidebar.state)
+        return SidebarListBuilder.isScratch(project, state: sidebar.state)
     }
 
     /// The details card, while it is built.
