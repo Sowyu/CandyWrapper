@@ -22,7 +22,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 
 | Commit | PR | Area | Change | Status |
 |---|---|---|---|---|
-| fec83a18e3 | #17138 | composer | fix(web): numbered composer lists nest and lift correctly | port |
+| fec83a18e3 | #17138 | composer | fix(web): numbered composer lists nest and lift correctly | ported: ComposerListContinuation follows 4928: Tab nests at the parent content column numbered after existing children, an empty nested item lifts one level per Enter, in source and rich mode |
 
 ## Port group diff-review (3)
 
@@ -771,7 +771,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 00b2d0e271 | #26559 | composer | fix(web): the prompt box follows the interface font size | port |
 | e00f98fde2 | #22236 | composer | fix(web): stacked composer notices line up their details buttons | port |
 | a0aefbee11 | #23784 | composer | fix(shared): give attached threads a canonical read call | port |
-| 8003dd8c7b | #27016 | composer | fix(web): Shift+Tab moves a nested composer list item back out | port |
+| 8003dd8c7b | #27016 | composer | fix(web): Shift+Tab moves a nested composer list item back out | ported: Shift+Tab lifts a nested item to its parent indent and renumbers the parent list (ComposerListContinuation `outdent`) |
 | 8b74a69019 | #28446 | composer | fix(web): background command details open above their button | port |
 | cedf8b4c1c | #23940 | composer | fix(web): format inline code when the opening backtick is typed last | port |
 | 16233e7529 | #24331 | composer | fix(web): typed answer moved to the draft by an option click is announced | port |

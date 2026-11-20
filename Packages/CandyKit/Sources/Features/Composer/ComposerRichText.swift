@@ -164,89 +164,247 @@ enum ComposerRichText {
     }
 }
 
-/// composer-list-continuation.ts:29-179. Kept separate from rendering so source mode
-/// and rich mode use the same marker grammar and UTF-16 edit coordinates.
+/// composer-list-continuation.ts at 4928 (#17138, #27016): Enter continues, splits or lifts a list item,
+/// Tab nests it at its parent's content column and Shift+Tab lifts it back out. Kept separate from rendering
+/// so source mode and rich mode share one marker grammar, in UTF-16 Markdown offsets.
 enum ComposerListContinuation {
-    /// `renumber`: number replacements on the ordered items after the new one, in the original text.
-    struct Edit: Equatable { var range: NSRange; var replacement: String; var renumber: [Renumber] = [] }
-    struct Renumber: Equatable { var range: NSRange; var number: String }
+    /// A replacement in the original text.
+    struct Piece: Equatable { var range: NSRange; var text: String }
+    /// The pieces, ascending and apart, and the caret in the edited text. T3 returns one replacement that
+    /// copies the text between its changes; pieces leave that text, and any chip in it, untouched.
+    struct Edit: Equatable {
+        var pieces: [Piece]
+        var cursorAfter: Int
+        func applied(to text: String) -> String {
+            let result = NSMutableString(string: text)
+            for piece in pieces.reversed() { result.replaceCharacters(in: piece.range, with: piece.text) }
+            return result as String
+        }
+    }
+
+    enum Kind: Equatable { case ordered(number: String, delimiter: String), task, bullet(String) }
+    struct Marker: Equatable { var kind: Kind; var indent: String; var space: String }
+    struct Parsed { var marker: Marker; var markerEnd: Int; var contentColumn: Int }
+
+    private static func regex(_ p: String) -> NSRegularExpression { try! NSRegularExpression(pattern: p) }
+    nonisolated(unsafe) private static let indentPattern = regex(#"^[ \t]*"#)
+    nonisolated(unsafe) private static let orderedPattern = regex(#"^(\d+)([.)])((?:[ \t]+)|\s*$)"#)
+    nonisolated(unsafe) private static let taskPattern = regex(#"^-(\s)\[[ xX]\]((?:[ \t]+)|\s*$)"#)
+    nonisolated(unsafe) private static let bulletPattern = regex(#"^([-*+])((?:[ \t]+)|\s*$)"#)
+
+    /// `parseListMarker`.
+    static func parse(_ line: String) -> Parsed? {
+        let text = line as NSString
+        let indentLength = indentPattern.firstMatch(in: line, range: NSRange(location: 0, length: text.length))?.range.length ?? 0
+        let indent = text.substring(to: indentLength)
+        let rest = text.substring(from: indentLength)
+        let full = NSRange(location: 0, length: (rest as NSString).length)
+        func group(_ m: NSTextCheckingResult, _ i: Int) -> String {
+            m.range(at: i).location == NSNotFound ? "" : (rest as NSString).substring(with: m.range(at: i))
+        }
+        if let m = orderedPattern.firstMatch(in: rest, range: full) {
+            let number = group(m, 1), space = group(m, 3)
+            return Parsed(marker: Marker(kind: .ordered(number: number, delimiter: group(m, 2)), indent: indent, space: space),
+                          markerEnd: indentLength + m.range.length,
+                          contentColumn: contentColumn(indent, markerWidth: number.utf16.count + 1, padding: space))
+        }
+        // The checkbox is item content, so a task's content starts after "- ".
+        if let m = taskPattern.firstMatch(in: rest, range: full) {
+            return Parsed(marker: Marker(kind: .task, indent: indent, space: group(m, 2)), markerEnd: indentLength + m.range.length,
+                          contentColumn: contentColumn(indent, markerWidth: 1, padding: group(m, 1)))
+        }
+        if let m = bulletPattern.firstMatch(in: rest, range: full) {
+            let space = group(m, 2)
+            return Parsed(marker: Marker(kind: .bullet(group(m, 1)), indent: indent, space: space), markerEnd: indentLength + m.range.length,
+                          contentColumn: contentColumn(indent, markerWidth: 1, padding: space))
+        }
+        return nil
+    }
+
+    /// CommonMark content follows 1-4 columns of padding; wider padding is code, so the content column sits
+    /// one column past the marker.
+    private static func contentColumn(_ indent: String, markerWidth: Int, padding: String) -> Int {
+        let markerEnd = indentWidth(indent) + markerWidth
+        let space = indentWidth(padding, from: markerEnd)
+        return markerEnd + (1...4 ~= space ? space : 1)
+    }
+
+    private static let maxSafe: UInt64 = 9_007_199_254_740_991
+
     static func nextOrderedMarker(_ marker: String) -> String {
         let digits = String(marker.dropLast())
-        guard let n = UInt64(digits), n <= 9_007_199_254_740_991 else { return marker }
+        guard let n = UInt64(digits), n < maxSafe else { return marker }
         let next = String(n + 1)
         return String(repeating: "0", count: max(0, digits.count - next.count)) + next + marker.suffix(1)
     }
-    /// A list item's marker, compiled once: `edit` runs on every Return and Tab in the composer.
-    nonisolated(unsafe) private static let listMarker = try! NSRegularExpression(pattern: #"^([ \t]*)(-\s\[[ xX]\]|\d+[.)]|[-*+])([ \t]+|$)"#)
 
-    static func edit(_ text: String, selection: NSRange, indent: Bool = false) -> Edit? {
-        let value = text as NSString
-        guard selection.length == 0, selection.location <= value.length else { return nil }
-        let cursor = selection.location
-        if ComposerInlineTokens.collect(text).contains(where: { cursor > $0.range.location && cursor < NSMaxRange($0.range) }) { return nil }
-        let before = value.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: cursor))
-        let start = before.location == NSNotFound ? 0 : before.location + 1
-        let after = value.range(of: "\n", range: NSRange(location: cursor, length: value.length - cursor))
-        let end = after.location == NSNotFound ? value.length : after.location
-        let line = value.substring(with: NSRange(location: start, length: end - start)) as NSString
-        guard let match = listMarker.firstMatch(in: line as String, range: NSRange(location: 0, length: line.length)) else { return nil }
-        if indent { return Edit(range: NSRange(location: start, length: 0), replacement: "  ") }
-        // A bare "2." with no space after it is not an item yet: Return adds a line
-        // (composer-list-continuation.ts:156, bac96aa3b2).
-        guard match.range(at: 3).length > 0 else { return nil }
-        guard cursor >= start + match.range.length else { return nil }
-        if line.substring(from: match.range.length).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return Edit(range: NSRange(location: start, length: cursor - start), replacement: "")
+    private static func nextMarkerText(_ marker: Marker) -> String {
+        switch marker.kind {
+        case .ordered(let number, let delimiter): marker.indent + nextOrderedMarker(number + delimiter) + " "
+        case .task: marker.indent + "- [ ] "
+        case .bullet(let bullet): marker.indent + bullet + " "
         }
-        let prefix = line.substring(with: match.range(at: 1)), marker = line.substring(with: match.range(at: 2))
-        let ordered = marker.last == "." || marker.last == ")"
-        let next = marker.contains("[") ? "- [ ]" : ordered ? nextOrderedMarker(marker) : marker
-        let renumber = ordered ? renumberFollowing(value, after: end, indent: prefix, marker: marker) : []
-        return Edit(range: selection, replacement: "\n" + prefix + next + " ", renumber: renumber)
     }
 
     /// Markdown tabs advance to the next four-column stop.
-    private static func indentWidth(_ line: String) -> Int {
-        var width = 0
+    private static func indentWidth(_ line: String, from column: Int = 0) -> Int {
+        var width = column
         for c in line {
             if c == " " { width += 1 } else if c == "\t" { width += 4 - width % 4 } else { break }
         }
-        return width
+        return width - column
     }
 
-    /// `renumberFollowingItems` (composer-list-continuation.ts:79-122): the same-level ordered items
-    /// after the split line count on from the inserted one, until a blank line, a shallower line or
-    /// another kind of item. Deeper lines are skipped; a newline inside a chip starts no item.
-    private static func renumberFollowing(_ value: NSString, after lineEnd: Int, indent: String, marker: String) -> [Renumber] {
-        // `Number.isSafeInteger(expected)` (composer-list-continuation.ts:87-91): a number too large to count
-        // on from renumbers nothing, and adding to it here must not overflow.
-        guard let current = UInt64(marker.dropLast()), current <= 9_007_199_254_740_991 - 2 else { return [] }
+    /// `renumberFollowingItems`: the same-level ordered items after the line count on from `marker` + 2, until a
+    /// blank line, a shallower line or another kind of item. Deeper lines are skipped; a newline inside a chip
+    /// starts no item.
+    private static func renumberFollowing(_ value: NSString, after lineEnd: Int, marker: Marker, tokens: [NSRange]) -> [Piece] {
+        guard case .ordered(let number, let delimiter) = marker.kind, let current = UInt64(number), current <= maxSafe - 2 else { return [] }
         var expected = current + 2
-        let delimiter = marker.suffix(1), base = indentWidth(indent)
-        let tokens = ComposerInlineTokens.collect(value as String)
-        var result: [Renumber] = [], position = lineEnd
-        while position < value.length, expected <= 9_007_199_254_740_991 {
+        let base = indentWidth(marker.indent)
+        var pieces: [Piece] = [], position = lineEnd
+        while position < value.length, expected <= maxSafe {
             let lineStart = position + 1
             let next = value.range(of: "\n", range: NSRange(location: lineStart, length: value.length - lineStart))
             let end = next.location == NSNotFound ? value.length : next.location
             position = end
-            if tokens.contains(where: { $0.range.location < lineStart && NSMaxRange($0.range) > lineStart }) { continue }
+            if tokens.contains(where: { $0.location < lineStart && NSMaxRange($0) > lineStart }) { continue }
             let line = value.substring(with: NSRange(location: lineStart, length: end - lineStart))
             let width = indentWidth(line)
-            if line.trimmingCharacters(in: .whitespaces).isEmpty || width < base { break }
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || width < base { break }
             if width > base { continue }
-            guard let m = listMarker.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) else { break }
-            let current = (line as NSString).substring(with: m.range(at: 2))
-            guard current.last.map(String.init) == String(delimiter), current.dropLast().allSatisfy(\.isNumber) else { break }
-            let digits = String(current.dropLast())
+            guard let parsed = parse(line), case .ordered(let digits, let d) = parsed.marker.kind, d == delimiter else { break }
             let replacement = digits.hasPrefix("0")
                 ? String(repeating: "0", count: max(0, digits.count - String(expected).count)) + String(expected) : String(expected)
             if replacement != digits {
-                result.append(Renumber(range: NSRange(location: lineStart + m.range(at: 2).location, length: digits.utf16.count),
-                                       number: replacement))
+                pieces.append(Piece(range: NSRange(location: lineStart + parsed.marker.indent.utf16.count, length: digits.utf16.count), text: replacement))
             }
             expected += 1
         }
+        return pieces
+    }
+
+    private static func currentLine(_ value: NSString, _ cursor: Int) -> (start: Int, end: Int, text: String) {
+        let before = value.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: cursor))
+        let start = before.location == NSNotFound ? 0 : before.location + 1
+        let after = value.range(of: "\n", range: NSRange(location: cursor, length: value.length - cursor))
+        let end = after.location == NSNotFound ? value.length : after.location
+        return (start, end, value.substring(with: NSRange(location: start, length: end - start)))
+    }
+
+    /// `listMarkersAbove`: the list items above the line, nearest first, up to the first line that isn't one.
+    private static func markersAbove(_ value: NSString, lineStart: Int, tokens: [NSRange]) -> [Parsed] {
+        var result: [Parsed] = []
+        var lineStart = lineStart, tokenIndex = tokens.count - 1
+        func lineBegin(before index: Int) -> Int {
+            let found = value.range(of: "\n", options: .backwards, range: NSRange(location: 0, length: max(0, index)))
+            return found.location == NSNotFound ? 0 : found.location + 1
+        }
+        while lineStart > 0 {
+            let lineEnd = lineStart - 1
+            lineStart = lineBegin(before: lineEnd)
+            // A newline inside a chip does not start a list item.
+            while tokenIndex >= 0 {
+                let token = tokens[tokenIndex]
+                if token.location >= lineStart { tokenIndex -= 1 }
+                else if NSMaxRange(token) > lineStart { lineStart = lineBegin(before: token.location) }
+                else { break }
+            }
+            guard let parsed = parse(value.substring(with: NSRange(location: lineStart, length: lineEnd - lineStart))) else { break }
+            result.append(parsed)
+        }
         return result
+    }
+
+    private static func parent(_ value: NSString, lineStart: Int, marker: Marker, tokens: [NSRange]) -> Marker? {
+        let width = indentWidth(marker.indent)
+        return markersAbove(value, lineStart: lineStart, tokens: tokens).first { indentWidth($0.marker.indent) < width }?.marker
+    }
+
+    /// `nestedNumber`: an ordered item continues its new siblings' numbering, else starts at 1.
+    private static func nestedNumber(_ marker: Marker, previous: Marker?) -> (replaced: Int, text: String) {
+        guard case .ordered(let number, let delimiter) = marker.kind else { return (0, "") }
+        if case .ordered(let prev, let d)? = previous?.kind, d == delimiter {
+            return (number.utf16.count, String(nextOrderedMarker(prev + delimiter).dropLast()))
+        }
+        return (number.utf16.count, "1")
+    }
+
+    private static func tokens(_ text: String) -> [NSRange] { ComposerInlineTokens.collect(text).map(\.range) }
+
+    /// `listContinuationForEnter`.
+    static func enter(_ text: String, cursor: Int) -> Edit? {
+        let value = text as NSString
+        guard cursor >= 0, cursor <= value.length else { return nil }
+        let line = currentLine(value, cursor)
+        // A bare "2." with no space after it is not an item yet: Return adds a line (bac96aa3b2).
+        guard let parsed = parse(line.text), !parsed.marker.space.isEmpty else { return nil }
+        let markerEnd = line.start + parsed.markerEnd
+        guard cursor >= markerEnd else { return nil }
+        let tokens = tokens(text)
+        if tokens.contains(where: { cursor > $0.location && cursor < NSMaxRange($0) }) { return nil }
+        if value.substring(with: NSRange(location: markerEnd, length: line.end - markerEnd)).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // An empty item lifts one level per press, then leaves the list.
+            let parent = parent(value, lineStart: line.start, marker: parsed.marker, tokens: tokens)
+            let replacement = parent.map(nextMarkerText) ?? ""
+            let end = max(cursor, markerEnd)
+            let renumbered = parent.map { renumberFollowing(value, after: line.end, marker: $0, tokens: tokens) } ?? []
+            return Edit(pieces: [Piece(range: NSRange(location: line.start, length: end - line.start), text: replacement)] + renumbered,
+                        cursorAfter: line.start + replacement.utf16.count)
+        }
+        let insertion = "\n" + nextMarkerText(parsed.marker)
+        return Edit(pieces: [Piece(range: NSRange(location: cursor, length: 0), text: insertion)]
+                        + renumberFollowing(value, after: line.end, marker: parsed.marker, tokens: tokens),
+                    cursorAfter: cursor + insertion.utf16.count)
+    }
+
+    /// `listIndentForTab`: the item nests at its previous sibling's content column, numbered after any child
+    /// that sibling already has; with no sibling above it moves two spaces in.
+    static func indent(_ text: String, cursor start: Int) -> Edit? {
+        let value = text as NSString
+        guard start >= 0, start <= value.length else { return nil }
+        let line = currentLine(value, start)
+        guard let parsed = parse(line.text) else { return nil }
+        let tokens = tokens(text)
+        if tokens.contains(where: { start > $0.location && start < NSMaxRange($0) }) { return nil }
+        let marker = parsed.marker, width = indentWidth(marker.indent)
+        var previousChild: Marker?
+        for above in markersAbove(value, lineStart: line.start, tokens: tokens) {
+            let aboveWidth = indentWidth(above.marker.indent)
+            if aboveWidth < width { break }
+            if aboveWidth > width {
+                if previousChild.map({ aboveWidth < indentWidth($0.indent) }) ?? true { previousChild = above.marker }
+                continue
+            }
+            let indent = previousChild?.indent ?? above.marker.indent + String(repeating: " ", count: above.contentColumn - aboveWidth)
+            let number = nestedNumber(marker, previous: previousChild)
+            let replacedEnd = line.start + marker.indent.utf16.count + number.replaced
+            let replacement = indent + number.text
+            return Edit(pieces: [Piece(range: NSRange(location: line.start, length: replacedEnd - line.start), text: replacement)],
+                        cursorAfter: start < replacedEnd ? line.start + indent.utf16.count : start - replacedEnd + line.start + replacement.utf16.count)
+        }
+        return Edit(pieces: [Piece(range: NSRange(location: line.start, length: 0), text: "  ")], cursorAfter: start + 2)
+    }
+
+    /// `listOutdentForTab`: a nested item moves to its parent's indent, continuing an ordered parent's list.
+    static func outdent(_ text: String, cursor start: Int) -> Edit? {
+        let value = text as NSString
+        guard start >= 0, start <= value.length else { return nil }
+        let line = currentLine(value, start)
+        guard let parsed = parse(line.text), !parsed.marker.indent.isEmpty else { return nil }
+        let tokens = tokens(text)
+        if tokens.contains(where: { start > $0.location && start < NSMaxRange($0) }) { return nil }
+        let marker = parsed.marker
+        let parent = parent(value, lineStart: line.start, marker: marker, tokens: tokens)
+        // With no parent above, undo one step of Tab's two-space fallback.
+        let indent = parent?.indent ?? marker.indent.replacingOccurrences(of: #"^(?:\t| {1,2})"#, with: "", options: .regularExpression)
+        var continues = false
+        if case .ordered(_, let d)? = parent?.kind, case .ordered(_, let own) = marker.kind, d == own { continues = true }
+        let number = continues ? nestedNumber(marker, previous: parent) : (replaced: 0, text: "")
+        let replacedEnd = line.start + marker.indent.utf16.count + number.replaced
+        let replacement = indent + number.text
+        let renumbered = continues ? parent.map { renumberFollowing(value, after: line.end, marker: $0, tokens: tokens) } ?? [] : []
+        return Edit(pieces: [Piece(range: NSRange(location: line.start, length: replacedEnd - line.start), text: replacement)] + renumbered,
+                    cursorAfter: start < replacedEnd ? line.start + indent.utf16.count : start - replacedEnd + line.start + replacement.utf16.count)
     }
 }

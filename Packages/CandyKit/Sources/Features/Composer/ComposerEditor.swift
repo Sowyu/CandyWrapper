@@ -827,27 +827,33 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         return allowed
     }
 
-    private func listEdit(indent: Bool) -> Bool {
+    /// Applies a list edit computed on the draft's Markdown (composerCommandKey.ts `applyListEdit` at 4928). In a
+    /// rich draft a piece inside a line's marker rewrites that marker atom's source, which the styler reads back.
+    private func listEdit(_ compute: (String, Int) -> ComposerListContinuation.Edit?) -> Bool {
         let selection = selectedRange()
-        guard selection.length == 0 else { return false }
-        guard let storage = textStorage else { return false }
+        guard selection.length == 0, let storage = textStorage else { return false }
         let mapping = ComposerRichTextStyler.mapping(storage)
         let cursor = mapping.offsets[min(selection.location, mapping.offsets.count - 1)]
-        guard let edit = ComposerListContinuation.edit(mapping.value, selection: NSRange(location: cursor, length: 0), indent: indent) else { return false }
-        func storageRange(_ range: NSRange) -> NSRange {
-            let start = mapping.offsets.lastIndex(where: { $0 <= range.location }) ?? 0
-            let end = mapping.offsets.lastIndex(where: { $0 <= NSMaxRange(range) }) ?? start
-            return NSRange(location: start, length: max(0, end - start))
-        }
+        guard let edit = compute(mapping.value, cursor) else { return false }
+        func storageIndex(_ markdown: Int) -> Int { mapping.offsets.lastIndex(where: { $0 <= markdown }) ?? 0 }
         breakUndoCoalescing()
         applyingListEdit = true
         undoManager?.beginUndoGrouping()
-        // The renumbered items sit after the caret: change them last to first so earlier offsets hold.
-        for r in edit.renumber.reversed() { replace(storageRange(r.range), with: r.number) }
-        replace(storageRange(edit.range), with: edit.replacement)
+        // Last to first, so earlier offsets hold.
+        for piece in edit.pieces.reversed() {
+            let start = storageIndex(piece.range.location)
+            if richTextEnabled, start < storage.length, start + 1 < mapping.offsets.count, let atom = block(at: start), atom.isLineMarker,
+               NSMaxRange(piece.range) <= mapping.offsets[start + 1] {
+                let local = NSRange(location: piece.range.location - mapping.offsets[start], length: piece.range.length)
+                replaceBlocks(NSRange(location: start, length: 1), with: (atom.source as NSString).replacingCharacters(in: local, with: piece.text))
+            } else {
+                let end = storageIndex(NSMaxRange(piece.range))
+                replace(NSRange(location: start, length: max(0, end - start)), with: piece.text)
+            }
+        }
         undoManager?.endUndoGrouping()
         applyingListEdit = false
-        if indent { setCaret(markdown: cursor + 2) }
+        setCaret(markdown: edit.cursorAfter)
         breakUndoCoalescing()
         return true
     }
@@ -901,8 +907,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             } else { insertText("  ", replacementRange: selectedRange()) }
             return
         }
-        if event.keyCode == 48, event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty,
-           !hasMarkedText(), blockIndent() || listEdit(indent: true) { return }
+        // Tab nests a list item and Shift+Tab lifts it back out (#17138, #27016, composerCommandKey.ts at 4928).
+        if event.keyCode == 48, !hasMarkedText() {
+            let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
+            if flags.isEmpty, listEdit(ComposerListContinuation.indent) { return }
+            if flags == .shift, listEdit(ComposerListContinuation.outdent) { return }
+        }
         let returnKeys: Set<UInt16> = [36, 76]
         if returnKeys.contains(event.keyCode) {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -924,7 +934,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             if onSubmitKey?(key) == true { return }
             // A list item splits or leaves its list, a quote or heading continues (Shift+Enter in T3).
             if !key.composing, blockReturn() { scrollRangeToVisible(selectedRange()); return }
-            if !key.composing, listEdit(indent: false) { return }
+            if !key.composing, listEdit(ComposerListContinuation.enter) { return }
         }
         let plainKey = event.modifierFlags.intersection([.shift, .option, .command, .control]).isEmpty && !hasMarkedText()
         // ArrowLeft 123, ArrowRight 124: a styled edge is two caret stops (`stepCaretAcrossStyledEdge`).

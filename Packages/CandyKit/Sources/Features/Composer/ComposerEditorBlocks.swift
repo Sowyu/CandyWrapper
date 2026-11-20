@@ -262,20 +262,6 @@ extension ComposerEditor {
         return false
     }
 
-    // MARK: Tab
-
-    /// Tab on a list item nests it two spaces deeper (`listIndentForTab`).
-    func blockIndent() -> Bool {
-        guard richTextEnabled, selectedRange().length == 0 else { return false }
-        let caret = selectedRange().location, start = lineStart(caret)
-        guard let atom = block(at: start), atom.listParts != nil else { return false }
-        breakUndoCoalescing()
-        replaceBlocks(NSRange(location: start, length: 1), with: "  " + atom.source)
-        setSelectedRange(NSRange(location: caret, length: 0))
-        breakUndoCoalescing()
-        return true
-    }
-
     // MARK: Paste
 
     /// A rich paste that parses to anything but one plain line goes in as whole lines, the way
