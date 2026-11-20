@@ -1,0 +1,42 @@
+#!/bin/zsh -f
+# Self-check for scripts/appcast-key-check, the appcast step of scripts/release: signs a feed with throwaway keys
+# and expects the check to pass or stop. Prints "ok", or each case that went the wrong way.
+# Needs Sparkle's sign_update: SPARKLE_BIN=<folder>, or the one in any build's SourcePackages under /tmp.
+check=${0:A:h}/appcast-key-check
+bin=${SPARKLE_BIN:-$(print -l /tmp/*/SourcePackages/artifacts/sparkle/Sparkle/bin(N/om) | head -1)}
+sign_update=$bin/sign_update
+[[ -x $sign_update ]] || { print -u2 "no sign_update: set SPARKLE_BIN to Sparkle's bin folder"; exit 2 }
+dir=$(mktemp -d /tmp/cw-keychecktest.XXXXXX) || exit 2
+trap 'rm -rf $dir' EXIT
+cd $dir
+# Three throwaway Ed25519 seeds in Sparkle's format, and their public keys.
+for k in old new other; do head -c 32 /dev/urandom | base64 > $k.seed; done
+pub() { /usr/bin/xcrun swift - $1 <<'SWIFT'
+import CryptoKit
+import Foundation
+let seed = Data(base64Encoded: try! String(contentsOfFile: CommandLine.arguments[1], encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines))!
+print(try! Curve25519.Signing.PrivateKey(rawRepresentation: seed).publicKey.rawRepresentation.base64EncodedString())
+SWIFT
+}
+old=$(pub old.seed) other=$(pub other.seed)
+feed() { # feed <file> <seed>: a small appcast signed the way scripts/release signs it
+  print -r -- '<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>t</title>
+<item><title>1.0</title><sparkle:version>1</sparkle:version></item></channel></rss>' > $1
+  $sign_update --ed-key-file - $1 < $2 >/dev/null
+}
+feed by-old.xml old.seed
+feed by-new.xml new.seed
+sed 's|<title>1.0</title>|<title>1.1</title>|' by-old.xml > tampered.xml
+fail=0
+# expect <exit status> <case> <appcast> [previous key]: checks with the current key's seed on stdin.
+expect() { $check $sign_update $3 $4 < new.seed >/dev/null 2>&1; local s=$?; (( s == $1 )) || { print "FAIL $2: exit $s, want $1"; fail=1 } }
+expect 0 "current key, no option" by-new.xml
+expect 1 "previous key's feed, no option" by-old.xml
+expect 0 "previous key's feed, right --previous-key" by-old.xml $old
+expect 1 "previous key's feed, wrong --previous-key" by-old.xml $other
+expect 1 "changed feed, right --previous-key" tampered.xml $old
+expect 1 "current key's feed, --previous-key left in" by-new.xml $old
+expect 1 "not a key" by-old.xml not-a-key
+(( fail )) || print ok
+exit $fail

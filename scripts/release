@@ -7,6 +7,8 @@
 #   --notes FILE         release notes (markdown): the GitHub release body and the appcast item's description
 #   --channel nightly    tag the appcast item `nightly` (only the Nightly track sees it); default: Sparkle's default channel
 #   --out DIR            work folder, which must be yours (default: a new mktemp folder /tmp/cw-release-<version>.XXXXXX)
+#   --previous-key KEY   once, after an EdDSA key change: accept a published appcast signed by this earlier public key
+#                        (docs/release.md, "Key rotation, 2026-11-21")
 #
 # Test builds only (scripts/release refuses to publish with any of these):
 #   --appcast FILE       start from this appcast instead of the published one
@@ -28,13 +30,14 @@ KC=$HOME/Library/Keychains/candywrapper-release.keychain-db
 FEED_URL=https://github.com/$REPO_SLUG/releases/download/appcast/appcast.xml
 here=${0:A:h:h}
 
-dry=0 notes= channel= out= appcast_in= feed= pubkey= edfile= bundle_id= version= build= commit= source= dlprefix=
+dry=0 notes= channel= out= prevkey= appcast_in= feed= pubkey= edfile= bundle_id= version= build= commit= source= dlprefix=
 while (( $# )); do
   case $1 in
     --dry-run) dry=1 ;;
     --notes) notes=${2:A}; shift ;;
     --channel) channel=$2; shift ;;
     --out) out=$2; shift ;;
+    --previous-key) prevkey=$2; shift ;;
     --appcast) appcast_in=${2:A}; shift ;;
     --feed-url) feed=$2; shift ;;
     --public-key) pubkey=$2; shift ;;
@@ -44,7 +47,7 @@ while (( $# )); do
     --build) build=$2; shift ;;
     --source) source=${2:A}; shift ;;
     --download-prefix) dlprefix=$2; shift ;;
-    -h|--help) sed -n '2,19p' $0; exit 0 ;;
+    -h|--help) sed -n '2,21p' $0; exit 0 ;;
     -*) print -u2 "unknown option $1"; exit 2 ;;
     *) commit=$1 ;;
   esac
@@ -172,10 +175,10 @@ if [[ -n $appcast_in ]]; then cp $appcast_in $out/appcast.old.xml
 # The query string skips GitHub's edge cache: a cached copy could be a stale feed, or a 404 from before the
 # feed existed, and a fetch of the bare URL can itself leave such a 404 cached for every client.
 elif ! curl -fsSL -o $out/appcast.old.xml "$FEED_URL?fetched=$(date +%s)"; then print "no published appcast yet, starting a new one"; rm -f $out/appcast.old.xml; fi
-# Earlier items are copied into the new feed and signed again, so they must come from a feed this key signed.
-if [[ -f $out/appcast.old.xml ]] && ! edkey | $sparkle_bin/sign_update --verify --ed-key-file - $out/appcast.old.xml >/dev/null 2>&1; then
-  print -u2 "the published appcast's signature does not verify, so it changed outside scripts/release; stopping"; exit 1
-fi
+# Earlier items are copied into the new feed and signed again, so they must come from a feed this key signed,
+# or, with --previous-key, from one the earlier key signed.
+if [[ -f $out/appcast.old.xml ]]; then edkey | $here/scripts/appcast-key-check $sparkle_bin/sign_update $out/appcast.old.xml $prevkey || exit 1
+elif [[ -n $prevkey ]]; then print -u2 "--previous-key needs a published appcast to check; stopping"; exit 1; fi
 
 notes_file=${notes:-$work/notes.md}
 [[ -n $notes ]] || print -r -- "- CandyWrapper $ver" > $notes_file

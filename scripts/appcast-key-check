@@ -1,0 +1,45 @@
+#!/bin/zsh -f
+# Checks that a published appcast was signed by our own EdDSA key before scripts/release carries its items over.
+#
+#   scripts/appcast-key-check <sign_update> <appcast> [<previous public key>]   (the current key's seed on stdin)
+#
+# Without a previous key the appcast must verify with the current key, as it always has. With one, it must
+# verify with that previous public key instead: this is the one release after a key change (docs/release.md,
+# "Key rotation, 2026-11-21"). An appcast that verifies with neither key stops the release, and so does one that
+# already verifies with the current key, so the previous key can't stay in use by habit.
+# The seed goes only to sign_update's stdin. The previous key is public, so checking it needs no secret.
+sign_update=$1 appcast=$2 previous=${3:-}
+[[ -x $sign_update && -f $appcast ]] || { print -u2 "usage: appcast-key-check <sign_update> <appcast> [<previous public key>]"; exit 2 }
+
+if $sign_update --verify --ed-key-file - $appcast >/dev/null 2>&1; then
+  [[ -z $previous ]] && exit 0
+  print -u2 "the published appcast already verifies with the current key, so the key change is done; drop --previous-key"; exit 1
+fi
+if [[ -z $previous ]]; then
+  print -u2 "the published appcast's signature does not verify, so it changed outside scripts/release; stopping"; exit 1
+fi
+
+# Sparkle's own check (SPUExtractSignedFeed.m, SUAppcastDriver.m:94-133 in Sparkle 2.10.0): the signed bytes are
+# everything before the last "<!-- sparkle-signatures:" block, which holds the base64 Ed25519 signature and their length.
+/usr/bin/xcrun swift - $appcast $previous <<'SWIFT' && { print "the published appcast is signed by the previous key $previous"; exit 0 }
+import CryptoKit
+import Foundation
+let args = CommandLine.arguments
+func fail(_ m: String) -> Never { FileHandle.standardError.write(Data((m + "\n").utf8)); exit(1) }
+guard let data = FileManager.default.contents(atPath: args[1]) else { fail("cannot read \(args[1])") }
+guard let raw = Data(base64Encoded: args[2]), raw.count == 32, let key = try? Curve25519.Signing.PublicKey(rawRepresentation: raw)
+else { fail("--previous-key is not a base64 Ed25519 public key") }
+guard let start = data.range(of: Data("<!-- sparkle-signatures:\n".utf8), options: .backwards),
+      let end = data.range(of: Data("-->".utf8), in: start.upperBound..<data.endIndex),
+      let block = String(data: data[start.upperBound..<end.lowerBound], encoding: .utf8)
+else { fail("the appcast has no Sparkle signature block") }
+let content = data[data.startIndex..<start.lowerBound]
+var signature: Data?, length: Int?
+for line in block.split(separator: "\n") {
+  if line.hasPrefix("edSignature:") { signature = Data(base64Encoded: line.dropFirst(12).trimmingCharacters(in: .whitespaces)) }
+  if line.hasPrefix("length:") { length = Int(line.dropFirst(7).trimmingCharacters(in: .whitespaces)) }
+}
+guard let signature, length == content.count, key.isValidSignature(signature, for: content) else { fail("no match") }
+SWIFT
+print -u2 "the published appcast verifies with neither the current key nor the previous key $previous, so it changed outside scripts/release; stopping"
+exit 1
