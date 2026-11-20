@@ -96,3 +96,80 @@ The current full-screen set the tests read is `design/reference-3824`. Its READM
 5. Review. Each PNG has to be looked at before it replaces the 3824 one, so plan for the user's review time.
 
 Captures from the desktop app on a real screen instead need the screen lock, the official Nightly app and screencapture, so they wait until the user frees the screen.
+
+## Full-screen tests against reference-4928
+
+Written 2026-11-19 (task screens-4928). `design/reference-4928` now holds the full-screen set, captured from 4928's web client against a sandbox seeded from scratch (its README has the details). Every test that read `design/reference-3824` reads `design/reference-4928`. No ceiling was raised and no app code changed. The test fixtures changed in two places to match the new seed: `fixtures/screen-4928-markdown.md` holds the new Markdown reply, and `Screen3824Fixtures.sidebar` lists the new sidebar rows. Every other fixture still draws 3824's seed data, such as the diff's file list, the palette results and the approval text, so some failures below mix data with real UI changes.
+
+I ran `scripts/test --filter` with QueueFidelityTests, ChangedFilesFidelityTests, PickersFidelityTests, ComposerFidelityTests, SettingsScreensFidelityTests, SidebarFidelityTests (both modules), PanelsFidelityTests, ThreadFidelityTests, ReferenceScreensFidelityTests, DiffFidelityTests and PanelScreensFidelityTests. Only QueueFidelityTests passes. The other 10 suites fail on 65 cases, and the DesignSystemTests sidebar fails 2 sampled checks. The numbers are the share of pixels that differ, then the ceiling.
+
+### Thread, `ThreadFidelityTests` wholePanel, 8 cases
+
+The text matches the new fixture. The dark panel differs most.
+
+- `03a-kitchen-sink-top` light 8.33%, dark 17.51%, ceiling 5.5%
+- `03b-kitchen-sink-middle` light 6.12%, dark 15.30%
+- `03c-kitchen-sink-bottom` light 5.65%, dark 6.30%
+- `03d-kitchen-sink-commands` light 8.61%, dark 8.65%
+
+### Sidebar, 4 cases and 2 checks
+
+4928's default theme draws art behind the sidebar header, and each row puts the project line above the title.
+
+- `SidebarFidelityTests` wholeSidebar `list` light 12.36%, dark 22.03%, ceiling 11%
+- `SidebarFidelityTests` wholeSidebar `below the art` light 14.26%, dark 22.39%, ceiling 11%
+- DesignSystemTests `sidebarGrainAgainstCapture`: the mean differs by 25.7 (light) and 27.6 (dark) against 1.0, and the deviation by 65.6 and 70.1 against 0.5. Its sample rect now lands on the header art.
+- DesignSystemTests `selectedRowFillAgainstCapture`: the mean differs by 24.0 and 26.0 against 1.5. The selected markdown row moved to the bottom of the list.
+
+### Composer pickers, `PickersFidelityTests`, 8 cases
+
+At 4928, 13, 41 and 53 show one docked picker (models, effort column, footer). CandyWrapper still draws 41 and 53 as the 3824 effort popup.
+
+- `41-traits-picker` light 29.73%, dark 24.77%, ceiling 5.5%
+- `53-effort-menu-permissions` light 29.73%, dark 24.77%
+- `03c-footer-controls` light 21.43%, dark 21.45%
+- `13-model-picker` light 6.64%, dark 6.62%. The popup is 362x283 in T3 and 362x267 here.
+- `ComposerFidelityTests` `54-composer-effort-bars` dark 13.33%, ceiling 11.5%
+
+### Settings, `SettingsScreensFidelityTests`, 22 cases, ceiling 5%
+
+4928 adds settings sections to the sidebar and changes the row grid (see "Settings rows" above).
+
+- `16a-settings-general` light 6.55%, dark 7.13%
+- `16b-settings-general-mid` light 8.50%, dark 9.25%
+- `16c-settings-general-bottom` light 6.21%, dark 7.12%
+- `18-settings-providers` light 7.53%, dark 14.01%
+- `19-settings-keybindings` light 5.23%, dark 5.31%
+- `32-settings-source-control` light 6.13%, dark 6.74%
+- `39-settings-diagnostics` light 6.10%, dark 43.03%. The counters are live, and the dark capture's first card differs most.
+- `40-settings-integrations` light 5.81%, dark 6.28%
+- `49-settings-modal-general` light 6.55%, dark 7.13%
+
+### Panels and dialogs, `PanelScreensFidelityTests` 9 cases and `PanelsFidelityTests` 2 cases
+
+The fixtures still hold 3824's approval command, palette results and commit file list. Compare the data before reading these as UI changes.
+
+- `05-approval-request` light 14.16%, dark 14.23%, ceiling 4%
+- `22-commit-dialog` light 6.73%, dark 7.53%, ceiling 6%
+- `08-palette-search` light 20.96%, dark 11.68%, ceiling 6.5%
+- `45-go-to-file` light 17.06%, dark 20.40%, ceiling 6.5%
+- `46-project-search` dark 9.35%, ceiling 6.5%
+- `06-user-input-request` light 5.63%, dark 5.75%, ceiling 4%
+
+### Diff and changed files, `DiffFidelityTests` 4 cases and `ChangedFilesFidelityTests` 5 cases
+
+The diff fixture is 3824's two-file patch with +3 each. The new seed changes one line in each file.
+
+- `09-diff-split` light 23.67%, dark 24.17%, ceiling 8.5%
+- `10-diff-unified` light 20.38%, dark 20.52%, ceiling 8.5%
+- `47-changed-files-card.main` dark 14.23%, ceiling 7.5%
+- `48-diff-turn-file.chat` light 19.45%, dark 25.05%, ceiling 7.5%
+- `48-diff-turn-file.panel` light 13.35%, dark 13.32%, ceiling 7.5%
+
+### Narrow, `ReferenceScreensFidelityTests`, 2 cases
+
+- `03n-narrow` light 7.36%, dark 18.44%, ceiling 5.5%
+
+### Next step
+
+Before porting from these numbers, bring the remaining fixtures to the 4928 seed: the diff patch from the notes thread, the approval command under `/Users/Shared/cw-sandbox-4928/demo-repo`, the palette thread names and the commit dialog's files. The sandbox stays seeded for that, and the IDs are in `design/reference-4928/plans/sandbox-ids.json`. Then whatever still fails is a real 4928 difference. The dark thread panel and the sidebar header art look like the largest real differences.
