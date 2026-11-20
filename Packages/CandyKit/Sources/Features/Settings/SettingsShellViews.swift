@@ -750,6 +750,7 @@ public final class SettingsPageView: DSView {
     public var page: (NSView & SettingsGroupRow)? {
         didSet {
             oldValue?.removeFromSuperview()
+            if page !== oldValue { pendingReveal = nil }
             if let page { document.addSubview(page) }
             header.section = page == nil ? nil : header.section
             needsLayout = true
@@ -775,12 +776,24 @@ public final class SettingsPageView: DSView {
     public override func cancelOperation(_ sender: Any?) { onEscape?() }
 
     /// Lays the page out again after its content changed height.
-    public func pageChanged() { needsLayout = true; layoutSubtreeIfNeeded() }
+    public func pageChanged() {
+        needsLayout = true; layoutSubtreeIfNeeded()
+        if let target = pendingReveal, !target.isHiddenOrHasHiddenAncestor { pendingReveal = nil; reveal(target, highlight: pendingHighlight) }
+    }
+
+    /// A search target whose section waits on its data (Issue trackers loads after Source control opens). T3 scrolls
+    /// from the target's ref callback, when the element mounts (`useSettingsSearchTarget`, settingsLayout.tsx:159-170
+    /// at 4928); here the next height change that shows it scrolls to it once. Another page, another jump or a scroll
+    /// to the top drops it.
+    private weak var pendingReveal: NSView?
+    private var pendingHighlight = true
 
     /// Scrolls `target` (a row or section of the page) to the middle and pulses it, as a search jump does
     /// (settingsLayout.tsx `scrollAndFocusSettingsTarget`, `block: "center"`).
     public func reveal(_ target: NSView, highlight: Bool = true) {
+        pendingReveal = nil
         pageChanged()
+        guard !target.isHiddenOrHasHiddenAncestor else { pendingReveal = target; pendingHighlight = highlight; return }
         let rect = document.convert(target.bounds, from: target)
         let visible = scroll.scrollView.contentView.bounds.height
         let y = max(0, min(rect.midY - visible / 2, document.frame.height - visible))
@@ -789,7 +802,7 @@ public final class SettingsPageView: DSView {
     }
 
     /// Back to the top for a newly opened page.
-    public func scrollToTop() { scroll.scroll(to: .zero) }
+    public func scrollToTop() { pendingReveal = nil; scroll.scroll(to: .zero) }
 
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
 
