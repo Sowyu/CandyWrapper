@@ -14,8 +14,6 @@ public final class RouteHistory {
         /// The 4928 Issues page.
         case issues
         case usage
-        /// Redesign's Orchestrator pane, CandyWrapper's own.
-        case orchestrator
     }
 
     public private(set) var entries: [Route] = []

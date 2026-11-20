@@ -4,7 +4,7 @@ import argparse, ctypes, datetime, json, os, pathlib, pwd, signal, statistics, s
 REPO = pathlib.Path(__file__).resolve().parents[2]
 ROOT = pathlib.Path.home()/'CandyWrapper-research/sandbox/html-benchmark'
 APP = pathlib.Path('/tmp/cw-dd-html-benchmark/Build/Products/Debug/CandyWrapper.app')
-p=argparse.ArgumentParser(); p.add_argument('--tag',default='baseline'); p.add_argument('--case',choices=['light','collage','chart']); p.add_argument('--mode',choices=['thread','conductor']); p.add_argument('--appearance',choices=['dark','light']); a=p.parse_args()
+p=argparse.ArgumentParser(); p.add_argument('--tag',default='baseline'); p.add_argument('--case',choices=['light','collage','chart']); p.add_argument('--mode',choices=['thread']); p.add_argument('--appearance',choices=['dark','light']); a=p.parse_args()
 assert APP.exists(), 'Build with scripts/build-test-app html-benchmark'
 assert a.tag.replace('-','').replace('_','').isalnum()
 probe=ROOT/'probe'
@@ -38,7 +38,7 @@ def capture(pid,path):
     rect=','.join(str(round(w[k])) for k in ['x','y','w','h'])
     subprocess.run(['sudo','launchctl','asuser',str(os.getuid()),'sudo','-u',pwd.getpwuid(os.getuid()).pw_name,'/usr/sbin/screencapture','-x','-R'+rect,str(path)],check=True)
 
-cases=[(k,m,'dark') for k in ['light','collage','chart'] for m in ['thread','conductor']]+[('collage',m,'light') for m in ['thread','conductor']]
+cases=[(k,m,'dark') for k in ['light','collage','chart'] for m in ['thread']]+[('collage',m,'light') for m in ['thread']]
 cases=[v for v in cases if (not a.case or v[0]==a.case) and (not a.mode or v[1]==a.mode) and (not a.appearance or v[2]==a.appearance)]
 # Lock ownership is an external precondition, so one command can never monopolize the screen silently.
 owner=subprocess.check_output([str(REPO/'scripts/ui/screen-lock'),'who'],text=True)

@@ -3,8 +3,8 @@ import T3Client
 import T3Protocol
 import T3Store
 
-/// A T3 terminal no one sees, for the helper's install and for the Connectors tab's `config` command
-/// (docs/orchestrator-helper.md section 2, docs/connectors.md).
+/// A T3 terminal no one sees, for the Connectors tab's `config` command (docs/connectors.md) and the one-time removal
+/// of the old Orchestrator relay (`OrchestratorCleanup`).
 @MainActor
 enum HiddenTerminal {
     /// Opens a terminal no one sees, types `command` in slices a PTY's small input queue keeps up with, answers

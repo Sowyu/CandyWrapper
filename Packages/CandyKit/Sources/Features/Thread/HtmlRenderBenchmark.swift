@@ -5,7 +5,7 @@ import Foundation
 import T3Protocol
 import T3Store
 
-/// Opt-in sandbox driver. Runs the real thread or Conductor view; never sends orchestration commands.
+/// Opt-in sandbox driver. Runs the real thread view; never sends orchestration commands.
 @MainActor
 public final class HtmlRenderBenchmark: DSView {
     struct Manifest: Decodable {
@@ -18,7 +18,6 @@ public final class HtmlRenderBenchmark: DSView {
     private let output: URL
     private let log: FileHandle
     private let panel: ThreadPanelView?
-    private let conductor: OrchestratorPaneView?
     private let origin = ProcessInfo.processInfo.systemUptime
     private var started = false
     private var phase = "setup"
@@ -30,7 +29,7 @@ public final class HtmlRenderBenchmark: DSView {
     public init(manifestPath: String, kind: String, mode: String, output: String) throws {
         let sandbox = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("CandyWrapper-research/sandbox").resolvingSymlinksInPath().path + "/"
         guard URL(fileURLWithPath: manifestPath).resolvingSymlinksInPath().path.hasPrefix(sandbox),
-              URL(fileURLWithPath: output).resolvingSymlinksInPath().path.hasPrefix(sandbox), ["thread", "conductor"].contains(mode) else {
+              URL(fileURLWithPath: output).resolvingSymlinksInPath().path.hasPrefix(sandbox), mode == "thread" else {
             throw CocoaError(.fileReadNoPermission)
         }
         let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: URL(fileURLWithPath: manifestPath)))
@@ -41,14 +40,12 @@ public final class HtmlRenderBenchmark: DSView {
         let path = self.output.appendingPathComponent("events.jsonl")
         FileManager.default.createFile(atPath: path.path, contents: nil)
         log = try FileHandle(forWritingTo: path)
-        panel = mode == "thread" ? ThreadPanelView() : nil
-        conductor = mode == "conductor" ? OrchestratorPaneView() : nil
+        panel = ThreadPanelView()
         super.init(frame: .zero)
         let urls = Dictionary(uniqueKeysWithValues: pages.map { ($0.attachmentId, $0.url) })
         let asset: @MainActor @Sendable (String, String) async -> URL? = { id, _ in urls[id] }
         panel?.model.webAssetURL = asset
-        conductor?.webAssetURL = asset
-        addSubview(panel ?? conductor!)
+        addSubview(panel!)
         ThreadWebFrameView.benchmarkObserver = { [weak self] event, page, frame, data in
             self?.observe(event, page: page, frame: frame, data: data)
         }
@@ -56,7 +53,7 @@ public final class HtmlRenderBenchmark: DSView {
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    override public func layout() { super.layout(); (panel ?? conductor!).frame = bounds }
+    override public func layout() { super.layout(); panel?.frame = bounds }
     override public func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard window != nil, !started else { return }; started = true
@@ -115,12 +112,6 @@ public final class HtmlRenderBenchmark: DSView {
     private func arrive(_ count: Int) throws {
         record("arrival", ["page":pages[count-1].title,"count":count])
         if let panel { panel.setProjection(try projection(count), projectTitle:"Sandbox", workspaceRoot:output.deletingLastPathComponent().path) }
-        if let conductor {
-            var state = OrchestratorPaneState(); state.name = "Conductor"; state.started = true; state.connected = true
-            state.machine = "HTML sandbox"; state.environmentId = "html-benchmark"
-            state.items = pages.prefix(count).map { .html(id:$0.attachmentId,page:HtmlRenderReference(attachmentId:$0.attachmentId,title:$0.title,height:$0.height)) }
-            conductor.set(state)
-        }
         window?.contentView?.layoutSubtreeIfNeeded()
     }
     private func descendants(_ root: NSView) -> [NSView] { [root] + root.subviews.flatMap(descendants) }

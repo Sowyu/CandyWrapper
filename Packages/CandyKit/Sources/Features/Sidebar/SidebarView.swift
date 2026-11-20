@@ -7,10 +7,6 @@ import T3Store
 @MainActor
 public struct SidebarActions {
     public var openThread: (ThreadId) -> Void = { _ in }
-    /// The pinned Orchestrator row was clicked (Redesign, Orchestrator on).
-    public var openOrchestrator: () -> Void = {}
-    /// Its name was renamed inline with a double click.
-    public var renameOrchestrator: (String) -> Void = { _ in }
     public var settle: (ThreadId) -> Void = { _ in }
     public var unsettle: (ThreadId) -> Void = { _ in }
     public var snooze: (ThreadId, NSView) -> Void = { _, _ in }
@@ -107,35 +103,6 @@ public final class SidebarContentView: DSView {
                    SidebarNavRowView(.calendarClock, "Automations"), SidebarNavRowView(.settings, "Settings")]
     /// Dither (after Capy): the account row, a pill floating at the foot of the sidebar.
     public let accountRow = SidebarAccountRowView()
-    /// Redesign with the Orchestrator on: its pinned row above the threads, which all sit under it. Nil removes the row.
-    public var orchestrator: OrchestratorSidebarInfo? {
-        didSet {
-            guard orchestrator != oldValue else { return }
-            if let info = orchestrator {
-                if let row = orchestratorRow { row.apply(info) } else {
-                    let row = OrchestratorSidebarRowView(info)
-                    row.action = { [weak self] in self?.actions.openOrchestrator() }
-                    row.onRename = { [weak self] name in self?.actions.renameOrchestrator(name) }
-                    addSubview(row)
-                    orchestratorRow = row
-                    let relay = BotPointerRelay()
-                    let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
-                                              owner: relay, userInfo: nil)
-                    addTrackingArea(area)
-                    botPointer = (relay, area)
-                }
-            } else {
-                orchestratorRow?.removeFromSuperview()
-                orchestratorRow = nil
-                if let (_, area) = botPointer { removeTrackingArea(area) }
-                botPointer = nil
-            }
-            if (orchestrator == nil) != (oldValue == nil) { needsLayout = true }
-        }
-    }
-    private var orchestratorRow: OrchestratorSidebarRowView?
-    /// Forwards pointer moves over the sidebar to the bots while the Orchestrator is on.
-    private var botPointer: (BotPointerRelay, NSTrackingArea)?
     /// Dither: Capy's "Threads" section label between the nav rows and the list.
     let navSection = LabelView("Threads", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
     let backButton = SidebarMenuButtonView("Back", icon: .arrowLeft)
@@ -151,12 +118,12 @@ public final class SidebarContentView: DSView {
     public var state = SidebarListState() {
         didSet {
             // Inline, so the fix-up does not run this observer again.
-            if showsNoRoute { state.activeThreadId = nil; state.activeDraftId = nil }
+            if isOnUtilityPage { state.activeThreadId = nil; state.activeDraftId = nil }
             if state.activeThreadId != oldValue.activeThreadId, !resolvingRoute {
                 routeThreadId = state.activeThreadId
                 state.activeThreadId = listedRowId(for: routeThreadId)
             }
-            if state.hiddenThreadIds != oldValue.hiddenThreadIds || state.hiddenThreadTags != oldValue.hiddenThreadTags { refreshListSnapshot() }
+            if state.hiddenThreadTags != oldValue.hiddenThreadTags { refreshListSnapshot() }
             if state != oldValue { rebuild(animated: true) }
         }
     }
@@ -170,14 +137,13 @@ public final class SidebarContentView: DSView {
         return SidebarModel.resolveListedAncestorThreadId(id, threads: threads)
     }
 
-    /// The snapshot the list draws: `snapshot` without the threads `state.hiddenThreadIds` names, nor those a
-    /// hidden tag hides (`SidebarModel.hidesForTags`).
+    /// The snapshot the list draws: `snapshot` without the threads a hidden tag hides (`SidebarModel.hidesForTags`).
     private var listSnapshot: ShellSnapshot?
 
     private func refreshListSnapshot() {
-        let hidden = state.hiddenThreadIds, tags = state.hiddenThreadTags
-        let hides: (ThreadShell) -> Bool = { hidden.contains($0.id) || SidebarModel.hidesForTags($0, hiddenTags: tags) }
-        guard var s = snapshot, !hidden.isEmpty || !tags.isEmpty, s.threads.contains(where: hides) else { listSnapshot = snapshot; return }
+        let tags = state.hiddenThreadTags
+        let hides: (ThreadShell) -> Bool = { SidebarModel.hidesForTags($0, hiddenTags: tags) }
+        guard var s = snapshot, !tags.isEmpty, s.threads.contains(where: hides) else { listSnapshot = snapshot; return }
         s.threads.removeAll(where: hides)
         listSnapshot = s
     }
@@ -241,10 +207,6 @@ public final class SidebarContentView: DSView {
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
     /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
     public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; needsLayout = true } }
-    /// The main area shows something that isn't a thread or draft but leaves the sidebar as it is: the Orchestrator's
-    /// pane, whose own row shows it's open. No thread row is active meanwhile.
-    public var showsOtherPage = false { didSet { if showsOtherPage { clearActiveRows() } } }
-    private var showsNoRoute: Bool { isOnUtilityPage || showsOtherPage }
 
     private func clearActiveRows() {
         if state.activeThreadId != nil { state.activeThreadId = nil }
@@ -1135,14 +1097,6 @@ public final class SidebarContentView: DSView {
             row.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: SidebarNavRowView.height)
             listTop += SidebarNavRowView.height + 2
         }
-        if let row = orchestratorRow {
-            row.isHidden = !capy
-            if capy {
-                listTop += 6
-                row.frame = NSRect(x: 8, y: listTop, width: max(0, w - 16), height: OrchestratorSidebarRowView.height)
-                listTop += OrchestratorSidebarRowView.height
-            }
-        }
         if navSection.superview == nil { navSection.lineHeight = 16; addSubview(navSection) }
         navSection.isHidden = !capy
         if capy {
@@ -1206,9 +1160,3 @@ public final class SidebarContentView: DSView {
     }
 }
 
-/// Sends the pointer's moves over the sidebar to the bots, which turn toward it; leaving sends them back to rest.
-final class BotPointerRelay: NSResponder {
-    override func mouseMoved(with event: NSEvent) { BotGazeTracker.shared.pointer(event.locationInWindow, in: event.window) }
-    override func mouseEntered(with event: NSEvent) { BotGazeTracker.shared.pointer(event.locationInWindow, in: event.window) }
-    override func mouseExited(with event: NSEvent) { BotGazeTracker.shared.pointer(nil, in: event.window) }
-}

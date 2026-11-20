@@ -1012,8 +1012,7 @@ final class ComposerController {
         // `composer.stash` is always claimed, so the key never reaches anything else.
         shortcuts.on("composer.stash") { [weak self] call in
             guard let self else { return false }
-            // The Orchestrator's pane has a composer of its own, with its own stash.
-            guard self.isActive else { return !call.isRepeat && self.stashElsewhere?() == true }
+            guard self.isActive else { return false }
             if !call.isRepeat { self.stashShortcut() }
             return true
         }
@@ -1027,8 +1026,6 @@ final class ComposerController {
 
     /// The composer shows for a thread or draft in this window.
     private var isActive: Bool { !composer.isHidden && target != nil && composer.window != nil }
-    /// The stash key while this composer is away: true when another composer, the Orchestrator's, took it.
-    var stashElsewhere: (() -> Bool)?
 
     /// Keybinding context keys the composer owns.
     var shortcutContext: [String: Bool] {
@@ -1634,22 +1631,6 @@ final class ComposerController {
         if attachments != currentAttachments { refresh() } else { refreshes.promptChanged() }
     }
 
-    /// A thread's saved draft, for a composer outside the thread panel (the Orchestrator's chat). It is the same
-    /// per-thread draft the thread's own composer keeps, saved to `composer.prompts.v1`.
-    func draftText(_ id: ThreadId) -> String { prompts[id.rawValue] ?? "" }
-
-    /// Saves a thread's draft from a composer outside the thread panel, debounced like typing here.
-    func setDraftText(_ text: String, for id: ThreadId) {
-        let key = id.rawValue
-        guard (prompts[key] ?? "") != text else { return }
-        prompts[key] = text.isEmpty ? nil : text
-        // The panel's composer, if it still shows this thread, follows, so it never writes back an older text.
-        if draftKey == key, queuedEdit == nil, questionRequestId == nil, composer.text != text {
-            composer.text = text
-            pickers.prompt = text
-        }
-        scheduleSave()
-    }
 
     private func flushPrompt() {
         if let edit = queuedEdit { queuedEdits.update(edit.threadId, text: composer.text); return }
