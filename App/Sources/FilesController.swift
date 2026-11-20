@@ -228,7 +228,8 @@ final class FilesController {
         case .file:
             showActiveFile(force: false)
             ensureTree()
-        case .diff, .pullRequest, .pullRequests, .issue, .browser, .terminal, .device:
+        // The side chat pane builds itself through `onSideChatShown` (SideChatController).
+        case .diff, .pullRequest, .pullRequests, .issue, .browser, .terminal, .device, .sideChat:
             break
         }
     }
