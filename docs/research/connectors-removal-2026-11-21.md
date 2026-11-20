@@ -114,3 +114,11 @@ What is left on a machine is inert, and removing the page removes nothing it con
 | `docs/decisions.md` | Edit | A dated line |
 | `PROGRESS.md` | Edit | Entry at the top; the "first release with the Helper" item under Waiting on the user closed |
 | `README.md`, `AGENTS.md`, `docs/parity-checklist.md` | No change | None mentions Connectors or the helper |
+
+## Checks
+
+- `scripts/check-app-build` printed "app build ok" after each code commit.
+- `scripts/test` failed only on PanelScreensFidelityTests 05-approval-request and ChangedFilesFidelityTests cardAndDiff, which fail on main, and MarkdownBackgroundLayoutTests, which passed when run alone.
+- The Settings fidelity suites and RedesignBaselineTests, `--filter "Settings.*FidelityTests|RedesignBaselineTests"`, gave the same 94 scores on main and on this branch, nav cases included: `nav.search.rest` 0.0322 light and 0.0337 dark, `49-settings-modal-general` 0.0166 and 0.0168, `settings.rest` 0.0082 and 0.0010. In the full run `providers.list.rest` read 0.0003 off in each appearance; it matched exactly under the same filter, so suite order caused it.
+- `scripts/release --dry-run --version 1.15.2 --build 84 7a154f76` ended with "dry run: nothing published". `codesign --verify --deep --strict` passed on the app and on the app in the ZIP, and neither has a `helper-manifest.json`.
+- The test app ran against the 4928 sandbox in Redesign with `orchestrator.v1` seeded. It connected, logged "orchestrator cleanup on <machine>: done", removed the key, and Settings listed no Connectors row.
