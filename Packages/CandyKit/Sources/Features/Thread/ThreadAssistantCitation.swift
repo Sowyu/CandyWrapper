@@ -23,11 +23,13 @@ public struct ThreadAssistantCitation: Equatable, Sendable {
         return ns.length > 64 ? ns.substring(to: 64) + "…" : compact
     }
     public static func parse(_ href: String) -> Self? {
-        guard href.hasPrefix("t3-citation://v1/"), href.utf16.count <= 160_000,
+        // Ids may run to 4,096 characters (ASSISTANT_CITATION_MAX_ID_LENGTH, #28084); the cap is T3's
+        // 9 × (8,000 + 8,000 + 3 × 4,096 + 2 × 32) + 1,000 (shared/assistantCitations.ts at 4928).
+        guard href.hasPrefix("t3-citation://v1/"), href.utf16.count <= 256_168,
               let parts = URLComponents(string: href), parts.scheme == "t3-citation", parts.host == "v1",
               parts.user == nil, parts.password == nil, parts.port == nil, parts.fragment == nil else { return nil }
         let path = parts.percentEncodedPath.dropFirst().split(separator: "/", omittingEmptySubsequences: false).compactMap { String($0).removingPercentEncoding }
-        guard path.count == 3, path.allSatisfy({ !$0.isEmpty && $0.utf16.count <= 512 }) else { return nil }
+        guard path.count == 3, path.allSatisfy({ !$0.isEmpty && $0.utf16.count <= 4_096 }) else { return nil }
         var query: [String: String] = [:]
         // URLSearchParams decodes '+' as a space; URLComponents does not.
         for pair in (parts.percentEncodedQuery ?? "").split(separator: "&") {
