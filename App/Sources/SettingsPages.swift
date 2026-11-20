@@ -163,7 +163,6 @@ extension SettingsController {
         case .appearance: .appearance
         case .keyboard: .keybindings
         case .models: .providers
-        case .connectors: .connectors
         case .threads: .threads
         case .scheduledTasks: .scheduledTasks
         case .git: .sourceControl
@@ -255,7 +254,6 @@ extension SettingsController {
         case .licenses: SettingsOpenSourceLicensesView(context: c)
         case .voice: VoiceSettingsView(context: c)
         case .scheduledTasks: ScheduledTasksSettingsView(context: c)
-        case .connectors: ConnectorsSettingsView(context: c)
         case .experimental: ExperimentalSettingsView(context: c)
         case .redesign: RedesignSettingsView(context: c)
         case .beta: BetaSettingsView(context: c)
