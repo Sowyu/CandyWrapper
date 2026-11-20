@@ -18,9 +18,10 @@ struct SettingsConcernTests {
         #expect(SettingsSection.fromPath("/threads") == nil)
     }
 
-    /// 4928 adds Voice and names source control "Source control & issues" (settingsSearch.ts:96-178).
+    /// 4928 adds Voice and names source control "Source control & issues" (settingsSearch.ts:96-178). CandyWrapper's Redesign and
+    /// Experimental tabs close the list.
     @Test func pageNamesAndOrderFollow4928WithExperimentalLast() {
-        #expect(SettingsSection.navSections.map(\.label) == ["General", "Appearance", "Chat", "Diffs & pull requests", "Keybindings", "Voice", "SnapShots", "Providers", "Threads", "Browser", "Devices", "Scheduled tasks", "Projects", "Source control & issues", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About", "Archive", "Experimental"])
+        #expect(SettingsSection.navSections.map(\.label) == ["General", "Appearance", "Chat", "Diffs & pull requests", "Keybindings", "Voice", "SnapShots", "Providers", "Threads", "Browser", "Devices", "Scheduled tasks", "Projects", "Source control & issues", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About", "Archive", "Redesign", "Experimental"])
     }
 
     @Test func movedRowsKeepTheirSearchAnchorsAndDestinations() {

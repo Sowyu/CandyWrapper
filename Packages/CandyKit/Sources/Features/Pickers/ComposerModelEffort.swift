@@ -255,7 +255,7 @@ final class ComposerEffortColumnView: DSView {
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// Redesign stacks the section under the model list: the header across, the levels as segmented lines, then the
     /// option rows (the user's layout, 2026-11-20). Only Redesign docks a capy column, so the two go together.
-    var stacked: Bool { capy }
+    var stacked: Bool { capy && RedesignPickerSettings.stacked }
     /// The level segments in the stacked layout, keyed by their index in `rows`; their rows stay hidden.
     private(set) var segments: [Int: ComposerFooterSegmentView] = [:]
     private(set) var levelLines: [ComposerFooterGroupView] = []
@@ -633,11 +633,18 @@ final class ComposerFooterSegmentView: ControlView {
         if let glyph { glyph.frame = NSRect(x: x, y: (bounds.height - 12) / 2, width: glyphWidth, height: 12); x += glyphWidth + 4 }
         label.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: ceil(label.textWidth), height: 16)
     }
+    /// The fill's radius: concentric with the track, its radius less the inset between them, never under 2pt.
+    static let radius = max(2, ComposerFooterGroupView.radius - ComposerFooterGroupView.inset)
     override func updateLayer() {
-        layer?.cornerRadius = 6
-        var corners: CACornerMask = []
-        if first { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
-        if last { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
+        layer?.cornerRadius = Self.radius
+        // T3 rounds only the track's outer corners (`first:rounded-l-md last:rounded-r-md`, ComposerModelEffort.tsx:565); Redesign rounds every
+        // segment, so a middle pick sits on a rounded fill too (the user, 2026-11-21).
+        var corners: CACornerMask = [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        if !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            corners = []
+            if first { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
+            if last { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
+        }
         layer?.maskedCorners = corners
         layer?.backgroundColor = checked ? Themed.color(\.input, 0.72).cgColor(in: self) : nil
         layer?.borderWidth = state.focusVisible || focused ? 2 : 0; layer?.borderColor = Themed.color(\.ring).cgColor(in: self)
@@ -651,6 +658,7 @@ final class ComposerFooterSegmentView: ControlView {
 
 /// The segment track: `flex rounded-lg bg-input/40 p-0.5`.
 final class ComposerFooterGroupView: DSView {
+    static let radius: CGFloat = 8, inset: CGFloat = 2
     let segments: [ComposerFooterSegmentView]
     init(_ segments: [ComposerFooterSegmentView]) {
         self.segments = segments
@@ -663,14 +671,14 @@ final class ComposerFooterGroupView: DSView {
     override func layout() {
         super.layout()
         let extra = fills && !segments.isEmpty ? max(0, bounds.width - naturalWidth) / CGFloat(segments.count) : 0
-        var exact: CGFloat = 2, x: CGFloat = 2
+        var exact = Self.inset, x = Self.inset
         for s in segments {
             exact += s.naturalWidth + extra
             let next = exact.rounded()
-            s.frame = NSRect(x: x, y: 2, width: next - x, height: 24); x = next
+            s.frame = NSRect(x: x, y: Self.inset, width: next - x, height: 24); x = next
         }
     }
-    override func updateLayer() { layer?.cornerRadius = 8; layer?.backgroundColor = Themed.color(\.input, 0.4).cgColor(in: self) }
+    override func updateLayer() { layer?.cornerRadius = Self.radius; layer?.backgroundColor = Themed.color(\.input, 0.4).cgColor(in: self) }
 }
 
 /// The footer's Permissions trigger (`PermissionsMenu`, :666-706): `ms-auto h-7 px-2 rounded-md text-xs gap-1.5`, the
@@ -726,7 +734,7 @@ final class ComposerPickerFooterView: DSView {
     var onBoolean: ((String, Bool) -> Void)?
     var onPermissions: ((NSView) -> Void)?
     /// Redesign's stacked picker: the controls wrap to a second line when they don't fit its 335pt.
-    var stacked: Bool { capy }
+    var stacked: Bool { capy && RedesignPickerSettings.stacked }
     var onSizeChange: (() -> Void)?
     /// Keyboard focus among the segments and the permissions trigger, in reading order (stacked only).
     private(set) var focusIndex: Int? { didSet { showFocus() } }

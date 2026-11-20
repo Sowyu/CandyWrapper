@@ -171,6 +171,7 @@ extension SettingsController {
         case .tools: .browser
         case .machines: .connections
         case .advanced: .maintenance
+        case .redesign: .redesign
         case .experimental: .experimental
         case .about: .about
         }
@@ -258,6 +259,7 @@ extension SettingsController {
         case .orchestrator: OrchestratorSettingsView(context: c)
         case .connectors: ConnectorsSettingsView(context: c)
         case .experimental: ExperimentalSettingsView(context: c)
+        case .redesign: RedesignSettingsView(context: c)
         case .beta: BetaSettingsView(context: c)
         default: SnapShotSettingsView(context: c)
         }

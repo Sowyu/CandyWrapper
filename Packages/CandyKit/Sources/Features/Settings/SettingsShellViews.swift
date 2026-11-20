@@ -10,8 +10,10 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     case orchestrator
     /// Redesign's Connectors tab, CandyWrapper's own; never in T3's nav.
     case connectors
-    /// CandyWrapper's own experimental switches, Redesign among them, so it sits last in T3's nav too.
+    /// CandyWrapper's own experimental switches, so it sits last in T3's nav too.
     case experimental
+    /// CandyWrapper's own: the Redesign switch and every Redesign-only setting, beside Experimental.
+    case redesign
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
     case diagnostics, licenses
 
@@ -43,6 +45,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .orchestrator: "Orchestrator"
         case .connectors: "Connectors"
         case .experimental: "Experimental"
+        case .redesign: "Redesign"
         case .diagnostics: "Diagnostics"
         case .licenses: "Open source licenses"
         }
@@ -76,6 +79,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .orchestrator: .workflow
         case .connectors: .plug2
         case .experimental: .flaskConical
+        case .redesign: .paintbrush
         case .diagnostics: .activity
         case .licenses: .fileText
         }
@@ -107,7 +111,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         ("Agents", [.providers, .threads, .browser, .devices, .scheduledTasks]),
         ("Code", [.projects, .sourceControl, .worktrees]),
         ("Connections", [.connections, .access]),
-        (nil, [.maintenance, .beta, .about, .archive, .experimental]),
+        (nil, [.maintenance, .beta, .about, .archive, .redesign, .experimental]),
     ]
     static let navSections = navGroups.flatMap(\.sections)
 
@@ -296,7 +300,7 @@ public final class SettingsSidebarView: DSView {
     func setQuery(_ query: String) { search.text = query; activeResult = 0; runSearch() }
 
     private func runSearch() {
-        results = isSearching ? SettingsSearch.search(search.text, in: isDither ? searchItems : searchItems.filter { $0.id != "composer-collapse" }) : []
+        results = isSearching ? SettingsSearch.search(search.text, in: searchItems) : []
         activeResult = min(activeResult, max(results.count - 1, 0))
         while resultRows.count < results.count {
             let row = SettingsSearchResultRow()

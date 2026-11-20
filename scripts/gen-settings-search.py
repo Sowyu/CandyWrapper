@@ -101,12 +101,23 @@ PATHS = {"/settings/chat": "chat", "/settings/diffs": "diffs", "/settings/thread
          "/settings/source-control": "sourceControl", "/settings/storage": "storage", "/settings/connections": "connections", "/settings/beta": "beta",
          "/settings/archived": "archive"}
 
-# CandyWrapper's own rows that 4928's catalog no longer lists, each placed after the T3 item it followed: Redesign's
-# composer collapse switch, and the Cursor Keychain switch shown to servers that still send the setting.
+# CandyWrapper's own rows that 4928's catalog no longer lists, each placed after the T3 item it followed: the Cursor
+# Keychain switch shown to servers that still send the setting.
 KEEP_AFTER = {
-    "tool-call-visibility": '        .item(SettingsSearchItem(id: "composer-collapse", title: "Collapse composer on scroll", to: .chat, searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"])),',
     "providers": '        .item(SettingsSearchItem(id: "cursor-keychain-usage", title: "Cursor account usage", to: .providers, searchTerms: ["cursor macOS keychain usage tokens cost limits permission"], flags: [.providerSettingsOnly, .macProviderSettingsOnly])),',
 }
+
+# CandyWrapper's own Redesign tab (RedesignSettingsView), after T3's items, in the tab's order.
+CANDY_ITEMS = [
+    '        .item(SettingsSearchItem(id: "redesign", title: "Redesign", to: .redesign, searchTerms: ["theme look dither picture wallpaper candywrapper own experimental"])),',
+    '        .item(SettingsSearchItem(id: "redesign-picture", title: "Picture", to: .redesign, searchTerms: ["redesign background wallpaper image photo desktop picture art"])),',
+    '        .item(SettingsSearchItem(id: "background-dim", title: "Background dim", to: .redesign, searchTerms: ["redesign picture wallpaper darken dim scrim opacity"])),',
+    '        .item(SettingsSearchItem(id: "accent-color", title: "Accent color", to: .redesign, searchTerms: ["redesign accent colour tint highlight switches send focus selection"])),',
+    '        .item(SettingsSearchItem(id: "ignore-reduce-transparency", title: "Ignore Reduce Transparency", to: .redesign, searchTerms: ["redesign glass blur accessibility reduce transparency picture"])),',
+    '        .item(SettingsSearchItem(id: "composer-collapse", title: "Collapse composer on scroll", to: .redesign, searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"])),',
+    '        .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout two columns"])),',
+    '        .item(SettingsSearchItem(id: "redesign-picker-account", title: "Account and limits in the model picker", to: .redesign, searchTerms: ["redesign model picker account usage limits manage provider card email plan"])),',
+]
 
 # Pages CandyWrapper doesn't have yet: voice dictation and the secrets store. Their rows stay out of search.
 UNPORTED_PATHS = {"/settings/voice", "/settings/secrets"}
@@ -178,7 +189,7 @@ extension SettingsSearch {{
     enum CatalogEntry {{ case item(SettingsSearchItem), keybindings }}
 
     static let catalogEntries: [CatalogEntry] = [
-{chr(10).join(lines)}
+{chr(10).join(lines + CANDY_ITEMS)}
     ]
 }}
 """

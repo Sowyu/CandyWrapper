@@ -42,7 +42,6 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "working-shelf", title: "Working section", to: .general, searchTerms: ["hide fold running monitoring threads inbox sidebar shelf"])),
         .item(SettingsSearchItem(id: "boring-sidebar", title: "Boring sidebar (group by project)", to: .beta, searchTerms: ["beta folders project tree classic sidebar"])),
         .item(SettingsSearchItem(id: "tool-call-visibility", title: "Tool calls in chat", to: .chat, searchTerms: ["hide tool calls commands edits searches work log activity quiet chat zen final answers only"])),
-        .item(SettingsSearchItem(id: "composer-collapse", title: "Collapse composer on scroll", to: .chat, searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"])),
         .item(SettingsSearchItem(id: "guest-links", title: "Guest links", to: .beta, scope: .environment, searchTerms: ["beta share guest invite link teammate watch t3 connect tunnel"])),
         .item(SettingsSearchItem(id: "linked-environments-beta", title: "Linked environments", to: .beta, scope: .environment, searchTerms: ["beta link another machine vps peer agents work there delegate"])),
         .item(SettingsSearchItem(id: "prompt-suggestions-beta", title: "Suggest next prompt", to: .beta, scope: .environment, searchTerms: ["beta tab autocomplete predict next message claude codex ghost text"])),
@@ -147,5 +146,13 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "load-balancing", title: "Load balancing", to: .connections, searchTerms: ["automatic machine environment resources cpu memory capacity preference weight shared projects"])),
         .item(SettingsSearchItem(id: "pull-request-routing", title: "Pull request sharing", to: .connections, searchTerms: ["pull request routing trusted environments shared credentials permissions read actions source control GitHub Cursor Origin GitLab GitCafe Forgejo Bitbucket Azure DevOps"])),
         .item(SettingsSearchItem(id: "archive", title: "Archived threads", to: .archive, searchTerms: ["restore reopen deleted history projects"])),
+        .item(SettingsSearchItem(id: "redesign", title: "Redesign", to: .redesign, searchTerms: ["theme look dither picture wallpaper candywrapper own experimental"])),
+        .item(SettingsSearchItem(id: "redesign-picture", title: "Picture", to: .redesign, searchTerms: ["redesign background wallpaper image photo desktop picture art"])),
+        .item(SettingsSearchItem(id: "background-dim", title: "Background dim", to: .redesign, searchTerms: ["redesign picture wallpaper darken dim scrim opacity"])),
+        .item(SettingsSearchItem(id: "accent-color", title: "Accent color", to: .redesign, searchTerms: ["redesign accent colour tint highlight switches send focus selection"])),
+        .item(SettingsSearchItem(id: "ignore-reduce-transparency", title: "Ignore Reduce Transparency", to: .redesign, searchTerms: ["redesign glass blur accessibility reduce transparency picture"])),
+        .item(SettingsSearchItem(id: "composer-collapse", title: "Collapse composer on scroll", to: .redesign, searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"])),
+        .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout two columns"])),
+        .item(SettingsSearchItem(id: "redesign-picker-account", title: "Account and limits in the model picker", to: .redesign, searchTerms: ["redesign model picker account usage limits manage provider card email plan"])),
     ]
 }

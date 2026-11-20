@@ -242,7 +242,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             advanced.onHeightChange = { [weak self] in self?.onHeightChange?() }
             advancedInterface = advanced
             // AppearanceSettingsPanel.tsx:297 at 4928: Thread details follows the chat width.
-            var interface: [NSView & SettingsGroupRow] = [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), width, threadDetailsRow()]
+            var interface: [NSView & SettingsGroupRow] = [contrast, glass, width, threadDetailsRow()]
             if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
                 // AppearanceSettingsPanel.tsx:275-306 at 3824: the effort row sits between chat width and math.
                 let effort = clientSelect("effort-display", "Show reasoning effort in the composer as its name, such as High, or as bars.", key: "effortDisplay",
@@ -253,7 +253,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             interface += [math, appIconRow(), appIconAppearanceRow(), advanced]
             return section("appearance-interface", "Interface", interface)
         }
-        return section("appearance-interface", "Interface", [contrast, glass, ditherRow(), ditherDimRow(), ditherAccentRow(), ignoreReduceTransparencyRow(), identification, diff, strip, width, threadDetailsRow(), math,
+        return section("appearance-interface", "Interface", [contrast, glass, identification, diff, strip, width, threadDetailsRow(), math,
                                                               appIconRow(), appIconAppearanceRow()])
     }
 
@@ -288,70 +288,6 @@ public final class AppearanceSettingsView: SettingsPageBase {
             r?.needsLayout = true
         })
         return r
-    }
-
-    /// CandyWrapper's own row for the Dither theme's picture: choose one, or go back to the desktop picture.
-    private func ditherRow() -> SettingsRowView {
-        let choose = ButtonView("Choose…", variant: .outline, size: .sm)
-        let desktop = ButtonView("Use desktop", variant: .ghost, size: .sm)
-        choose.action = { [weak self] in self?.chooseDitherPicture() }
-        desktop.action = { [weak self] in DitherPicture.clear(); ThemeLibrary.shared.apply(); self?.refresh() }
-        let group = SettingsControlGroup([desktop, choose], gap: 6)
-        let r = row(nil, title: "Redesign picture", detail: "The picture the Redesign theme shows in the main panel. Without one it uses the desktop picture.",
-                    control: group)
-        binder.add { [weak group] in
-            desktop.isHidden = DitherPicture.path == nil
-            group?.invalidateIntrinsicContentSize()
-        }
-        return r
-    }
-
-    /// CandyWrapper's own: how much the Redesign theme dims its art behind an open thread (the user, 2026-10-22).
-    private func ditherDimRow() -> SettingsRowView {
-        let key = "ditherBackgroundDim"
-        let control = SettingsSliderControl(value: Double(client.int(key)), range: 0...90, step: 5, outputWidth: 48)
-        control.format = { "\(Int($0))%" }
-        control.slider.setAccessibilityLabel("Background dim")
-        let r = row(nil, title: "Background dim", detail: "How much the Redesign theme dims its picture behind an open thread.", control: control)
-        let slot = ResetSlot(label: "background dim")
-        r.accessories = [slot]
-        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
-        control.onChange = { [weak self] v in self?.context.writeClient?([key: .number(v)]) }
-        binder.add { [weak self, weak control] in
-            guard let self else { return }
-            control?.value = Double(self.client.int(key))
-            slot.isShown = !self.client.isDefault(key)
-        }
-        return r
-    }
-
-    /// CandyWrapper's own: the Redesign theme's accent (the user, 2026-10-23). It recolors the palette's accent roles.
-    private func ditherAccentRow() -> SettingsRowView {
-        let key = "ditherAccent"
-        let swatches = DitherAccent.all.map { accent in
-            let b = AccentSwatchButton(accent)
-            b.action = { [weak self] in self?.context.writeClient?([key: .string(accent.id)]) }
-            return b
-        }
-        let r = row(nil, title: "Accent color", detail: "The color the Redesign theme uses for switches, the send button, focus and selection.",
-                    control: SettingsControlGroup(swatches, gap: 6))
-        let slot = ResetSlot(label: "accent color")
-        r.accessories = [slot]
-        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
-        binder.add { [weak self] in
-            guard let self else { return }
-            let current = DitherAccent.named(self.client.string(key)).id
-            for b in swatches { b.isSelected = b.accent.id == current }
-            slot.isShown = !self.client.isDefault(key)
-        }
-        return r
-    }
-
-    /// CandyWrapper's own (the user, 2026-10-28): with macOS's Reduce Transparency on, Redesign's picture shows under a
-    /// heavier scrim and Glass goes flat. This draws them as if it were off.
-    private func ignoreReduceTransparencyRow() -> SettingsRowView {
-        clientSwitch("ignore-reduce-transparency", "Show the Redesign picture, Glass and blur as if Reduce Transparency were off in macOS.",
-                     key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
     }
 
     private func chooseDitherPicture() {
@@ -687,41 +623,5 @@ final class ModeTilesView: DSView, SettingsGroupRow {
                 fill(NSRect(x: rowRect.minX + d + 4, y: rowRect.midY - rowRect.height * 0.15, width: rowRect.width * 0.52, height: rowRect.height * 0.30), line, radius: 2)
             }
         }
-    }
-}
-
-/// One accent in the Redesign accent row: a 16pt dot, ringed in the foreground color when chosen.
-final class AccentSwatchButton: ControlView {
-    let accent: DitherAccent
-    var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; setAccessibilityValue(isSelected) } } }
-
-    init(_ accent: DitherAccent) {
-        self.accent = accent
-        super.init(frame: .zero)
-        scalesWhenPressed = false
-        setAccessibilityRole(.radioButton)
-        setAccessibilityLabel(accent.label)
-        toolTip = accent.label
-    }
-
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-
-    override var intrinsicContentSize: NSSize { NSSize(width: 22, height: 22) }
-    override var wantsUpdateLayer: Bool { false }
-    override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let r = NSRect(x: bounds.midX - 11, y: bounds.midY - 11, width: 22, height: 22)
-        if isSelected || state.focusVisible {
-            Themed.color(\.foreground, isSelected ? 0.9 : 0.5).setStroke()
-            let ring = NSBezierPath(ovalIn: r.insetBy(dx: 0.75, dy: 0.75))
-            ring.lineWidth = 1.5
-            ring.stroke()
-        }
-        let dark = effectiveAppearance.isDark
-        (state.hovered && !isSelected ? DitherAccent.color(DitherAccent.mix(accent.accent(dark: dark), white: 0.12))
-            : DitherAccent.color(accent.accent(dark: dark))).setFill()
-        NSBezierPath(ovalIn: r.insetBy(dx: 3, dy: 3)).fill()
     }
 }

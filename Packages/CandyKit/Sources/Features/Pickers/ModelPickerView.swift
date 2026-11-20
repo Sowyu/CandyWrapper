@@ -34,8 +34,9 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             reload()
         }
     }
-    /// Redesign docked: tabs across the top, search under them, and the list under the search.
-    var stacked: Bool { docked && capy }
+    /// Redesign docked: tabs across the top, search under them, and the list under the search. Settings > Redesign >
+    /// Stacked model picker off keeps the two-column dock.
+    var stacked: Bool { docked && capy && RedesignPickerSettings.stacked }
     /// The open provider's project models are still being scanned (ModelPickerContent.tsx:1225-1231 at 4928, #24585).
     var workspaceModelsScanning = false { didSet { emptyLabel.text = workspaceModelsScanning ? "Searching project models..." : "No models found" } }
     private(set) var rail: ModelPickerRail
@@ -208,9 +209,10 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         needsDisplay = true
     }
 
-    /// Redesign's card for the rail's provider, while not searching. Rebuilt only when what it shows changes.
+    /// Redesign's card for the rail's provider, while not searching. Rebuilt only when what it shows changes. Settings >
+    /// Redesign > Account and limits turns it on; without it the tab keeps T3's status tooltip and dims while not ready.
     private func syncCard() {
-        guard capy, !searching, case .instance(let id) = rail, let entry = catalog.entry(id) else { card = nil; return }
+        guard capy, RedesignPickerSettings.showsAccount, !searching, case .instance(let id) = rail, let entry = catalog.entry(id) else { card = nil; return }
         let info = DitherProviderCardInfo(entry)
         if card?.info == info { return }
         card = DitherProviderCardView(info: info, onManage: onManage.map { open in { open(id) } })
