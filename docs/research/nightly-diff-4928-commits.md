@@ -1509,7 +1509,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 08af12da49 | #33994 | thread | fix(shared): show zero seconds in minute durations | already in CandyWrapper: durations read `1m 0s` (screens-port, T3Store ThreadRelationships `formatDuration`) |
 | 3051b32502 | #33943 | thread | fix: chat file links open the file agents cite | ported (thread-4): WorkspaceLinkLookup (T3Store) with FilesController.citedFile: bare names, package-relative paths and repeated prefixes find their file through projects.searchEntries before opening or revealing |
 | 283fa1f1cd | #34011 | thread | fix(clients): scroll truncated command output notice with logs | port |
-| d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check ignores the end line |
+| d256170b34 | #34006 | thread | fix: file links with line ranges open at their first line | ported in 93df13b9: a range opens at its first line; the label check compares the end line too (thread-4, FileLinks.endLine). Left: the tooltip's `L42–64`, which needs an endLine on FileLinkMeta |
 | d6d1763d41 | #33820 | thread | fix(web): sent messages keep the numbers written on list items | ported: sent messages keep each ordered item's written number and draw every level in digits; the gutter widens by the numbers shown (thread-2, MarkdownDocument `keepWrittenNumbers`). Left: copying a list keeps CommonMark's numbers (markdown-clipboard.ts) |
 | 43915a4064 | #34095 | thread | fix(web): question panel header text sits centered in its row | port |
 | ccc7b2d96f | #33352 | thread | fix(web): MCP App cards no longer flash white in dark mode while the app loads | port |

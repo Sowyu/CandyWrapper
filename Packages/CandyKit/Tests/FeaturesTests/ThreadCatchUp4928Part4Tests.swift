@@ -87,6 +87,15 @@ struct ThreadCatchUp4928Part4Tests {
         #expect(card.frame.width == 1178 && card.frame.height == 334)
         dialog.dismiss()
     }
+
+    /// #34006 (markdownLinks.ts at 4928): a label naming a line range matches only the same range.
+    @Test func fileLinkLabelsCompareTheEndLine() {
+        #expect(FileLinks.isFileLinkLabel("src/a.ts:42-64", href: "src/a.ts:42-64"))
+        #expect(!FileLinks.isFileLinkLabel("src/a.ts:42-64", href: "src/a.ts:42-70"))
+        #expect(!FileLinks.isFileLinkLabel("src/a.ts:42-64", href: "src/a.ts:42"))
+        #expect(FileLinks.isFileLinkLabel("src/a.ts:42", href: "src/a.ts:42-64"))
+        #expect(FileLinks.endLine("a.ts#L3-L9") == 9 && FileLinks.endLine("a.ts:9-3") == nil)
+    }
 }
 
 private extension NSView {
