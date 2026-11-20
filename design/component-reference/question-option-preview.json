@@ -1,0 +1,31 @@
+{
+ "component": "question-option-preview",
+ "source": "apps/web/src/components/chat/ComposerPendingUserInputPanel.tsx, ChatMarkdown.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "plain",
+   "html": "<div class=\"chat-markdown w-full min-w-0 [overflow-wrap:anywhere] [word-break:break-word] text-xs text-foreground/70\"><p>Title: Login fails<br>\nBody: A quote in the password breaks login.</p></div>",
+   "wrapperStyle": "display:block;width:320px;--font-size-code:13px",
+   "native": {
+    "markdown": "Title: Login fails\nBody: A quote in the password breaks login.",
+    "width": "320"
+   }
+  },
+  {
+   "name": "styled",
+   "html": "<div class=\"chat-markdown w-full min-w-0 [overflow-wrap:anywhere] [word-break:break-word] text-xs text-foreground/70\"><p>Uses <strong>bold</strong> and <em>italic</em> text.<br>\nSecond line keeps its break.</p>\n<ul>\n<li>First step</li>\n<li>Second step</li>\n</ul></div>",
+   "wrapperStyle": "display:block;width:320px;--font-size-code:13px",
+   "native": {
+    "markdown": "Uses **bold** and *italic* text.\nSecond line keeps its break.\n\n- First step\n- Second step",
+    "width": "320"
+   }
+  }
+ ]
+}
