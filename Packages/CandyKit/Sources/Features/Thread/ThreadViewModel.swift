@@ -293,7 +293,32 @@ public final class ThreadViewModel {
         }
         refreshItems()
     }
-    func forgetCommandOutput(_ id: String) { liveCommandOutputs[id] = nil; commandBuffers[id] = nil }
+    /// A row stopped showing a command's output. A running command's stream ends with it, so hidden rows receive
+    /// nothing; a finished command's output stays 5 minutes, so reopening or scrolling back to it does not fetch it
+    /// again (`completeWhen` and `completedTtlMs`, client-runtime state/orchestration.ts at 4928, #34002).
+    func forgetCommandOutput(_ id: String) {
+        guard commandBuffers[id]?.running == false, case .live? = liveCommandOutputs[id] else {
+            liveCommandOutputs[id] = nil; commandBuffers[id] = nil
+            return
+        }
+        finishedOutputEvictions[id]?.cancel()
+        let ttl = finishedOutputTTL
+        finishedOutputEvictions[id] = Task { [weak self] in
+            try? await Task.sleep(for: ttl)
+            guard !Task.isCancelled, let self else { return }
+            self.finishedOutputEvictions[id] = nil
+            self.liveCommandOutputs[id] = nil; self.commandBuffers[id] = nil
+        }
+    }
+
+    /// The command finished and its output is still held: a row showing it again needs no stream. Keeps it while shown.
+    func holdsFinishedCommandOutput(_ id: String) -> Bool {
+        guard commandBuffers[id]?.running == false, case .live? = liveCommandOutputs[id] else { return false }
+        finishedOutputEvictions.removeValue(forKey: id)?.cancel()
+        return true
+    }
+    private var finishedOutputEvictions: [String: Task<Void, Never>] = [:]
+    var finishedOutputTTL: Duration = .seconds(300)
 
     /// Per entry id: the revision fetched (`TurnItemDetail.revision`) and its state.
     private var outputs: [String: (revision: String, state: ToolOutputState)] = [:]
@@ -408,7 +433,7 @@ public final class ThreadViewModel {
             // Work after a steer folds under `<run>:steer:<entry>` (a8bb769d65).
             // ponytail: opens every steer segment of the run; map entries to their fold like `timelineTurnFoldRunIdsByEntryId` if that shows.
             for item in items {
-                guard case .turnFold(let fold, _, _) = item.row.kind, fold.rawValue.hasPrefix("\(run.rawValue):steer:") else { continue }
+                guard case .turnFold(let fold, _, _, _) = item.row.kind, fold.rawValue.hasPrefix("\(run.rawValue):steer:") else { continue }
                 if expandedRunIds.insert(fold).inserted { findOpenedRuns.insert(fold); changed = true }
             }
             for attempt in projection?.attempts ?? [] where attempt.runId == run {
@@ -673,6 +698,8 @@ public final class ThreadViewModel {
 
     private func dropOutputs() {
         liveCommandOutputs = [:]; commandBuffers = [:]
+        finishedOutputEvictions.values.forEach { $0.cancel() }
+        finishedOutputEvictions = [:]
         outputTasks.values.forEach { $0.cancel() }
         outputTasks = [:]
         outputs = [:]

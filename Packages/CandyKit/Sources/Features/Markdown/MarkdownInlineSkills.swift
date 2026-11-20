@@ -6,13 +6,22 @@ import T3Protocol
 public enum MarkdownInlineSkills {
     private static let token = try! NSRegularExpression(pattern: #"(^|\s)\p{Sc}(?![0-9][0-9_]*(?:[kKmMbBtT]|[eE][0-9]+)?(?:\s|$))(?=[a-zA-Z0-9:_-]*[a-zA-Z])([a-zA-Z0-9][a-zA-Z0-9:_-]*)(?=\s|$)"#)
     public static func runs(_ runs: [InlineRun], skills: [ServerProviderSkill]) -> [InlineRun] {
+        self.runs(runs, byName: index(skills))
+    }
+
+    /// Skills by name, the first of a name winning, as `skills.find` picks it (inlineSkills.ts at 4928, #29008).
+    static func index(_ skills: [ServerProviderSkill]) -> [String: ServerProviderSkill] {
+        Dictionary(skills.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    static func runs(_ runs: [InlineRun], byName skills: [String: ServerProviderSkill]) -> [InlineRun] {
         runs.flatMap { run in
             guard !run.code, run.link == nil else { return [run] }
             let text = run.text as NSString
             var result: [InlineRun] = [], cursor = 0
             for match in token.matches(in: run.text, range: NSRange(location: 0, length: text.length)) {
                 let name = text.substring(with: match.range(at: 2))
-                guard let skill = skills.first(where: { $0.name == name }) else { continue }
+                guard let skill = skills[name] else { continue }
                 let start = match.range.location + match.range(at: 1).length
                 if start > cursor { var plain = run; plain.text = text.substring(with: NSRange(location: cursor, length: start - cursor)); result.append(plain) }
                 var chip = run; chip.text = "$" + name; chip.skillLabel = ProviderSkills.displayName(skill); chip.skill = skill; result.append(chip)
@@ -25,14 +34,15 @@ public enum MarkdownInlineSkills {
     }
     public static func document(_ document: MarkdownDocument, skills: [ServerProviderSkill]) -> MarkdownDocument {
         guard !skills.isEmpty else { return document }
+        let skills = index(skills)
         func block(_ b: MarkdownBlock) -> MarkdownBlock {
             switch b {
-            case .paragraph(let r): return .paragraph(runs(r, skills: skills))
-            case .heading(let level, let r): return .heading(level: level, runs(r, skills: skills))
+            case .paragraph(let r): return .paragraph(runs(r, byName: skills))
+            case .heading(let level, let r): return .heading(level: level, runs(r, byName: skills))
             case .blockquote(let children): return .blockquote(children.map(block))
             case .alert(let kind, let children): return .alert(kind, children.map(block))
             case .list(var list): list.items = list.items.map { var item = $0; item.blocks = item.blocks.map(block); return item }; return .list(list)
-            case .table(var table): table.header = table.header.map { runs($0, skills: skills) }; table.rows = table.rows.map { $0.map { runs($0, skills: skills) } }; return .table(table)
+            case .table(var table): table.header = table.header.map { runs($0, byName: skills) }; table.rows = table.rows.map { $0.map { runs($0, byName: skills) } }; return .table(table)
             default: return b
             }
         }

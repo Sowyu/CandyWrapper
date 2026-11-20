@@ -22,7 +22,7 @@ final class TurnFoldRowView: TimelineRowView {
         hoverChanged()
         setAccessibilityRole(.button)
         onClick = { [weak self] in
-            guard let self, let row = self.item?.row, case .turnFold(let runId, _, _) = row.kind else { return }
+            guard let self, let row = self.item?.row, case .turnFold(let runId, _, _, _) = row.kind else { return }
             self.context.model?.clickFold(row) {
                 self.context.disclosure(self.item?.id)
                 self.context.model?.toggleRun(runId)
@@ -33,7 +33,7 @@ final class TurnFoldRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         let sameRow = self.item?.id == item.id
         super.configure(item)
-        guard case .turnFold(_, let text, let expanded) = item.row.kind else { return }
+        guard case .turnFold(_, let text, let expanded, _) = item.row.kind else { return }
         label.text = WorkHistorySkeletonView.label(text, item.ui)
         skeleton = WorkHistorySkeletonView.update(skeleton, in: self, showing: item.ui.deferredWorkLoading)
         setAccessibilityValue(item.ui.deferredWorkLoading ? "Loading work history" : nil)
@@ -93,7 +93,7 @@ final class AttemptFoldRowView: TimelineRowView {
         hoverChanged()
         setAccessibilityRole(.button)
         onClick = { [weak self] in
-            guard let self, let row = self.item?.row, case .attemptFold(_, let attemptId, _, _) = row.kind else { return }
+            guard let self, let row = self.item?.row, case .attemptFold(_, let attemptId, _, _, _) = row.kind else { return }
             self.context.model?.clickFold(row) {
                 self.context.disclosure(self.item?.id)
                 self.context.model?.toggleAttempt(attemptId)
@@ -106,7 +106,7 @@ final class AttemptFoldRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         let sameRow = self.item?.id == item.id
         super.configure(item)
-        guard case .attemptFold(_, _, let text, let expanded) = item.row.kind else { return }
+        guard case .attemptFold(_, _, let text, let expanded, _) = item.row.kind else { return }
         label.text = WorkHistorySkeletonView.label(text, item.ui)
         skeleton = WorkHistorySkeletonView.update(skeleton, in: self, showing: item.ui.deferredWorkLoading)
         setAccessibilityValue(item.ui.deferredWorkLoading ? "Loading work history" : nil)

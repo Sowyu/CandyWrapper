@@ -385,7 +385,24 @@ private func measureThreadUpdate(_ name: String, copies: Int, window: Int) async
     let tooled = try variants { p, i in
         p.visibleTurnItems[tool].item = try replacing(p.visibleTurnItems[tool].item, ["status": .string(i == 0 ? "running" : "completed")])
     }
-    for (suffix, pair) in [("stream", streamed), ("tool", tooled)] {
+    // The same streamed word in a thread that holds one older question whose answer only its runtime request kept
+    // (`createQuestionHistoryProjector`, #29105).
+    let answeredStreamed = try streamed.map { projection in
+        var p = projection
+        var row = p.visibleTurnItems[tool]
+        row.item = try replacing(row.item, [
+            "id": .string("legacy-question"), "type": .string("user_input_request"), "requestId": .string("legacy-request"),
+            "questions": .array([.object(["id": .string("q1"), "header": .string("Pick"), "question": .string("Which one?"), "options": .array([])])]),
+        ])
+        row.sourceItemId = row.item.id
+        p.visibleTurnItems.insert(row, at: 0)
+        p.runtimeRequests.append(try JSONValue.object([
+            "id": .string("legacy-request"), "kind": .string("user_input"), "status": .string("resolved"),
+            "answers": .object(["q1": .string("The first")]),
+        ]).decode(as: RuntimeRequest.self))
+        return p
+    }
+    for (suffix, pair) in [("stream", streamed), ("tool", tooled), ("stream_answered", answeredStreamed)] {
         var memo = TimelineRowsInput.Memo()
         var flip = 0
         var last = TimelineRowsInput.derive(projection: pair[0], memo: &memo)
@@ -489,6 +506,16 @@ struct PerfBenchmarks {
         #expect(suffixes[paths[3]] == "p3/src")
     }
 
+    /// A reply that names 400 `$skill` tokens, checked against a provider with 500 skills (#29008).
+    @Test func inlineSkills() {
+        let skills = (0..<500).map { ServerProviderSkill(name: "skill-\($0)", path: "/skills/\($0)") }
+        let text = (0..<400).map { "Use $skill-\(($0 * 7) % 500) here." }.joined(separator: " ")
+        let doc = MarkdownDocument(parsing: text)
+        var out = doc
+        measure("inline_skills_500", runs: 5, extra: ["bytes": text.utf8.count]) { out = MarkdownInlineSkills.document(doc, skills: skills) }
+        #expect(out != doc)
+    }
+
     /// A subagent prompt that opens with comment divider lines but is no workflow script (#38368).
     @Test func workflowScriptCheck() {
         // The old pattern doubles its time about every 2 more slashes: 24 took 59 ms, 28 took 773 ms.
@@ -535,6 +562,26 @@ struct PerfBenchmarks {
     /// One update to the huge thread on screen with all 5,700 rows loaded, as streaming sends them.
     @Test func hugeThreadUpdate() async throws {
         try await measureThreadUpdate("huge_update", copies: 300, window: 300)
+    }
+
+    /// The reducer's share of one streamed word on the `huge_full` thread (5,700 rows, 900 runs), which runs off the
+    /// main thread for every token: `turn-item.updated` for the streaming answer through `ThreadReducer.apply`.
+    @Test func hugeThreadReduceStream() throws {
+        let (p, answer, _) = try streamingProjection(copies: 300, window: 300)
+        var reducer = ThreadReducer(threadId: p.thread.id)
+        reducer.applySnapshot(ThreadDetailSnapshot(snapshotSequence: 1, projection: p))
+        let item = p.visibleTurnItems[answer].item
+        let text = item.text
+        var sequence = 1
+        let events = try (0..<2).map { i in
+            ThreadEvent(id: "e\(i)", type: "turn-item.updated", threadId: p.thread.id, runId: item.runId, occurredAt: "2026-01-02T00:00:00.000Z",
+                        payload: .turnItem(try replacing(item, ["text": .string(text + String(repeating: " word", count: i + 1))])))
+        }
+        measure("huge_reduce_stream", runs: 9, inner: 5, extra: ["rows": p.visibleTurnItems.count]) {
+            sequence += 1
+            reducer.apply([.event(sequence: sequence, event: events[sequence % 2])])
+        }
+        #expect(reducer.projection?.visibleTurnItems.count == p.visibleTurnItems.count)
     }
 
     @Test func markdownLayout() {

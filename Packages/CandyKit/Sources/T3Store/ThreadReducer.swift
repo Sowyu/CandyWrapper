@@ -68,13 +68,21 @@ public enum ThreadReduction {
     /// Port of `createOrchestrationV2TurnItemVisibility`: rolled-back runs hide their items, a
     /// cancelled queued message never shows, and a superseded attempt's interrupt result hides
     /// unless its run also has an interrupt request.
+    /// Only rolled back, cancelled and queued runs and superseded attempts can hide an item, so a thread with none
+    /// answers true without a lookup, and the interrupt scan runs only with superseded attempts
+    /// (`createOrchestrationV2TurnItemVisibility`, orchestrationV2Timeline.ts:75-120 at 4928, #28965).
     static func visibility(runs: [Run], attempts: [RunAttempt], items: [TurnItem]) -> (TurnItem) -> Bool {
-        let statuses = Dictionary(runs.map { ($0.id, $0.status) }, uniquingKeysWith: { _, last in last })
+        var statuses: [RunId: ThreadStatus] = [:]
+        for run in runs {
+            if run.status == .rolledBack || run.status == .cancelled || run.status == .queued { statuses[run.id] = run.status }
+            else { statuses[run.id] = nil }
+        }
         var supersededRoots: [RunId: Set<NodeId>] = [:]
         for attempt in attempts where attempt.status == "superseded" {
             supersededRoots[attempt.runId, default: []].insert(attempt.rootNodeId)
         }
-        let interruptRuns = Set(items.filter { $0.type == .runInterruptRequest }.map(\.runId))
+        if statuses.isEmpty, supersededRoots.isEmpty { return { _ in true } }
+        let interruptRuns = supersededRoots.isEmpty ? [] : Set(items.lazy.filter { $0.type == .runInterruptRequest }.map(\.runId))
         return { item in
             let status = item.runId.flatMap { statuses[$0] }
             if status == .rolledBack { return false }
@@ -90,8 +98,16 @@ public enum ThreadReduction {
         }
     }
 
+    /// `visibility` for one item, looking up only what that item needs: every streamed update asks it, and building
+    /// the whole-thread tables each time cost a pass over every run and item.
     static func isVisible(_ item: TurnItem, in projection: ThreadProjection) -> Bool {
-        visibility(runs: projection.runs, attempts: projection.attempts, items: projection.turnItems)(item)
+        let status = item.runId.flatMap { id in projection.runs.last { $0.id == id }?.status }
+        if status == .rolledBack { return false }
+        if status == .cancelled || status == .queued, item.type == .userMessage, item.inputIntent == .queuedTurn { return false }
+        guard item.type == .runInterruptResult, let runId = item.runId, let nodeId = item.nodeId,
+              projection.attempts.contains(where: { $0.runId == runId && $0.status == "superseded" && $0.rootNodeId == nodeId })
+        else { return true }
+        return projection.turnItems.contains { $0.type == .runInterruptRequest && $0.runId == runId }
     }
 
     static func renumbered(_ rows: [ProjectedTurnItem]) -> [ProjectedTurnItem] {
@@ -119,10 +135,20 @@ public enum ThreadReduction {
     /// Port of `upsertVisibleTurnItem`: local rows stay ordered by `(ordinal, id)`.
     static func upsertVisibleTurnItem(_ projection: ThreadProjection, _ item: TurnItem, partial: Bool, latestLocalTurnOrdinal: Int?) -> [ProjectedTurnItem] {
         let rows = projection.visibleTurnItems
-        let index = rows.firstIndex { $0.sourceItemId == item.id }
+        // Streamed updates land on the newest rows, so search from the end (orchestrationV2Projection.ts:420-424 at 4928).
+        let index = rows.lastIndex { $0.sourceItemId == item.id }
         let next = ProjectedTurnItem(local: item)
         if let index, rows[index].isLocal, rows[index].sourceThreadId == next.sourceThreadId, rows[index].item == item {
             return rows
+        }
+        // Same ordinal and the next row local or none: removing and inserting it again would put it back here.
+        if let index, rows[index].isLocal, rows[index].sourceThreadId == next.sourceThreadId, rows[index].item.ordinal == item.ordinal,
+           index == rows.count - 1 || rows[index + 1].isLocal
+        {
+            var updated = rows
+            updated[index] = ProjectedTurnItem(position: rows[index].position, visibility: next.visibility, sourceThreadId: next.sourceThreadId,
+                                               sourceItemId: next.sourceItemId, item: item)
+            return updated.indices.contains(index) && updated[index].position == index ? updated : renumbered(updated)
         }
         if index == nil, partial, shouldDropMissingPartialTurnItem(projection, item, latestLocalTurnOrdinal: latestLocalTurnOrdinal) {
             return rows
@@ -149,7 +175,8 @@ public enum ThreadReduction {
     }
 
     static func upsert<T: Identifiable>(_ list: inout [T], _ value: T) {
-        if let index = list.firstIndex(where: { $0.id == value.id }) { list[index] = value } else { list.append(value) }
+        // Updates land on the newest entries; ids are unique, so the last match is the only one.
+        if let index = list.lastIndex(where: { $0.id == value.id }) { list[index] = value } else { list.append(value) }
     }
 
     static func upsertJSON(_ list: inout [JSONValue], _ value: JSONValue) {

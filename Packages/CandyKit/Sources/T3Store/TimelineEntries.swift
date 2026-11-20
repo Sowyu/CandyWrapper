@@ -238,28 +238,52 @@ public enum TimelineEntries {
     /// older answers were saved on the runtime request without updating the timeline item, so a
     /// resolved request with answers fills in the item's `questionAnswer`.
     public static func projectingQuestionHistory(_ rows: [ProjectedTurnItem], requests: [RuntimeRequest]) -> [ProjectedTurnItem] {
+        var cache = QuestionHistoryCache()
+        return projectingQuestionHistory(rows, requests: requests, cache: &cache)
+    }
+
+    /// Answered items by row, kept across updates while the item and its request stay the same, as T3 keeps them
+    /// since 4928 (threadRequests.ts, #29105): a streamed word neither rebuilds them nor copies the rows.
+    public struct QuestionHistoryCache: Sendable {
+        var answered: [TurnItemId: (item: TurnItem, request: RuntimeRequest, answered: TurnItem)] = [:]
+        public init() {}
+    }
+
+    public static func projectingQuestionHistory(
+        _ rows: [ProjectedTurnItem], requests: [RuntimeRequest], cache: inout QuestionHistoryCache
+    ) -> [ProjectedTurnItem] {
         // Nothing to fill in: hand back the same array, so later comparisons stay cheap.
-        guard requests.contains(where: { $0.status == "resolved" && $0.answers != nil }) else { return rows }
+        guard requests.contains(where: { $0.status == "resolved" && $0.answers != nil }) else { cache = QuestionHistoryCache(); return rows }
         let byId = Dictionary(requests.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-        return rows.map { row in
-            let item = row.item
+        var next = QuestionHistoryCache()
+        var out: [ProjectedTurnItem]?
+        for index in rows.indices {
+            let item = rows[index].item
             guard item.type == .userInputRequest, item.questionAnswer == nil, let requestId = item.requestId,
-                let request = byId[requestId], request.status == "resolved", let answers = request.answers,
-                case .object(var fields) = item.raw
-            else { return row }
-            var questionText: [String: JSONValue] = [:]
-            for question in item["questions"]?.arrayValue ?? [] {
-                if let id = question["id"]?.stringValue { questionText[id] = question["question"] ?? .string("") }
+                let request = byId[requestId], request.status == "resolved", let answers = request.answers
+            else { continue }
+            let answered: TurnItem
+            if let kept = cache.answered[item.id], kept.item == item, kept.request == request {
+                answered = kept.answered
+            } else {
+                guard case .object(var fields) = item.raw else { continue }
+                var questionText: [String: JSONValue] = [:]
+                for question in item["questions"]?.arrayValue ?? [] {
+                    if let id = question["id"]?.stringValue { questionText[id] = question["question"] ?? .string("") }
+                }
+                fields["questionAnswer"] = .object([
+                    "requestId": .string(request.id), "answers": answers,
+                    "attachmentsByQuestionId": .object([:]), "questionTextById": .object(questionText),
+                ])
+                guard let made = try? TurnItem(json: .object(fields)) else { continue }
+                answered = made
             }
-            fields["questionAnswer"] = .object([
-                "requestId": .string(request.id), "answers": answers,
-                "attachmentsByQuestionId": .object([:]), "questionTextById": .object(questionText),
-            ])
-            guard let answered = try? TurnItem(json: .object(fields)) else { return row }
-            var next = row
-            next.item = answered
-            return next
+            next.answered[item.id] = (item, request, answered)
+            if out == nil { out = rows }
+            out![index].item = answered
         }
+        cache = next
+        return out ?? rows
     }
 
     /// Walks up the execution nodes to the attempt rooted there (session-logic.ts:603-617).

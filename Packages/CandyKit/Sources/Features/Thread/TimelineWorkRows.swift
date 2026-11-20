@@ -277,6 +277,8 @@ class WorkRowBase: TimelineRowView {
 final class WorkRowView: WorkRowBase {
     private var commandContentVisible = true
     private var commandTasks: [String: Task<Void, Never>] = [:]
+    /// Finished outputs this row shows from the model's store, without a stream.
+    private var heldOutputs: Set<String> = []
     deinit { commandTasks.values.forEach { $0.cancel() } }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -292,8 +294,10 @@ final class WorkRowView: WorkRowBase {
         for (id, task) in commandTasks where !ids.contains(id) {
             task.cancel(); commandTasks[id] = nil; context.model?.forgetCommandOutput(id)
         }
+        for id in heldOutputs where !ids.contains(id) { heldOutputs.remove(id); context.model?.forgetCommandOutput(id) }
         guard let model = context.model, let subscribe = model.commandOutput else { return }
-        for entry in wanted where commandTasks[entry.id] == nil {
+        for entry in wanted where commandTasks[entry.id] == nil && !heldOutputs.contains(entry.id) {
+            if model.holdsFinishedCommandOutput(entry.id) { heldOutputs.insert(entry.id); continue }
             guard let row = entry.projectedItem else { continue }
             let id = entry.id
             commandTasks[id] = subscribe(row.sourceThreadId.rawValue, row.sourceItemId.rawValue) { [weak self, weak model] result in
@@ -482,6 +486,8 @@ final class WorkRowView: WorkRowBase {
     override func prepareForReuse() {
         for (id, task) in commandTasks { task.cancel(); context.model?.forgetCommandOutput(id) }
         commandTasks = [:]
+        for id in heldOutputs { context.model?.forgetCommandOutput(id) }
+        heldOutputs = []
         super.prepareForReuse()
         cards.forEach { $0?.stop() }
     }
