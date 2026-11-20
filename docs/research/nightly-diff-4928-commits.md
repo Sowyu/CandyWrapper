@@ -1470,7 +1470,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 31564dece8 | #29759 | thread | fix(shared): find in thread matches a word typed with a curly apostrophe | ported (thread-3): ThreadFindText.fold folds curly apostrophes |
 | 480eb8d219 | #29814 | thread | fix(client): mark unread sticks on a thread reopened within ten minutes | port |
 | a185dd9248 | #30527 | thread | fix(web): give dialog titles a readable line height | port |
-| d51bc58f5e | #30389 | thread | fix(tools): show images from MCP and OpenCode outputs | left (thread-3): TurnItemDetail formats structuredContent and image markers for MCP outputs (client-runtime work-log/itemDetail.ts at 4928); about 40 lines plus tests |
+| d51bc58f5e | #30389 | thread | fix(tools): show images from MCP and OpenCode outputs | ported (thread-4): TurnItemDetail.textFromBlocks shows an MCP result's structuredContent with its image markers when it has images or no text; mcpToolResultOutput is the server's |
 | 567a105705 | #30606 | thread | fix(client-runtime): expire missing file metadata per thread | port |
 | c15e49a77c | #26435 | thread | fix: keep older pending questions answerable | ported (thread-3): history pages reveal older approval and question cards (ThreadReduction.mergeOlderHistory) |
 | 9bfecb8f1e | #29000 | thread | fix(web): deleted forks no longer remain in Lineage | port |
