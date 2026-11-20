@@ -1340,7 +1340,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | fc2b5de20c | #35426 | sidebar | fix(web): a project filter that hides every active thread says so and offers Show all projects | ported 9a0153d1 |
 | 8fc1dade71 | #35522 | sidebar | fix(web): keep settled pagination focused while loading | already in CandyWrapper: the Show more row keeps list focus while it loads |
 | a7779fc558 | #35499 | sidebar | fix(web): a focused folder New thread button no longer draws over the hidden-thread count | already in CandyWrapper: SidebarRowViews.swift shows the folder New thread button and the count never together |
-| b1c1e07ded | #23517 | sidebar | fix(web): a click no longer lands on the sidebar row that just slid under it | left: ignore presses on rows that just slid under the pointer |
+| b1c1e07ded | #23517 | sidebar | fix(web): a click no longer lands on the sidebar row that just slid under it | ported (sidebar-2): SidebarShiftGuard drops presses for 500ms on rows that moved half a row without the user's input |
 | db470a3ebd | #35659 | sidebar | fix(web): legacy collapsed project folders stay collapsed after a save | skip: web localStorage migration |
 | 2d80cb6bc7 | #36420 | sidebar | fix(clients): live working timers count on the host's clock | left: needs a server clock offset per environment |
 | dea07a1b12 | #36467 | sidebar | fix(web): rewind no longer offers file restore in project-folder threads | skip: rewind file restore, outside the sidebar |
