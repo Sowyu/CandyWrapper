@@ -60,6 +60,15 @@ struct RunOnFidelityTests {
                         let strip = ComposerContextStripView(frame: NSRect(x: 8, y: 8 + 64, width: 600, height: 32))
                         strip.runOn.options = Self.options
                         strip.runOn.selectedId = selected
+                        if native["kind"] == "strip.git" {
+                            // #27114: the wide Git layout, machine | workspace … branch.
+                            strip.showsGitControls = true
+                            strip.showsEnvironment = true
+                            strip.runContext.glyphs = [IconName.folder.definition]
+                            strip.runContext.text = "Current checkout"
+                            strip.branch.text = "main"
+                        }
+                        strip.layoutSubtreeIfNeeded()
                         canvas.addSubview(strip)
                         canvas.addSubview(composer)
                     }
@@ -82,6 +91,27 @@ struct RunOnFidelityTests {
         let html = "<!doctype html><meta charset=utf-8><title>Run on</title><body style='font:13px -apple-system'>" + images
         try html.write(to: Self.out.deletingLastPathComponent().appendingPathComponent("report-run-on.html"), atomically: true, encoding: .utf8)
         #expect(mean < 0.05)
+    }
+
+    /// #27114: from a 576pt composer the machine gets its own control and the branch moves to the end;
+    /// narrower, the branch follows the run context.
+    @Test func gitStripSwitchesLayoutAt576() {
+        let strip = ComposerContextStripView(frame: NSRect(x: 0, y: 0, width: 575, height: 32))
+        strip.appearance = NSAppearance(named: .aqua)
+        strip.showsGitControls = true
+        strip.showsEnvironment = true
+        strip.runOn.options = Self.options
+        strip.runContext.text = "Current checkout"
+        strip.branch.text = "main"
+        var changes = 0
+        strip.onWideChange = { changes += 1 }
+        strip.layoutSubtreeIfNeeded()
+        #expect(!strip.isWide && strip.runOn.isHidden)
+        #expect(strip.branch.frame.minX == strip.runContext.frame.maxX + 8)
+        strip.frame.size.width = 576
+        strip.layoutSubtreeIfNeeded()
+        #expect(strip.isWide && !strip.runOn.isHidden && changes == 1)
+        #expect(strip.runContext.frame.minX > strip.runOn.frame.maxX && strip.branch.frame.maxX == 576 - 8)
     }
 
     /// One machine, or a locked draft: a static label with no list. A pick reports the new environment once.

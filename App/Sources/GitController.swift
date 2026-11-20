@@ -98,6 +98,7 @@ final class GitController {
         panel.onDetailsToggle = { [weak self] in self?.toggleDetails() }
         let strip = panel.contextStrip
         strip.runContext.action = { [weak self] in self?.openRunContextMenu(inPanel: false) }
+        strip.onWideChange = { [weak self] in self?.render() }
         strip.branch.action = { [weak self] in self?.openBranchPicker(inPanel: false) }
         let branchMenu: (NSEvent, NSView) -> Void = { [weak self] event, view in
             guard let name = self?.resolvedBranch, !name.isEmpty else { return }
@@ -373,8 +374,11 @@ final class GitController {
         let indicator = !(target.isDraft && ThemeRuntime.isDither(dark: panel.effectiveAppearance.isDark))
             && (runOnChoices || (env != nil && target.environmentId != environments.primaryId))
         let modern = !ThemeRuntime.isDither(dark: strip.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: strip.effectiveAppearance.isDark)
-        strip.runContext.glyphs = indicator ? (modern ? [EnvironmentMachineIcon.definition(env?.machine ?? "server")] : [EnvironmentMachineIcon.definition(env?.machine ?? "server"), folderIcon(target)]) : [folderIcon(target)]
-        strip.runContext.text = strip.runOn.autoBalanceLabel ?? (indicator ? env?.label ?? "Run on" : label)
+        strip.showsEnvironment = indicator
+        // From a 576pt composer the machine has its own control, so this one is the workspace alone (#27114).
+        let split = strip.wideGit
+        strip.runContext.glyphs = indicator && !split ? (modern ? [EnvironmentMachineIcon.definition(env?.machine ?? "server")] : [EnvironmentMachineIcon.definition(env?.machine ?? "server"), folderIcon(target)]) : [folderIcon(target)]
+        strip.runContext.text = split ? label : strip.runOn.autoBalanceLabel ?? (indicator ? env?.label ?? "Run on" : label)
         strip.runContext.tooltipText = label
         strip.runContext.interactive = target.isDraft && composer.currentDraft != nil
         strip.branch.text = branchLabel
@@ -523,7 +527,8 @@ final class GitController {
     private func openRunContextMenu(inPanel: Bool) {
         guard let target, target.isDraft, composer.currentDraft != nil else { return }
         let anchor: NSView = inPanel ? panel.detailsCard.runContext : panel.contextStrip.runContext
-        var items = runOnItems()
+        // The wide strip's workspace control lists the workspaces only (`BranchToolbarEnvModeSelector`).
+        var items = !inPanel && panel.contextStrip.wideGit ? [] : runOnItems()
         if !items.isEmpty { items.append(.separator) }
         items += workspaceItems(target)
         let width: CGFloat = inPanel ? anchor.bounds.width : previousWorktree != nil ? 336 : 0

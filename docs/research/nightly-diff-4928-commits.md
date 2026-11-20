@@ -1032,7 +1032,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 3a873e8faf | #23475 | pr/git | fix(web): disable conflict checkout without required permissions | left (panels-2): not checked |
 | a2e4524d51 | #21579 | pr/git | fix(web): preview address bar no longer ligates "://" | left (panels-2): not checked |
 | e123ac644e | #26073 | pr/git | fix(web): a failed review guide keeps Try again reachable | left (panels-2): not checked |
-| 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | left (not reached in composer-3): from @xl (576pt) T3 shows the wide strip layout, machine, separator and the worktree picker (`BranchToolbarEnvModeSelector`), which CW has no control for yet; needs a 4928 reference capture |
+| 7cdbb8ef59 | #27114 | pr/git | fix(web): show the worktree picker in the composer strip at default width | ported (composer-5): from a 576pt composer the default themes' strip shows the machine, a separator and the workspace picker on the left and the branch at the end; the workspace menu then lists workspaces only. Spec case run-on `strip.git.wide` (2.58 to 2.92%) and a layout test |
 | 45d29b45fe | #22382 | pr/git | fix(web): a refused review shows GitHub's reason | left (panels-2): not checked |
 | 1c8ada5023 | #22974 | pr/git | fix(web): composer notices no longer flicker next to a floating preview | left (panels-2): not checked |
 | a24ec905c8 | #28070 | pr/git | fix(web): machine label no longer shifts between one and many machines | left (panels-2): not checked |

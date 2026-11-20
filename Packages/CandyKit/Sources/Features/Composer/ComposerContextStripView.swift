@@ -14,9 +14,11 @@ public struct RunOnOption: Equatable, Sendable {
 }
 
 /// The context strip under the draft composer (`ComposerSurface.ContextStrip`, ComposerSurface.tsx:104-117).
-/// In a Git project it holds the run context (machine and workspace mode) on the left and the branch on the
-/// right (BranchToolbar.tsx:780-865; the composer is never wider than `@3xl`, so this is the only Git layout);
-/// elsewhere only the "Run on" control (`BranchToolbarEnvironmentSelector`). The strip is inset 22 per side,
+/// In a Git project it holds the run context (machine and workspace mode) and the branch. In the default themes,
+/// below a 576pt composer (`@xl/composer-surface`, #27114) the branch follows the run context
+/// (`RunContextSelector`); from 576pt the machine (`BranchToolbarEnvironmentSelector`), a separator and the
+/// workspace (`BranchToolbarEnvModeSelector`) sit left and the branch at the end (BranchToolbar.tsx:774-850 at
+/// 4928). Glass keeps its run context and branch at the strip's ends. Elsewhere only the "Run on" control. The strip is inset 22 per side,
 /// starts 16 above the composer's bottom (`-mt-4`) and shows 32 below it (`pt-5`, a 24 row, `pb-1`).
 /// Its top 16 sit under the composer and are masked off (`mask-b-from-4`); below that it continues the
 /// composer's glass, outline (`rounded-b-2xl`) and, in dark, the 10px seam shade (`composer-seam-below`).
@@ -35,17 +37,26 @@ public final class ComposerContextStripView: DSView {
     public var showsGitControls = false {
         didSet {
             guard showsGitControls != oldValue else { return }
-            runOn.isHidden = showsGitControls
-            runContext.isHidden = !showsGitControls
-            branch.isHidden = !showsGitControls
+            updateVisibility()
             needsLayout = true
         }
     }
+    /// `@xl/composer-surface`: the composer (the strip plus its insets) is at least 576 wide.
+    public static let wideComposerWidth: CGFloat = 576
+    /// The wide Git layout is showing; the host labels `runContext` as the workspace alone then.
+    public private(set) var isWide = false
+    /// `showEnvironmentIndicator`: in the wide Git layout "Run on" shows before the workspace, after a separator.
+    public var showsEnvironment = false { didSet { if showsEnvironment != oldValue { updateVisibility(); needsLayout = true } } }
+    /// Called when the strip switches between the narrow and wide Git layouts.
+    public var onWideChange: (() -> Void)?
+    /// `<Separator orientation="vertical" className="mx-0.5 h-3.5!">` between the machine and the workspace.
+    private let separator = SeparatorView(.vertical)
     /// Redesign: the strip is a row of floating pills over the composer instead of a tray under it. The host sets it.
     public var floatsAsPills = false {
         didSet {
             guard floatsAsPills != oldValue else { return }
             for c in [runOn, runContext, branch] as [ComposerContextControl] { c.pillSized = floatsAsPills }
+            updateVisibility()
             needsLayout = true; needsDisplay = true
         }
     }
@@ -87,7 +98,19 @@ public final class ComposerContextStripView: DSView {
         branch.middleTruncates = true
         branch.setAccessibilityLabel("Branch")
         for c in [runContext, branch] { c.isHidden = true; addSubview(c) }
+        separator.isHidden = true
+        addSubview(separator)
         for c in [runOn, runContext, branch] as [ComposerContextControl] { c.onSizeChange = { [weak self] in self?.needsLayout = true } }
+    }
+
+    /// The wide Git layout applies: wide, not floating as pills, not the 3814 design.
+    public var wideGit: Bool { showsGitControls && isWide && !floatsAsPills && ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
+
+    private func updateVisibility() {
+        runOn.isHidden = showsGitControls && !(wideGit && showsEnvironment)
+        runContext.isHidden = !showsGitControls
+        branch.isHidden = !showsGitControls
+        separator.isHidden = !(wideGit && showsEnvironment)
     }
 
     public override func updateLayer() {
@@ -105,6 +128,7 @@ public final class ComposerContextStripView: DSView {
         seam.colors = [Themed.black(0.18).cgColor, Themed.black(0).cgColor]
         tint.backgroundColor = Themed.white(0.01).cgColor
         CATransaction.commit()
+        updateVisibility()
     }
 
     public override func layout() {
@@ -120,6 +144,13 @@ public final class ComposerContextStripView: DSView {
         seam.startPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 0 : 1)
         seam.endPoint = CGPoint(x: 0.5, y: surface.isFlipped ? 1 : 0)
         CATransaction.commit()
+        // The default themes' strip is as wide as the composer (ThreadPanelView sets no inset for them).
+        let wide = w >= Self.wideComposerWidth
+        if wide != isWide {
+            isWide = wide
+            updateVisibility()
+            onWideChange?()
+        }
         if updateCompact(width: w) { return }
         let frames = controlFrames(width: w)
         for (control, frame) in frames { control.frame = frame }
@@ -150,10 +181,26 @@ public final class ComposerContextStripView: DSView {
             var x: CGFloat = 8
             var result: [(ComposerContextControl, NSRect)] = []
             let trailing = showsPermissions ? permissions.intrinsicContentSize.width + 8 : 0
-            for control in showsGitControls ? [runContext, branch] : [runOn] {
-                let width = min(control.intrinsicContentSize.width, max(0, w - 16 - x - trailing))
-                result.append((control, NSRect(x: x, y: 8, width: width, height: 24)))
-                x += width + 8
+            if wideGit {
+                // The controls host (`flex-1`, `gap-1`): machine, a 14pt separator 2 in from each side, workspace;
+                // the branch takes its width before the permissions (`ml-auto`), and the host gives way first.
+                let right = min(branch.intrinsicContentSize.width, max(0, w - 16 - trailing))
+                let room = max(0, w - 16 - trailing - right - 8)
+                if showsEnvironment {
+                    let width = min(runOn.intrinsicContentSize.width, room)
+                    result.append((runOn, NSRect(x: x, y: 8, width: width, height: 24)))
+                    x += width + 4 + 2
+                    separator.frame = NSRect(x: x, y: 13, width: 1, height: 14)
+                    x += 1 + 2 + 4
+                }
+                result.append((runContext, NSRect(x: x, y: 8, width: min(runContext.intrinsicContentSize.width, max(0, 8 + room - x)), height: 24)))
+                result.append((branch, NSRect(x: w - 8 - trailing - right, y: 8, width: right, height: 24)))
+            } else {
+                for control in showsGitControls ? [runContext, branch] : [runOn] {
+                    let width = min(control.intrinsicContentSize.width, max(0, w - 16 - x - trailing))
+                    result.append((control, NSRect(x: x, y: 8, width: width, height: 24)))
+                    x += width + 8
+                }
             }
             if showsPermissions { let width = permissions.intrinsicContentSize.width; result.append((permissions, NSRect(x: w - 8 - width, y: 8, width: width, height: 24))) }
             return result
@@ -188,7 +235,9 @@ public final class ComposerContextStripView: DSView {
     /// Flips compact mode when the measure says so. Returns true when it laid the controls out itself.
     private func updateCompact(width: CGFloat) -> Bool {
         guard width > 0 else { return false }
-        let needed = showsGitControls ? Self.neededWidth(groups: [runContext], directChild: branch) : Self.neededWidth(groups: [runOn], directChild: nil)
+        let needed = !showsGitControls ? Self.neededWidth(groups: [runOn], directChild: nil)
+            : wideGit && showsEnvironment ? Self.neededWidth(groups: [runOn, runContext], directChild: branch) + 9
+            : Self.neededWidth(groups: [runContext], directChild: branch)
         let next = Self.compact(was: labelsCompact, needed: needed, available: width)
         guard next != labelsCompact else { return false }
         labelsCompact = next
