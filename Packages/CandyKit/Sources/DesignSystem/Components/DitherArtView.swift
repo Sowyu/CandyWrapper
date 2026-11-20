@@ -87,7 +87,7 @@ public final class DitherArtView: NSView {
         return current
     }
 
-    /// How much of the art a page shows. `page` is the heavy scrim, for the Orchestrator's pane and like pages.
+    /// How much of the art a page shows. `page` is the heavy scrim, for pages in the thread panel's place.
     public enum Emphasis: Sendable { case hero, thread, settings, page }
 
     /// A page calls this: while `source` is the frontmost registered page showing inside the art's panel, the art

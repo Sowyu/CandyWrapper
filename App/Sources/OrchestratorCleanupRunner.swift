@@ -34,7 +34,8 @@ final class OrchestratorCleanupRunner {
         let left = pending.subtracting(done)
         guard !left.isEmpty else { return finish() }
         let home = legacy.environmentId ?? environments.primaryId
-        for env in left.subtracting(tried) where environments.session(env) != nil && environments.snapshot(env) != nil {
+        // Connected, so the shell is the server's, not the cached one shown at launch.
+        for env in left.subtracting(tried) where environments.state(env)?.status == .connected && environments.snapshot(env) != nil {
             tried.insert(env)
             Task { [weak self] in
                 guard let self else { return }
