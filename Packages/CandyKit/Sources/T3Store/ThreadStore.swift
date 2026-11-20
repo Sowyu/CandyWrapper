@@ -70,7 +70,11 @@ public actor ThreadStore {
 
     /// Writes the queued snapshot now; the thread's view closed. Waits for the offers and removals
     /// already sent first, so the newest state is the one written.
+    ///
+    /// Closing the view caches a running thread too; only an expanded history stays out
+    /// (`!current.history.expanded`, threads.ts:367-383 at 4928, #25213).
     public func flushCache() async {
+        offerToCache(running: true)
         await cacheTask?.value
         await cache?.flush(cacheKey)
     }
@@ -140,8 +144,12 @@ public actor ThreadStore {
         return request
     }
 
-    public func applyHistoryPage(_ page: ThreadHistoryPage, requestCursor: String) {
-        publish(reducer.applyHistoryPage(page, requestCursor: requestCursor))
+    /// Returns the cursor to load next while the load should keep paging (#24417).
+    @discardableResult
+    public func applyHistoryPage(_ page: ThreadHistoryPage, requestCursor: String, throughEntryId: String? = nil) -> String? {
+        let (changes, next) = reducer.applyHistoryPageContinuing(page, requestCursor: requestCursor, throughEntryId: throughEntryId)
+        publish(changes)
+        return next
     }
 
     public func deferredWorkRequest(anchorId: TurnItemId) -> ThreadHistoryRequest? {
@@ -216,9 +224,15 @@ public actor ThreadStore {
             cacheTask = Task { await previous?.value; await cache.remove(key) }
             return
         }
-        guard let projection = reducer.projection, let sequence = reducer.lastSequence,
-              ThreadCache.shouldPersist(projection, history: reducer.history)
+        offerToCache(running: false)
+    }
+
+    /// `running` also caches a thread with a live run, for a view that is closing.
+    private func offerToCache(running: Bool) {
+        guard let cache, reducer.status != .deleted, let projection = reducer.projection, let sequence = reducer.lastSequence,
+              running ? !reducer.history.expanded : ThreadCache.shouldPersist(projection, history: reducer.history)
         else { return }
+        let key = cacheKey
         var history = reducer.history
         history.loading = false
         history.error = nil

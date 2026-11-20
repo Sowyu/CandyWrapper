@@ -27,7 +27,8 @@ public struct ThreadMcpAppDownload: Sendable, Equatable {
             default: return nil
             }
             let raw = resource["name"]?.stringValue.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-                ?? resource["uri"]?.stringValue?.split(whereSeparator: { "/?#".contains($0) }).last.map(String.init) ?? "download"
+                // The path's last segment, before any query or fragment (`downloadName`, mcpApps/host.ts:483 at 4928, #30712).
+                ?? resource["uri"]?.stringValue?.split(whereSeparator: { "?#".contains($0) }).first?.split(separator: "/").last.map(String.init) ?? "download"
             let name = String(raw.unicodeScalars.map { scalar -> Character in
                 scalar.value < 32 || "\\/:*?\"<>|".unicodeScalars.contains(scalar) ? "-" : Character(scalar)
             }.prefix(200))

@@ -22,6 +22,20 @@ public struct ChatMessage: Sendable, Hashable, Identifiable {
     public var idleCompaction: String?
     /// The thread opens with this workflow script, so it shows as the workflow's opening block.
     public var workflowOpening = false
+    /// The thread in a linked environment whose agent sent this, with its title then (`OrchestrationV2LinkedSender`,
+    /// orchestrationV2.ts at 4928, #34721). `senderThreadId` names only a thread in this environment.
+    public var linkedSender: LinkedSender?
+
+    public struct LinkedSender: Sendable, Hashable {
+        public var environmentId: String
+        public var threadId: String
+        public var title: String
+        public init(environmentId: String, threadId: String, title: String) {
+            self.environmentId = environmentId; self.threadId = threadId; self.title = title
+        }
+        /// The `t3-thread://v2` link that opens it.
+        public var href: String { "t3-thread://v2/\(environmentId)/\(threadId)" }
+    }
 
     public init(
         id: MessageId, role: Role, text: String, runId: RunId? = nil, streaming: Bool = false,
@@ -362,7 +376,12 @@ public enum TimelineEntries {
                 scheduledTaskId: isUser ? item.string("scheduledTaskId") : nil,
                 context: isUser ? item["context"] : nil,
                 attachments: item["attachments"]?.arrayValue ?? [])
-            if isUser { message.idleCompaction = item.string("idleCompaction") }
+            if isUser {
+                message.idleCompaction = item.string("idleCompaction")
+                if let sender = item["linkedSender"], let env = sender["environmentId"]?.stringValue, let thread = sender["threadId"]?.stringValue {
+                    message.linkedSender = ChatMessage.LinkedSender(environmentId: env, threadId: thread, title: sender["title"]?.stringValue ?? "")
+                }
+            }
             return TimelineEntry(id: message.id.rawValue, createdAt: createdAt, kind: .message(message, projectedItem: row), attempt: attempt)
         case .proposedPlan:
             let planId = PlanId(item.string("planId") ?? item.id.rawValue)
@@ -373,15 +392,21 @@ public enum TimelineEntries {
             return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .proposedPlan(proposed), attempt: attempt)
         case .dynamicTool where ThreadWebContent.htmlRender(item) != nil:
             return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .htmlRender(ThreadWebContent.htmlRender(item)!, runId: item.runId), attempt: attempt)
-        case .dynamicTool where ThreadWebContent.mcpApp(item) != nil:
-            let app = McpAppEntry(app: ThreadWebContent.mcpApp(item)!, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId,
-                                  revision: TurnItemDetail.revision(item))
-            return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .mcpApp(app, runId: item.runId), attempt: attempt)
         case _ where standaloneEventTypes.contains(item.type):
             return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .event(row), attempt: attempt)
         default:
             return TimelineEntry(id: item.id.rawValue, createdAt: createdAt, kind: .work(WorkLog.entry(for: row)), attempt: attempt)
         }
+    }
+
+    /// An MCP App call keeps its tool row and gets the app card after it, `mcp-app:<id>` (session-logic.ts:735-756
+    /// at 4928, #33347).
+    static func appEntry(_ row: ProjectedTurnItem, attempt: TimelineAttempt?) -> TimelineEntry? {
+        let item = row.item
+        guard item.type == .dynamicTool, let reference = ThreadWebContent.mcpApp(item) else { return nil }
+        let app = McpAppEntry(app: reference, sourceThreadId: row.sourceThreadId, itemId: row.sourceItemId, revision: TurnItemDetail.revision(item))
+        return TimelineEntry(id: "mcp-app:" + item.id.rawValue, createdAt: item.startedAt ?? item.updatedAt,
+                             kind: .mcpApp(app, runId: item.runId), attempt: attempt)
     }
 
     /// Port of `deriveTimelineEntriesFromVisibleTurnItems` (session-logic.ts:592-809), without
@@ -402,6 +427,8 @@ public enum TimelineEntries {
         var attempts: [TimelineAttempt?] = []
         /// Per row, its index in `entries`, or -1 for a row left out.
         var entryIndex: [Int] = []
+        /// Per row, how many entries it made from `entryIndex` on: 0, 1, or 2 for an MCP App call.
+        var entryCount: [Int] = []
         var entries: [TimelineEntry] = []
         var folded: [String: RunId?] = [:]
         var attemptsSource: [RunAttempt] = []
@@ -444,6 +471,7 @@ public enum TimelineEntries {
         next.lookup = lookup
         next.attempts.reserveCapacity(rows.count)
         next.entryIndex.reserveCapacity(rows.count)
+        next.entryCount.reserveCapacity(rows.count)
         next.entries.reserveCapacity(old.entries.count + 1)
         // Rows line up by index while the window only grows at its end; a shifted row (a history
         // page, an insert) is found by its id.
@@ -475,24 +503,23 @@ public enum TimelineEntries {
             let unchangedRow = previous.map { samePayload(old.rows[$0], row) } ?? false
             let attempt = unchangedRow && !lookupChanged ? old.attempts[previous!] : lookup.attempt(row.item)
             next.attempts.append(attempt)
-            let entry: TimelineEntry?
+            let start = next.entries.count
             if let p = previous, unchangedRow, attempt == old.attempts[p] {
                 let index = old.entryIndex[p]
-                entry = index < 0 ? nil : old.entries[index]
+                // Indexing, not slicing into a new array: this runs for every row on every streaming update.
+                if index >= 0 { for k in index ..< index + old.entryCount[p] { next.entries.append(old.entries[k]) } }
             } else {
                 if i >= front { reusedAll = false }
-                entry = Self.entry(row, attempt: attempt, planById: planById, folded: folded)
+                if let entry = Self.entry(row, attempt: attempt, planById: planById, folded: folded) { next.entries.append(entry) }
+                if row.item.type == .dynamicTool, let app = Self.appEntry(row, attempt: attempt) { next.entries.append(app) }
                 if sameShape, let p = previous {
-                    let index = old.entryIndex[p]
-                    if (index < 0) != (entry == nil) { sameShape = false } else if index >= 0 { changed.append(index) }
+                    let index = old.entryIndex[p], count = next.entries.count - start
+                    if old.entryCount[p] != count { sameShape = false } else if index >= 0 { changed.append(contentsOf: index ..< index + count) }
                 }
             }
-            if let entry {
-                next.entryIndex.append(next.entries.count)
-                next.entries.append(entry)
-            } else {
-                next.entryIndex.append(-1)
-            }
+            let count = next.entries.count - start
+            next.entryIndex.append(count == 0 ? -1 : start)
+            next.entryCount.append(count)
         }
         next.prepended = reusedAll ? frontEntries : nil
         memo = next

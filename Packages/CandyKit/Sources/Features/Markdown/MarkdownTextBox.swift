@@ -37,6 +37,8 @@ final class MarkdownTextBox {
     let lineCount: Int
     /// Inline code chips (border boxes), relative to the box.
     private(set) var chips: [CGRect] = []
+    /// The inline code spans' character ranges, which a double-click selects whole (#26639).
+    let codeRanges: [NSRange]
     var firstBaseline: CGFloat {
         guard lineCount > 0 else { return 0 }
         return lineTops == nil ? baselineOffset : laidOut.first??.first?.baseline ?? baselineOffset
@@ -96,6 +98,7 @@ final class MarkdownTextBox {
          chipRanges: [NSRange] = [], chipFont: NSFont? = nil, wraps: Bool = true, lazy: Bool? = nil,
          inlineBoxes: [(index: Int, above: CGFloat, below: CGFloat)] = []) {
         self.lineHeight = lineHeight
+        codeRanges = chipRanges
         text = string.string
         length = string.length
         let storage = NSTextContentStorage(), manager = NSTextLayoutManager()

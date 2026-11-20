@@ -95,7 +95,18 @@ public final class SkillDetailsView: DSView {
         instructions.frame = NSRect(x: 8, y: 52 + h, width: instructions.intrinsicContentSize.width, height: 32)
     }
     public static func show(skill: ServerProviderSkill, from view: NSView, onViewInstructions: (@MainActor () -> Void)?) {
-        PopoverView(content: SkillDetailsView(skill: skill, onViewInstructions: onViewInstructions), padding: .compact, width: .auto)
+        // View instructions also closes the popover (`PopoverClose`, SkillInlineText.tsx:139-144 at 4928, #37900).
+        let box = PopupBox()
+        var close: (@MainActor () -> Void)?
+        if let onViewInstructions {
+            close = { [weak view] in
+                if let popup = box.popup { view?.popupHost?.close(popup, returnFocus: false) }
+                onViewInstructions()
+            }
+        }
+        box.popup = PopoverView(content: SkillDetailsView(skill: skill, onViewInstructions: close), padding: .compact, width: .auto)
             .show(from: view, placement: PopupPlacement(side: .top, align: .center, sideOffset: 4, fallbackAxisSide: .end))
     }
 }
+
+@MainActor private final class PopupBox { weak var popup: OpenPopup? }

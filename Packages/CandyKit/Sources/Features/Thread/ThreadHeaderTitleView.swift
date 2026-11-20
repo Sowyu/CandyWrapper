@@ -85,7 +85,8 @@ final class ThreadHeaderParentCrumb: ControlView {
     }
     var collapsed = false { didSet { label.isHidden = collapsed; ellipsis.isHidden = !collapsed } }
     var fullWidth: CGFloat { ceil(label.textWidth) }
-    var width: CGFloat { collapsed ? ceil(ellipsis.textWidth) : fullWidth }
+    var width: CGFloat { collapsed ? collapsedWidth : fullWidth }
+    var collapsedWidth: CGFloat { ceil(ellipsis.textWidth) }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

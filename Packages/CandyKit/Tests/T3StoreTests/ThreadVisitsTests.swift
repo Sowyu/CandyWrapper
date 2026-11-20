@@ -10,7 +10,7 @@ import Testing
     @Test func serversWithoutVisitTrackingKeepALocalWatermark() {
         var shell = thread()
         shell.lastVisitedAt = .absent
-        let tracker = ThreadVisitTracker()
+        var tracker = ThreadVisitTracker()
         #expect(tracker.decide(shell, routeKey: "e:t", local: nil, nowMs: now) == .local(shell.updatedAt))
         #expect(tracker.decide(shell, routeKey: "e:t", local: shell.updatedAt, nowMs: now) == .none)
     }
@@ -29,6 +29,19 @@ import Testing
         #expect(tracker.decide(shell, routeKey: "e:t", local: nil, nowMs: now + 50) == .none)
         tracker.reset()
         #expect(tracker.decide(shell, routeKey: "e:t", local: nil, nowMs: now + 50) == .dispatch(shell.updatedAt, delayMs: 0))
+    }
+
+    /// #29814 (threadVisits.ts:174-179 at 4928): a thread opened already seen, then marked unread, stays unread.
+    @Test func markUnreadSticksOnAThreadOpenedAlreadySeen() {
+        let seen = thread {
+            $0.lastVisitedAt = .value("2026-06-20T01:00:00.000Z")
+            $0.status = .completed
+        }
+        var tracker = ThreadVisitTracker()
+        #expect(tracker.decide(seen, routeKey: "e:t", local: nil, nowMs: now) == .none)
+        var unread = seen
+        unread.lastVisitedAt = .value("2026-06-19T23:00:00.000Z")
+        #expect(tracker.decide(unread, routeKey: "e:t", local: nil, nowMs: now + 50) == .none)
     }
 
     @Test func switchingRoutesAndRapidReopensStartWithoutThePreviousThrottle() {

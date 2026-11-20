@@ -23,10 +23,15 @@ public struct ThreadVisitTracker: Sendable {
     public init() {}
 
     /// What to do for the open thread's shell. `routeKey` is the scoped thread id.
-    public func decide(_ shell: ThreadShell, routeKey: String, local: T3Timestamp?, nowMs: Int64) -> Decision {
+    public mutating func decide(_ shell: ThreadShell, routeKey: String, local: T3Timestamp?, nowMs: Int64) -> Decision {
         guard let updated = shell.updatedAt.epochMs else { return .none }
         let visited = SidebarModel.resolveThreadLastVisitedAt(server: shell.lastVisitedAt, local: local)?.epochMs
-        if let visited, visited >= updated { return .none }
+        if let visited, visited >= updated {
+            // Already seen, so a later mark-unread stays even though no visit went out for this watermark
+            // (threadVisits.ts:174-179 at 4928, #29814).
+            if !shell.lastVisitedAt.isAbsent { lastDispatchedKey = Self.key(routeKey, shell) }
+            return .none
+        }
         guard !shell.lastVisitedAt.isAbsent else { return .local(shell.updatedAt) }
         // Dedupe per watermark: the effect re-runs before the command's echo lands, and a mark-unread on the
         // open thread stays until new activity lands or the thread is reopened.

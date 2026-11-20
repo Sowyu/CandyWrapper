@@ -612,6 +612,12 @@ public final class ThreadViewModel {
                 let p = UserMessagePresentation.resolve(m)
                 switch p.attribution {
                 case .automation: ui.foldTitle = p.scheduledTaskId.flatMap { scheduledTaskTitles[$0] }
+                case .agent where m.linkedSender != nil:
+                    // A linked environment's sender: its shell's title when this client has it, else the title sent (#34721).
+                    let sender = m.linkedSender!
+                    let title = linkedThread?(ThreadId(sender.href))?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let sent = sender.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ui.foldTitle = title?.isEmpty == false ? title : sent.isEmpty ? nil : sent
                 case .agent:
                     ui.foldTitle = m.senderThreadId.flatMap { id in
                         if let title = foldTitles[id] { return title }

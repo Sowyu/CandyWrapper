@@ -509,10 +509,33 @@ public struct ThreadReducer: Sendable {
 
     /// Merges an older page. Ignored when the cursor moved while the request was in flight
     /// (`isActiveHistoryRequestCursor`, threadHistoryMerge.ts:30-36).
+    ///
+    /// A plain load (no `throughEntryId`) keeps paging while the page holds no turn start, so one
+    /// click reveals a whole earlier turn (`keepPaging` and `startsTurn`, threads.ts:78-87 and :811-819
+    /// at 4928, #24417). `nextCursor` is the cursor to load next, nil when the load is done.
     @discardableResult
-    public mutating func applyHistoryPage(_ page: ThreadHistoryPage, requestCursor: String) -> ThreadChangeSet {
+    public mutating func applyHistoryPage(
+        _ page: ThreadHistoryPage, requestCursor: String, throughEntryId: String? = nil
+    ) -> ThreadChangeSet {
+        applyHistoryPageContinuing(page, requestCursor: requestCursor, throughEntryId: throughEntryId).changes
+    }
+
+    /// A user message opens a turn unless it steers a running one; every notification is a response
+    /// boundary (`startsTurn`, threads.ts:78-87 at 4928).
+    static func startsTurn(_ item: TurnItem) -> Bool {
+        item.type == .notification
+            || (item.type == .userMessage && item.inputIntent != .steer && item.inputIntent != .promotedQueuedToSteer)
+    }
+
+    public mutating func applyHistoryPageContinuing(
+        _ page: ThreadHistoryPage, requestCursor: String, throughEntryId: String? = nil
+    ) -> (changes: ThreadChangeSet, nextCursor: String?) {
         var changes = ThreadChangeSet()
-        guard history.historyCursor == requestCursor, let current = projection else { return changes }
+        guard history.historyCursor == requestCursor, let current = projection else { return (changes, nil) }
+        let keepPaging = throughEntryId == nil && page.hasMoreHistory
+            && !page.items.contains { Self.startsTurn($0.item) }
+        // "History did not advance." (threads.ts:820-825): a page that repeats its cursor ends the load.
+        let next = keepPaging && page.nextCursor != requestCursor ? page.nextCursor : nil
         let merged = ThreadReduction.mergeOlderHistory(current, page.items)
         changes.projectionChanged = merged != current
         projection = merged
@@ -520,8 +543,9 @@ public struct ThreadReducer: Sendable {
         let watermark = history.latestLocalTurnOrdinal
         history = ThreadHistoryMeta(historyCursor: page.nextCursor, hasMoreHistory: page.hasMoreHistory, latestLocalTurnOrdinal: watermark)
         history.expanded = true
+        history.loading = next != nil
         changes.historyChanged = true
-        return changes
+        return (changes, next)
     }
 
     // MARK: Deferred work (threads.ts:727-860 at 4928, #26240)

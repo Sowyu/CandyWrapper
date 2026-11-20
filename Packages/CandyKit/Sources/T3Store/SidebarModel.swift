@@ -153,7 +153,9 @@ public enum SidebarModel {
     /// Port of `shellRuntime` (packages/client-runtime/src/state/models.ts:175-199).
     public static func shellRuntime(_ thread: ThreadShell) -> ThreadRuntimeSummary? {
         let parkAtIdle = backgroundWorkHoldsCompletion(thread.backgroundTasks, awaitedMarked: thread.marksAwaitedWork) && thread.status != .failed
-        if thread.latestRunId == nil, thread.activeProviderThreadId == nil, !parkAtIdle { return nil }
+        // An imported session is bound to a provider thread before it ever runs; that is no runtime
+        // (models.ts:234 at 4928, #33042).
+        if thread.latestRunId == nil, !parkAtIdle { return nil }
         return ThreadRuntimeSummary(
             status: parkAtIdle ? .idle : (thread.activityRunStatus ?? thread.status),
             activeRunId: thread.activeRunId,
@@ -731,7 +733,11 @@ public enum SidebarModel {
         if order == .createdAt {
             return (thread.createdAt.epochMs ?? thread.updatedAt.epochMs).map(Double.init) ?? -.infinity
         }
-        if let ms = thread.latestUserMessageAt?.epochMs { return Double(ms) }
+        // Agents also post in the user role; only what the user wrote counts (`getLatestUserMessageTimestamp`,
+        // threadSort.ts:85-96 at 4928, #33873).
+        // ponytail: a null authored stamp (the user never wrote) should count from creation, but the shell decodes null
+        // and absent alike; make the field a Tristate if agent-started threads sort too high.
+        if let ms = thread.latestUserAuthoredMessageAt?.epochMs ?? thread.latestUserMessageAt?.epochMs { return Double(ms) }
         if let ms = thread.updatedAt.epochMs ?? thread.createdAt.epochMs { return Double(ms) }
         return -.infinity
     }

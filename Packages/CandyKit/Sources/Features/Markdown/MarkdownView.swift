@@ -1166,7 +1166,25 @@ public final class MarkdownView: DSView {
         guard onCiteSelection != nil else { super.mouseDown(with: event); return }
         window?.makeFirstResponder(self)
         clearAssistantSelection()
-        selectionAnchor = selectionIndex(convert(event.locationInWindow, from: nil))
+        let index = selectionIndex(convert(event.locationInWindow, from: nil))
+        if event.clickCount == 2, let index, let range = Self.doubleClickRange(at: index, in: selectionBoxes.map { ($0.box, $0.offset) }) {
+            assistantRange = range
+            needsDisplay = true
+            return
+        }
+        selectionAnchor = index
+    }
+    /// A double-click selects the word, and the whole span inside inline code, where word selection
+    /// would stop at hyphens and dots (`selectInlineCode`, ChatMarkdown.tsx:946-949 at 4928, #26639).
+    static func doubleClickRange(at index: Int, in boxes: [(box: MarkdownTextBox, offset: Int)]) -> NSRange? {
+        guard let hit = boxes.first(where: { index >= $0.offset && index < $0.offset + $0.box.length }) else { return nil }
+        let local = index - hit.offset
+        if let code = hit.box.codeRanges.first(where: { NSLocationInRange(local, $0) }) {
+            return NSRange(location: code.location + hit.offset, length: code.length)
+        }
+        let word = NSAttributedString(string: hit.box.text).doubleClick(at: local)
+        guard word.length > 0 else { return nil }
+        return NSRange(location: word.location + hit.offset, length: word.length)
     }
     public override func mouseDragged(with event: NSEvent) {
         if thumbDrag != nil { dragCodeThumb(to: convert(event.locationInWindow, from: nil)); return }

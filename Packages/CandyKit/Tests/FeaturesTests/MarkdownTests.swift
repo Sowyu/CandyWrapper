@@ -288,3 +288,20 @@ struct MarkdownImageLineTests {
         #expect(shape("Hard-wrapped\nprose") == "Hard-wrapped prose")
     }
 }
+
+/// #26639 (ChatMarkdown.tsx:946-949 at 4928): a double-click inside inline code takes the whole span,
+/// elsewhere the word.
+@MainActor
+struct MarkdownDoubleClickTests {
+    @Test func selectsTheWholeInlineCodeSpan() {
+        let text = "run foo-bar.baz now"
+        let font = NSFont.systemFont(ofSize: 14)
+        let first = MarkdownTextBox(NSAttributedString(string: "intro"), width: 400, lineHeight: 20, strut: font)
+        let box = MarkdownTextBox(NSAttributedString(string: text), width: 400, lineHeight: 20, strut: font,
+                                  chipRanges: [NSRange(location: 4, length: 11)])
+        let boxes = [(box: first, offset: 0), (box: box, offset: 6)]
+        #expect(MarkdownView.doubleClickRange(at: 6 + 9, in: boxes) == NSRange(location: 10, length: 11))
+        #expect(MarkdownView.doubleClickRange(at: 6 + 17, in: boxes) == NSRange(location: 22, length: 3))
+        #expect(MarkdownView.doubleClickRange(at: 2, in: boxes) == NSRange(location: 0, length: 5))
+    }
+}

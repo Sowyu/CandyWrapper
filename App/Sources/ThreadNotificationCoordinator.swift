@@ -40,7 +40,7 @@ final class ThreadNotificationCoordinator: NSObject {
         var lastMode = mode
         ClientSettingsStore.shared.observe { [weak self] keys in
             guard let self, keys.contains("notificationMode") || keys.contains("inAppNotificationsEnabled") else { return }
-            if !self.isMounted { self.tracker.resetAll(); self.scheduleCompletions() }
+            if !self.isMounted { self.tracker.resetAll(); self.scheduleCompletions(); self.closeToasts { _ in true } }
             if self.mode != lastMode {
                 lastMode = self.mode
                 // The [mode] effect clears on every change.
@@ -184,6 +184,7 @@ final class ThreadNotificationCoordinator: NSObject {
     }
 
     private func showToast(_ event: ThreadNotificationEvent) {
+        // A dismissed or timed out toast's id stays until its thread opens; dismissing it again is a no-op.
         guard let viewport = toasts() else { return }
         let kind: ToastQueue.Kind = switch event.tone {
         case .success: .success
@@ -202,6 +203,25 @@ final class ThreadNotificationCoordinator: NSObject {
             self?.navigate(event.environmentId, event.threadId)
         }, leadingIcon: icon)
         toastId = viewport.show(toast)
+        openToasts[Self.toastKey(event.environmentId, event.threadId), default: []].append((WeakToastViewport(viewport), toastId))
+    }
+
+    /// Open toasts by thread, so opening a thread closes its own (ThreadNotificationCoordinator.tsx:82-100 and :434 at 4928, #24313).
+    private var openToasts: [String: [(viewport: WeakToastViewport, id: Int)]] = [:]
+    private static func toastKey(_ environmentId: String, _ threadId: ThreadId) -> String { environmentId + "\u{1}" + threadId.rawValue }
+
+    private func closeToasts(_ shouldClose: (String) -> Bool) {
+        for (key, toasts) in openToasts where shouldClose(key) {
+            for toast in toasts { toast.viewport.value?.dismiss(toast.id) }
+            openToasts[key] = nil
+        }
+    }
+
+    /// The route moved to a thread: its toasts close.
+    func threadOpened() {
+        guard let open = openThread() else { return }
+        let key = Self.toastKey(open.environmentId, open.threadId)
+        closeToasts { $0 == key }
     }
 
     private func post(_ event: ThreadNotificationEvent) {
@@ -273,4 +293,9 @@ final class NotificationSoundPlayer {
         guard let clip = clips[kind], !clip.isPlaying else { return }
         clip.play()
     }
+}
+
+private struct WeakToastViewport {
+    weak var value: ToastViewport?
+    init(_ value: ToastViewport) { self.value = value }
 }

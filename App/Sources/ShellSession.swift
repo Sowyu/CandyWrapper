@@ -321,6 +321,9 @@ final class ShellSession {
             let generation = await store.generation
             defer { if familyTokens[id] == token { familyReads[id] = nil; familyTokens[id] = nil } }
             guard generation > 0, loadedFamilies[id] != generation else { return }
+            // Only a thread the shell leaves out loads its family; a listed thread's lineage and
+            // subagents come from its own detail (`useOpenThreadFamily`, ThreadRouteView.tsx:34-46 and :111 at 4928, #26762).
+            if await store.snapshot?.threads.contains(where: { $0.id == id }) == true { return }
             do {
                 let json = try await supervisor.request("orchestration.getThreadFamily", payload: .object(["threadId": .string(id.rawValue)]))
                 let family = try json.decode(as: ShellThreadRead.self)

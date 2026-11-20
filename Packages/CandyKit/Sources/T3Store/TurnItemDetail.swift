@@ -101,7 +101,13 @@ public enum TurnItemDetail {
             let text = commandOutputText(out)
             return text.isEmpty ? nil : text
         case .dynamicTool:
-            return item.outputOmitted ? nil : formatToolValue(item.output)
+            guard !item.outputOmitted else { return nil }
+            // An app call stores the provider result beside the app reference; its images get no preview
+            // (`dynamicToolOutputText`, itemDetail.ts at 4928, #33347).
+            if let output = item.output?.objectValue, output["t3McpApp"] != nil, let result = output["result"] {
+                return formatToolValue(result.objectValue != nil ? mcpToolResultOutput(result) : result, previews: 0)
+            }
+            return formatToolValue(item.output)
         default:
             return nil
         }
@@ -123,9 +129,21 @@ public enum TurnItemDetail {
 
     /// `formatToolValue` (itemDetail.ts:68-80): text blocks as text, everything else as JSON.
     // ponytail: JSON keys come out sorted (JSONValue drops key order) and minified JSON text is not re-indented; port prettyJsonText if MCP output reads badly
-    static func formatToolValue(_ value: JSONValue?) -> String? {
+    /// `mcpToolResultOutput` (shared toolOutput.ts:345-358 at 4928): the structured content unless it is empty,
+    /// beside the content when that has images, else the content.
+    static func mcpToolResultOutput(_ result: JSONValue) -> JSONValue? {
+        var structured = result["structuredContent"]
+        if structured == .null || structured?.objectValue?.isEmpty == true || structured?.arrayValue?.isEmpty == true { structured = nil }
+        let content = result["content"]
+        if let structured, let blocks = content?.arrayValue, blocks.contains(where: { readableImageMimeType($0) != nil }) {
+            return .object(["content": content!, "structuredContent": structured])
+        }
+        return structured ?? content
+    }
+
+    static func formatToolValue(_ value: JSONValue?, previews: Int = maxToolOutputImages) -> String? {
         guard let value, value != .null else { return nil }
-        var previews = maxToolOutputImages
+        var previews = previews
         if let text = textFromBlocks(value, depth: 0, level: .root, previews: &previews) {
             return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : text
         }

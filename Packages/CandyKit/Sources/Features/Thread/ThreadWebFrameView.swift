@@ -105,6 +105,11 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         dark = page.dark
         let config = WKWebViewConfiguration()
         config.suppressesIncrementalRendering = false
+        // An HTML render's video or image viewer may take the screen (`allow="fullscreen"`,
+        // BrowserDocumentFrame.tsx:323-324 at 4928, #21378).
+        if page.allow.split(separator: " ").contains(where: { $0.hasPrefix("fullscreen") }) {
+            config.preferences.isElementFullscreenEnabled = true
+        }
         let controller = WKUserContentController()
         if page.kind == .agent {
             config.websiteDataStore = ThreadWebFrameBudget.dataStore

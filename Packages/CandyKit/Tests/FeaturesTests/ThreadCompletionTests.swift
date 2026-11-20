@@ -88,6 +88,13 @@ struct ThreadCompletionTests {
         let item = ThreadMinimapItem(id: "u", rowIndex: 0, userText: " Fix  it ", assistantText: "## Done\n\n**Bold** and `code`\n\n- one\n- two\n\n```swift\nlet x = 1\n```")
         #expect(item.preview == "Fix it\n\nDone Bold and code one two let x = 1")
     }
+    /// #38250 (timelineMinimapItems.ts:101-125 at 4928): a cited prompt previews the quoted text, not "Assistant quote".
+    @Test func minimapPreviewReadsCitationsInPrompts() {
+        let quote = ThreadAssistantCitation(environmentId: "e", threadId: "t", messageId: "m", text: "the quote", start: 0, end: 9,
+                                            prefix: "", suffix: "", comment: nil)
+        let item = ThreadMinimapItem(id: "u", rowIndex: 0, userText: "see \(quote.markdown) and **this**", assistantText: nil)
+        #expect(item.preview == "see the quote and this")
+    }
     /// Redesign draws T3's strips: 8pt each whatever the turn's length, left-aligned, the turn on screen only brighter.
     @Test func ditherMinimapDrawsT3Strips() throws {
         let previous = ThemeRuntime.input

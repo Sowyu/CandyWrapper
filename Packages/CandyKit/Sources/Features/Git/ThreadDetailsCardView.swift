@@ -378,7 +378,9 @@ public final class DetailsSplitPart: ControlView {
 
     var preferredHeight: CGFloat {
         switch mode {
-        case .running(_, let output?), .success(_, let output?): _ = output; return 28 + 16 + 2 + 6
+        // `py-1.5` around an 18pt title row (`grid-rows-[1.125rem]`), the output's `pt-0.5` and its 16pt line
+        // (ThreadDetailsControl.tsx:58 and GitActionsControl.tsx:343-375 at 4928, #33724 and #34727).
+        case .running(_, let output?), .success(_, let output?): _ = output; return 6 + 18 + 2 + 16 + 6
         default: return 32
         }
     }
@@ -426,10 +428,12 @@ public final class DetailsSplitPart: ControlView {
             iconView?.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
             return
         }
-        // Idle: the 32pt row. Running and success: a 28pt title row (`grid-rows-[1.75rem]`, `py-0.75`) with
-        // the output line under it (`pt-0.5`) and a 12pt column gap.
+        // Idle, and running or success without output: the title centered in the 32pt row, so a loading row keeps the
+        // idle height (#34727). With output: an 18pt title row under `py-1.5`, the output line under it (`pt-0.5`).
+        // Running and success keep a 12pt column gap.
         let multi = mode != .idle
-        let titleY: CGFloat = multi ? 3 : 0, titleH: CGFloat = multi ? 28 : bounds.height
+        let outputShown = preferredHeight > 32
+        let titleY: CGFloat = outputShown ? 6 : 0, titleH: CGFloat = outputShown ? 18 : bounds.height
         var x: CGFloat = 10
         if let spinner {
             spinner.frame = NSRect(x: x - 2, y: titleY + (titleH - 16) / 2, width: 16, height: 16)

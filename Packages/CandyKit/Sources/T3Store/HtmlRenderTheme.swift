@@ -47,7 +47,8 @@ public struct HtmlRenderTheme: Sendable, Equatable {
         // accentSurfaceForeground, error, errorForeground, errorSurface, warning, warningForeground, warningSurface,
         // codeBackground, codeForeground.
         let c: [String: String] = dark ? [
-            "canvas": "#0a0a0a", "text": "#f5f5f5", "muted": "#111111", "mutedForeground": "#818181", "surface": "#111111",
+            // The dark chat canvas is black (themePalette.ts:437-440 at 4928, #25948).
+            "canvas": "#000000", "text": "#f5f5f5", "muted": "#111111", "mutedForeground": "#818181", "surface": "#111111",
             "surfaceOverlay": "#111111", "secondary": "#111111", "secondaryForeground": "#f5f5f5", "border": "#191919",
             "input": "#1e1e1e", "focus": "#346bf1", "messageAction": "#346bf1", "messageActionForeground": "#ffffff",
             "accent": "#346bf1", "accentForeground": "#ffffff", "accentSurface": "#141414", "accentSurfaceForeground": "#f5f5f5",

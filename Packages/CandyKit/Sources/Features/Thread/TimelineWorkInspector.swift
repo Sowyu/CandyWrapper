@@ -165,9 +165,10 @@ struct WorkDetail: Hashable {
         }
         switch output {
         case .live(let text, let truncated, let running):
+            // The notice heads the log it trims and scrolls with it (CommandOutputPanel.tsx:87-91 at 4928, #34011).
+            if truncated { mono("Earlier output not shown", .note) }
             if !text.isEmpty { mono(text, .output) }
             else if !running { mono("No output.", .note) }
-            if truncated { mono("Earlier output was truncated.", .note) }
         case .loading: mono("Loading output…", .note)
         case .failed(let message): mono("Couldn't load output: " + message, .error)
         case .fetched(.gone): mono("Couldn't load output: Output is no longer available.", .error)

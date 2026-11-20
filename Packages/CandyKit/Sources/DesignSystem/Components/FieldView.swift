@@ -44,6 +44,12 @@ public class FieldView: DSView {
 
     /// Selects the whole text, as `event.currentTarget.select()` does.
     public func selectAll() { editor.selectAll(nil) }
+    /// Puts the caret after the last character and scrolls it into view.
+    public func moveCaretToEnd() {
+        let end = NSRange(location: (editor.string as NSString).length, length: 0)
+        editor.setSelectedRange(end)
+        editor.scrollRangeToVisible(end)
+    }
 
     /// Called on every edit.
     public final var onChange: (@MainActor (String) -> Void)?

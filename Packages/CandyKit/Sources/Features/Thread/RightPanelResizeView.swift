@@ -20,7 +20,8 @@ final class RightPanelResizeView: DSView {
 
     override func layout() {
         super.layout()
-        line.frame = NSRect(x: (bounds.width / 2).rounded(.down), y: 0, width: 1, height: bounds.height)
+        // The hover line sits on the handle's left edge (`left-0 -translate-x-1/2`), where the panel border is.
+        line.frame = NSRect(x: 0, y: 0, width: 1, height: bounds.height)
     }
 
     override func updateLayer() {

@@ -45,10 +45,15 @@ final class UserIntentMarkerView: DSView {
     private let label = LabelView("", font: TL.font(12), color: TL.c(\.mutedForeground))
 
     /// Label, icon and tooltip for a steer, or nil for any other intent (TimelineUserMessageRow.tsx:463-483).
-    static func presentation(_ intent: InputIntent?) -> (label: String, icon: Bool, tooltip: String)? {
+    /// `unread`: the agent has not read the steer yet (its item is still pending, #33982, TimelineUserMessageRow.tsx:1070-1080 at 4928).
+    static func presentation(_ intent: InputIntent?, unread: Bool = false) -> (label: String, icon: Bool, tooltip: String)? {
+        guard intent == .steer || intent == .promotedQueuedToSteer else { return nil }
+        if unread {
+            return ("Steer · waiting to be read", true,
+                    "Waiting for the agent to read this. It reads steers between steps, after a running command finishes.")
+        }
         if intent == .steer { return ("Steer", true, "Steered the active turn") }
-        if intent == .promotedQueuedToSteer { return ("Steer", true, "Originally queued, then promoted to steer the active turn") }
-        return nil
+        return ("Steer", true, "Originally queued, then promoted to steer the active turn")
     }
 
     override init(frame frameRect: NSRect) {
@@ -250,6 +255,7 @@ final class UserMessageRowView: TimelineRowView {
             guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
             let p = UserMessagePresentation.resolve(m)
             if p.isAutomation { if let task = p.scheduledTaskId { self.context.model?.onOpenScheduledTask?(task) } }
+            else if let linked = m.linkedSender { self.context.model?.onOpenThread?(ThreadId(linked.href)) }
             else if let sender = m.senderThreadId { self.context.model?.onOpenThread?(ThreadId(sender)) }
         }
         hoverChanged()
@@ -302,7 +308,9 @@ final class UserMessageRowView: TimelineRowView {
                 return card
             } : []
         }
-        openLink.isHidden = fold == nil || !item.ui.messageExpanded || (fold == .automation ? presentation.scheduledTaskId == nil : m.senderThreadId == nil)
+        openLink.isHidden = fold == nil || !item.ui.messageExpanded || (fold == .automation ? presentation.scheduledTaskId == nil
+            // Only an environment this client is connected to can open a linked sender's thread (#34721).
+            : m.linkedSender.map { context.model?.linkedEnvironment?($0.environmentId) == nil } ?? (m.senderThreadId == nil))
         let open = fold == nil || item.ui.messageExpanded
         markdown.isHidden = !open
         attachments.isHidden = !open
@@ -348,7 +356,8 @@ final class UserMessageRowView: TimelineRowView {
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
         time.toolTip = nil
         // A burst of your messages shows its steer label once (TimelineUserMessageRow.tsx:888-895 at 4928).
-        let intent = item.row.continuesSteer ? nil : UserIntentMarkerView.presentation(m.inputIntent)
+        let pending: Bool = if case .message(_, let p, _, _, _, _) = item.row.kind { p?.item.status == .pending } else { false }
+        let intent = item.row.continuesSteer ? nil : UserIntentMarkerView.presentation(m.inputIntent, unread: pending)
         marker.isHidden = intent == nil
         if let intent { marker.configure(intent) }
         bubble.joinedTop = item.row.groupedWithPrevious || shape.mediaAboveText
