@@ -157,7 +157,7 @@ final class WelcomeOnboardingController {
         let page = WelcomePageView(model: model, context: context)
         page.frame = content.bounds
         page.autoresizingMask = [.width, .height]
-        page.topInset = 28
+        page.topInset = SidebarMetrics.topbarHeight // `--workspace-topbar-height` on macOS desktop (index.css:123, WelcomePage.tsx:278)
         content.addSubview(page)
         self.page = page
         sync()
