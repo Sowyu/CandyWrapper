@@ -466,6 +466,11 @@ struct PullRequest4928LogicTests {
         #expect(PullRequestWriteLogic.reviewerTruncationNote(loadedTruncated: false, searchable: false, query: "", searched: false, searchError: nil, searchTruncated: false) == nil)
     }
 
+    @Test func cancelledChecksWearAGrayStopSign() {
+        #expect(PullRequestStyle.checkStatus("cancelled").icon == .octagonX)
+        #expect(PullRequestStyle.checkStatus("failure").icon == .circleX)
+    }
+
     @Test func fastForwardLabelAndMaintainerEdits() {
         #expect(PullRequestDetailLogic.mergeMethodLabel("fast-forward") == "Fast-forward merge")
     }

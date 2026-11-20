@@ -147,6 +147,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case mousePointerClick
     case music
     case octagonAlert
+    case octagonX
     case package
     case packagePlus
     case paintbrush
@@ -406,6 +407,7 @@ extension IconName {
         case .mousePointerClick: return "mouse-pointer-click"
         case .music: return "music"
         case .octagonAlert: return "octagon-alert"
+        case .octagonX: return "octagon-x"
         case .package: return "package"
         case .packagePlus: return "package-plus"
         case .paintbrush: return "paintbrush"
@@ -1432,6 +1434,12 @@ extension IconName {
                 IconElement(.path(d: "M9 18V5l12-2v13")),
                 IconElement(.circle(cx: 6, cy: 18, r: 3)),
                 IconElement(.circle(cx: 18, cy: 16, r: 3)),
+            ])
+        case .octagonX:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "m15 9-6 6")),
+                IconElement(.path(d: "M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z")),
+                IconElement(.path(d: "m9 9 6 6")),
             ])
         case .octagonAlert:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

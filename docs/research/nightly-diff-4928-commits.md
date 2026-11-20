@@ -1101,7 +1101,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 8214342385 | #32283 | pr/git | fix(web): collapsed PR comments no longer show raw HTML | port |
 | afe0528039 | #34727 | pr/git | fix(web): keep git action loading rows at idle height | port |
 | fd033dfec3 | #34722 | pr/git | fix(web): improve Word document previews | port |
-| 3a30b011c3 | #34734 | pr/git | fix(web): cancelled PR checks show a gray stop sign instead of the failed X | port |
+| 3a30b011c3 | #34734 | pr/git | fix(web): cancelled PR checks show a gray stop sign instead of the failed X | ported (panels-2): cancelled checks wear `octagon-x` in muted/70, PullRequestStyle.checkStatus |
 | 3bd7b04544 | #34796 | pr/git | fix(web): Escape and tool keys work as soon as preview annotation starts | port |
 | 0ac41eecad | #34878 | pr/git | fix(web): sidebar rows drop a branch and worktree that were deleted | port |
 | ee90bdc940 | #34992 | pr/git | fix(web): CSV/TSV and large-text previews say "1 row", "1 column" and "1 line" | port |

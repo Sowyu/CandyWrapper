@@ -30,7 +30,9 @@ public enum PullRequestStyle {
         switch status {
         case "action-required": (.circleDot, Themed.base("amber-600", 1, dark: "amber-400", 0.9))
         case "success": (.circleCheck, color(.open))
-        case "failure", "cancelled": (.circleX, Themed.color(\.destructive))
+        case "failure": (.circleX, Themed.color(\.destructive))
+        // A gray stop sign, not the failed X (4928 pullRequestPresentation.tsx, #34734).
+        case "cancelled": (.octagonX, Themed.color(\.mutedForeground, 0.7))
         case "pending": (.loaderCircle, Themed.base("amber-500"))
         case "skipped": (.circleSlash, Themed.color(\.mutedForeground, 0.7))
         default: (.circleDashed, Themed.color(\.mutedForeground, 0.7))
