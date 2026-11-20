@@ -1594,7 +1594,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | 250d372e51 | #36321 | thread | fix(web): images in expanded tool rows page through the group's viewed images | ported in 2eb8794e |
 | cfc71e1a99 | #36357 | thread | fix(web): preview annotations in question answers reach the agent with their text | port |
 | 48cdefed5a | #32108 | thread | fix(web): size markdown media whose width and height carry a px unit | port |
-| c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | port |
+| c8db8be305 | #36334 | thread | fix(web): a run waiting on foreground subagents says so instead of Thinking | ported: the Thinking row reads Waiting on a subagent or Waiting on N subagents while the run's newest entries are its own running subagents (thread-2, TimelineRows `.thinking(label:)`). Zen keeps Thinking since it hides the cards |
 | cf382b0c44 | #24637 | thread | fix(web,mobile): explain missing file access for host videos | port |
 | 4c7685729f | #36497 | thread | fix(web): clicking a label in an inline HTML render no longer jumps the chat | free with the runtime: the label fix is in the bootstrap the server injects |
 | a4723422e7 | #26692 | thread | fix(web): screen readers no longer say "Message" twice entering the composer | port |

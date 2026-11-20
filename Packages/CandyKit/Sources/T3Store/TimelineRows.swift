@@ -49,7 +49,8 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         case working(compacting: String?)
         case pendingApproval(PendingApproval)
         /// Placeholder while running with no visible activity. `compacting` blanks it (:3793-3795).
-        case thinking(groupId: String?, expanded: Bool?, compacting: Bool)
+        /// `label` replaces "Thinking" while the run waits on subagents it launched (#36334).
+        case thinking(groupId: String?, expanded: Bool?, compacting: Bool, label: String? = nil)
         /// Header of a settled group of tool calls.
         case workToggle(WorkToggle)
         /// "Worked for 22s" header of a settled turn.
@@ -1047,8 +1048,19 @@ public enum TimelineRows {
                 if expanded { rows.append(expandedBody(groupId, anchor.createdAt, visibleActive.map { $0.work! })) }
                 appendViewedImages(groupId, anchor.createdAt, visibleActive.map { $0.work! })
             } else {
+                // `runningSubagentsAtRunTail` (MessagesTimeline.logic.ts at 4928, #36334): the run has done nothing since
+                // launching children that still run.
+                // ponytail: counts the filtered entries, so Zen, which hides subagent cards, keeps Thinking; count before the filter if Zen users ask
+                var waitingOn = 0
+                if let run = unsettled {
+                    for entry in entries.reversed() {
+                        guard case .event(let row) = entry.kind, row.item.type == .subagent, row.item.runId == run else { break }
+                        if isWorkActive(row.item.status) { waitingOn += 1 }
+                    }
+                }
                 rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
-                                        kind: .thinking(groupId: nil, expanded: nil, compacting: compacting)))
+                                        kind: .thinking(groupId: nil, expanded: nil, compacting: compacting,
+                                                        label: waitingOn == 0 ? nil : waitingOn == 1 ? "Waiting on a subagent" : "Waiting on \(waitingOn) subagents")))
             }
         }
 
