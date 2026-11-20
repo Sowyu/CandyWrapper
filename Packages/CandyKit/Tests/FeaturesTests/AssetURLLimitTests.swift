@@ -40,16 +40,56 @@ import Testing
         #expect(await limit.inFlight == 0)
     }
 
+    /// Opens once; every `wait` before or after that returns.
+    actor Gate {
+        private var open = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        func wait() async {
+            if open { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+        func release() { open = true; for waiter in waiters { waiter.resume() }; waiters = [] }
+    }
+
+    /// The earlier version slept 10 ms between steps. Under a full parallel run those sleeps stretched until the waiter
+    /// started before the holder or after it finished, took a free turn and returned 2, so it failed now and then.
+    /// It now waits for each state it needs.
     @Test func aCancelledWaiterGivesItsTurnBack() async {
         let limit = AssetURLLimit(limit: 1)
-        let hold = Task { await run(limit) { try? await Task.sleep(for: .milliseconds(100)); return 1 } }
-        try? await Task.sleep(for: .milliseconds(10))
+        let gate = Gate()
+        let hold = Task { await run(limit) { await gate.wait(); return 1 } }
+        while await limit.inFlight == 0 { await Task.yield() }
         let waiter = Task { await run(limit) { 2 } }
-        try? await Task.sleep(for: .milliseconds(10))
+        while await limit.queued == 0 { await Task.yield() }
         waiter.cancel()
         #expect(await waiter.value == nil)
+        #expect(await limit.queued == 0)
+        await gate.release()
         #expect(await hold.value == 1)
         #expect(await run(limit) { 3 } == 3)
         #expect(await limit.inFlight == 0)
+    }
+
+    /// Cancelling a running call leaves its turn to the next waiter, and waiters cancelled in any order leave the queue.
+    @Test func cancellingInEveryOrderLosesNoTurn() async {
+        for order in [[0, 1, 2], [2, 1, 0], [1, 0, 2], [0, 2, 1]] {
+            let limit = AssetURLLimit(limit: 1)
+            let gate = Gate()
+            let hold = Task { await run(limit) { await gate.wait(); return -1 } }
+            while await limit.inFlight == 0 { await Task.yield() }
+            var waiters: [Task<Int?, Never>] = []
+            for i in 0..<3 {
+                waiters.append(Task { await run(limit) { i } })
+                while await limit.queued <= i { await Task.yield() }
+            }
+            for i in order { waiters[i].cancel() }
+            for waiter in waiters { #expect(await waiter.value == nil) }
+            hold.cancel()
+            await gate.release()
+            _ = await hold.value
+            #expect(await run(limit) { 7 } == 7)
+            #expect(await limit.inFlight == 0)
+            #expect(await limit.queued == 0)
+        }
     }
 }
