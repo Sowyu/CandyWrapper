@@ -1559,7 +1559,7 @@ Counts: 1167 port, 2 free with the runtime, 444 n/a, 70 skip. No commit reached 
 | d2b8f291d6 | #35045 | thread | fix(web): icon-only chat header controls show their name on hover | port |
 | 5574cca053 | #35043 | thread | fix(web): panel resize handle no longer covers the chat scrollbar | port |
 | 3a815e9749 | #35031 | thread | fix(client-runtime): relative Markdown images in a remote thread no longer show the desktop's file | n/a (thread-3): CandyWrapper never retries a remote thread's media on this Mac's server, so a relative path cannot show the desktop's file |
-| 4d641633b2 | #35267 | thread | fix(web): bare URLs end at Chinese and Japanese punctuation | left (thread-3): CandyWrapper's parser leaves a URL followed by Chinese or Japanese punctuation unlinked altogether (`打开 http://localhost:18780，然后刷新` has no link), so the port needs autolink detection for that case before it can end the link at the mark |
+| 4d641633b2 | #35267 | thread | fix(web): bare URLs end at Chinese and Japanese punctuation | ported (thread-4): MarkdownDocument.endingBareURLsAtCJKPunctuation writes an ASCII bare URL before a CJK mark as an explicit autolink, so it links, ends at the mark and closes its emphasis |
 | 13645b1904 | #35549 | thread | fix(web): align timeline activity timestamps | port |
 | 932cbd4e44 | #31115 | thread | fix(web): the Fix action on a thread details PR row stays inside the card | port |
 | c0df40aa54 | #33405 | thread | fix(web): queued message preview keeps inline image labels in place | port |
