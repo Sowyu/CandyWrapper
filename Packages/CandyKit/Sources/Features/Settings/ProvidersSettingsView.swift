@@ -186,7 +186,17 @@ public enum ProvidersLogic {
     }
 
     /// Runtime fields per driver (each driver's settings schema, `providerSettingsForm` annotations, in `order`).
-    public struct Field: Sendable { public var key, title, detail, placeholder: String; public var secret = false; public var redacted = false; public var options: [(String, String)] = []; public var defaultValue = "" }
+    public struct Field: Sendable {
+        public var key, title, detail, placeholder: String; public var secret = false; public var redacted = false; public var options: [(String, String)] = []; public var defaultValue = ""
+        /// The field schema's pattern, checked on the trimmed text (`fieldAcceptsString`, ProviderSettingsForm.tsx:96-101).
+        public var pattern: String?
+        /// `field.accepts`: an empty value clears the field, so it always passes.
+        public func accepts(_ text: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let pattern, !trimmed.isEmpty else { return true }
+            return trimmed.range(of: pattern, options: .regularExpression) != nil
+        }
+    }
     public static func fields(_ driver: String, config: JSONValue? = nil) -> [Field] {
         func binary(_ name: String, _ detail: String) -> Field { Field(key: "binaryPath", title: "Binary path", detail: detail, placeholder: name) }
         switch driver {
@@ -202,7 +212,8 @@ public enum ProvidersLogic {
                                     Field(key: "homePath", title: "CLAUDE_CONFIG_DIR path",
                                           detail: "Custom Claude home and config directory. Keeps .claude.json and .claude separate.", placeholder: "~/.claude"),
                                     Field(key: "autoCompactWindow", title: "Auto-compact after",
-                                          detail: "Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default.", placeholder: "e.g. 300000"),
+                                          detail: "Compact after 100,000 to 1,000,000 tokens. Leave empty to use Claude's default.", placeholder: "e.g. 300000",
+                                          pattern: #"^(?:|[1-9]\d{5}|1000000)$"#),  // contracts settings.ts:764,823-825
                                     // contracts settings.ts:710-725.
                                     Field(key: "idleCompaction", title: "Compact idle threads",
                                           detail: "When to compact an idle thread over 200,000 tokens: after you return, just before its prompt cache expires, or never. Overrides the default in General settings.",
@@ -920,15 +931,19 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                     field.clear.action = { [weak self] in self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: ""), env: env.id) }
                     control = field
                 } else {
-                    let input = InputView(placeholder: f.placeholder, text: saved, size: .sm)
-                    input.frame.size = NSSize(width: 224, height: 28)
-                    input.isEnabled = !readOnly
-                    input.setAccessibilityLabel(f.title)
-                    input.onCommit = { [weak self] text in
+                    // `ProviderSettingsTextInput` (ProviderSettingsForm.tsx:618-662, #35100): a value the field's schema
+                    // refuses stays in the field, marked invalid, with "Enter a valid value. It was not saved." under it.
+                    let field = ValidatedFieldControl(placeholder: f.placeholder, text: saved)
+                    field.input.isEnabled = !readOnly
+                    field.input.setAccessibilityLabel(f.title)
+                    field.onHeightChange = { [weak self] in self?.onHeightChange?() }
+                    field.input.onCommit = { [weak self, weak field] text in
+                        guard f.accepts(text) else { field?.rejected = true; return }
+                        field?.rejected = false
                         guard text.trimmingCharacters(in: .whitespacesAndNewlines) != saved else { return }
                         self?.upsert(row, ProvidersLogic.config(current(), set: f.key, to: text), env: env.id)
                     }
-                    control = input
+                    control = field
                 }
                 return SettingsRowView(title: f.title, detail: f.detail, control: control)
             }
@@ -1816,5 +1831,40 @@ extension ProviderBadge {
         ProviderEnvironmentLogic.accentColor(row.instance["accentColor"]?.stringValue).map {
             ProviderBadge(initials: ProviderIcon.initials(displayName), accent: $0, size: .small, overhang: 4, ring: Themed.color(\.card))
         }
+    }
+}
+
+/// A 224pt settings text field that can hold a refused value: `aria-invalid` on the input and a destructive
+/// `text-2xs` note under it (`flex flex-col gap-1`, ProviderSettingsForm.tsx:634-660).
+final class ValidatedFieldControl: DSView {
+    let input: InputView
+    private let note = LabelView("Enter a valid value. It was not saved.", font: DSFont.ui(11), color: Themed.color(\.destructive))
+    var onHeightChange: (() -> Void)?
+    var rejected = false {
+        didSet {
+            guard rejected != oldValue else { return }
+            input.isInvalid = rejected
+            note.isHidden = !rejected
+            invalidateIntrinsicContentSize()
+            superview?.invalidateIntrinsicContentSize()
+            superview?.needsLayout = true
+            onHeightChange?()
+        }
+    }
+
+    init(placeholder: String, text: String) {
+        input = InputView(placeholder: placeholder, text: text, size: .sm)
+        super.init(frame: NSRect(x: 0, y: 0, width: 224, height: 28))
+        note.lineHeight = 16
+        note.isHidden = true
+        addSubview(input)
+        addSubview(note)
+    }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 224, height: rejected ? 28 + 4 + 16 : 28) }
+    override func layout() {
+        super.layout()
+        input.frame = NSRect(x: 0, y: 0, width: bounds.width, height: 28)
+        note.frame = NSRect(x: 0, y: 32, width: bounds.width, height: 16)
     }
 }
