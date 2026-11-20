@@ -2,29 +2,22 @@ import AppKit
 import DesignSystem
 
 /// Redesign's floating chrome for everything around the composer (the user, 2026-10-22: "no more things sticking out of
-/// the prompt field, only floating rounded rectangle pills"): the composer's frosted glass, a hairline border and a
-/// soft drop shadow, on continuous corners. Pills (chips, Stash, notices) are 30pt with control corners; panels
-/// (approvals, the queue, the stash list) use card corners. Nothing draws while idle: the shadow has a fixed path.
+/// the prompt field, only floating rounded rectangle pills"): the composer's solid surface, a hairline border and a
+/// soft drop shadow, on continuous corners. Pills (chips, Stash, notices) are 30pt; they and the panels (approvals,
+/// the queue, the stash list) share the composer's one surface corner. Nothing draws while idle: the shadow has a fixed path.
 public enum DitherPill {
     public static let height: CGFloat = RedesignTokens.Space.pill
-    /// Control corners. Rows of pills sit `inset` in from the composer's sides, so a pill's smaller corner stays
-    /// inside the composer's 16pt curve instead of looking like it hangs off it (the user, 2026-10-22).
-    public static let radius: CGFloat = DitherChrome.controlRadius
-    public static let inset: CGFloat = DitherChrome.panelRadius - DitherChrome.controlRadius
+    /// The composer's corner. Rows of pills sit `inset` in from the composer's sides, so a pill's corner never hangs
+    /// off the composer's curve (the user, 2026-10-22); with one corner for both, that is none.
+    public static let radius: CGFloat = DitherChrome.cardRadius
+    public static let inset: CGFloat = DitherChrome.panelRadius - radius
     /// Between the composer and the first row, between rows, and between pills in a row.
     public static let gap: CGFloat = 8
     public static let spacing: CGFloat = 6
 
-    /// The resting glass over the backdrop blur, opaque without the blur: a timeline card scrolled under a panel would
-    /// otherwise read through it (the user's 1.14.10 subagent panel over the changed-files card, 2026-10-28).
-    @MainActor public static func fill(in view: NSView) -> CGColor { RedesignTokens.Surface.fill(RedesignTokens.Surface.resting, in: view) }
-
-    @MainActor public static var blurs: Bool { RedesignTokens.Surface.blurs }
-    /// Tests pin Reduce Transparency here.
-    @MainActor public static var reduceTransparencyOverride: Bool? {
-        get { RedesignTokens.Surface.reduceTransparencyOverride }
-        set { RedesignTokens.Surface.reduceTransparencyOverride = newValue }
-    }
+    /// The solid surface fill: a timeline card scrolled under a panel never reads through it (the user's 1.14.10
+    /// subagent panel over the changed-files card, 2026-10-28).
+    @MainActor public static func fill(in view: NSView) -> CGColor { RedesignTokens.Surface.fill(in: view) }
 
     /// The resting shadow.
     @MainActor public static func shadow(_ layer: CALayer, path: CGRect, radius: CGFloat, dark: Bool) {
@@ -54,8 +47,10 @@ public enum DitherPill {
 /// branch controls). Lets clicks through.
 public final class DitherPillSurface: DSView {
     public var radius: CGFloat = DitherPill.radius { didSet { if radius != oldValue { needsLayout = true } } }
+    /// The panel's own ground instead of the raised surface, for a large surface whose cards must stand a step
+    /// above it (Settings).
+    public var ground = false { didSet { if ground != oldValue { needsDisplay = true } } }
     private let shade = DSView()
-    private let blur = BackdropBlurView()
     private let face = DSView()
 
     public override init(frame frameRect: NSRect) {
@@ -63,8 +58,9 @@ public final class DitherPillSurface: DSView {
         layer?.masksToBounds = false
         face.layer?.borderWidth = 1
         face.layer?.masksToBounds = true
-        for v in [shade, blur, face] { addSubview(v) }
+        for v in [shade, face] { addSubview(v) }
         setAccessibilityElement(false)
+        // Increase Contrast changes the rim.
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
                                                           name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
     }
@@ -75,7 +71,7 @@ public final class DitherPillSurface: DSView {
 
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        face.layer?.backgroundColor = DitherPill.fill(in: self)
+        face.layer?.backgroundColor = ground ? Themed.color(\.background).cgColor(in: self) : DitherPill.fill(in: self)
         face.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
         CATransaction.commit()
         needsLayout = true
@@ -84,8 +80,7 @@ public final class DitherPillSurface: DSView {
     public override func layout() {
         super.layout()
         let r = min(radius, bounds.height / 2)
-        for v in [shade, blur, face] { v.frame = bounds }
-        blur.cornerRadius = r
+        for v in [shade, face] { v.frame = bounds }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         face.layer?.cornerRadius = r
         shade.layer?.masksToBounds = false
@@ -96,7 +91,8 @@ public final class DitherPillSurface: DSView {
 }
 
 extension DitherPill {
-    /// Keeps a shadow outside its shape, so it never darkens the see-through glass above it.
+    /// Keeps a shadow outside its shape. The surface is opaque now, but a shadow under a 1pt translucent rim would
+    /// still darken the rim.
     @MainActor static func outsideMask(_ rect: CGRect, radius: CGFloat, existing: CALayer?) -> CALayer {
         let mask = existing as? CAShapeLayer ?? CAShapeLayer()
         let path = CGMutablePath()

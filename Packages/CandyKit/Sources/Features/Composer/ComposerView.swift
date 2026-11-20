@@ -965,9 +965,8 @@ public final class ComposerView: DSView {
         glass.layer?.cornerRadius = cardRadius
         dropHighlight.cornerRadius = cardRadius
         outline.layer?.cornerRadius = cardRadius
-        // Dither: frosted glass, the art blurred through a lighter tint.
         glass.layer?.backgroundColor = ThemeRuntime.isDither(dark: dark)
-            ? RedesignTokens.Surface.fill(RedesignTokens.Surface.resting, in: self)
+            ? RedesignTokens.Surface.fill(in: self)
             : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = ThemeRuntime.isDither(dark: dark) ? DitherChrome.rim(dark: dark).cgColor
             : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor

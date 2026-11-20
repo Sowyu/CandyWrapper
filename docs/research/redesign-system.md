@@ -1,17 +1,27 @@
 # Redesign system
 
-Redesign is a picture behind the app, dithered or blurred ("Background" in Settings > Redesign), with the conversation straight on it and the composer, pills and menus on glass. This page fixes the values every Redesign surface and control uses. They live in code as `RedesignTokens` in `Packages/CandyKit/Sources/DesignSystem/Theme/RedesignTokens.swift`, and `RedesignTokenGuardTests` fails when Redesign drawing code writes a corner radius, a shadow or a surface opacity anywhere else. The audit that led here is `docs/research/redesign-audit-2026-11-20.md`. Redesign is CandyWrapper's own look, so nothing here is checked against T3.
+Redesign is a near-black app with a background the user picks in Settings > Redesign > Background: their picture dithered, the picture blurred, or a halftone in the accent with no picture. The conversation sits straight on it, and the composer, pills, menus and modals are solid surfaces with a hairline rim. Redesign draws no backdrop blur anywhere. This page fixes the values every Redesign surface and control uses. They live in code as `RedesignTokens` in `Packages/CandyKit/Sources/DesignSystem/Theme/RedesignTokens.swift`, and `RedesignTokenGuardTests` fails when Redesign drawing code writes a corner radius, a shadow or a surface opacity anywhere else. The audit that led here is `docs/research/redesign-audit-2026-11-20.md`. Redesign is CandyWrapper's own look, so nothing here is checked against T3.
 
 ## Radius
 
+The user, 2026-11-21: "make all corner radiuses the same unless its done right and tastefully and make corner radiuses akin to [corner-radius-target.png]". That picture's corner is a circular arc spanning 15px at 2x, so 7.5pt. Capy's own, measured in the user's screenshots, are tighter: about 6pt on the content panel and 4pt on the composer.
+
 | Token | Value | Used for |
 |---|---|---|
-| `Radius.control` | 8 | buttons, inputs, rows, tabs, chips, the 30pt pills, the header pill |
-| `Radius.card` | 12 | cards, user bubbles, code blocks, tables, banners, menus and popovers |
-| `Radius.panel` | 16 | the composer, the details card, the content panel, modals |
-| `Radius.window` | 16 | the window's own corner, measured on macOS 27, so the content panel inside it is concentric |
+| `Radius.card` | 8 | every surface: cards, user bubbles, code blocks, tables, banners, menus, popovers, the 30pt pills, the header pill, the composer, the details card, the content panel, modals, Settings cards |
+| `Radius.panel` | 8, the same as `card` | kept as a name for the large surfaces |
+| `Radius.control` | 6, `nested(in: card, inset: 2)` | what sits inside a surface: buttons, menu rows, sidebar rows, tabs, chips, segmented selections |
+| `Radius.joined` | 3 | where two user bubbles of a burst meet |
+| `Radius.window` | 16 | the window's own corner, measured on macOS 27 |
 
-A shape inset inside another takes `Radius.nested(in: outer, inset:)`, the outer radius less the inset, never under 2. A pill row sits 8 inside the composer, so 16 less 8 is the pills' 8. Dots, rings and lines with round ends take `Radius.capsule(height)`, half their height. That is a shape, not a step on the scale. The audit's 10, 3.5, 3 and 1.5 are gone: the Settings nav row is 8, and the dots and the usage bar are capsules.
+`DitherChrome.radius(_ stock:)` maps T3's radii onto two steps: under 5 stays (hairline rounding), 5 to 8 is `control`, 9 to 29 is `card`, 30 and over stays (full pills).
+
+Exceptions, each deliberate:
+
+- Full pills stay round: status chips, the send button and dots take `Radius.capsule(height)`.
+- The sidebar's account row is concentric with the window, `nested(in: window, inset: 8)`, so 8. Its avatar, and the account avatar in Settings, is a rounded square at `control` (the user: "make it a square with rounded corners"): strictly concentric, 8pt inside the card's 8pt corner, it would floor at 2, a hard square at 28pt. Default themes keep the circle.
+- Menus and popovers draw their 8 as a circular corner through `BoxDecorationLayer`, where the composer and pills use continuous corners. At 1x the two read the same.
+- `Radius.joined` is a shape inside a burst, not a step on the scale.
 
 ## Spacing
 
@@ -32,19 +42,34 @@ Dark needs more opacity because a light shadow vanishes on a dark picture. A sur
 
 ## Surfaces
 
-Every glass surface is a 12pt backdrop blur (`Tokens.LengthPx.glassBlur`), a fill and a 1pt rim on continuous corners.
+The user, 2026-11-21: "in redesign no more blurs its no premium", about the thread menu. Every surface is opaque: a solid fill, a 1pt rim in the text color at 0.08 (0.24 under Increase Contrast) on its corner, and the token shadow.
 
-| Recipe | Blur | Fill | Rim | Shadow | Reduce Transparency |
-|---|---|---|---|---|---|
-| Resting glass | 12 | `surfaceRaised` (dark) or `card` (light) at `Surface.resting` 0.62 | text color at 0.08 | resting | blur off, fill opaque |
-| Floating glass | 12 | `popover` at `Surface.floating` 0.82 | text color at 0.08 | floating | blur off, fill opaque |
-| Card on a surface | none | text color at `Surface.inset` 0.05 | text color at 0.08 | none | unchanged, it sits on an opaque surface |
+| Surface | Fill (dark) | Fill (light) | Shadow |
+|---|---|---|---|
+| Ground (main panel) | `canvas` #080808 | `canvas` #f9f9f9 | none |
+| Sidebar, band, chrome | #030303 | #ececec | none |
+| Resting: the composer, pills, the header pill, the details card | `surfaceRaised` #0f0f0f | `card` #ffffff | resting |
+| Floating: menus, popovers, pickers, tooltips, the command palette | `popover` from `surfaceOverlay` #141414 | #ffffff | floating |
+| Modal: Settings and Usage | the ground, #080808 | #f9f9f9 | the modal's |
+| Card on the ground or a modal: code blocks, tables, Settings cards, the changed-files card | white at 0.05 over the ground, #141414 | `card` in Settings, black at 0.05 over the ground elsewhere | none |
 
-Increase Contrast raises the rim to 0.24. Floating layers take the higher fill because they cover sharp text that a 0.62 tint lets read through.
+The scrim behind a modal or the command palette is the ground at 0.72 (dark) or 0.6 (light), with no blurred snapshot (`ModalHost.blurredSnapshot` returns nil under Redesign).
 
-A blur is allocated only where this table says a surface has one: resting and floating glass. Cards on a surface never get their own blur. In Dither a user bubble keeps its own blur, as in 1.15.1. In Blur it has none, since the picture behind it is soft already.
+The no-blur rule lives in four places: `BackdropBlurView` sets its alpha to 0 under Redesign, so a blur view that T3's own look allocates (the composer, the banners) composites nothing; `WindowGlass.syncPaneBlur` only adds a pane blur for Glass; `WindowGlass.frosted(panes: false)` keeps Redesign's palette surfaces opaque; and Redesign-only views (`DitherPillSurface`, the tab strip, the details card, user bubbles) hold no blur view at all. Glass is untouched. "Glass opacity" still drives Glass and the default themes' dropdown glass; under Redesign it changes nothing.
+
+Measured with the sandbox's thread open in dark on 2026-11-21: 24 `BackdropBlurView`s alive before, 14 after, and all 14 at alpha 0. The Background = Blur picture is not a blur view: `DitherArt.render` blurs it once on a worker, and it stays as it was.
 
 ## Backgrounds
+
+Three choices, the client setting `redesignBackground`: `dither` (labelled Picture, the default), `blur` and `gradient`.
+
+Gradient is the user's "a dither option without an image like capy does here" and "capys plain dither isnt just static" (capy-dither-no-image.mov). No picture. Measured frame by frame from the recording (AVAssetImageGenerator, zero tolerance, 2.75 s to 12.5 s on the new-thread page): Capy's cells are binary, one navy (about #26314b) or off, on a fixed grid of 6px at 2x (3pt). They never shift or change size; the field under them changes. A 40px patch differs by under 2 levels from frame to frame, where a moving grid would differ by about 10. Soft lobes along the top drift and swell: one moves about 37pt a second to the right, the left one rises and fades, and one at the right grows from nothing to the brightest in about 5 s. The field stays in the top 25 to 30% (its centroid) and fades out by about 45% down. It did not repeat or settle in the 9.75 s on screen.
+
+CandyWrapper's Gradient copies that. Cells on a 3pt grid, on where the field beats the cell's 8 by 8 Bayer threshold, in one color: the accent (`palette.primary`) at 36% over the ground in dark, 22% in light. The field is three Gaussian lobes along the top whose centres and strengths swing on whole turns of a 12 s loop, times a linear falloff to the canvas's foot, half way down the panel. `DitherArt.gradientFrames` renders the loop once on a worker as 96 one-byte alpha masks (8 a second), about 52 KB each for an 1100 by 850 panel, 5 MB in all. The view shows them through the art layer's mask, and a discrete `CAKeyframeAnimation` on the mask's contents flips them, so the app does no work per frame; the window server swaps the texture.
+
+It moves only while every condition holds: Background is Gradient, Settings > Redesign > Animate gradient is on (the default), the new-thread page shows, the window is visible, not miniaturized or covered, and key, and Reduce Motion is off. Any one stopping removes the animation and holds the frame on screen (`DitherArtView.syncMotion`, `DitherArtTests.gradientMotionStopsWhenItCannotBeSeen`). The frames exist only while the new-thread page shows; a thread, Settings or any other page drops them and shows the plain ground with no scrim. With Animate off the page shows frame 0 still. Picture and Background dim are inert in Gradient, and Animate gradient is inert outside it.
+
+Cost, measured on the M2 Pro with `top` over interleaved 6 s windows, the new-thread page key in dark: the app 0.02 to 0.03% CPU animating or still; the window server about 4.6% animating against about 4.2% with Animate off (the composer's caret blinks in both) and 0.3% with another app in front. So the motion costs about 0.4 points of window server CPU. Other agents' apps were drawing during the measurement, so single readings swung by several points; the averages above come from four cycles each.
 
 The user chose, after seeing a glass card behind the conversation on 2026-11-21: "no glass card either full blur or full dither". Nothing sits behind the conversation in either mode. The setting is the client setting `redesignBackground`, `dither` by default.
 
@@ -53,6 +78,26 @@ Dither is 1.15.1's background: the picture in 2pt ordered-dither dots in the mai
 Blur draws the same picture behind the whole window, the sidebar and the tab band included, with no edge between the sidebar and the panel. `DitherArt.render` blurs the picture once per size, appearance and picture on a worker thread: close to a Gaussian of sigma 32pt (two vImage tent passes) over a canvas of 8pt pixels, which the layer scales up smoothly. At that sigma text- and icon-sized detail in the picture is gone while its colors and window-sized shapes still read. I compared 16, 32 and 64 over Sonoma: at 16 the ripple stripes in its green still read as detail, and at 64 the red wave runs into the sky. The cached image is a sixteenth of the dots' memory: 81 KB for a 1440 by 900 window, against 1 MB for Dither's dots in the panel. Then the same fade and reach as the dots apply without the steps, so no pixel strays further from the background than the brightest dot does, and the dim, scrim and veil are Dither's. Nothing redraws while a thread scrolls or streams. The sidebar's text, muted text and icons take the same 4.6:1 floor, since they sit on the picture too. The new-thread reveal does not play in Blur.
 
 In both modes the rows fade out above the tab band's 52 and are back in full 16 below it, through the timeline's mask, so nothing runs under the header pill and no header bar shows, which the user removed from every theme (324b6bcf). The mask leaves the picture itself in that clear top. The thread's project and title sit there on the lane's left edge, on the pill's centre line, and hide while tabs show, since the tab names the thread.
+
+## Palette (dark)
+
+Before 2026-11-21 Redesign dark was Capy's stylesheet grays: canvas #131314, chrome and sidebar #0a0a0b, surface #181819, raised and overlay #202021, border #232324, input #2a2a2b, muted #1c1c1d, bubbles #202021, code #0f0f10. Over the glass at the user's 10% Glass opacity, Settings read as one flat #1e1e1e to #262626 (too-grey-settings.png). Now, after Capy's real app (its window #000, panel #050505, composer #0f0f0f, selected row #1a1a1a, hairline #141414):
+
+| Role | Before | After |
+|---|---|---|
+| canvas (ground) | #131314 | #080808 |
+| chrome, toolbar, sidebar | #0a0a0b | #030303 |
+| surface | #181819 | #0e0e0e |
+| surfaceRaised, toolbarControl | #202021 / #181819 | #0f0f0f |
+| surfaceOverlay (menus) | #202021 | #141414 |
+| border | #232324 | #1d1d1d |
+| input | #2a2a2b | #262626 |
+| muted | #1c1c1d | #161616 |
+| messageSurface (bubbles) | #202021 | #1e1e1e |
+| codeBackground, terminal | #0f0f10 | #0c0c0c |
+| sidebarRowSelected, active | #ffffff17 | #ffffff1a |
+
+Text keeps its values. Body #f5f5f5 is 18.4:1 on the ground and 16.9:1 on a menu or card; muted #aaaaab is 8.6:1 on the ground and 7.9:1 on a menu or card (it was 7.0:1 on the old #202021). Light keeps its palette: once the surfaces were solid it showed no flatness.
 
 ## States
 

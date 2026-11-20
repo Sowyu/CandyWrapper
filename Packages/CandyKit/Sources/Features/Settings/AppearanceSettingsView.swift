@@ -216,6 +216,12 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  key: "appearanceContrast", range: 50...200, step: 5, reset: "contrast")
         let glass = sliderRow("setting-glass-opacity", "Higher values make menus, dialogs, and the composer more solid.",
                               key: "glassOpacity", range: 10...100, step: 5, reset: "glass opacity")
+        // Redesign's surfaces are solid, so with Redesign in both appearances the slider changes nothing.
+        binder.add { [weak glass] in
+            let solid = ThemeRuntime.isDither(dark: true) && ThemeRuntime.isDither(dark: false)
+            let reason = solid ? "Redesign's menus, dialogs and composer are solid. Glass opacity applies to the other themes." : nil
+            if glass?.inertReason != reason { glass?.inertReason = reason }
+        }
         let modern = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         let nightly = context.runtimeUpdate?.channel != .latest
         let artworkOptions: [(String, String)] = !modern ? [("artwork", "Artwork"), ("pill", "Version pill"), ("none", "None")]

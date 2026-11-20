@@ -613,8 +613,6 @@ public final class ThreadDetailsCardView: DSView {
     }
 
     private let decoration = BoxDecorationLayer()
-    /// Dither: the art behind the card blurs through its tinted fill, like the composer's frost.
-    private let blur = BackdropBlurView()
     private let divider = CALayer()
     /// Tasks bound to the thread (`ThreadAutomationsPanel`), separated by `border-t border-border/65`.
     public let servers = ThreadServersView()
@@ -636,8 +634,6 @@ public final class ThreadDetailsCardView: DSView {
         scrollArea = ScrollAreaView(documentView: content, scrollFade: true)
         super.init(frame: frameRect)
         decoration.host = self
-        blur.isHidden = true
-        addSubview(blur)
         layer?.addSublayer(decoration)
         // `overflow-hidden rounded-3xl`: scrolled rows stay inside the border's rounded corners.
         scrollArea.wantsLayer = true
@@ -815,7 +811,6 @@ public final class ThreadDetailsCardView: DSView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        blur.frame = bounds
         scrollArea.frame = bounds.insetBy(dx: 1, dy: 1)
         let width = bounds.width - 2, height = preferredHeight - 2
         content.frame = NSRect(x: 0, y: 0, width: width, height: height)
@@ -910,15 +905,13 @@ public final class ThreadDetailsCardView: DSView {
         box.radius = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? 16 : 22
         let dark = effectiveAppearance.isDark
         let frost = ThemeRuntime.isDither(dark: dark)
-        box.fill = frost ? Themed.color(dark ? \.surfaceRaised : \.card, 0.62) : PopupSurface.glassFill
-        // Redesign: the composer's rim on the card's own layer, which composites over the blur and the rows.
+        box.fill = frost ? Themed.color(dark ? \.surfaceRaised : \.card) : PopupSurface.glassFill
+        // Redesign: the composer's solid surface, its rim on the card's own layer over the rows.
         box.border = frost ? nil : Themed.color(\.contrastForeground, 0.1)
         decoration.boxStyle = box
         layer?.cornerRadius = frost ? DitherChrome.radius(box.radius) : 0
         layer?.borderWidth = frost ? 1 : 0
         layer?.borderColor = frost ? DitherChrome.rim(dark: dark).cgColor : nil
-        blur.isHidden = !frost || CommandLine.arguments.contains("--no-blur")
-        blur.cornerRadius = DitherChrome.radius(box.radius)
         // The rows clip inside the border's curve: 22 less 1, or Redesign's 16 less 1.
         scrollArea.layer?.cornerRadius = frost ? DitherChrome.nested(in: DitherChrome.radius(box.radius), inset: 1) : ThreadDesign.uses3814(dark: dark) ? 15 : Self.innerRadius
         divider.backgroundColor = Themed.color(\.contrastBorder, 0.65).cgColor(in: self)

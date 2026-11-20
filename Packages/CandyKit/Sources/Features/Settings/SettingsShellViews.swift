@@ -702,13 +702,19 @@ public final class ClerkAvatarView: DSView {
 
     public override func updateLayer() {
         circle.backgroundColor = image == nil ? Themed.color(\.primary, 0.18).cgColor(in: self) : nil
+        circle.cornerRadius = cornerRadius
+    }
+
+    /// A circle, or under Redesign the rounded square of its sidebar account avatar.
+    private var cornerRadius: CGFloat {
+        ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? RedesignTokens.Radius.control : bounds.width / 2
     }
 
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         circle.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height)
-        circle.cornerRadius = bounds.width / 2
+        circle.cornerRadius = cornerRadius
         circle.contentsScale = window?.backingScaleFactor ?? 2
         CATransaction.commit()
         let lh = initialsLabel.lineHeight ?? 16

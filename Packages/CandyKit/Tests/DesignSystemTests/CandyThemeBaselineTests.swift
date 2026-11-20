@@ -32,7 +32,15 @@ import Testing
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("fixtures/theme/candy-3669-baseline.json")
-        let expected = try JSONDecoder().decode([String: [String: [[Double]]]].self, from: Data(contentsOf: url))
+        var expected = try JSONDecoder().decode([String: [String: [[Double]]]].self, from: Data(contentsOf: url))
+        // CANDY_RECORD_REDESIGN_PALETTE=1 records Redesign's entries again after a deliberate palette change; Glass's
+        // stay as recorded and must still match.
+        if ProcessInfo.processInfo.environment["CANDY_RECORD_REDESIGN_PALETTE"] == "1" {
+            for (key, value) in actual where key.hasPrefix(ThemeDefinition.dither.id + "/") { expected[key] = value }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .sortedKeys
+            try encoder.encode(expected).write(to: url)
+        }
         #expect(Set(actual.keys) == Set(expected.keys))
         for (context, roles) in expected {
             for (name, value) in roles {

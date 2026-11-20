@@ -270,8 +270,10 @@ public final class ModalHost: DSView {
 
     /// `excluding`: a subview left out, such as an open overlay taking a fresh backdrop. The other subviews draw one by
     /// one at their frames, so the overlay keeps the first responder and never leaves the screen.
+    /// Redesign gets none: its overlays sit on the tint alone (the user, 2026-11-21: "in redesign no more blurs").
     public static func blurredSnapshot(of view: NSView, excluding excluded: NSView? = nil) -> CGImage? {
-        snapshot(of: view, excluding: excluded).flatMap { blurred($0, pointSize: view.bounds.size) }
+        guard !ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) else { return nil }
+        return snapshot(of: view, excluding: excluded).flatMap { blurred($0, pointSize: view.bounds.size) }
     }
 
     /// The window drawn at half size before the blur. Every view draws into this one context, so a view that leaves

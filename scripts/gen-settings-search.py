@@ -111,7 +111,8 @@ KEEP_AFTER = {
 CANDY_ITEMS = [
     '        .item(SettingsSearchItem(id: "redesign", title: "Redesign", to: .redesign, searchTerms: ["theme look dither picture wallpaper candywrapper own experimental"])),',
     '        .item(SettingsSearchItem(id: "redesign-picture", title: "Picture", to: .redesign, searchTerms: ["redesign background wallpaper image photo desktop picture art"])),',
-    '        .item(SettingsSearchItem(id: "redesign-background", title: "Background", to: .redesign, searchTerms: ["redesign picture wallpaper dither blur dots soft backdrop"])),',
+    '        .item(SettingsSearchItem(id: "redesign-background", title: "Background", to: .redesign, searchTerms: ["redesign picture wallpaper dither blur gradient halftone dots soft backdrop no picture"])),',
+    '        .item(SettingsSearchItem(id: "redesign-gradient-animate", title: "Animate gradient", to: .redesign, searchTerms: ["redesign gradient dither dots motion move animate animation drift"])),',
     '        .item(SettingsSearchItem(id: "background-dim", title: "Background dim", to: .redesign, searchTerms: ["redesign picture wallpaper darken dim scrim opacity"])),',
     '        .item(SettingsSearchItem(id: "accent-color", title: "Accent color", to: .redesign, searchTerms: ["redesign accent colour tint highlight switches send focus selection"])),',
     '        .item(SettingsSearchItem(id: "ignore-reduce-transparency", title: "Ignore Reduce Transparency", to: .redesign, searchTerms: ["redesign glass blur accessibility reduce transparency picture"])),',

@@ -66,8 +66,10 @@ public final class BackdropBlurView: NSVisualEffectView {
             backdrop.setValue(scale, forKey: "scale")
         }
         CATransaction.commit()
-        // No backdrop: the material alone would tint the glass, so show nothing.
-        let alpha: CGFloat = backdrop == nil ? 0 : 1
+        // No backdrop: the material alone would tint the glass, so show nothing. Redesign draws no blur at all (the
+        // user, 2026-11-21: "in redesign no more blurs"); its surfaces are opaque. The window server skips a layer
+        // at zero opacity.
+        let alpha: CGFloat = backdrop == nil || ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 0 : 1
         if alphaValue != alpha { alphaValue = alpha }
     }
 

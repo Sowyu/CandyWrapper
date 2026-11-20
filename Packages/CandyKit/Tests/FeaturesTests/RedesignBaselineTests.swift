@@ -164,10 +164,8 @@ struct RedesignBaselineTests {
                 let page = DitherSettingsSectionView(section: section, pages: pages)
                 try capture("settings-" + section.rawValue, page, NSSize(width: 800, height: min(1800, max(100, page.height(forWidth: 800)))))
             }
-            // Settings and Usage float over the route on Redesign's pill surface; Reduce Transparency makes the pill opaque.
-            for (name, reduce) in [("settings-modal", false), ("settings-modal-reduce-transparency", true), ("usage-modal", false)] {
-                DitherPill.reduceTransparencyOverride = reduce
-                defer { DitherPill.reduceTransparencyOverride = nil }
+            // Settings and Usage float over the route on Redesign's solid pill surface.
+            for name in ["settings-modal", "usage-modal"] {
                 let page = SettingsPageView()
                 page.header.isRouteModal = true
                 var nav: SettingsSidebarView?
@@ -206,8 +204,21 @@ struct RedesignBaselineTests {
             }
             let redesignPage = DitherSettingsSectionView(section: .redesign, pages: redesignPages)
             try capture("settings-redesign-blur", redesignPage, NSSize(width: 800, height: min(1800, max(100, redesignPage.height(forWidth: 800)))))
+            // Background set to Gradient: accent dots at the top left of the new-thread page, plain ground in a thread.
+            input.ditherBlur = false; input.ditherGradient = true
+            ThemeRuntime.apply(input)
+            defer { input.ditherGradient = false; ThemeRuntime.apply(input) }
+            let gradientDraft = ComposerFidelityTests.panel(width: 844, dark: dark)
+            gradientDraft.setDraft(projectTitle: "demo-repo")
+            gradientDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
+            try capture("composer-empty-gradient", gradientDraft, panelSize)
+            let gradientThread = ComposerFidelityTests.panel(width: 844, dark: dark)
+            gradientThread.timeline.context.now = { Self.now }
+            gradientThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            gradientThread.layoutSubtreeIfNeeded(); gradientThread.timeline.scroll(toFraction: 0)
+            try capture("thread-markdown-top-gradient", gradientThread, panelSize)
         }
-        #expect(count == 94)
+        #expect(count == 96)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -288,13 +299,28 @@ struct RedesignBaselineTests {
             }
             v.displayIfNeeded()
             if let art = v as? DitherArtView, let layer = art.layer?.sublayers?.first {
-                let bg = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.srgb
+                let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false), bg = palette.background.srgb
                 let blur = ThemeRuntime.ditherBlur, unit = DitherArt.unit(blur: blur)
-                layer.frame = art.bounds
                 layer.magnificationFilter = blur ? .linear : .nearest
-                layer.contents = DitherArt.render(.init(url: ComposerAttachmentsFidelityTests.fixture,
-                    width: Int(ceil(art.bounds.width / unit)), height: Int(ceil(art.bounds.height / unit)),
-                    background: [bg.x, bg.y, bg.z], scale: 2, blur: blur))
+                if ThemeRuntime.ditherGradient {
+                    // The loop's first frame, which is also the still look: the cell color through the cell mask.
+                    let reach = DitherArt.gradientReach, accent = palette.primary.srgb, unit = DitherArt.gradientUnit
+                    let w = Int(ceil(art.bounds.width * reach.width / unit)), h = Int(ceil(art.bounds.height * reach.height / unit))
+                    layer.frame = NSRect(x: 0, y: art.bounds.height - CGFloat(h) * unit, width: CGFloat(w) * unit, height: CGFloat(h) * unit)
+                    layer.contents = nil
+                    layer.backgroundColor = DitherArt.gradientColor(tint: [accent.x, accent.y, accent.z], background: [bg.x, bg.y, bg.z], dark: dark)
+                    let mask = layer.mask ?? CALayer()
+                    mask.frame = layer.bounds
+                    mask.magnificationFilter = .nearest
+                    mask.contentsGravity = .resize
+                    mask.contents = DitherArt.gradientFrames(width: w, height: h, frames: 1).first
+                    layer.mask = mask
+                } else {
+                    layer.frame = art.bounds
+                    layer.contents = DitherArt.render(.init(url: ComposerAttachmentsFidelityTests.fixture,
+                        width: Int(ceil(art.bounds.width / unit)), height: Int(ceil(art.bounds.height / unit)),
+                        background: [bg.x, bg.y, bg.z], scale: 2, blur: blur))
+                }
             }
             if let scroller = v as? ScrollAreaScroller { scroller.isHidden = true }
             v.subviews.forEach(display)
