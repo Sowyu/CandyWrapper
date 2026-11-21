@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Write the model notes snapshot Redesign's model picker reads: per model, models.dev's one-line description, limits,
-input types, capabilities and its own provider's price.
+"""Write the model notes snapshot Redesign's model picker reads: per model, models.dev's one-line description, context
+window, knowledge cutoff, input types and its own provider's price.
 
 Run it at release time, never from the app: the picker reads only the generated file and makes no request.
     scripts/gen-model-notes              # fetches https://models.dev/api.json
@@ -53,16 +53,11 @@ def main():
             limit = m.get('limit') or {}
             if limit.get('context'):
                 note['context'] = int(limit['context'])
-            if limit.get('output'):
-                note['output'] = int(limit['output'])
-            for key, field in (('knowledge', 'knowledge'), ('released', 'release_date')):
-                if m.get(field):
-                    note[key] = m[field]
+            if m.get('knowledge'):
+                note['knowledge'] = m['knowledge']
             inputs = m.get('modalities', {}).get('input')
             if inputs:
                 note['input'] = inputs
-            note['tools'] = bool(m.get('tool_call'))
-            note['reasoning'] = bool(m.get('reasoning'))
             cost = m.get('cost') or {}
             if 'input' in cost and 'output' in cost:
                 note['price'] = {k: cost[k] for k in ('input', 'output', 'cache_read', 'cache_write') if k in cost}

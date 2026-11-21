@@ -8,68 +8,16 @@ import T3Store
 /// Redesign's detail layout (the user's layout 2, 2026-11-21): the cost line, the models.dev snapshot, the sizes, the
 /// keyboard and the list shrinking under it.
 @MainActor @Suite(.serialized) struct ModelPickerDetailTests {
-    typealias Price = ThreadCostEstimate.Price
-    static let sonnet = Price(input: 2, cachedInput: 0.1, output: 10)
-    static let fable = Price(input: 8, cachedInput: 0.2, output: 40)
-    static let haiku = Price(input: 0.1, cachedInput: 0.01, output: 0.5)
+    // MARK: Prices
 
-    // MARK: Cost line
-
-    @Test func ownTurnsGiveTheMedianOfTheLatestForty() {
-        // 50 turns: the first 10 are dear and fall out of the window, the latest 40 run 0.10 to 0.49.
-        let turns = (0..<10).map { _ in 9.0 } + (0..<40).map { 0.10 + Double($0) / 100 }
-        let line = ModelCostLine.make(.init(modelName: "Claude Fable 5.2", price: Self.fable, ownTurns: turns,
-                                            reference: ("Sonnet 5.5", Self.sonnet), catalogPrices: [Self.sonnet]))
-        #expect(line.kind == .ownUsage)
-        #expect(line.headline == "About $0.30 a turn for you")
-        #expect(line.explanation.contains("median of your last 40 finished turns"))
-        #expect(line.detail == "$8 in · $40 out per 1M tokens")
-    }
-
-    @Test func tooFewTurnsFallBackToTheReference() {
-        let line = ModelCostLine.make(.init(modelName: "Claude Fable 5.2", price: Self.fable, ownTurns: [0.3, 0.4],
-                                            reference: ("Sonnet 5.5", Self.sonnet)))
-        #expect(line.kind == .relative)
-        // Typical turn: Fable 15K*8 + 85K*0.2 + 2K*40 = 0.217, Sonnet 0.0585, so 3.7x, rounded to 4.
-        #expect(line.headline == "About 4x the cost of Sonnet 5.5")
-        #expect(ModelCostLine.make(.init(modelName: "Haiku", price: Self.haiku, reference: ("Sonnet 5.5", Self.sonnet))).headline
-                == "Under a tenth of the cost of Sonnet 5.5")
-        #expect(ModelCostLine.relative(0.5, to: "X") == "About half of the cost of X")
-        #expect(ModelCostLine.relative(1.05, to: "X") == "About the same cost as X")
-        #expect(ModelCostLine.relative(1.5, to: "X") == "About 1.5x the cost of X")
-    }
-
-    @Test func withoutAReferenceTheMeterPlacesTheModel() {
-        let all = [Self.haiku, Self.sonnet, Self.fable, Price(input: 4, cachedInput: 0.2, output: 20)]
-        let dear = ModelCostLine.make(.init(modelName: "Fable", price: Self.fable, catalogPrices: all))
-        #expect(dear.kind == .meter && dear.meter == 4 && dear.headline == "Cost")
-        #expect(ModelCostLine.make(.init(modelName: "Haiku", price: Self.haiku, catalogPrices: all)).meter == 1)
-        #expect(dear.accessibilityText.hasPrefix("Cost 4 of 4"))
-    }
-
-    @Test func aPlanComparesModelsAndKeepsDollarsAsTheAPIEquivalent() {
-        let turns = Array(repeating: 0.5, count: 12)
-        let line = ModelCostLine.make(.init(modelName: "Fable", price: Self.fable, ownTurns: turns, reference: ("Sonnet 5.5", Self.sonnet),
-                                            billing: .subscription(plan: "Claude Max Subscription")))
-        #expect(line.kind == .relative && line.headline == "About 4x the cost of Sonnet 5.5")
-        #expect(line.detail == "About $0.50 a turn at API prices")
-        #expect(line.explanation.contains("Claude Max Subscription pays for these turns"))
-        let alone = ModelCostLine.make(.init(modelName: "Fable", price: Self.fable, ownTurns: turns, billing: .subscription(plan: nil)))
-        #expect(alone.headline == "About $0.50 a turn at API prices")
-    }
-
-    @Test func anUnpricedModelSaysSo() {
-        let line = ModelCostLine.make(.init(modelName: "Muse Spark", price: nil, ownTurns: [1, 2, 3, 4, 5]))
-        #expect(line.kind == .unpriced && line.headline == "No price known" && line.detail == nil && line.meter == nil)
-    }
-
-    @Test func billingReadsTheProvidersAuth() {
-        var p = ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", displayName: "Claude", models: [])
-        #expect(ModelDetailContent.billing(p) == .api)
-        p.auth = .object(["status": .string("authenticated"), "type": .string("apiKey"), "label": .string("Claude API Key")])
-        #expect(ModelDetailContent.billing(p) == .api)
-        p.auth = .object(["status": .string("authenticated"), "type": .string("max"), "label": .string("Claude Max Subscription")])
-        #expect(ModelDetailContent.billing(p) == .subscription(plan: "Claude Max Subscription"))
+    @Test func pricesComeFromTheAppsTableThenModelsDev() {
+        let table = ModelDetailContent.prices(driver: "claudeAgent", slug: "claude-sonnet-5-5")
+        #expect(table.map { "\($0.label) \($0.value)" } == ["Input $2", "Cached input $0.10", "Output $10"])
+        // gemini-4-carbon is not in the app's table; models.dev's row for Google prices it.
+        let fallback = ModelDetailContent.prices(driver: "antigravity", slug: "gemini-4-carbon")
+        #expect(fallback.map(\.label) == ["Input", "Cached input", "Output"] && fallback.first?.value == "$2")
+        #expect(ModelDetailContent.prices(driver: "custom", slug: "house-model").isEmpty)
+        #expect(ModelDetailContent.dollars(0.075) == "$0.075" && ModelDetailContent.dollars(1.25) == "$1.25" && ModelDetailContent.dollars(40) == "$40")
     }
 
     // MARK: Snapshot
@@ -78,13 +26,13 @@ import T3Store
         let source = try #require(ModelNotes.source)
         #expect(source.name == "models.dev" && source.licence == "MIT" && !source.fetched.isEmpty)
         let sonnet = try #require(ModelNotes.note(driver: "claudeAgent", slug: "claude-sonnet-5-5"))
-        #expect(sonnet.context == 1_000_000 && sonnet.tools && sonnet.description?.isEmpty == false)
+        #expect(sonnet.context == 1_000_000 && sonnet.description?.isEmpty == false && sonnet.input?.contains("image") == true)
         #expect((sonnet.description?.count ?? 0) <= 121)
         #expect(ModelNotes.note(driver: "claudeAgent", slug: "claude-sonnet-5-5[1m]") == sonnet)
     }
 
     @Test func lookupMatchesOnlyWhatIsSurelyTheModel() {
-        let note = ModelNote(name: "N", description: "D", tools: true, reasoning: false)
+        let note = ModelNote(name: "N", description: "D")
         let models = ["anthropic/claude-x": note, "google/gemini-9-flash": note, "opencode/big-pickle": note, "openai/gpt-9": note]
         #expect(ModelNotes.lookup(driver: "claudeAgent", slug: "claude-x-20251001", in: models) == note)
         #expect(ModelNotes.lookup(driver: "antigravity", slug: "gemini-9-flash-high", in: models) == note)
@@ -94,32 +42,25 @@ import T3Store
         #expect(ModelNotes.lookup(driver: "claudeAgent", slug: "claude-x-high", in: models) == nil, "effort variants only for Gemini")
     }
 
-    @Test func factsFormatPlainly() {
-        let note = ModelNote(name: "N", context: 1_050_000, output: 128_000, knowledge: "2026-06", released: "2026-11-09",
-                             input: ["text", "image", "pdf"], tools: true, reasoning: true)
-        let facts = ModelNotes.facts(note).map { "\($0.0)=\($0.1)" }
-        #expect(facts == ["Context=1.05M", "Max output=128K", "Knowledge=Jun 2026", "Released=Nov 2026", "Reads=text, image, PDF",
-                          "Supports=tools, reasoning"])
-        #expect(ModelNotes.facts(ModelNote(name: "N", tools: false, reasoning: false)).isEmpty)
+    @Test func onlyFactsThatHelpChooseShow() {
+        let note = ModelNote(name: "N", context: 1_050_000, knowledge: "2026-06", input: ["text", "image", "pdf", "video"])
+        #expect(ModelNotes.facts(note).map { "\($0.0)=\($0.1)" } == ["Context=1.05M", "Knowledge=Jun 2026"])
+        #expect(ModelNotes.facts(ModelNote(name: "N")).isEmpty)
+        #expect(["text", "image", "pdf", "audio", "video"].allSatisfy { ModelDetailPaneView.input($0) != nil })
+        #expect(ModelDetailPaneView.input("pdf")?.1 == "PDF files" && ModelDetailPaneView.input("smell") == nil)
     }
 
-    @Test func aModelModelsDevLacksShowsNameAndCostOnly() throws {
+    @Test func aModelModelsDevLacksShowsNameAndNoPrice() throws {
         try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
             let house = ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", displayName: "Claude",
                                        models: [ServerProviderModel(slug: "house-model", name: "House")])
             let rig = ModelPickerShrinkTests.Rig(catalog: ProviderCatalog([house]), activeModel: "house-model")
             let content = try #require(rig.dock.pane.content)
-            #expect(content.name == "House" && content.description == nil && content.facts.isEmpty && content.cost.kind == .unpriced)
+            #expect(content.name == "House" && content.description == nil && content.facts.isEmpty && content.inputs.isEmpty && content.prices.isEmpty)
+            // Padding, name and provider, the price label, one "No price known" row, padding.
+            let expected: CGFloat = 16 + 36 + 16 + 16 + 8 - 2 + 24 - 2 + 16
+            #expect(rig.dock.pane.height(for: content, card: nil) == expected)
         }
-    }
-
-    @Test func theLedgerKeepsEachTurnOnceAndTheLatestForty() {
-        let ledger = ModelTurnCosts(defaults: nil)
-        let turns = (0..<45).map { ThreadCostEstimate.FinishedTurn(id: "t\($0)", model: "claude-opus-5-5", completedAt: String(format: "2026-11-21T10:%02d:00Z", $0), usd: Double($0)) }
-        ledger.record(Array(turns.prefix(10)))
-        ledger.record(turns)
-        let kept = ledger.turns("claude-opus-5-5[1m]")
-        #expect(kept.count == 40 && kept.first == 5 && kept.last == 44)
     }
 
     // MARK: Layout

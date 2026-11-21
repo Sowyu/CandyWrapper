@@ -4,7 +4,7 @@ import T3Protocol
 import T3Store
 
 /// What Redesign's detail pane shows for one model (the user's layout 2, 2026-11-21): the name and provider,
-/// models.dev's one line, the estimated cost in plain words, and models.dev's facts.
+/// models.dev's one line, the price per 1M tokens as the mockup has it, and the facts that differ between models.
 struct ModelDetailContent: Equatable {
     var key: String
     var name: String
@@ -12,95 +12,89 @@ struct ModelDetailContent: Equatable {
     var driver: String
     var slug: String
     var description: String?
-    var cost: ModelCostLine
+    /// "Input", "Cached input", "Output" with their dollars; empty when nothing prices the model.
+    var prices: [Fact]
+    /// Context and Knowledge.
     var facts: [Fact]
+    /// models.dev's input types: text, image, pdf, audio, video.
+    var inputs: [String]
     struct Fact: Equatable { var label: String, value: String }
 
-    /// The fixed reference when the highlighted model is the selected one: a model most people here know.
-    static let referenceSlug = "claude-sonnet-5-5"
-
-    static func price(driver: String, slug: String) -> (ThreadCostEstimate.Price, fromModelsDev: Bool)? {
-        if let p = ThreadCostEstimate.price(slug) { return (p, false) }
-        guard let p = ModelNotes.note(driver: driver, slug: slug)?.price else { return nil }
-        // Without a cache price, cached input is charged as fresh input: the dearer reading.
-        return (ThreadCostEstimate.Price(input: p.input, cachedInput: p.cacheRead ?? p.input, cacheWrite: p.cacheWrite, output: p.output), true)
-    }
-
-    /// API key, Bedrock or a custom endpoint bill per token; a signed-in plan, or a provider reporting limit windows, is a
-    /// subscription (`auth.type`, ClaudeProvider.ts:189-210, CodexProvider.ts:203-230 at 4928).
-    static func billing(_ p: ServerProvider) -> ModelCostLine.Billing {
-        let type = p.auth?["type"]?.stringValue?.lowercased()
-        if let type, ["apikey", "bedrock", "customendpoint", "vertex"].contains(type) { return .api }
-        let label = p.auth?["label"]?.stringValue
-        if p.usageLimits?.windows.isEmpty == false || (type != nil && p.auth?["status"]?.stringValue == "authenticated") {
-            return .subscription(plan: label)
+    /// The app's own table first (what the thread cost uses), else models.dev's row for the lab's own provider.
+    static func prices(driver: String, slug: String) -> [Fact] {
+        if let p = ThreadCostEstimate.price(slug) {
+            return [Fact(label: "Input", value: dollars(p.input)), Fact(label: "Cached input", value: dollars(p.cachedInput)),
+                    Fact(label: "Output", value: dollars(p.output))]
         }
-        return .api
+        guard let p = ModelNotes.note(driver: driver, slug: slug)?.price else { return [] }
+        return [Fact(label: "Input", value: dollars(p.input))] + (p.cacheRead.map { [Fact(label: "Cached input", value: dollars($0))] } ?? [])
+            + [Fact(label: "Output", value: dollars(p.output))]
     }
 
-    static func make(_ item: ModelPickerItem, catalog: ProviderCatalog, active: ProviderInstanceId, activeModel: String,
-                     turns: (String) -> [Double]) -> ModelDetailContent {
+    /// "$2", "$0.10", "$1.25", "$0.075": whole dollars bare, cents to two places, a fraction of a cent to three.
+    static func dollars(_ v: Double) -> String {
+        if v == v.rounded() { return "$\(Int(v))" }
+        if (v * 100).rounded() != v * 100 { return String(format: "$%.3f", v) }
+        return String(format: "$%.2f", v)
+    }
+
+    static func make(_ item: ModelPickerItem) -> ModelDetailContent {
         let slug = item.model.slug, driver = item.entry.driver
         let note = ModelNotes.note(driver: driver, slug: slug)
-        let price = price(driver: driver, slug: slug)
-        // The selected model is the one people know; on itself the line compares with Sonnet 5.5 when the catalog has it.
-        let isActive = item.entry.id == active && slug == activeModel
-        let candidates: [(ProviderInstanceEntry, ServerProviderModel)] = catalog.entries.flatMap { e in e.models.map { (e, $0) } }
-        let activePair = candidates.first { $0.0.id == active && $0.1.slug == activeModel }
-        let fixedPair = candidates.first { $0.1.slug == referenceSlug }
-        let referencePair = !isActive ? activePair : (slug == referenceSlug ? nil : fixedPair)
-        let reference = referencePair.flatMap { pair in
-            Self.price(driver: pair.0.driver, slug: pair.1.slug).map { (name: ModelNames.trigger(pair.1), price: $0.0) }
-        }
-        var seen = Set<String>()
-        let catalogPrices = candidates.filter { $0.0.isReady && seen.insert($0.1.slug).inserted }
-            .compactMap { Self.price(driver: $0.0.driver, slug: $0.1.slug)?.0 }
-        let name = ModelNames.display(item.model)
-        let cost = ModelCostLine.make(.init(modelName: name, price: price?.0, priceFromModelsDev: price?.fromModelsDev ?? false,
-                                            ownTurns: turns(slug), reference: reference, catalogPrices: catalogPrices,
-                                            billing: billing(item.entry.provider)))
-        return ModelDetailContent(key: item.key, name: name,
+        return ModelDetailContent(key: item.key, name: ModelNames.display(item.model),
                                   provider: item.model.subProvider.map { "\(item.entry.displayName) · \($0)" } ?? item.entry.displayName,
-                                  driver: driver, slug: slug, description: note?.description, cost: cost,
-                                  facts: note.map { ModelNotes.facts($0).map { Fact(label: $0.0, value: $0.1) } } ?? [])
+                                  driver: driver, slug: slug, description: note?.description, prices: prices(driver: driver, slug: slug),
+                                  facts: note.map { ModelNotes.facts($0).map { Fact(label: $0.0, value: $0.1) } } ?? [],
+                                  inputs: note?.input ?? [])
     }
 }
 
-/// The pane at the right of Redesign's picker. Facts and the description come from the bundled models.dev snapshot.
+/// The pane at the right of Redesign's picker, after the mockup the user chose (r4-picker-chosen-layout2.png) and their
+/// note that the first build was cramped (r4-picker-wip-cramped.png, 2026-11-21): 16pt padding and 16pt between blocks,
+/// 8pt from a label to its rows, rows on a 24pt pitch, all on the 4pt grid. Only the name carries weight.
 final class ModelDetailPaneView: DSView {
-    static let width: CGFloat = 212
-    static let inset: CGFloat = 14, factHeight: CGFloat = 18
+    static let width: CGFloat = 288
+    static let pad: CGFloat = 16, gap: CGFloat = 16, labelGap: CGFloat = 8, pitch: CGFloat = 24, inputIcon: CGFloat = 16
 
     private(set) var content: ModelDetailContent?
     private var card: DitherProviderCardView?
     private let cardLine = CALayer()
     private let rule = CALayer()
     private var icon: NSView?
-    private let name = LabelView("", font: DSFont.ui(14, weight: .medium))
+    private let name = LabelView("", font: DSFont.ui(14, weight: .semibold))
     private let provider = LabelView("", font: DSFont.ui(12))
     private let about = TextBlockView()
-    private let costCaption = LabelView("Estimated cost", font: DSFont.ui(11))
-    private let headline = LabelView("", font: DSFont.ui(13, weight: .medium))
-    private let meter = LabelView("$$$$", font: DSFont.ui(13, weight: .medium))
-    private let detail = TextBlockView()
-    private let costGroup = DSView()
-    private var factLabels: [(LabelView, LabelView)] = []
+    private let priceCaption = LabelView("Price per 1M tokens", font: DSFont.ui(12))
+    private var priceRows: [(LabelView, LabelView)] = []
+    private var factRows: [(LabelView, LabelView)] = []
+    private var readsLabel: LabelView?
+    private var inputIcons: [IconView] = []
+    private var contentWidth: CGFloat { Self.width - 2 * Self.pad }
+
+    /// The icon and spoken name for a models.dev input type.
+    static func input(_ kind: String) -> (IconName, String)? {
+        switch kind {
+        case "text": (.type, "Text")
+        case "image": (.image, "Images")
+        case "pdf": (.fileText, "PDF files")
+        case "file": (.file, "Files")
+        case "audio": (.music, "Audio")
+        case "video": (.film, "Video")
+        default: nil
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         clipsToBounds = true
         for l in [rule, cardLine] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
-        for l in [name, provider, costCaption, headline, meter] { l.smoothsFont = false }
-        name.lineHeight = 20; provider.lineHeight = 16; costCaption.lineHeight = 14; headline.lineHeight = 18; meter.lineHeight = 18
-        about.font = DSFont.ui(12); about.lineHeight = 16; about.maxLines = 3; about.smoothsFont = false
-        detail.font = DSFont.ui(11); detail.lineHeight = 14; detail.maxLines = 2; detail.smoothsFont = false
-        for v in [name, provider, about, costGroup] as [NSView] { addSubview(v) }
-        for v in [costCaption, headline, meter, detail] as [NSView] { costGroup.addSubview(v) }
+        for l in [name, provider, priceCaption] { l.smoothsFont = false }
+        name.lineHeight = 20; provider.lineHeight = 16; priceCaption.lineHeight = 16
+        about.font = DSFont.ui(13); about.lineHeight = 20; about.maxLines = 2; about.smoothsFont = false
+        for v in [name, provider, about, priceCaption] as [NSView] { addSubview(v) }
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Model details")
-        costGroup.setAccessibilityElement(true)
-        costGroup.setAccessibilityRole(.staticText)
     }
 
     /// Shows `content`; nothing changes when it is the same. `card`: the provider's account card at the top.
@@ -113,9 +107,14 @@ final class ModelDetailPaneView: DSView {
         guard content != self.content else { return }
         self.content = content
         icon?.removeFromSuperview(); icon = nil
-        factLabels.forEach { $0.0.removeFromSuperview(); $0.1.removeFromSuperview() }
-        factLabels = []
-        guard let content else { name.text = ""; provider.text = ""; about.text = ""; costGroup.isHidden = true; needsLayout = true; return }
+        for (l, v) in priceRows + factRows { l.removeFromSuperview(); v.removeFromSuperview() }
+        priceRows = []; factRows = []
+        readsLabel?.removeFromSuperview(); readsLabel = nil
+        inputIcons.forEach { $0.removeFromSuperview() }
+        inputIcons = []
+        let hidden = content == nil
+        for v in [name, provider, about, priceCaption] as [NSView] { v.isHidden = hidden }
+        guard let content else { needsLayout = true; return }
         let glyph = ProviderIcon.make(driver: content.driver, displayName: content.provider, size: 16, color: Themed.color(\.contrastForeground), model: true)
         addSubview(glyph); icon = glyph
         name.text = content.name
@@ -125,102 +124,115 @@ final class ModelDetailPaneView: DSView {
         about.isHidden = content.description == nil
         let credit = ModelNotes.source.map { "From \($0.name) (\($0.licence) licence), fetched \($0.fetched)." }
         about.toolTip = credit
-        costGroup.isHidden = false
-        let c = content.cost
-        headline.text = c.headline
-        meter.isHidden = c.meter == nil
-        detail.text = c.detail ?? ""
-        costGroup.toolTip = c.explanation
-        costGroup.setAccessibilityLabel("Estimated cost: \(c.accessibilityText)")
-        for f in content.facts {
-            let l = LabelView(f.label, font: DSFont.ui(12)), v = LabelView(f.value, font: DSFont.ui(12))
-            for x in [l, v] { x.lineHeight = 16; x.smoothsFont = false; x.toolTip = credit; addSubview(x) }
-            v.alignment = .right
-            l.setAccessibilityLabel("\(f.label): \(f.value)")
-            factLabels.append((l, v))
+        priceRows = content.prices.isEmpty ? [row("No price known", "", credit: nil)] : content.prices.map { row($0.label, $0.value, credit: nil) }
+        factRows = content.facts.map { row($0.label, $0.value, credit: credit) }
+        let inputs = content.inputs.compactMap(Self.input)
+        if !inputs.isEmpty {
+            let l = LabelView("Reads", font: DSFont.ui(12))
+            l.lineHeight = 20; l.smoothsFont = false; l.toolTip = credit
+            addSubview(l)
+            readsLabel = l
+            l.setAccessibilityLabel("Reads: " + inputs.map(\.1).joined(separator: ", "))
+            inputIcons = inputs.map { name, spoken in
+                let v = IconView(name: name, size: Self.inputIcon)
+                v.toolTip = spoken
+                v.setAccessibilityElement(true)
+                v.setAccessibilityRole(.image)
+                v.setAccessibilityLabel(spoken)
+                addSubview(v)
+                return v
+            }
         }
         restyle()
         needsLayout = true
     }
 
-    /// The pane's height for `content` at this width, as `layout` places it.
-    func height(for content: ModelDetailContent?, card info: DitherProviderCardInfo?) -> CGFloat {
-        var y = Self.inset - 2
-        if let info { y += DitherProviderCardView.height(info) + 1 + 10 }
-        guard let content else { return y }
-        y += 20 + 16
-        if let d = content.description {
-            about.text = d
-            y += 8 + about.height(forWidth: Self.width - 2 * Self.inset)
-            about.text = self.content?.description ?? ""
-        }
-        y += 12 + 14 + 18 + (content.cost.detail == nil ? 0 : 2 + measure(content.cost.detail!))
-        if !content.facts.isEmpty { y += 12 + CGFloat(content.facts.count) * Self.factHeight }
-        return y + Self.inset
+    /// A label at the left and its value at the right in tabular figures.
+    private func row(_ label: String, _ value: String, credit: String?) -> (LabelView, LabelView) {
+        let l = LabelView(label, font: DSFont.ui(12)), v = LabelView(value, font: DSFont.ui(13).monospacedDigits)
+        for x in [l, v] { x.lineHeight = 20; x.smoothsFont = false; x.toolTip = credit; addSubview(x) }
+        v.alignment = .right
+        if !value.isEmpty { l.setAccessibilityLabel("\(label): \(value)") }
+        return (l, v)
     }
 
-    private func measure(_ text: String) -> CGFloat {
-        let old = detail.text
-        detail.text = text
-        defer { detail.text = old }
-        return detail.height(forWidth: Self.width - 2 * Self.inset)
+    /// The pane's height for `content`, as `layout` places it.
+    func height(for content: ModelDetailContent?, card info: DitherProviderCardInfo?) -> CGFloat {
+        var y = info.map { DitherProviderCardView.height($0) + 1 } ?? 0
+        guard let content else { return y + Self.pad }
+        y += Self.pad + 20 + 16
+        if let d = content.description {
+            let old = about.text
+            about.text = d
+            y += Self.gap + about.height(forWidth: contentWidth)
+            about.text = old
+        }
+        y += Self.gap + 16 + Self.labelGap - 2 + CGFloat(max(1, content.prices.count)) * Self.pitch - 2
+        let facts = content.facts.count + (content.inputs.contains { Self.input($0) != nil } ? 1 : 0)
+        if facts > 0 { y += Self.gap - 2 + CGFloat(facts) * Self.pitch - 2 }
+        return y + Self.pad
     }
 
     override func layout() {
         super.layout()
-        let x = Self.inset, w = bounds.width - 2 * Self.inset
+        let x = Self.pad, w = bounds.width - 2 * Self.pad
         rule.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
-        var y = Self.inset - 2
+        var y: CGFloat = 0
         if let card {
             card.frame = NSRect(x: 4, y: 0, width: bounds.width - 8, height: card.preferredHeight)
             cardLine.isHidden = false
             cardLine.frame = CGRect(x: x, y: card.frame.maxY, width: w, height: 1)
-            y = card.frame.maxY + 1 + 10
+            y = card.frame.maxY + 1
         } else {
             cardLine.isHidden = true
         }
+        y += Self.pad
         icon?.frame = NSRect(x: x, y: y + 2, width: 16, height: 16)
-        name.frame = NSRect(x: x + 22, y: y, width: max(0, w - 22), height: 20)
-        provider.frame = NSRect(x: x, y: y + 20, width: w, height: 16)
+        name.frame = NSRect(x: x + 24, y: y, width: max(0, w - 24), height: 20)
+        provider.frame = NSRect(x: x + 24, y: y + 20, width: max(0, w - 24), height: 16)
         y += 36
         if !about.isHidden {
             let h = about.height(forWidth: w)
-            about.frame = NSRect(x: x, y: y + 8, width: w, height: h)
-            y += 8 + h
+            about.frame = NSRect(x: x, y: y + Self.gap, width: w, height: h)
+            y += Self.gap + h
         }
-        let detailH = detail.text.isEmpty ? 0 : detail.height(forWidth: w)
-        let groupH = 14 + 18 + (detailH > 0 ? 2 + detailH : 0)
-        costGroup.frame = NSRect(x: x, y: y + 12, width: w, height: groupH)
-        costCaption.frame = NSRect(x: 0, y: 0, width: w, height: 14)
-        if !meter.isHidden {
-            let hw = ceil(headline.textWidth)
-            headline.frame = NSRect(x: 0, y: 14, width: hw, height: 18)
-            meter.frame = NSRect(x: hw + 6, y: 14, width: ceil(meter.textWidth) + 1, height: 18)
-        } else {
-            headline.frame = NSRect(x: 0, y: 14, width: w, height: 18)
+        // Each row is a 20pt line centered in its 24pt pitch, so blocks still sit 16pt apart.
+        y += Self.gap
+        priceCaption.frame = NSRect(x: x, y: y, width: w, height: 16)
+        y += 16 + Self.labelGap - 2
+        y = place(priceRows, from: y, x: x, w: w) - 2
+        guard !factRows.isEmpty || readsLabel != nil else { return }
+        y += Self.gap - 2
+        y = place(factRows, from: y, x: x, w: w)
+        if let readsLabel {
+            readsLabel.frame = NSRect(x: x, y: y + 2, width: 80, height: 20)
+            var right = x + w
+            for v in inputIcons.reversed() {
+                v.frame = NSRect(x: right - Self.inputIcon, y: y + (Self.pitch - Self.inputIcon) / 2, width: Self.inputIcon, height: Self.inputIcon)
+                right -= Self.inputIcon + 8
+            }
         }
-        detail.frame = NSRect(x: 0, y: 34, width: w, height: detailH)
-        y += 12 + groupH
-        if !factLabels.isEmpty { y += 12 }
-        for (l, v) in factLabels {
-            let vw = min(ceil(v.textWidth) + 1, w - 60)
-            v.frame = NSRect(x: x + w - vw, y: y + 1, width: vw, height: 16)
-            l.frame = NSRect(x: x, y: y + 1, width: max(0, w - vw - 8), height: 16)
-            y += Self.factHeight
+    }
+
+    private func place(_ rows: [(LabelView, LabelView)], from top: CGFloat, x: CGFloat, w: CGFloat) -> CGFloat {
+        var y = top
+        for (l, v) in rows {
+            let vw = min(ceil(v.textWidth) + 1, w - 96)
+            v.frame = NSRect(x: x + w - vw, y: y + 2, width: vw, height: 20)
+            l.frame = NSRect(x: x, y: y + 2, width: max(0, w - vw - 12), height: 20)
+            y += Self.pitch
         }
+        return y
     }
 
     private func restyle() {
         name.color = Themed.color(\.contrastForeground)
         provider.color = Themed.color(\.contrastMutedForeground)
-        about.color = Themed.color(\.contrastForeground, 0.78)
-        costCaption.color = Themed.color(\.contrastMutedForeground)
-        headline.color = Themed.color(\.contrastForeground)
-        meter.color = Themed.color(\.contrastForeground, 0.22)
-        meter.prefixColor = content?.cost.meter.map { ($0, Themed.color(\.contrastForeground)) }
-        detail.color = Themed.color(\.contrastMutedForeground)
-        (icon as? IconView)?.strokeColor = Themed.color(\.contrastForeground)
-        for (l, v) in factLabels { l.color = Themed.color(\.contrastMutedForeground); v.color = Themed.color(\.contrastForeground) }
+        about.color = Themed.color(\.contrastMutedForeground)
+        priceCaption.color = Themed.color(\.contrastMutedForeground)
+        for (l, v) in priceRows + factRows { l.color = Themed.color(\.contrastMutedForeground); v.color = Themed.color(\.contrastForeground) }
+        readsLabel?.color = Themed.color(\.contrastMutedForeground)
+        for v in inputIcons { v.strokeColor = Themed.color(\.contrastMutedForeground) }
     }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle(); needsDisplay = true }

@@ -11,13 +11,9 @@ public struct ModelNote: Decodable, Equatable, Sendable {
     public var name: String
     public var description: String?
     public var context: Int?
-    public var output: Int?
     /// "2026-06" or "2026-04-30".
     public var knowledge: String?
-    public var released: String?
     public var input: [String]?
-    public var tools: Bool
-    public var reasoning: Bool
     public var price: Price?
 }
 
@@ -91,18 +87,13 @@ public enum ModelNotes {
         return "\(names[m - 1]) \(year)"
     }
 
-    /// The pane's facts as label and value pairs, in reading order; a fact models.dev lacks stays out.
+    /// The pane's facts as label and value pairs: only what differs between models people pick between and helps choose.
+    /// Max output (128K on every current Claude and Codex model), the release date, and tools and reasoning (every model
+    /// here has both) stay out; the input types show as icons.
     static func facts(_ n: ModelNote) -> [(String, String)] {
         var out: [(String, String)] = []
         if let c = n.context { out.append(("Context", tokens(c))) }
-        if let o = n.output { out.append(("Max output", tokens(o))) }
         if let k = n.knowledge.flatMap(month) { out.append(("Knowledge", k)) }
-        if let r = n.released.flatMap(month) { out.append(("Released", r)) }
-        if let input = n.input, !input.isEmpty {
-            out.append(("Reads", input.map { $0 == "pdf" ? "PDF" : $0 }.joined(separator: ", ")))
-        }
-        let can = [n.tools ? "tools" : nil, n.reasoning ? "reasoning" : nil].compactMap { $0 }
-        if !can.isEmpty { out.append(("Supports", can.joined(separator: ", "))) }
         return out
     }
 }

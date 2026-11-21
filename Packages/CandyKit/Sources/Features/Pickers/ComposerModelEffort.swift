@@ -929,7 +929,7 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
     private var paneKey: String?
     /// The top area's floor, so a one-model provider is not a strip, and its ceiling, so the popup fits above the
     /// composer in a 700pt window (measured on screen 2026-11-21); the host trims it further in a shorter window.
-    static let detailMinHeight: CGFloat = 232, detailMaxHeight: CGFloat = 360
+    static let detailMinHeight: CGFloat = 232, detailMaxHeight: CGFloat = 400
     /// Stacked: keyboard focus sits on the list, between the search and the Reasoning section in Tab order.
     private(set) var listFocused = false
 
@@ -959,8 +959,7 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         let items = picker.listedItems
         let item = picker.highlightedItem ?? paneKey.flatMap(picker.listedItem) ?? items.first { $0.isSelected } ?? items.first
         paneKey = item?.key
-        let content = item.map { ModelDetailContent.make($0, catalog: picker.catalog, active: picker.active, activeModel: picker.activeModel,
-                                                         turns: { ModelTurnCosts.shared.turns($0) }) }
+        let content = item.map(ModelDetailContent.make)
         pane.show(content, card: cardInfo(item))
         let height = naturalSize.height
         if abs(height - bounds.height) > 0.5, window != nil { contentChanged() }
@@ -979,8 +978,7 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         // While searching the height stays where it was when typing started, as the list's own does.
         if let topCache, topCache.keys == keys || picker.searching { return topCache.height }
         let tallestPane = items.prefix(40).map { item in
-            pane.height(for: ModelDetailContent.make(item, catalog: picker.catalog, active: picker.active, activeModel: picker.activeModel,
-                                                     turns: { ModelTurnCosts.shared.turns($0) }), card: cardInfo(item))
+            pane.height(for: ModelDetailContent.make(item), card: cardInfo(item))
         }.max() ?? pane.height(for: nil, card: nil)
         let height = min(Self.detailMaxHeight, max(Self.detailMinHeight, picker.naturalSize.height, tallestPane))
         topCache = (keys, height)

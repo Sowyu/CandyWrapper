@@ -47,13 +47,11 @@ public enum ThreadCostEstimate {
     ]
 
     /// The price of `model`, ignoring a `[1m]` context tag and a date suffix such as `-20251001`.
-    public static func price(_ model: String) -> Price? { prices[priceKey(model)] }
-
-    /// The table's key for `model`: lowercased, without a `[1m]` tag or a date suffix.
-    public static func priceKey(_ model: String) -> String {
+    public static func price(_ model: String) -> Price? {
         var key = model.lowercased()
         if let bracket = key.firstIndex(of: "[") { key = String(key[..<bracket]) }
-        return key.replacingOccurrences(of: #"-\d{8}$"#, with: "", options: .regularExpression)
+        key = key.replacingOccurrences(of: #"-\d{8}$"#, with: "", options: .regularExpression)
+        return prices[key]
     }
 
     public struct Tokens: Equatable, Sendable {
@@ -155,11 +153,18 @@ public enum ThreadCostEstimate {
 
     /// The thread's own turns, no models when it has none. Turns on a model without a price only add to `unpricedModels`.
     public static func own(_ projection: ThreadProjection) -> Breakdown {
-        let modelOf = models(projection)
+        let runByAttempt = Dictionary(projection.attempts.map { ($0.id.rawValue, $0.runId) }, uniquingKeysWith: { a, _ in a })
+        let modelByRun = Dictionary(projection.runs.compactMap { run in run.modelSelection.map { (run.id, $0.model) } }, uniquingKeysWith: { a, _ in a })
+        let runByNode = Dictionary(projection.nodes.compactMap { node in node.runId.map { (node.id.rawValue, $0) } }, uniquingKeysWith: { a, _ in a })
+        // A turn with no run of its own, like a Codex subagent's turn in its child thread (CodexAdapterV2.ts:2648-2656),
+        // takes the latest run's model, else the thread's (orchestrationV2.ts:378).
+        let fallback = projection.runs.max { $0.ordinal < $1.ordinal }?.modelSelection?.model
+            ?? projection.thread.raw["modelSelection"]?["model"]?.stringValue
         var result = Breakdown()
         for turn in projection.providerTurns {
             guard let tokens = tokens(turn) else { continue }
-            let model = modelOf(turn) ?? "an unknown model"
+            let run = turn["runAttemptId"]?.stringValue.flatMap { runByAttempt[$0] } ?? turn["nodeId"]?.stringValue.flatMap { runByNode[$0] }
+            let model = run.flatMap { modelByRun[$0] } ?? fallback ?? "an unknown model"
             guard let price = price(model) else {
                 if !result.unpricedModels.contains(model) { result.unpricedModels.append(model) }
                 continue
@@ -168,38 +173,6 @@ public enum ThreadCostEstimate {
             result.add(tokens, price, model: model)
         }
         return result
-    }
-
-    /// Each turn's model, read from its run.
-    static func models(_ projection: ThreadProjection) -> (JSONValue) -> String? {
-        let runByAttempt = Dictionary(projection.attempts.map { ($0.id.rawValue, $0.runId) }, uniquingKeysWith: { a, _ in a })
-        let modelByRun = Dictionary(projection.runs.compactMap { run in run.modelSelection.map { (run.id, $0.model) } }, uniquingKeysWith: { a, _ in a })
-        let runByNode = Dictionary(projection.nodes.compactMap { node in node.runId.map { (node.id.rawValue, $0) } }, uniquingKeysWith: { a, _ in a })
-        // A turn with no run of its own, like a Codex subagent's turn in its child thread (CodexAdapterV2.ts:2648-2656),
-        // takes the latest run's model, else the thread's (orchestrationV2.ts:378).
-        let fallback = projection.runs.max { $0.ordinal < $1.ordinal }?.modelSelection?.model
-            ?? projection.thread.raw["modelSelection"]?["model"]?.stringValue
-        return { turn in
-            let run = turn["runAttemptId"]?.stringValue.flatMap { runByAttempt[$0] } ?? turn["nodeId"]?.stringValue.flatMap { runByNode[$0] }
-            return run.flatMap { modelByRun[$0] } ?? fallback
-        }
-    }
-
-    /// One completed turn with its full totals, priced at API rates.
-    public struct FinishedTurn: Equatable, Sendable {
-        public var id: String, model: String, completedAt: String, usd: Double
-    }
-
-    /// The thread's completed turns that report whole-turn totals and run on a priced model. Interrupted turns and turns
-    /// with only their latest request's usage stay out, so a median of these is a real turn's cost.
-    public static func finishedTurns(_ projection: ThreadProjection) -> [FinishedTurn] {
-        let modelOf = models(projection)
-        return projection.providerTurns.compactMap { turn in
-            guard turn["status"]?.stringValue == "completed", turn["turnTokenUsage"]?["inputTokens"]?.doubleValue != nil,
-                  let id = turn["id"]?.stringValue, let at = turn["completedAt"]?.stringValue,
-                  let tokens = tokens(turn), let model = modelOf(turn), let price = price(model) else { return nil }
-            return FinishedTurn(id: id, model: priceKey(model), completedAt: at, usd: tokens.cost(price))
-        }
     }
 
     /// A turn's totals, else its latest request once it has ended. Nil while it runs.
