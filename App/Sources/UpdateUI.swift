@@ -15,7 +15,7 @@ final class UpdateUI {
     private let toasts: () -> ToastViewport?
     private let showWindow: () -> Void
     private let footerCheck = SidebarUpdateCheck()
-    var checkEnvironmentUpdates: @MainActor @Sendable () async -> Bool = { true }
+    var checkEnvironmentUpdates: @MainActor @Sendable () async -> [SidebarUpdateCheck.Outcome] = { [.checked] }
     /// Dither holds CandyWrapper's runtime update while a thread runs on this Mac (`UpdateEverything.holdsServerUpdates`).
     var holdsServerUpdates: () -> Bool = { false }
 
@@ -91,7 +91,10 @@ final class UpdateUI {
             await footerCheck.run(checks: [
                 { [updater] in
                     let result = await updater.check(background: true)
-                    return result.checked && result.state.errorContext != .check
+                    // A check or download already under way is not a failure (canCheckForUpdate, desktopUpdate.logic.ts:195).
+                    if !result.checked, result.state.status == .downloading || result.state.status == .checking { return [.busy] }
+                    if result.checked, result.state.errorContext != .check { return [.checked] }
+                    return [.appFailed(reason: result.state.message)]
                 },
                 checkEnvironmentUpdates
             ], hasUpdates: { [updater, runtime] in
@@ -100,7 +103,9 @@ final class UpdateUI {
             })
             switch footerCheck.state {
             case .upToDate: toast("Up to date", nil, .success)
-            case .failed: toast("Could not check all updates", "Try again when all update sources are available.")
+            case .failed:
+                let copy = SidebarUpdateCheck.failureCopy(footerCheck.failures)
+                toast(copy.title, copy.message)
             default: break
             }
         }

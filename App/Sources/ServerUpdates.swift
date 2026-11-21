@@ -77,15 +77,15 @@ final class ServerUpdates {
         checkedDescriptors[environmentId] ?? (try? environments.session(environmentId)?.welcome?["environment"]?.decode(as: EnvironmentDescriptor.self))
     }
 
-    /// Re-read connected servers without reconnecting their sockets or interrupting turns.
-    func check() async -> Bool {
-        await withTaskGroup(of: Bool.self) { group in
+    /// Re-read connected servers without reconnecting their sockets or interrupting turns. Returns the ids that failed.
+    func check() async -> [String] {
+        await withTaskGroup(of: String?.self) { group in
             for id in environments.environmentIds where environments.state(id)?.status == .connected {
-                group.addTask { [weak self] in await self?.checkDescriptor(id) ?? false }
+                group.addTask { [weak self] in await self?.checkDescriptor(id) ?? false ? nil : id }
             }
-            var succeeded = true
-            for await result in group { if !result { succeeded = false } }
-            return succeeded
+            var failed: [String] = []
+            for await id in group { if let id { failed.append(id) } }
+            return failed
         }
     }
 
