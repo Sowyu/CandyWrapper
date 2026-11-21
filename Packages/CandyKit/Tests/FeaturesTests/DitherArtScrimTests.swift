@@ -68,7 +68,7 @@ struct DitherArtScrimTests {
         // An open thread, never shown as the new-thread page: it registers when it joins the window.
         let panel = ThreadPanelView(frame: main.bounds)
         main.addSubview(panel)
-        let thread = DitherArt.scrim(.thread, display), heavy = DitherArt.scrim(.page, display)
+        let thread = DitherArt.scrim(.thread, display, picture: true), heavy = DitherArt.scrim(.page, display)
         #expect(art.scrimAlphaForTesting == thread)
 
         let pane = HeavyPageView(frame: main.bounds)
@@ -87,7 +87,7 @@ struct DitherArtScrimTests {
         let (window, main) = host()
         let art = DitherArtView(frame: main.bounds)
         main.addSubview(art)
-        let thread = DitherArt.scrim(.thread, display), heavy = DitherArt.scrim(.page, display)
+        let thread = DitherArt.scrim(.thread, display, picture: true), heavy = DitherArt.scrim(.page, display)
         let panel = ThreadPanelView(frame: main.bounds)
         main.addSubview(panel)
         let pane = HeavyPageView(frame: main.bounds)

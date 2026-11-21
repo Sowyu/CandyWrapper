@@ -25,8 +25,8 @@ import T3Protocol
         // The theme picker turns Redesign on: the switch follows and the rows wake.
         lib.setTheme(ThemeDefinition.dither.id)
         #expect(page.master.isOn)
-        // Animate gradient waits for Gradient; the default Background is Picture.
-        #expect(page.gated.allSatisfy { $0.inertReason == nil || $0.inertReason == RedesignSettingsView.animateReason })
+        // Animate gradient waits for Gradient and Background dim for Blur; the default Background is Picture.
+        #expect(page.gated.allSatisfy { [nil, RedesignSettingsView.animateReason, RedesignSettingsView.dimReason].contains($0.inertReason) })
         // The switch turns it off, and on again: the picker follows.
         page.master.onChange?(false)
         #expect(!lib.isRedesignOn && !page.master.isOn)

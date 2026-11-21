@@ -17,27 +17,23 @@ struct DitherArtTests {
 
     func bytes(_ image: CGImage) -> [UInt8] { [UInt8](image.dataProvider!.data! as Data) }
 
-    @Test func fadesIntoTheBackgroundWithoutStrayDots() throws {
+    /// Picture: a picture as dark as the ground renders as exactly the ground, and a bright one in the ground and its
+    /// two inks only, with ink on at most 85% of each level so a bright sky keeps a pattern.
+    @Test func pictureIsTheGroundAndTwoInks() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "dither-art-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let bg = 10.0 / 255
-        let flat = try #require(DitherArt.render(.init(url: try picture(gray: bg, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
+        let flat = try #require(DitherArt.render(.init(url: try picture(gray: 0, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
         #expect(Set(bytes(flat).enumerated().filter { $0.offset % 4 != 3 }.map(\.element)) == [10])
-
-        // A bright picture is held to the reach, in three strengths: none, half and full.
-        let bright = try #require(DitherArt.render(.init(url: try picture(gray: 0.9, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
+        let bright = try #require(DitherArt.render(.init(url: try picture(gray: 0.95, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
         let b = bytes(bright), row = bright.bytesPerRow
-        let half = 10 + Int((DitherArt.reach / 2).rounded()), full = 10 + Int(DitherArt.reach.rounded())
-        #expect(Set((0..<60).flatMap { y in (0..<80).map { Int(b[y * row + $0 * 4]) } }).isSubset(of: [10, half, full]))
-        #expect(abs((0..<80).map { Int(b[$0 * 4]) }.reduce(0, +) / 80 - full) <= 4)
-        // A mid gray, under the reach, thins toward the bottom.
-        let mid = try #require(DitherArt.render(.init(url: try picture(gray: 0.4, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
-        let m = bytes(mid), mrow = mid.bytesPerRow
-        let top = (0..<80).map { Int(m[$0 * 4]) }.reduce(0, +) / 80
-        let bottom = (0..<80).map { Int(m[59 * mrow + $0 * 4]) }.reduce(0, +) / 80
-        #expect(bottom < top)
-        #expect(DitherArt.fade(0.5) == 0.15 && DitherArt.fade(1) < 0.4)
+        let inks = PictureInk.inks(hue: PictureInk.navyHue)
+        let allowed: Set<[UInt8]> = [[10, 10, 10], inks.deep.bytes, inks.light.bytes]
+        let cells = (0..<60).flatMap { y in (0..<80).map { x in Array(b[(y * row + x * 4)..<(y * row + x * 4 + 3)]) } }
+        #expect(Set(cells).isSubset(of: allowed))
+        #expect(cells.filter { $0 == inks.light.bytes }.count < cells.count * 9 / 10)
+        #expect(cells.contains(inks.light.bytes))
     }
 
     /// Blur: a hard black and white edge comes out as a smooth ramp, never past the dots' reach, so text keeps the
@@ -95,7 +91,7 @@ struct DitherArtTests {
         shell.layoutSubtreeIfNeeded()
         #expect(art()?.superview === shell.main)
         #expect(art()?.requestForTesting?.blur == false)
-        #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / DitherArt.dot).rounded(.up)))
+        #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / PictureInk.cell).rounded(.up)))
     }
 
     /// Gradient: no picture, binary Bayer cells of one color on a fixed grid, like Capy's: on at the top left, off
@@ -266,22 +262,8 @@ struct DitherArtTests {
         // The top row is the picture's own warm color: red over blue, never the built-in's violet and teal.
         let b = bytes(art)
         let red = (0..<756).map { Int(b[$0 * 4]) }.reduce(0, +), blue = (0..<756).map { Int(b[$0 * 4 + 2]) }.reduce(0, +)
-        #expect(red > blue + 756 * 20)
-    }
-
-    /// The new-thread reveal starts empty, grows in Bayer order and ends on the resting art, byte for byte.
-    @Test func revealFramesGrowFromTheBackgroundToTheRestingArt() throws {
-        let dir = FileManager.default.temporaryDirectory.appending(path: "dither-reveal-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let bg = 10.0 / 255
-        let art = try #require(DitherArt.render(.init(url: try picture(gray: 0.9, in: dir), width: 80, height: 60, background: [bg, bg, bg], scale: 2)))
-        let frames = DitherArt.revealFrames(art, background: [bg, bg, bg], reveals: [0, 0.5, 1])
-        try #require(frames.count == 3)
-        func lit(_ image: CGImage) -> Int { bytes(image).enumerated().filter { $0.offset % 4 == 0 && $0.element != 10 }.count }
-        #expect(lit(frames[0]) == 0)
-        #expect(lit(frames[1]) > 0 && lit(frames[1]) < lit(art))
-        #expect(bytes(frames[2]) == bytes(art))
+        // An HDR orange past white clips to a yellow, which Auto's olive rule turns green, so it is checked above only.
+        if kind != .hdrEXR { #expect(red > blue + 756 * 20) }
     }
 }
 
@@ -350,14 +332,15 @@ struct DitherTabStripAccessibilityTests {
         #expect(high.label > normal.label && high.icon > normal.icon)
     }
 
-    /// Over the brightest (dark) or darkest (light) dot behind the chat column, Redesign's muted text keeps 4.5:1 in
-    /// its own colors and in another theme's, at any "Background dim" where any text could.
+    /// Blur: over the brightest (dark) or darkest (light) pixel behind the chat column, Redesign's muted text keeps
+    /// 4.5:1 in its own colors and in another theme's, at any "Background dim" where any text could. Picture holds its
+    /// floor in the render instead (`PictureInkTests.textKeepsItsFloorsBehindTheColumn`).
     @Test func mutedTextKeepsContrastOverTheArt() {
         for theme in [ThemeDefinition.dither] + ThemeDefinition.builtIns.prefix(3) {
             for dim in [0, 35, 90] {
                 var input = ThemeRuntimeInput(light: theme.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
                                               dark: theme.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
-                input.ditherLight = true; input.ditherDark = true; input.ditherDim = dim
+                input.ditherLight = true; input.ditherDark = true; input.ditherDim = dim; input.ditherBlur = true
                 let palettes = ThemeRuntime.resolve(input)
                 for dark in [false, true] {
                     let p = palettes.palette(dark: dark, sidebar: false)

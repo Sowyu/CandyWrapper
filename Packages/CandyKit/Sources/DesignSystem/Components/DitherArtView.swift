@@ -3,12 +3,13 @@ import AppKit
 import ImageIO
 import os
 
-/// The Dither theme's art (CandyWrapper's own, after Capy's desktop app): the chosen picture, or the desktop picture,
-/// filling the main panel in its own colors at 2pt ordered-dither dots of brightness, held within a reach of the
-/// panel's background that keeps text readable anywhere on it. A new thread shows it fully, an open thread under a
-/// light scrim of the background, and every other page under a heavy one. It renders once per size and appearance
-/// off the main thread. Opening a new thread resolves the dots in, in Bayer order, for 0.75 s. Thread activity
-/// leaves the art still.
+/// The Dither theme's art (CandyWrapper's own, after Capy's desktop app). Picture: the chosen or desktop picture as a
+/// two-ink Bayer dither on 3pt cells (`PictureInk`), thinning around the new thread's composer and behind a thread's
+/// reading column so text keeps its floors, with no dim layer. Blur: the picture blurred behind the whole window.
+/// Gradient: accent cells with no picture. Settings and other pages lay a heavy scrim of the background over it. It
+/// renders once per size, picture, appearance, ink and page shape off the main thread and never moves in Picture
+/// (the user, 2026-11-21: "no motion its horrid"). A live resize scales the cached image with the panel on the GPU and
+/// renders once when the size settles.
 public final class DitherArtView: NSView {
     private let art = CALayer()
     /// The background over the art, one share across the panel, plus a faint veil of it behind the chat column.
@@ -22,8 +23,6 @@ public final class DitherArtView: NSView {
     private var shown: DitherArt.Request?
     private var pending: DitherArt.Request?
     private var debounce: DispatchWorkItem?
-    /// A new thread opened before the art had rendered: the first render resolves in.
-    private var revealsWhenShown = false
     private var loggedScrim: CGFloat?
     /// macOS's Reduce Transparency, replaceable in tests.
     var systemReducesTransparency: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
@@ -59,7 +58,7 @@ public final class DitherArtView: NSView {
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
                                                           name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         // "Ignore Reduce Transparency" and the other theme settings take effect at once.
-        NotificationCenter.default.addObserver(self, selector: #selector(displayOptionsChanged), name: ThemeRuntime.didChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(themeChanged), name: ThemeRuntime.didChange, object: nil)
         // macOS posts nothing when the desktop picture changes or rotates, so the art checks it again whenever the
         // desktop could have changed under it. A check costs nothing when the picture is the same.
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(desktopMayHaveChanged),
@@ -76,6 +75,8 @@ public final class DitherArtView: NSView {
     }
 
     @objc private func displayOptionsChanged(_ note: Notification) { updateScrim() }
+    /// The ink, the accent and the palette's ground feed Picture's render, so a theme change may render again.
+    @objc private func themeChanged(_ note: Notification) { refresh() }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -111,19 +112,17 @@ public final class DitherArtView: NSView {
     /// takes `emphasis`'s scrim. Pass nil when the source leaves. Pages that never call it get the heavy page scrim.
     @MainActor
     public static func setEmphasis(_ emphasis: Emphasis?, from source: NSView) {
-        let wasHero = sources.object(forKey: source)?.emphasis == .hero
         if let emphasis { sources.setObject(EmphasisBox(emphasis: emphasis), forKey: source) } else { sources.removeObject(forKey: source) }
-        // The full art goes up first, then opening a new thread resolves its dots in. Gradient renders only for the
-        // new-thread page, so a page change renders or drops it.
-        for art in arts.allObjects { if ThemeRuntime.ditherGradient { art.refresh() } else { art.updateScrim() } }
-        if emphasis == .hero, !wasHero, let art = art(behind: source) { art.playReveal() }
+        // Gradient renders only for the new-thread page and Picture's shape follows the page, so a page change may
+        // render again.
+        for art in arts.allObjects { art.refresh() }
     }
 
     /// A page joined or left the window, as the thread panel and a utility page trade places: every art takes the scrim
     /// of what shows now. Before, the last page's scrim stayed until something else redrew the art.
     @MainActor
     public static func pagesMoved() {
-        for art in arts.allObjects { if ThemeRuntime.ditherGradient { art.refresh() } else { art.updateScrim() } }
+        for art in arts.allObjects { art.refresh() }
     }
 
     /// A thread page calls this from its layout with its chat column, in its own coordinates, so the art's veil sits
@@ -132,7 +131,16 @@ public final class DitherArtView: NSView {
     public static func setColumn(_ column: NSRect?, from source: NSView) {
         guard columns.object(forKey: source)?.rectValue != column else { return }
         if let column { columns.setObject(NSValue(rect: column), forKey: source) } else { columns.removeObject(forKey: source) }
-        art(behind: source)?.updateScrim()
+        art(behind: source)?.refresh()
+    }
+
+    /// The new-thread page calls this from its layout with its composer's frame, in its own coordinates, so Picture's
+    /// dots thin around it. Pass nil when the composer isn't centred on the page.
+    @MainActor
+    public static func setComposer(_ composer: NSRect?, from source: NSView) {
+        guard composers.object(forKey: source)?.rectValue != composer else { return }
+        if let composer { composers.setObject(NSValue(rect: composer), forKey: source) } else { composers.removeObject(forKey: source) }
+        art(behind: source)?.refresh()
     }
 
     /// The art showing behind `source`, if any.
@@ -143,43 +151,13 @@ public final class DitherArtView: NSView {
         }
     }
 
-    /// Dots resolve in, in Bayer order, over 0.75 s, and the last frame is the static art itself, so the art ends
-    /// exactly as it rests. Core Animation flips the ten frames; they exist only while it plays.
-    func playReveal() {
-        guard !Motion.reduced, !ThemeRuntime.ditherBlur, !ThemeRuntime.ditherGradient else { return }
-        guard let request = shown, let contents = art.contents else { revealsWhenShown = true; return }
-        revealsWhenShown = false
-        let final = DitherArtImage(image: (contents as! CGImage))
-        // Hidden until the frames are ready, so the full art never flashes before resolving in.
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        art.opacity = 0
-        CATransaction.commit()
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let frames = DitherArtFrames(images: final.image.map {
-                DitherArt.revealFrames($0, background: request.background, reveals: (1...9).map { Double($0) / 10 })
-            } ?? [])
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard let self else { return }
-                    CATransaction.begin(); CATransaction.setDisableActions(true)
-                    self.art.opacity = 1
-                    CATransaction.commit()
-                    // A newer render replaced the art meanwhile: it shows as it is.
-                    guard self.shown == request, !frames.images.isEmpty, let final = self.art.contents else { return }
-                    let resolve = CAKeyframeAnimation(keyPath: "contents")
-                    resolve.values = frames.images + [final]
-                    resolve.calculationMode = .discrete
-                    resolve.duration = 0.75
-                    self.art.add(resolve, forKey: "reveal")
-                }
-            }
-        }
-    }
     /// Each registered page and its emphasis, weakly held.
     @MainActor private static let sources = NSMapTable<NSView, EmphasisBox>.weakToStrongObjects()
     @MainActor private static let arts = NSHashTable<DitherArtView>.weakObjects()
     /// Each thread page's chat column, weakly held.
     @MainActor private static let columns = NSMapTable<NSView, NSValue>.weakToStrongObjects()
+    /// Each new-thread page's composer, weakly held.
+    @MainActor private static let composers = NSMapTable<NSView, NSValue>.weakToStrongObjects()
 
     public override func updateLayer() {
         updateScrim()
@@ -233,6 +211,7 @@ public final class DitherArtView: NSView {
             shown = nil; pending = nil
             art.contents = nil
             dropGradient()
+            PictureInk.dropCache()
         } else if shown == nil {
             refresh()
         }
@@ -291,7 +270,6 @@ public final class DitherArtView: NSView {
     /// Moving between the main panel (Dither) and the window (Blur): the old art never shows at the new place.
     public override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
-        art.removeAnimation(forKey: "reveal")
         art.contents = nil
         shown = nil
         pending = nil
@@ -306,14 +284,46 @@ public final class DitherArtView: NSView {
     /// The whole panel: the thread's top fade blends it into the header.
     var artRect: CGRect { bounds }
 
-    /// The shown canvas at one dot per pixel, its top left at the panel's top left. A live resize shows the old canvas
-    /// cropped or short by a few dots until the new one renders.
+    /// The shown canvas at one cell per pixel, its top left at the panel's top left, on the lattice Gradient and
+    /// Picture share. While the panel's size differs from the canvas's (a live resize, a sidebar drag), the cached
+    /// image scales to cover the panel, centred as the picture is, so no band of ground shows; the window server
+    /// scales it, and the sharp render lands when the size settles (the user, 2026-11-21: "i need to release my mouse
+    /// before it pops in").
     private func placeArt() {
         guard let shown else { return }
         let unit = shown.unit
         let w = CGFloat(shown.width) * unit, h = CGFloat(shown.height) * unit
-        art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
+        let target = canvasSize(for: shown)
+        if target == (shown.width, shown.height) {
+            art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
+        } else if shown.tint != nil {
+            // Gradient covers the panel's width and the top of its height: stretch it there.
+            let gh = bounds.height * DitherArt.gradientReach.height
+            art.frame = CGRect(x: 0, y: bounds.height - gh, width: bounds.width, height: gh)
+        } else {
+            let k = max(bounds.width / w, bounds.height / h)
+            art.frame = CGRect(x: (bounds.width - w * k) / 2, y: (bounds.height - h * k) / 2, width: w * k, height: h * k)
+        }
         gradientMask.frame = art.bounds
+    }
+
+    /// The canvas size, in cells, a render for this panel's size would have in `request`'s mode.
+    private func canvasSize(for request: DitherArt.Request) -> (width: Int, height: Int) {
+        let reach = request.tint != nil ? DitherArt.gradientReach : CGSize(width: 1, height: 1)
+        return (Int((artRect.width * reach.width / request.unit).rounded(.up)), Int((artRect.height * reach.height / request.unit).rounded(.up)))
+    }
+
+    /// How many renders reached the screen, for tests.
+    private(set) var rendersForTesting = 0
+
+    /// The drag or window resize ended: render the sharp art now instead of after the pause.
+    public override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        guard let work = debounce, !work.isCancelled else { return }
+        work.cancel()
+        debounce = nil
+        pending = nil
+        refresh()
     }
 
     /// What the panel shows over the art: the frontmost registered page that's visible inside it decides, whatever
@@ -363,7 +373,8 @@ public final class DitherArtView: NSView {
         // Gradient: the dots show on a new thread only, with no scrim; every other page is the plain ground.
         let gradient = ThemeRuntime.ditherGradient
         if art.isHidden != (gradient && page != .hero) { art.isHidden = gradient && page != .hero }
-        let alpha = gradient ? 0 : DitherArt.scrim(page, display, light: !dark)
+        let picture = !gradient && !ThemeRuntime.ditherBlur
+        let alpha = gradient ? 0 : DitherArt.scrim(page, display, light: !dark, picture: picture)
         if loggedScrim != alpha {
             DitherArt.log.notice("scrim \(alpha) on \(String(describing: page), privacy: .public): reduce transparency \(display.reduceTransparency), increase contrast \(display.increaseContrast), dark \(dark)")
         }
@@ -372,7 +383,7 @@ public final class DitherArtView: NSView {
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // The veil follows the column through a live resize, so it never animates.
-        let veil = gradient ? 0 : DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
+        let veil = gradient || picture ? 0 : DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
         if veil > 0, bounds.width >= 1, let front, let column = Self.columns.object(forKey: front)?.rectValue {
             let lane = convert(column, from: front)
             let xs = (0...64).map { bounds.width * CGFloat($0) / 64 }
@@ -426,17 +437,25 @@ public final class DitherArtView: NSView {
             let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
             let fallbacks = [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url }
             PictureTint.sync([url].compactMap { $0 } + fallbacks)
-            let unit = DitherArt.unit(blur: blur)
-            request = DitherArt.Request(url: url, width: Int((rect.width / unit).rounded(.up)),
-                                        height: Int((rect.height / unit).rounded(.up)),
-                                        background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
-                                        fallbacks: fallbacks,
-                                        blur: blur)
+            let unit = blur ? DitherArt.blurPixel : PictureInk.cell
+            var made = DitherArt.Request(url: url, width: Int((rect.width / unit).rounded(.up)),
+                                         height: Int((rect.height / unit).rounded(.up)),
+                                         background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
+                                         fallbacks: fallbacks,
+                                         blur: blur, dark: dark)
+            if !blur {
+                made.ink = Self.ink(palette: palette)
+                made.shape = pictureShape()
+                made.text = [palette.foreground.srgb, palette.mutedForeground.srgb].flatMap { [$0.x, $0.y, $0.z] }
+            }
+            request = made
         }
         guard request != shown, request != pending else { return }
+        // Only a new size waits for the drag to pause; a page, ink or picture change renders at once.
+        let resizing = shown.map { $0.width != request.width || $0.height != request.height } ?? false
         pending = request
         debounce?.cancel()
-        // A live resize lands here every frame; the last size renders, the old art stretches meanwhile.
+        // A live resize lands here every frame; the last size renders, the old art scales with the panel meanwhile.
         if rendersInlineForTesting {
             let (image, frames) = Self.render(request)
             show(request, image: image, frames: frames)
@@ -451,7 +470,33 @@ public final class DitherArtView: NSView {
             }
         }
         debounce = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (shown == nil ? 0 : 0.15), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (resizing ? 0.15 : 0), execute: work)
+    }
+
+    /// Picture's inks from the "Ink" setting: Auto takes them from the picture, Accent from the accent, Custom from the
+    /// user's color.
+    private static func ink(palette: Palette) -> PictureInk.Choice {
+        switch ThemeRuntime.ditherInk {
+        case .auto: return .auto
+        case .accent: let c = palette.primary.srgb; return .color(SIMD3(c.x, c.y, c.z))
+        case let .custom(color): return .color(color)
+        }
+    }
+
+    /// What the front page needs from Picture's dots, in points from the panel's top left, snapped to whole cells so
+    /// a sub-point layout change renders nothing.
+    private func pictureShape() -> PictureInk.Shape {
+        let (page, front) = self.front
+        func cells(_ r: NSRect) -> [Double] {
+            let local = convert(r, from: front)
+            let snap = { (v: CGFloat) in Double((v / PictureInk.cell).rounded() * PictureInk.cell) }
+            return [snap(local.minX), snap(bounds.height - local.maxY), snap(local.width), snap(local.height)]
+        }
+        switch page {
+        case .hero: return .hero(composer: front.flatMap { Self.composers.object(forKey: $0)?.rectValue }.map(cells))
+        case .thread: return .thread(column: front.flatMap { Self.columns.object(forKey: $0)?.rectValue }.map(cells))
+        case .settings, .page: return .plain
+        }
     }
 
     /// Tests render on the main thread, so they never wait with theme globals applied.
@@ -467,6 +512,7 @@ public final class DitherArtView: NSView {
     private func show(_ request: DitherArt.Request, image: DitherArtImage, frames: DitherArtFrames) {
         guard pending == request else { return }
         pending = nil
+        rendersForTesting += 1
         // A render that failed isn't remembered, so the next refresh tries again.
         shown = image.image == nil ? nil : request
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -484,7 +530,6 @@ public final class DitherArtView: NSView {
         }
         placeArt()
         CATransaction.commit()
-        if revealsWhenShown { playReveal() }
         syncMotion()
     }
 
@@ -499,19 +544,17 @@ private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 
 /// The art's rendering. Touches no AppKit view, so it runs on any thread.
 public enum DitherArt {
-    /// Dot size in points.
-    public nonisolated static let dot: CGFloat = 2
     /// Blur's pixel size in points. The blurred picture has no detail finer than its radius, so the layer scales a
     /// canvas a quarter of the dots' on each side up smoothly, at a sixteenth of the memory.
     public nonisolated static let blurPixel: CGFloat = 8
     /// Blur's Gaussian sigma in points (radius about 3 sigma, 96 pt): text-sized and icon-sized detail in the picture
     /// is gone, while its colors and the shapes a quarter of a window wide still read.
     public nonisolated static let blurSigma: CGFloat = 32
-    /// Points per canvas pixel.
-    public nonisolated static func unit(blur: Bool) -> CGFloat { blur ? blurPixel : dot }
     /// The background's share over an open thread: the user's "Background dim" (35% by default), so the art keeps its
     /// colors and text reads over it without halos (the user, 2026-10-22).
     nonisolated static var threadScrim: CGFloat { ThemeRuntime.ditherDim }
+    /// "Background dim"'s default, which Picture's palette and marks keep since it lays no dim.
+    nonisolated static let defaultDim: Double = 0.35
     /// The background's share over Settings and every other page, whose cards and lists aren't frosted.
     nonisolated static let pageScrim: CGFloat = 0.92
 
@@ -524,8 +567,11 @@ public enum DitherArt {
     /// on the hero and in a thread then sits on about the background itself. Reduce Transparency takes at least those
     /// scrims but never covers the art: full cover made Redesign a plain panel with any picture and no sign why (the
     /// user's MacBook, 2026-10-28). "Ignore Reduce Transparency" turns it off here (`ThemeRuntime.reducesTransparency`).
+    /// Picture lays no scrim on a new thread or a thread: its render thins the dots where text sits instead (the user,
+    /// 2026-11-21, about the grey dim: "so non premium"). Reduce Transparency and Increase Contrast still take theirs.
     nonisolated static func scrim(_ page: Page, _ display: (reduceTransparency: Bool, increaseContrast: Bool),
-                                  light: Bool = false) -> CGFloat {
+                                  light: Bool = false, picture: Bool = false) -> CGFloat {
+        if picture, !display.reduceTransparency, !display.increaseContrast, page == .hero || page == .thread { return 0 }
         if display.reduceTransparency {
             let standard = scrim(page, (false, display.increaseContrast), light: light), strong = scrim(page, (false, true), light: light)
             return min(max(standard, strong), pageScrim)
@@ -603,9 +649,14 @@ public enum DitherArt {
         var dark = true
         /// Gradient's frame count: the loop, or 1 when Animate is off.
         var frames = 1
+        /// Picture: where the two inks come from, the page's shape over the dots, and the body and muted text colors
+        /// (sRGB, six values) whose floors hold behind a thread's column.
+        var ink = PictureInk.Choice.auto
+        var shape = PictureInk.Shape.plain
+        var text: [Double] = []
 
         /// Points per canvas pixel.
-        var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : DitherArt.unit(blur: blur) }
+        var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : blur ? DitherArt.blurPixel : PictureInk.cell }
     }
 
     /// Gradient's cell, in points: Capy's binary dither cells measured 6px at 2x in the user's recording.
@@ -717,9 +768,10 @@ public enum DitherArt {
         guard w > 0, h > 0 else { log.error("no art: the canvas is \(w) x \(h) dots"); return nil }
         if request.tint != nil { return gradientFrames(width: w, height: h, frames: 1).first }
         if request.url == nil { log.notice("no chosen or desktop picture") }
+        if !request.blur { return renderInk(request) }
         for url in [request.url].compactMap({ $0 }) + request.fallbacks {
             let t0 = Date()
-            guard let picture = picture(url, maxPixels: max(w, h) * (request.blur ? 1 : 2)) else { continue }
+            guard let picture = picture(url, maxPixels: max(w, h)) else { continue }
             if let art = render(request, picture: picture) { return art }
             log.error("can't dither \(url.path, privacy: .private): \(picture.width) x \(picture.height), \(picture.bitsPerComponent) bits")
         }
@@ -770,7 +822,7 @@ public enum DitherArt {
         return ctx.makeImage()
     }
 
-    /// `picture` covering the canvas, centered, faded into the background and dithered.
+    /// Blur: `picture` covering the canvas, centered, blurred and faded into the background.
     nonisolated static func render(_ request: Request, picture: CGImage) -> CGImage? {
         let w = request.width, h = request.height
         guard w > 0, h > 0,
@@ -781,42 +833,38 @@ public enum DitherArt {
         let pw = Double(picture.width) * cover, ph = Double(picture.height) * cover
         ctx.interpolationQuality = .high
         ctx.draw(picture, in: CGRect(x: (Double(w) - pw) / 2, y: (Double(h) - ph) / 2, width: pw, height: ph))
-        if request.blur { blur(ctx, width: w, height: h) }
+        blur(ctx, width: w, height: h)
         let bg = request.background.count == 3 ? request.background.map { $0 * 255 } : [0, 0, 0]
-        if request.blur {
-            // The same fade and reach as the dots, without the steps, so text keeps the contrast it has over Dither.
-            for y in 0..<h {
-                let keep = 1 - fade((Double(y) + 0.5) / Double(h))
-                for x in 0..<w {
-                    let i = (y * w + x) * 4
-                    var d = (0..<3).map { (Double(data[i + $0]) - bg[$0]) * keep }
-                    let m = d.map(abs).max() ?? 0
-                    if m > reach { d = d.map { $0 * reach / m } }
-                    for c in 0..<3 { data[i + c] = UInt8(min(max(bg[c] + d[c], 0), 255).rounded()) }
-                }
-            }
-            return ctx.makeImage()
-        }
-        // Three strengths per hue (none, half the reach, the full reach): a clean halftone, not a mush of shades.
-        let step = reach / 2
-        // Row 0 of the buffer is the top of the picture.
+        // The same fade and reach the old dots had, so text keeps its contrast over Blur.
         for y in 0..<h {
             let keep = 1 - fade((Double(y) + 0.5) / Double(h))
             for x in 0..<w {
                 let i = (y * w + x) * 4
-                let threshold = (Double(bayer[(y & 7) * 8 + (x & 7)]) + 0.5) / 64
-                // Each dot is the picture's own color at a dithered strength over the background, so the dots keep
-                // its hue instead of scattering red, green and blue, and a faded area is exactly the background.
                 var d = (0..<3).map { (Double(data[i + $0]) - bg[$0]) * keep }
-                var m = d.map(abs).max() ?? 0
-                if m > reach { d = d.map { $0 * reach / m }; m = reach }
-                guard m > 0.5 else { for c in 0..<3 { data[i + c] = UInt8(bg[c].rounded()) }; continue }
-                let scaled = m / step, low = scaled.rounded(.down)
-                let q = (scaled - low > threshold ? low + 1 : low) * step / m
-                for c in 0..<3 { data[i + c] = UInt8(min(max(bg[c] + d[c] * q, 0), 255).rounded()) }
+                let m = d.map(abs).max() ?? 0
+                if m > reach { d = d.map { $0 * reach / m } }
+                for c in 0..<3 { data[i + c] = UInt8(min(max(bg[c] + d[c], 0), 255).rounded()) }
             }
         }
         return ctx.makeImage()
+    }
+
+    /// Picture: the tone of the first picture that decodes (cached per picture and size), thresholded in the request's
+    /// inks and shape (`PictureInk`). Logs the time and the cached bytes.
+    nonisolated static func renderInk(_ request: Request) -> CGImage? {
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        let urls = [request.url].compactMap { $0 } + request.fallbacks
+        guard let tone = PictureInk.tone(urls, width: request.width, height: request.height) else { return nil }
+        let inks = switch request.ink {
+        case .auto: PictureInk.inks(hue: tone.hue)
+        case let .color(c): PictureInk.inks(light: c)
+        }
+        let ground = request.background.count == 3 ? SIMD3(request.background[0], request.background[1], request.background[2]) : .zero
+        let text = request.text.count == 6 ? [SIMD3(request.text[0], request.text[1], request.text[2]), SIMD3(request.text[3], request.text[4], request.text[5])] : []
+        let art = PictureInk.render(tone, inks: inks, ground: ground, dark: request.dark, shape: request.shape, text: text)
+        let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
+        log.notice("picture \(request.width) x \(request.height) cells in \(ms, format: .fixed(precision: 1)) ms, \(request.width * request.height * 5) bytes")
+        return art
     }
 
     /// Blurs `ctx`'s pixels in place by about `blurSigma`, the edges extended so no dark rim creeps in. Runs once per
@@ -834,30 +882,5 @@ public enum DitherArt {
         let k = UInt32(2 * box - 1)
         vImageTentConvolve_ARGB8888(&buffer, &temp, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend))
         vImageTentConvolve_ARGB8888(&temp, &buffer, nil, 0, 0, k, k, nil, vImage_Flags(kvImageEdgeExtend))
-    }
-
-    /// The art partly resolved, one frame per reveal: a dot whose Bayer threshold is above the reveal shows the
-    /// background, so a reveal of 1 is `art` itself. Works from the rendered art, so it costs no decode.
-    nonisolated static func revealFrames(_ art: CGImage, background: [Double], reveals: [Double]) -> [CGImage] {
-        let w = art.width, h = art.height
-        guard w > 0, h > 0,
-              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
-              let data = ctx.data?.bindMemory(to: UInt32.self, capacity: w * h) else { return [] }
-        ctx.draw(art, in: CGRect(x: 0, y: 0, width: w, height: h))
-        let full = Array(UnsafeBufferPointer(start: data, count: w * h))
-        // One whole pixel in the context's byte order: red, green, blue, then the skipped byte.
-        let rgb = (0..<3).map { UInt32(min(max(background.count == 3 ? background[$0] * 255 : 0, 0), 255).rounded()) }
-        let base = UInt32(littleEndian: rgb[0] | rgb[1] << 8 | rgb[2] << 16 | 255 << 24)
-        return reveals.compactMap { reveal in
-            // A dot shows once its Bayer threshold, (b + 0.5) / 64, is within the reveal.
-            let cut = Int((reveal * 64 - 0.5).rounded(.down))
-            // Row 0 of the buffer is the top of the picture, as in `render`.
-            for y in 0..<h {
-                let row = y * w, b = (y & 7) * 8
-                for x in 0..<w { data[row + x] = Int(bayer[b + (x & 7)]) <= cut ? full[row + x] : base }
-            }
-            return ctx.makeImage()
-        }
     }
 }

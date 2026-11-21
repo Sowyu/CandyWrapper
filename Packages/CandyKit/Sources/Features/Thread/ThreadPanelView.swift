@@ -1911,6 +1911,7 @@ public final class ThreadPanelView: DSView {
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
         composer.joinsContextStrip = false
+        DitherArtView.setComposer(isDraft && composerShown && chat > 0 ? composer.frame : nil, from: self)
         let visible = !composer.isHidden
         let docked = visible && !isDraft
         // Queued messages sit at the end of the timeline as the default themes draw them (the user, 2026-11-21:

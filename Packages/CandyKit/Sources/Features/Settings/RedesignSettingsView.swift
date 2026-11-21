@@ -18,6 +18,8 @@ public final class RedesignSettingsView: SettingsPageBase {
     static let offReason = "Turn on Redesign to change this."
     static let gradientReason = "Gradient uses no picture. Choose Picture or Blur to change this."
     static let animateReason = "Only Gradient moves. Choose Gradient to change this."
+    static let inkReason = "Only Picture draws in inks. Choose Picture to change this."
+    static let dimReason = "Picture thins its dots behind text instead of dimming. Choose Blur to change this."
     private let library: ThemeLibrary
     private var themeObserver: Int?
     /// The master switch, bound to the theme picker's setting.
@@ -44,7 +46,8 @@ public final class RedesignSettingsView: SettingsPageBase {
                                    key: "redesignGradientAnimate", reset: "animate gradient", title: "Animate gradient")
         let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
-        let look: [SettingsRowView] = [picture, backgroundRow(), tint, animate, dim, accentRow()]
+        let ink = inkRow()
+        let look: [SettingsRowView] = [picture, backgroundRow(), ink, tint, animate, dim, accentRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture, Glass and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
@@ -60,8 +63,14 @@ public final class RedesignSettingsView: SettingsPageBase {
             let off = library.isRedesignOn ? nil : Self.offReason
             for r in self.gated where r.inertReason != off { r.inertReason = off }
             // Gradient shows no picture, so the picture's own settings do nothing.
-            let pictureOff = off ?? (self.client.string("redesignBackground") == "gradient" ? Self.gradientReason : nil)
-            for r in [picture, tint, dim] where r.inertReason != pictureOff { r.inertReason = pictureOff }
+            let background = self.client.string("redesignBackground")
+            let pictureOff = off ?? (background == "gradient" ? Self.gradientReason : nil)
+            for r in [picture, tint] where r.inertReason != pictureOff { r.inertReason = pictureOff }
+            // The dim only darkens Blur; Picture's inks only draw Picture.
+            let dimOff = pictureOff ?? (background == "blur" ? nil : Self.dimReason)
+            if dim.inertReason != dimOff { dim.inertReason = dimOff }
+            let inkOff = off ?? (background == "dither" ? nil : Self.inkReason)
+            if ink.inertReason != inkOff { ink.inertReason = inkOff }
             let animateOff = off ?? (self.client.string("redesignBackground") == "gradient" ? nil : Self.animateReason)
             if animate.inertReason != animateOff { animate.inertReason = animateOff }
         }
@@ -118,13 +127,55 @@ public final class RedesignSettingsView: SettingsPageBase {
         return r
     }
 
-    /// How much Redesign dims its picture behind an open thread (the user, 2026-10-22).
+    /// Where Picture's two inks come from (the user, 2026-11-21: "i like 2 ink"): the picture's own hue, the accent, or
+    /// a color the user picks. Accent and Custom make that color the light ink and derive the deep one from its hue.
+    private func inkRow() -> SettingsRowView {
+        let key = "redesignInk", colorKey = "redesignInkColor", values = ["auto", "accent", "custom"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Auto", nil), ("Accent", nil), ("Custom", nil)], selected: 0)
+        toggle.setAccessibilityLabel("Ink")
+        let well = NSColorWell(style: .minimal)
+        well.setAccessibilityLabel("Custom ink color")
+        well.frame.size = NSSize(width: 38, height: 24)
+        let target = InkWellTarget { [weak self] color in
+            guard let self, let c = color.usingColorSpace(.sRGB) else { return }
+            let hex = String(format: "#%02x%02x%02x", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()),
+                             Int((c.blueComponent * 255).rounded()))
+            self.context.writeClient?([colorKey: .string(hex), key: .string("custom")])
+        }
+        well.target = target
+        well.action = #selector(InkWellTarget.changed(_:))
+        objc_setAssociatedObject(well, &InkWellTarget.key, target, .OBJC_ASSOCIATION_RETAIN)
+        let group = SettingsControlGroup([well, toggle], gap: 8)
+        let r = row("redesign-ink", title: "Ink",
+                    detail: "The two colors Picture draws in. Auto takes them from the picture. Accent and Custom use that color for the light ink and a deeper shade of it for the dark one.",
+                    control: group)
+        toggle.onChange = { [weak self, weak toggle] i in
+            guard let self else { return }
+            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
+            self.context.writeClient?([key: .string(values[i])])
+        }
+        binder.add { [weak self, weak toggle, weak well, weak group] in
+            guard let self else { return }
+            let mode = self.client.string(key)
+            toggle?.selectedIndex = values.firstIndex(of: mode) ?? 0
+            well?.isHidden = mode != "custom"
+            if case let .custom(c) = DitherInk(mode: "custom", color: self.client.string(colorKey)),
+               well?.color.usingColorSpace(.sRGB).map({ SIMD3($0.redComponent, $0.greenComponent, $0.blueComponent) }) != c {
+                well?.color = NSColor(srgbRed: c.x, green: c.y, blue: c.z, alpha: 1)
+            }
+            group?.invalidateIntrinsicContentSize()
+        }
+        return r
+    }
+
+    /// How much Redesign dims its blurred picture behind an open thread (the user, 2026-10-22). Picture lays no dim
+    /// since 2026-11-21: its dots thin behind text instead.
     private func dimRow() -> SettingsRowView {
         let key = "ditherBackgroundDim"
         let control = SettingsSliderControl(value: Double(client.int(key)), range: 0...90, step: 5, outputWidth: 48)
         control.format = { "\(Int($0))%" }
         control.slider.setAccessibilityLabel("Background dim")
-        let r = row("background-dim", title: "Background dim", detail: "How much the picture dims behind an open thread.", control: control)
+        let r = row("background-dim", title: "Background dim", detail: "How much the blurred picture dims behind an open thread.", control: control)
         let slot = ResetSlot(label: "background dim")
         r.accessories = [slot]
         slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
@@ -201,4 +252,12 @@ final class AccentSwatchButton: ControlView {
             : DitherAccent.color(accent.accent(dark: dark))).setFill()
         NSBezierPath(ovalIn: r.insetBy(dx: 3, dy: 3)).fill()
     }
+}
+
+/// Hands the ink well's color to the Ink row. NSColorWell keeps its target weakly, so the well holds this.
+private final class InkWellTarget: NSObject {
+    nonisolated(unsafe) static var key = 0
+    let onChange: (NSColor) -> Void
+    init(_ onChange: @escaping (NSColor) -> Void) { self.onChange = onChange }
+    @MainActor @objc func changed(_ sender: NSColorWell) { onChange(sender.color) }
 }

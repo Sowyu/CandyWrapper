@@ -19,7 +19,9 @@ public enum BackdropMarks {
     nonisolated static func worstBackground(dark: Bool) -> Double? {
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
         if ThemeRuntime.isDither(dark: dark) {
-            return DitherArt.worstBackground(background, dark: dark, dim: Double(ThemeRuntime.ditherDim), veiled: false)
+            // Picture lays no dim, so its marks keep the default dim's strength whatever the slider says.
+            let picture = !ThemeRuntime.ditherBlur && !ThemeRuntime.ditherGradient
+            return DitherArt.worstBackground(background, dark: dark, dim: picture ? DitherArt.defaultDim : Double(ThemeRuntime.ditherDim), veiled: false)
         }
         if ThemeRuntime.isGlass(dark: dark) {
             return WindowGlass.frostWorstBackground(background, dark: dark, opacity: Double(ThemeRuntime.glassOpacity))
