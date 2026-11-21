@@ -56,6 +56,10 @@ extension SettingsController {
             let copy = ConfirmCopy.resolve(message)
             self?.confirm(copy.title, copy.description ?? "", then: action)
         }
+        c.confirmDelete = { [weak self] message, title, action in
+            let copy = ConfirmCopy.resolve(message)
+            self?.confirm(copy.title, copy.description ?? "", confirmTitle: title, cancelFocused: true, then: action)
+        }
         c.modelPreferences = { [weak self] env in self?.composer?.modelPreferences(env) ?? ([], .object([:])) }
         c.toggleFavorite = { [weak self] env, id, model in self?.composer?.toggleModelFavorite(env, id, model) }
         c.writeModelPreferences = { [weak self] env, instanceId, hidden, order in
@@ -73,7 +77,7 @@ extension SettingsController {
         c.chooseIconFile = { [weak self] env, cwd, name, external, onSelect in
             self?.chooseIconFile?(env, cwd, name, external, onSelect)
         }
-        c.deleteProjects = { [weak self] members, leave in self?.deleteProjects(members, leave: leave) }
+        c.deleteProjects = { [weak self] members, leave, done in self?.deleteProjects(members, leave: leave, done: done) }
         c.threadCount = { [weak self] env, projectId in
             self?.environments.snapshot(env)?.threads.filter { $0.projectId.rawValue == projectId && $0.archivedAt == nil }.count ?? 0
         }
@@ -460,19 +464,22 @@ extension SettingsController {
 
     /// `removeMembers` after the confirm: `project.delete {force: true}` per member; the whole project goes back
     /// to the thread view.
-    private func deleteProjects(_ members: [SettingsScopeProject.Member], leave: Bool) {
+    private func deleteProjects(_ members: [SettingsScopeProject.Member], leave: Bool, done: (@MainActor (Bool) -> Void)? = nil) {
         Task {
             for m in members {
                 do {
-                    _ = try await environments.request(m.environmentId, "projects.mutate", .object([
-                        "type": .string("project.delete"), "commandId": .string(ThreadCommands.newCommandId()),
-                        "projectId": .string(m.projectId), "force": .bool(true),
-                    ]))
+                    _ = try await environments.request(m.environmentId, "projects.mutate",
+                                                       ProjectRemoval.command(projectId: m.projectId, commandId: ThreadCommands.newCommandId()))
                 } catch {
-                    toast("Failed to remove \"\(m.title)\"", Self.rpcMessage(error, fallback: "An error occurred."), .error)
+                    // T3 stops at the first failure; with several machines the title says which one failed.
+                    let place = members.count > 1 ? m.environmentLabel.map { " on \($0)" } ?? "" : ""
+                    toast("Failed to remove \"\(m.title)\"\(place)", Self.rpcMessage(error, fallback: "An error occurred."), .error)
+                    refreshPages()
+                    done?(false)
                     return
                 }
             }
+            done?(true)
             if leave {
                 // `waitForProjectRemoval` (state/entities.ts, T3 3105 11fd54fcb): the delete returns before the shell
                 // stream drops the project, and the thread view would open a new draft in it meanwhile. 5 s at most.

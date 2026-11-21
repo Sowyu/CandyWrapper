@@ -562,12 +562,14 @@ final class SettingsController {
 
     /// `requestConfirmDialog` as `ConfirmDialogHost` draws it: the question line is the title, the rest
     /// the description, then Cancel and a destructive Confirm.
-    func confirm(_ title: String, _ message: String, confirmTitle: String = "Confirm", then action: @escaping () -> Void) {
+    func confirm(_ title: String, _ message: String, confirmTitle: String = "Confirm", cancelFocused: Bool = false,
+                 then action: @escaping () -> Void) {
         guard let window, modal == nil else { return }
         let dialog = DialogView(kind: .alertDialog, title: title, message: message)
         let cancel = ButtonView("Cancel", variant: .outline)
         let ok = ButtonView(confirmTitle, variant: .destructive)
         dialog.footerButtons = [cancel, ok]
+        if cancelFocused { dialog.initialFocus = cancel }
         let host = ModalHost.present(dialog, in: window)
         host.onDismiss = { [weak self] in self?.modal = nil }
         modal = host
