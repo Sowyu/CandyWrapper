@@ -41,6 +41,15 @@ public final class DitherTabStripView: TopbarDragView {
     /// Moves the accessory left and down from its resting place. Redesign's right panel card sets it, so the header
     /// pill sits concentric in the card's top right corner while the card is open.
     public var accessoryShift: CGSize = .zero { didSet { if accessoryShift != oldValue { needsLayout = true } } }
+    /// Hands a click on the strip's empty band to a view below it, given the point in window coordinates. Redesign's
+    /// right panel card reaches up into the band with its tab row, outside its parent's bounds, where AppKit's hit
+    /// testing never looks; the card answers for its row here. The strip's own tabs and the pill keep their clicks.
+    public var passThrough: ((NSPoint) -> NSView?)?
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard hit === self, let passThrough, let superview else { return hit }
+        return passThrough(superview.convert(point, to: nil)) ?? hit
+    }
 
     /// Off hides the tabs and + and keeps them, so they come back as they were; the accessory stays.
     public var showsTabs = true { didSet { if showsTabs != oldValue { needsLayout = true } } }
@@ -48,7 +57,7 @@ public final class DitherTabStripView: TopbarDragView {
     private let plus = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconSm)
     static let tabWidth: CGFloat = 200, gap: CGFloat = 4
     /// The tabs' height; the header pill beside them matches it and shares their midline.
-    public static let tabHeight: CGFloat = 28
+    nonisolated public static let tabHeight: CGFloat = 28
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
