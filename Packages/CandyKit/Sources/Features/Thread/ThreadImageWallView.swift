@@ -602,6 +602,16 @@ public final class ThreadImageWallView: DSView {
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
 
+    /// The tile the ring was on when the focus left the wall, where the next arrow picks it up.
+    private var resumeFocus: Int?
+
+    /// Tab to the close button takes the ring off the tile: only the focused view shows one.
+    public override func resignFirstResponder() -> Bool {
+        guard super.resignFirstResponder() else { return false }
+        if viewer == nil, let f = masonry.focused { resumeFocus = f; masonry.focused = nil }
+        return true
+    }
+
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         GalleryTileView.stillPointer = window == nil ? nil : GalleryTileView.pointer()
@@ -744,9 +754,11 @@ public final class ThreadImageWallView: DSView {
         }
         let n = images.count
         guard n > 0 else { return key == .escape ? { onClose?(); return true }() : false }
-        let current = masonry.focused
+        let current = masonry.focused ?? resumeFocus
         func move(_ delta: Int) {
             let target = current.map { min(n - 1, max(0, $0 + delta)) } ?? 0
+            // Arrows that bubble up from the close button take the focus onto the wall, so only one ring shows.
+            if window?.firstResponder !== self { window?.makeFirstResponder(self) }
             masonry.focused = target
             masonry.reveal(target)
         }

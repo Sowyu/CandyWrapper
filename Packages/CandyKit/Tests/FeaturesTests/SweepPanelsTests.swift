@@ -16,20 +16,6 @@ struct SweepPanelsTests {
             if direction.north { #expect(rect.maxY == start.maxY) }
         }
     }
-    @Test func expandedChromeDoesNotScheduleADeferredCollapse() {
-        let composer = ComposerView()
-        composer.collapseOnScroll = true
-        var blocked = true
-        composer.restingBlocked = { blocked }
-        composer.recordTimelineScroll(delta: -40, canScroll: true, towardEnd: false)
-        #expect(!composer.isResting)
-        blocked = false
-        #expect(!composer.isResting)
-        composer.recordTimelineScroll(delta: -40, canScroll: true, towardEnd: false)
-        #expect(!composer.isResting) // 3824 keeps the default composer expanded while scrolling.
-        composer.expandFromScroll()
-        #expect(!composer.isResting)
-    }
     @Test func oneFailedFanoutTargetKeepsItsRetryRoute() {
         let pickers = ComposerPickers(store: ComposerSelectionStore(defaults: nil), draftKey: "draft", context: ComposerSelectionContext(catalog: ProviderCatalog([])))
         pickers.supportsMultipleModels = true

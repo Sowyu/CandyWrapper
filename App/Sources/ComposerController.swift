@@ -420,14 +420,6 @@ final class ComposerController {
             self.applyClientSettings()
             if keys.contains("effortDisplay") { self.refresh() }
         }
-        composer.restingBlocked = { [weak self] in
-            guard let self else { return true }
-            return self.panel.menus.isOpen || self.panel.stashMenuOpen || !self.panel.timeline.overflowsComposerViewport
-                || self.composer.isBusy || self.draftKey.flatMap { self.threadErrors.visible($0, shell: self.shellThread) } != nil
-        }
-        panel.timeline.onComposerScrollGesture = { [weak self] delta, canScroll, towardEnd in
-            self?.composer.recordTimelineScroll(delta: delta, canScroll: canScroll, towardEnd: towardEnd)
-        }
         composer.onSend = { [weak self] text, mode, background in self?.send(text, mode: mode, background: background) }
         // `compactThreadContext` (ChatComposer.tsx:4315-4330) then `onCompactContext` (ChatView.tsx:8651-8654):
         // `/compact` runs as its own turn and the draft stays.
@@ -738,7 +730,6 @@ final class ComposerController {
         let c = ClientSettingsStore.shared.current
         composer.stageArt = (sidebar?.stage ?? .none) != .none && c.string("environmentIdentificationMode") == "artwork"
         composer.sendShortcut = ComposerLogic.SendShortcut(rawValue: c.string("sendShortcut")) ?? .enter
-        composer.collapseOnScroll = c.bool("composerCollapseOnScroll")
         composer.richTextEnabled = c.bool("composerRichTextEnabled")
         followUpSteers = c.string("followUpBehavior") == "steer"
         composer.steerByDefault = followUpSteers || !requests.approvals.isEmpty

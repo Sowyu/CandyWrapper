@@ -153,7 +153,7 @@ struct TimelineTilingTests {
                 assistantCopyStreaming: false, turnDiffSummary: nil))),
         ])
         t.layoutSubtreeIfNeeded()
-        #expect(!t.overflowsComposerViewport)
+        #expect((t.scrollView.documentView?.bounds.height ?? 0) <= t.scrollView.contentView.bounds.height + 1)
         t.historyCursor = "page-1"
         var requests = 0
         t.onNearTop = { requests += 1 }

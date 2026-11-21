@@ -587,14 +587,19 @@ final class SettingsNoticeView: DSView, SettingsGroupRow {
     var message: String { get { text.text } set { text.text = newValue; needsLayout = true } }
     /// A button under the message (`flex flex-col items-start gap-3`), such as "Show all environments".
     var button: ButtonView? { didSet { oldValue?.removeFromSuperview(); button.map(addSubview); needsLayout = true } }
+    /// The text's inset from both sides; the button's label starts on it too. A subheading's 16 lines it up with one.
+    var inset: CGFloat = 0 { didSet { needsLayout = true } }
     func height(forWidth width: CGFloat) -> CGFloat {
-        text.height(forWidth: width) + (button.map { $0.isHidden ? 0 : 12 + $0.intrinsicContentSize.height } ?? 0)
+        text.height(forWidth: width - 2 * inset) + (button.map { $0.isHidden ? 0 : 12 + $0.intrinsicContentSize.height } ?? 0)
     }
     override func layout() {
         super.layout()
-        let h = text.height(forWidth: bounds.width)
-        text.frame = NSRect(x: 0, y: 0, width: bounds.width, height: button == nil ? bounds.height : h)
-        if let button { button.frame = NSRect(origin: NSPoint(x: 0, y: h + 12), size: button.intrinsicContentSize) }
+        let h = text.height(forWidth: bounds.width - 2 * inset)
+        text.frame = NSRect(x: inset, y: 0, width: bounds.width - 2 * inset, height: button == nil ? bounds.height : h)
+        if let button {
+            let x = inset > 0 ? inset - button.labelInset : 0
+            button.frame = NSRect(origin: NSPoint(x: x, y: h + 12), size: button.intrinsicContentSize)
+        }
     }
 }
 

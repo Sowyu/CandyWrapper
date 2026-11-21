@@ -30,22 +30,10 @@ struct ComposerRichTextTests {
         #expect(ComposerRichText.serialize([.init(text: " a ", marks: [.bold])]) == " **a** ")
         #expect(ComposerRichText.serialize([.init(text: " a ", marks: [.bold]), .init(text: "b", marks: [.bold, .italic])]) == " **a *b***")
     }
-    @Test func languagesAndScroll() {
+    @Test func languages() {
         #expect(ComposerCodeLanguages.replacing("  js title=x", with: "swift") == "  swift title=x")
         #expect(ComposerCodeLanguages.replacing("js title=x", with: "") == "text title=x")
         #expect(ComposerCodeLanguages.label("ts") == "TypeScript")
-        var gesture = ComposerScrollGesture()
-        let scrollResult1 = !gesture.record(now: 1, delta: -12, eligible: true, canScroll: true, towardEnd: false)
-        #expect(scrollResult1)
-        let scrollResult2 = gesture.record(now: 1.05, delta: -12, eligible: true, canScroll: true, towardEnd: false)
-        #expect(scrollResult2)
-        gesture.suppress(now: 1.06)
-        let scrollResult3 = !gesture.record(now: 1.1, delta: -50, eligible: true, canScroll: true, towardEnd: false)
-        #expect(scrollResult3)
-        let scrollResult4 = gesture.record(now: 1.3, delta: -50, eligible: true, canScroll: true, towardEnd: false)
-        #expect(scrollResult4)
-        let scrollResult5 = !gesture.record(now: 2, delta: 50, eligible: true, canScroll: true, towardEnd: true)
-        #expect(scrollResult5)
     }
     /// composer-list-continuation.test.ts at 4928, case for case.
     @Test func listContinuation() {

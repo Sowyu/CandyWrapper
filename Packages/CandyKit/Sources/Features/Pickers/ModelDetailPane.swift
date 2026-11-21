@@ -71,6 +71,8 @@ final class ModelDetailPaneView: DSView {
     private var factRows: [(LabelView, LabelView)] = []
     private var readsLabel: LabelView?
     private var inputIcons: [IconView] = []
+    /// What the card says while the list has no model to describe: an empty tab, or a search with no match.
+    private let emptyLabel = LabelView("No model to show", font: DSFont.ui(13))
 
     /// The icon and spoken name for a models.dev input type.
     static func input(_ kind: String) -> (IconName, String)? {
@@ -93,10 +95,12 @@ final class ModelDetailPaneView: DSView {
         for l in [name, provider, priceCaption] { l.smoothsFont = false }
         name.lineHeight = 20; provider.lineHeight = 16; priceCaption.lineHeight = 16
         about.font = DSFont.ui(13); about.lineHeight = 20; about.maxLines = 2; about.smoothsFont = false
-        for v in [name, provider, about, priceCaption] as [NSView] { addSubview(v) }
+        emptyLabel.lineHeight = 20; emptyLabel.alignment = .center; emptyLabel.smoothsFont = false
+        for v in [name, provider, about, priceCaption, emptyLabel] as [NSView] { addSubview(v) }
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Model details")
+        restyle()
     }
 
     /// Shows `content`; nothing changes when it is the same. `card`: the provider's account card at the top.
@@ -116,6 +120,7 @@ final class ModelDetailPaneView: DSView {
         inputIcons = []
         let hidden = content == nil
         for v in [name, provider, about, priceCaption] as [NSView] { v.isHidden = hidden }
+        emptyLabel.isHidden = !hidden
         guard let content else { needsLayout = true; return }
         let glyph = ProviderIcon.make(driver: content.driver, displayName: content.provider, size: 16, color: Themed.color(\.contrastForeground), model: true)
         addSubview(glyph); icon = glyph
@@ -188,6 +193,10 @@ final class ModelDetailPaneView: DSView {
         } else {
             cardLine.isHidden = true
         }
+        if content == nil {
+            emptyLabel.frame = NSRect(x: x, y: y + max(Self.pad, (bounds.height - y - 20) / 2), width: w, height: 20)
+            return
+        }
         y += Self.pad
         icon?.frame = NSRect(x: x, y: y + 2, width: 16, height: 16)
         name.frame = NSRect(x: x + 24, y: y, width: max(0, w - 24), height: 20)
@@ -232,6 +241,7 @@ final class ModelDetailPaneView: DSView {
         provider.color = Themed.color(\.contrastMutedForeground)
         about.color = Themed.color(\.contrastMutedForeground)
         priceCaption.color = Themed.color(\.contrastMutedForeground)
+        emptyLabel.color = Themed.color(\.contrastMutedForeground)
         for (l, v) in priceRows + factRows { l.color = Themed.color(\.contrastMutedForeground); v.color = Themed.color(\.contrastForeground) }
         readsLabel?.color = Themed.color(\.contrastMutedForeground)
         for v in inputIcons { v.strokeColor = Themed.color(\.contrastMutedForeground) }

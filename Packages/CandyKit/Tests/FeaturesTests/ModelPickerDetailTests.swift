@@ -251,6 +251,38 @@ import T3Store
         }
     }
 
+    /// Switching tabs keeps the popup's size, so the rail under the pointer never moves (1.17.0 walk, 01f and 01g):
+    /// a one-model tab and Favorites take the height the first tab set and scroll in it.
+    @Test func switchingTabsKeepsThePopupsSize() throws {
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let rig = ModelPickerShrinkTests.Rig(catalog: Self.catalog(14))
+            let size = rig.dock.naturalSize
+            for rail in [ModelPickerRail.instance("codex"), .favorites, .instance("claudeAgent")] {
+                rig.picker.selectRail(rail)
+                rig.lay()
+                #expect(rig.dock.naturalSize == size, "\(rail)")
+            }
+        }
+    }
+
+    /// The details card describes the selected model when nothing is highlighted, the first row when the selected
+    /// model is not in the tab, and says so when the tab has no model, instead of going blank (1.17.0 walk, 01f, 01g).
+    @Test func theDetailsCardIsNeverBlank() throws {
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let rig = ModelPickerShrinkTests.Rig(catalog: Self.catalog(4))
+            rig.lay()
+            #expect(rig.dock.pane.content?.key == rig.picker.listedItems.first { $0.isSelected }?.key)
+            rig.picker.selectRail(.instance("codex"))
+            rig.lay()
+            #expect(rig.dock.pane.content?.key == "codex:gpt-6-astra")
+            rig.picker.selectRail(.favorites)
+            rig.lay()
+            #expect(rig.picker.listedItems.isEmpty && rig.dock.pane.content == nil)
+            let empty = try #require(rig.dock.pane.subviews.compactMap { $0 as? LabelView }.first { $0.text == "No model to show" })
+            #expect(!empty.isHidden && empty.frame.minY > 0 && empty.frame.maxY < rig.dock.pane.bounds.height)
+        }
+    }
+
     // MARK: Small fixes, 2026-11-21
 
     /// A clamped description whose second line fits on its own still ends in an ellipsis.

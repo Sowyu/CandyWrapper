@@ -131,6 +131,20 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
     public var highlightedIndex: Int? {
         didSet { if highlightedIndex != oldValue { rowsDidChange(); scrollToHighlight(); onHighlight?(highlightedIndex) } }
     }
+    /// Where the first arrow key lands while nothing is highlighted, before the first or last row.
+    var keyStart: Int?
+
+    /// Highlights the chosen row `index` as a list opens, as base-ui's Select does. Redesign marks the chosen row with
+    /// a check and keeps fills for the pointer and the keyboard, so a list opened by the pointer starts with no
+    /// highlight and the first arrow key lands on `index`.
+    public func highlightOnOpen(_ index: Int?, byKeyboard: Bool = NSApp.currentEvent?.type == .keyDown) {
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), !byKeyboard {
+            keyStart = index
+            highlightedIndex = nil
+        } else {
+            highlightedIndex = index
+        }
+    }
     /// The highlight moved, which in base-ui moves focus and blurs the row before.
     public final var onHighlight: (@MainActor (Int?) -> Void)?
     /// Minimum width, for example the trigger width (`min-w-(--anchor-width)`).
@@ -440,7 +454,7 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
         let s = selectable
         guard !s.isEmpty else { return }
         guard let current = highlightedIndex, let pos = s.firstIndex(of: current) else {
-            highlightedIndex = delta > 0 ? s.first : s.last
+            highlightedIndex = keyStart.flatMap { s.contains($0) ? $0 : nil } ?? (delta > 0 ? s.first : s.last)
             return
         }
         highlightedIndex = s[(pos + delta + s.count) % s.count] // base-ui menus loop focus

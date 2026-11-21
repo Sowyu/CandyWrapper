@@ -54,3 +54,5 @@ On 2026-11-21 task redesign-surface took the reading column out and added the Ba
 After rebasing onto main with Tabler icons (b4ed667d), the 86 images whose icons changed were recorded again on the darker palette, each looked at on contact sheets.
 
 2026-11-21, task settings-tidy: the Experimental page merged into Labs and Redesign's nav got its own labelled order. `settings-experimental` became `settings-labs` in light and dark: T3's Beta group, then a "CandyWrapper experiments" group with the Tabs switch. `settings-modal` changed only in the nav column, which now reads App, Agents, Code, Connections and System with Redesign under Appearance. `settings-about` lost its separate Licenses card, since the Open source licenses row joined the privacy policy as in T3 (SettingsPanels.tsx:2507-2537). Each in light and dark, 96 in all. Every other image stayed byte-identical.
+
+2026-11-21, task walk-fixes: Settings > Redesign lost its Composer section with the Collapse composer on scroll row, so `settings-redesign` and `settings-redesign-blur` got shorter, light and dark. Every other image stayed byte-identical, the two Settings project pictures included.

@@ -159,7 +159,6 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "background-dim", title: "Background dim", to: .redesign, searchTerms: ["redesign blur picture wallpaper darken dim scrim opacity"])),
         .item(SettingsSearchItem(id: "accent-color", title: "Accent color", to: .redesign, searchTerms: ["redesign accent colour tint highlight switches send focus selection"])),
         .item(SettingsSearchItem(id: "ignore-reduce-transparency", title: "Ignore Reduce Transparency", to: .redesign, searchTerms: ["redesign blur accessibility reduce transparency picture"])),
-        .item(SettingsSearchItem(id: "composer-collapse", title: "Collapse composer on scroll", to: .redesign, searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"])),
         .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout one column details pane cost description scroll"])),
         .item(SettingsSearchItem(id: "redesign-picker-account", title: "Account and limits in the model picker", to: .redesign, searchTerms: ["redesign model picker account usage limits manage provider card email plan details pane"])),
         .item(SettingsSearchItem(id: "title-rewrite-model", title: "Title rewrite model", to: .threads, searchTerms: ["rewrite title rename regenerate thread title model reads writes haiku"])),

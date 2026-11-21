@@ -1206,9 +1206,11 @@ final class SidebarSlimRowView: SidebarRowBase {
         let woke = r.isWoke && r.snoozeLabel == nil
         if let snooze = r.snoozeLabel {
             time.text = snooze
-            time.color = SB.c(\.infoForeground)
+            // Redesign: the accent, as the Snoozed header has it, where T3 has its info blue.
+            let tone = r.dither ? SB.c(\.primary) : SB.c(\.infoForeground)
+            time.color = tone
             time.font = SB.tabular(12)
-            wokeIcon.strokeColor = SB.c(\.infoForeground)
+            wokeIcon.strokeColor = tone
         } else if woke {
             // A wake can land straight in the settled tail, so the pill shows there too (Sidebar.tsx:1871-1873).
             time.text = "Woke"
@@ -1310,28 +1312,32 @@ final class SidebarSlimRowView: SidebarRowBase {
         let multiline = row?.folderMultiline == true, metaShown = multiline && row?.hasMetaLine == true
         // The two-line row's title line is `h-6` under `py-1.5`; the one-line row centers in its height.
         let lineHeight: CGFloat = metaShown ? 36 : h
-        var x: CGFloat = 10
+        // Redesign's Snoozed shelf: on the Settled cards' columns (`SidebarCardRowView`), the icon 8pt in and the
+        // title 8pt after it. Project folders keep their own.
+        let shelf = row?.dither == true && row?.inProjectSection != true
+        let inset: CGFloat = shelf ? 8 : 10
+        var x: CGFloat = inset
         monogram.frame = NSRect(x: x, y: (lineHeight - 16) / 2, width: 16, height: 16)
-        x += 16 + 10
+        x += 16 + (shelf ? 8 : 10)
         let tw = ceil(time.textWidth)
         let pill = wokeIcon.isHidden ? tw : 12 + 4 + tw // `size-3` icon, `gap-1`
         // While hovered, a woke row's action joins the flow (`static`) right of the pill (Sidebar.tsx:1907-1941).
-        var timeRight = w - 10
+        var timeRight = w - inset
         if let b = actionButton {
             let bw = b.preferredWidth
             // `-mr-1`; Settle's `-mr-2 px-2` puts its check flush with the timestamps (T3 4928 SidebarThreadRow.tsx:1508, #33053).
             let outset: CGFloat = row?.action == .settle ? 8 : 4
-            b.frame = NSRect(x: w - 10 + outset - bw, y: (lineHeight - 24) / 2, width: bw, height: 24)
+            b.frame = NSRect(x: w - inset + outset - bw, y: (lineHeight - 24) / 2, width: bw, height: 24)
             if wokeBeside { timeRight = b.frame.minX }
         }
-        var slot = lift == nil ? max(32, w - 10 - timeRight + pill) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
+        var slot = lift == nil ? max(32, w - inset - timeRight + pill) : lift?.verb == nil ? -10 : dropBadge?.preferredWidth ?? 0 // `min-w-8`
         if let a = archiveButton, let b = actionButton, row?.action == .unsettle {
             let aw = a.preferredWidth
             a.frame = NSRect(x: b.frame.minX - aw, y: b.frame.minY, width: aw, height: 24)
             // While both show, the title stops short of them.
-            if (state.hovered || isKeyboardFocused), lift == nil { slot = max(slot, w - 10 - a.frame.minX) }
+            if (state.hovered || isKeyboardFocused), lift == nil { slot = max(slot, w - inset - a.frame.minX) }
         }
-        let slotX = w - 10 - slot
+        let slotX = w - inset - slot
         if lift != nil { dropBadge?.frame = NSRect(x: slotX, y: (lineHeight - 20) / 2, width: max(0, slot), height: 20) }
         time.frame = NSRect(x: timeRight - tw, y: (lineHeight - 16) / 2, width: tw + 1, height: 16)
         if !wokeIcon.isHidden {

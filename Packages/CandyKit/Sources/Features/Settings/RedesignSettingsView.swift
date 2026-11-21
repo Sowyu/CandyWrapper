@@ -71,14 +71,11 @@ public final class RedesignSettingsView: SettingsPageBase {
         let look: [SettingsRowView] = [picture, backgroundRow(), ink, dots, tint, animate, dim, accentRow(), avatarsRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
-        let collapse = clientSwitch("composer-collapse",
-                                    "Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again.",
-                                    key: "composerCollapseOnScroll", reset: "collapse composer on scroll", title: "Collapse composer on scroll")
         let stacked = clientSwitch("redesign-stacked-picker", "One column with six models at a time over Reasoning and the footer. Off shows the models with a details pane beside them.",
                                    key: "redesignStackedPicker", reset: "stacked model picker", title: "Stacked model picker")
         let account = clientSwitch("redesign-picker-account", "The provider's account and usage bar at the top of the details pane, or above the models when stacked.",
                                    key: "redesignPickerAccount", reset: "account and limits", title: "Account and limits in the model picker")
-        gated = look + [collapse, stacked, account]
+        gated = look + [stacked, account]
         binder.add { [weak self] in
             guard let self else { return }
             let off = library.isRedesignOn ? nil : Self.offReason
@@ -100,7 +97,6 @@ public final class RedesignSettingsView: SettingsPageBase {
         items = [
             section(nil, "Theme", [masterRow]),
             section("redesign-look", "Look", look + [transparency]),
-            section("redesign-composer", "Composer", [collapse]),
             section("redesign-model-picker", "Model picker", [stacked, account]),
         ]
         themeObserver = library.observe { [weak self] in self?.refresh() }

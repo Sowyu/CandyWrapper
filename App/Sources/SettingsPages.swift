@@ -608,7 +608,7 @@ extension SettingsController {
         where !c.isDefault(family) || !c.isDefault(size) { labels.append(label) }
         labels += client("diffFilesCollapsed", "Default diff file state") + client("diffIgnoreWhitespace", "Diff whitespace changes")
         labels += client("diffLayout", "Diff layout") + client("proactivePanelsEnabled", "Open pull requests and changes panels proactively")
-        labels += client("showSkillsInSlashMenu", "Show skills in slash menu") + client("composerCollapseOnScroll", "Collapse composer on scroll")
+        labels += client("showSkillsInSlashMenu", "Show skills in slash menu")
         labels += client("composerRichTextEnabled", "Rich text composer") + client("sendShortcut", "Send shortcut")
         labels += client("followUpBehavior", "Follow-up behavior") + client("toolCallVisibility", "Tool calls in chat")
         labels += server("responseStreamingMode", "Response streaming") + server("enableProviderUpdateChecks", "Provider update checks")
@@ -653,7 +653,7 @@ extension SettingsController {
                           "sidebarProjectSortOrder", "sidebarWorkingShelfEnabled", "mathRenderingEnabled", "wordWrap", "persistComposerContextStrip", "fontFamilySans",
                           "fontSizeInterface", "fontFamilyComposer", "fontSizePrompt", "fontFamilyCode", "fontSizeCode", "fontFamilyTerminal",
                           "fontSizeTerminal", "diffFilesCollapsed", "diffIgnoreWhitespace", "diffLayout", "proactivePanelsEnabled",
-                          "showSkillsInSlashMenu", "composerCollapseOnScroll", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
+                          "showSkillsInSlashMenu", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
                           "toolCallVisibility", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
                           "confirmTerminalClose", "language",
                           "menuBarItemEnabled", "trackpadHaptics", "messageRailHaptic", "tooltips", "titleRewriteModel"]
