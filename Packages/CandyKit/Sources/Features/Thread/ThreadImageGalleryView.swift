@@ -17,6 +17,11 @@ public final class ThreadImageGalleryView: DSView {
     static let inset: CGFloat = 10, gap: CGFloat = 8, header: CGFloat = 36, footer: CGFloat = 36
     /// The large picture's body never gets shorter than this, so its footer and arrows keep their room.
     static let minBody: CGFloat = 120
+    /// The card never runs the window's height (the user, r5: "make it just the right size"): at most 420pt and
+    /// 55% of the window, and never past the room below the pill.
+    static func cap(room: CGFloat, windowHeight: CGFloat) -> CGFloat {
+        min(room, 420, (windowHeight * 0.55).rounded(.down))
+    }
 
     /// Newest first. Setting it keeps the picture shown large, by its identity.
     public var images: [GalleryImage] = [] {
@@ -60,6 +65,8 @@ public final class ThreadImageGalleryView: DSView {
     private let detail = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let openInThread = ButtonView("Open in thread", icon: .arrowUpRight, variant: .ghost, size: .xs)
     private let reveal = ButtonView("Reveal in Finder", icon: .folderOpen, variant: .ghost, size: .xs)
+    /// The grid's last row while it holds more than the card shows: the full gallery.
+    let showAll = ButtonView("Show all in gallery", variant: .ghost, size: .xs)
 
     /// The picture shown large, or nil for the grid.
     var large: Int? { didSet { if large != oldValue { reload() } } }
@@ -77,7 +84,7 @@ public final class ThreadImageGalleryView: DSView {
         zoom.layer?.cornerRadius = RedesignTokens.Radius.control
         zoom.layer?.cornerCurve = .continuous
         detail.truncation = .middle
-        for view in [title, count, back, expand, previous, next, scroll, empty, zoom, detail, openInThread, reveal] as [NSView] { addSubview(view) }
+        for view in [title, count, back, expand, previous, next, scroll, empty, zoom, detail, openInThread, reveal, showAll] as [NSView] { addSubview(view) }
         scroll.scrollsHorizontally = false
         grid.widthHint = Self.size.width
         grid.makeLoader = { [weak self] image in
@@ -94,6 +101,7 @@ public final class ThreadImageGalleryView: DSView {
         next.setAccessibilityLabel("Next image")
         back.action = { [weak self] in self?.large = nil }
         expand.action = { [weak self] in self?.onOpenGallery?(self?.shown) }
+        showAll.action = { [weak self] in self?.onOpenGallery?(nil) }
         previous.action = { [weak self] in self?.step(-1) }
         next.action = { [weak self] in self?.step(1) }
         openInThread.action = { [weak self] in self?.shown.map { self?.onOpenInThread?($0) } }
@@ -132,6 +140,9 @@ public final class ThreadImageGalleryView: DSView {
         return min(cap, max(Self.minHeight, Self.header + grid.estimatedHeight))
     }
 
+    /// The grid holds more than the card shows, so its last row offers the full gallery.
+    var overflows: Bool { shown == nil && !images.isEmpty && Self.header + grid.estimatedHeight > cap }
+
     private var shown: GalleryImage? { large.flatMap { images.indices.contains($0) ? images[$0] : nil } }
 
     /// ← and → step through the large view; Escape goes back to the grid, then closes.
@@ -163,6 +174,7 @@ public final class ThreadImageGalleryView: DSView {
 
     private func resizeToFit() {
         let height = wantedHeight
+        if showAll.isHidden == overflows { showAll.isHidden = !overflows; needsLayout = true }
         guard frame.height != height else { return }
         setFrameSize(NSSize(width: Self.size.width, height: height))
         invalidateIntrinsicContentSize()
@@ -193,6 +205,7 @@ public final class ThreadImageGalleryView: DSView {
         } else {
             grid.images = images
         }
+        showAll.title = "Show all \(images.count) in gallery"
         resizeToFit()
         needsLayout = true
     }
@@ -217,7 +230,10 @@ public final class ThreadImageGalleryView: DSView {
         previous.frame = NSRect(x: next.frame.minX - 26, y: headerMid - 12, width: 24, height: 24)
         if large != nil { expand.frame = NSRect(x: (previous.isHidden ? next.frame.maxX - 24 : previous.frame.minX - 30), y: headerMid - 12, width: 24, height: 24) }
         let body = NSRect(x: 0, y: Self.header, width: w, height: bounds.height - Self.header)
-        scroll.frame = body
+        scroll.frame = showAll.isHidden ? body : NSRect(x: 0, y: body.minY, width: w, height: max(0, body.height - Self.footer))
+        let showAllWidth = min(w - 2 * i, showAll.intrinsicContentSize.width)
+        showAll.frame = NSRect(x: ((w - showAllWidth) / 2).rounded(), y: bounds.height - Self.footer + (Self.footer - 24) / 2,
+                               width: showAllWidth, height: 24)
         scroll.layoutSubtreeIfNeeded()
         grid.fitWidth()
         let emptyWidth = w - 8 * i, emptyHeight = empty.height(forWidth: emptyWidth)

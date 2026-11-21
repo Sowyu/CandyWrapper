@@ -412,7 +412,8 @@ public final class ThreadImageGalleryController {
             guard let self, let popup = self.popup, let window = self.pill.window else { return }
             PopupHost.host(for: window).reposition(popup)
         }
-        view.maxHeight = Self.cardRoom(below: pill, in: window)
+        view.maxHeight = ThreadImageGalleryView.cap(room: Self.cardRoom(below: pill, in: window),
+                                                   windowHeight: window.contentView?.bounds.height ?? window.frame.height)
         view.onOpenGallery = { [weak self] image in self?.openWall(showing: image) }
         view.images = images
         view.onOpenInThread = { [weak self] image in self?.close(); self?.onOpenInThread?(image) }

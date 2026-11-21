@@ -270,6 +270,26 @@ struct ThreadImageGalleryTests {
         #expect(view.frame.height == 300)
     }
 
+    /// The card stops at 420pt or 55% of the window, and a grid taller than that offers the full gallery in a last row.
+    @Test func cardCapsAndOffersTheGallery() {
+        #expect(ThreadImageGalleryView.cap(room: 900, windowHeight: 1000) == 420)
+        #expect(ThreadImageGalleryView.cap(room: 900, windowHeight: 600) == 330)
+        #expect(ThreadImageGalleryView.cap(room: 250, windowHeight: 1000) == 250)
+        let view = ThreadImageGalleryView()
+        view.maxHeight = 420
+        view.images = Self.fakeImages().prefix(2).map { $0 }
+        #expect(view.frame.height < 420 && view.showAll.isHidden)
+        view.images = Self.fakeImages()
+        #expect(view.frame.height == 420 && !view.showAll.isHidden)
+        #expect(view.showAll.title == "Show all 10 in gallery")
+        var opened: GalleryImage?? = .none
+        view.onOpenGallery = { opened = .some($0) }
+        view.showAll.action?()
+        #expect(opened == .some(nil))
+        view.large = 0
+        #expect(view.showAll.isHidden && view.frame.height <= 420)
+    }
+
     // MARK: Offscreen renders for review, written only with GALLERY_SNAPSHOTS=<dir>.
 
     static func dataURI(_ hue: CGFloat, _ label: String) -> String {
