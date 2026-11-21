@@ -625,11 +625,15 @@ final class SidebarCommands {
         let scoped = helper.scoped(to: env)
         deeperRenames[id] = scoped
         setLocalTitleRegeneration(id, true)
+        let old = parent.title
+        setTitleTyping(id, .thinking(old: old))
         Task { [weak self] in
             guard let self else { return }
             let outcome = await self.runDeeperRename(parent: parent, helper: helper, scoped: scoped, model: model)
             self.deeperRenames[id] = nil
             self.setLocalTitleRegeneration(id, false)
+            // The new title types out; after a failure the old one types back.
+            if case .success(let title) = outcome { self.land(id, old: old, target: title) } else { self.land(id, old: old, target: old) }
             // Deleted whatever happened; a quit before this line leaves it to the next launch's cleanup.
             _ = try? await self.environments.dispatch(scoped, ThreadCommands.delete(helper))
             switch outcome {
@@ -639,7 +643,27 @@ final class SidebarCommands {
         }
     }
 
-    private enum DeeperOutcome { case success, failure(String) }
+    private enum DeeperOutcome { case success(String), failure(String) }
+
+    /// The typing effect's phase on the row and, when it is open, the header.
+    private func setTitleTyping(_ id: ThreadId, _ phase: TitleTyping.Phase?) {
+        sidebar?.state.titleTypings[id] = phase
+        threads.titleTypings[id] = phase
+    }
+    private var typingLandings = 0
+
+    /// Types `target` out, then drops the phase once the effect has had its time (one delayed call, not a timer).
+    private func land(_ id: ThreadId, old: String, target: String) {
+        typingLandings += 1
+        let landing = TitleTyping.Phase.landing(old: old, target: target, id: typingLandings)
+        setTitleTyping(id, landing)
+        DispatchQueue.main.asyncAfter(deadline: .now() + TitleTyping.landingDuration(target) + 0.3) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.sidebar?.state.titleTypings[id] == landing else { return }
+                self.setTitleTyping(id, nil)
+            }
+        }
+    }
 
     private func runDeeperRename(parent: ThreadShell, helper: ThreadId, scoped: ThreadId, model: ModelSelection) async -> DeeperOutcome {
         let id = parent.id
@@ -680,11 +704,11 @@ final class SidebarCommands {
               let reply = DeeperRename.reply(in: snapshot.projection), let title = DeeperRename.title(fromReply: reply) else {
             return .failure("The title helper gave no title. The title is unchanged.")
         }
-        guard title != shell(id)?.title else { return .success }
+        guard title != shell(id)?.title else { return .success(title) }
         do { _ = try await environments.dispatch(id, ThreadCommands.rename(id.localId, title: title)) } catch {
             return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not rename the thread.")
         }
-        return .success
+        return .success(title)
     }
 
     /// Helpers a quit left behind: side chats titled "Title helper" with no run, never one running now. A /btw side

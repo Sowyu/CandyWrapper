@@ -1224,6 +1224,7 @@ final class ThreadController {
             let project = snapshot?.projects.first { $0.id == shell.projectId }
             panel.beginThreadSwitch(projectTitle: project.map { ThreadSession.crumbTitle($0, sidebar: sidebar) } ?? "", threadTitle: shell.title, keepRows: keepRows)
             panel.header.projectIcon = project.map(ProjectIconSource.init)
+            panel.titleTyping = titleTypings[id]
         } else {
             // No shell yet (a link before the first snapshot): T3 renders nothing (ThreadRouteView.tsx:181).
             panel.setDraft(projectTitle: nil)
@@ -1439,6 +1440,10 @@ final class ThreadController {
 
     /// The thread the panel shows, nil on a draft (the route's thread in T3).
     var openThreadId: ThreadId? { panel.isDraft ? nil : session?.threadId }
+
+    /// Rewrite title's typing effect per thread; the open thread's shows on its header.
+    var titleTypings: [ThreadId: TitleTyping.Phase] = [:] { didSet { syncTitleTyping() } }
+    func syncTitleTyping() { panel.titleTyping = openThreadId.flatMap { titleTypings[$0] } }
     /// The open thread changed, for the window title (#34697).
     var onOpenThreadChange: (() -> Void)?
 

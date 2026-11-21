@@ -602,6 +602,7 @@ final class CapyHoverGroup {
 /// content `px-2.5 py-2`: project line (h-5), title (`mt-1`), branch line (`mt-0.5`).
 final class SidebarCardRowView: SidebarRowBase {
     private var glimmer: SidebarTitleGlimmer?
+    private var typing: TitleTypingOverlay?
     private let surface = CALayer()
     /// The visible card, 2pt below the row's top: the hover card's trigger in T3 (aligned to its top edge).
     var surfaceFrame: CGRect { surface.frame }
@@ -791,8 +792,9 @@ final class SidebarCardRowView: SidebarRowBase {
             title.color = r.recedes ? (hovered ? SB.c(\.foreground) : SB.c(\.foreground, 0.75))
                 : r.status == .failed && !r.isUnread && !r.isWoke ? SB.c(\.foreground, 0.95) : SB.c(\.foreground)
         }
-        if r.isRegeneratingTitle { title.color = SB.c(\.mutedForeground) }
-        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle)
+        if r.isRegeneratingTitle, r.titleTyping == nil { title.color = SB.c(\.mutedForeground) }
+        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle && r.titleTyping == nil)
+        TitleTypingOverlay.sync(&typing, over: title, phase: r.titleTyping)
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
         // Dither sections (after Capy): the time joins the meta line, and the status slot keeps only the status.
@@ -878,6 +880,7 @@ final class SidebarCardRowView: SidebarRowBase {
 
     override func layout() {
         super.layout()
+        defer { typing?.follow() }
         let w = bounds.width
         let capy = capyRow
         CATransaction.begin()
@@ -1104,6 +1107,7 @@ final class ProviderStackView: NSView {
 /// The slim row (Sidebar.tsx:1791-1953): `h-9 px-2.5 gap-2.5`, used on the snoozed and settled shelves.
 final class SidebarSlimRowView: SidebarRowBase {
     private var glimmer: SidebarTitleGlimmer?
+    private var typing: TitleTypingOverlay?
     private let surface = CALayer()
     private let monogram = ProjectMonogramView()
     private let title = LabelView()
@@ -1196,8 +1200,9 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isActive || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
-        if r.isRegeneratingTitle { title.color = SB.c(\.mutedForeground) }
-        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle)
+        if r.isRegeneratingTitle, r.titleTyping == nil { title.color = SB.c(\.mutedForeground) }
+        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle && r.titleTyping == nil)
+        TitleTypingOverlay.sync(&typing, over: title, phase: r.titleTyping)
         pin.isHidden = !showsPin(r)
         configureMeta(r)
         terminal.count = r.terminalProcessCount
@@ -1301,6 +1306,7 @@ final class SidebarSlimRowView: SidebarRowBase {
 
     override func layout() {
         super.layout()
+        defer { typing?.follow() }
         let w = bounds.width, h = bounds.height
         CATransaction.begin()
         CATransaction.setDisableActions(true)

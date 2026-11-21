@@ -42,6 +42,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var isRegeneratingTitle: Bool
     /// Relative time, or the settled time on the settled shelf.
     public var timeLabel: String
+    /// Rewrite title's typing effect over the title, while it runs.
+    public var titleTyping: TitleTyping.Phase?
     /// Redesign's flat Settled: the time joins the meta line after the branch, as in a project section.
     public var timeInMeta = false
     /// Snoozed rows show when they come back (`snoozeWakeLabel`).
@@ -341,6 +343,8 @@ public struct SidebarListState: Equatable, Sendable {
     public var activeThreadId: ThreadId?
     /// Threads this client is renaming itself (Deeper rename): their rows show the regenerating glimmer.
     public var localTitleRegenerations: Set<ThreadId> = []
+    /// Rewrite title's typing effect, per thread, while it runs.
+    public var titleTypings: [ThreadId: TitleTyping.Phase] = [:]
     public var snoozedExpanded = false
     public var settledExpanded = false
     /// The Working beta shelf (`sidebarWorkingShelfEnabled`) and whether it is open (collapsed by default).
@@ -426,7 +430,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
             && a.settledRange == b.settledRange
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
-            && a.hiddenThreadTags == b.hiddenThreadTags
+            && a.hiddenThreadTags == b.hiddenThreadTags && a.titleTypings == b.titleTypings
     }
 }
 
@@ -811,6 +815,7 @@ public enum SidebarListBuilder {
             pullRequestBadge: SidebarPullRequestBadge(shell),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
         model.dither = state.dither
+        model.titleTyping = state.titleTypings[shell.id]
         if state.dither, section == .settled {
             // Redesign's Settled shows full rows, a step dimmer than active ones, with when each settled.
             model.variant = .card
