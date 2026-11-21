@@ -58,6 +58,25 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 
     /// A message the framed document posted.
     var onMessage: ((JSONValue) -> Void)?
+
+    /// Inline in a thread under Redesign, the frame and the web content clip to the surface corner like every other
+    /// card (the user, 2026-11-21: "make it so html previews get rounded ... corners"). T3 draws HTML renders square
+    /// (HtmlRenderFrame.tsx:87) and the default themes keep that; dialogs and full screen keep their own chrome.
+    var roundsInRedesign = false { didSet { if roundsInRedesign != oldValue { syncCorner() } } }
+
+    private func syncCorner() {
+        let radius = roundsInRedesign && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? RedesignTokens.Radius.card : 0
+        wantsLayer = true
+        guard let layer, layer.cornerRadius != radius else { return }
+        layer.cornerRadius = radius
+        layer.cornerCurve = .continuous
+        layer.masksToBounds = radius > 0
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        syncCorner()
+    }
     /// The document tried to load a second time (an MCP App left its page).
     var onNavigatedAway: (() -> Void)?
     /// The budget took the web view back.
@@ -188,6 +207,8 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
 
     override func layout() {
         super.layout()
+        // A theme switch lays the timeline out again, which is when Redesign's corner comes or goes.
+        syncCorner()
         guard let key = previewKey, htmlCache?.isActive == true, window != nil, !isHiddenOrHasHiddenAncestor else { return }
         if displayedKey != key {
             clearPreview()

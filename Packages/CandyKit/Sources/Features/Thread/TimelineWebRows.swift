@@ -35,6 +35,7 @@ final class HtmlRenderRowView: TimelineRowView {
         open.action = { [weak self] in self?.openFullScreen() }
         addSubview(open)
         frameView.onMessage = { [weak self] in self?.received($0) }
+        frameView.roundsInRedesign = true
     }
 
     override func configure(_ item: TimelineItem) {
@@ -444,6 +445,7 @@ final class McpAppRowView: TimelineRowView {
         } else if mode == "fullscreen", userInitiated, frameView.isLive, fullscreen == nil, let content = window?.contentView,
                   context.model?.projection?.runtimeRequests.contains(where: { $0.status == "pending" }) != true,
                   !content.subviews.contains(where: { $0 is ModalHost || $0 is ThreadMcpFullscreenView }), window?.attachedSheet == nil {
+            frameView.roundsInRedesign = false
             let host = ThreadMcpFullscreenView(content: frameView)
             host.frame = content.bounds; host.autoresizingMask = [.width, .height]
             host.onClose = { [weak self] in _ = self?.setDisplayMode("inline") }
@@ -555,6 +557,7 @@ final class McpAppRowView: TimelineRowView {
         super.layout()
         let box = NSRect(x: 4, y: 0, width: max(0, bounds.width - 8), height: boxHeight)
         if fullscreen == nil { frameView.frame = box }
+        frameView.roundsInRedesign = fullscreen == nil
         border.frame = box
         expand.frame = NSRect(x: max(4, box.maxX - 32), y: 8, width: 24, height: 24)
         note.frame = NSRect(x: box.minX, y: box.midY - 8, width: box.width, height: 16)

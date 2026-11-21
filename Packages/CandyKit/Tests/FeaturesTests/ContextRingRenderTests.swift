@@ -22,10 +22,10 @@ struct ContextRingRenderTests {
             for p in [10.0, 50, 80, 95, 100] {
                 let root = DSView(frame: NSRect(x: 0, y: 0, width: 120, height: 46))
                 root.wantsLayer = true
+                root.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
                 root.layer?.backgroundColor = Themed.color(\.background).cgColor(in: root)
                 let pill = DitherPillSurface(), meter = ThreadContextWindowMeterView()
                 root.addSubview(pill); root.addSubview(meter)
-                root.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
                 meter.usage = ThreadContextWindowUsage(used: p * 10_000, maximum: 1_000_000, autoCompactThreshold: 900_000, automatically: true)
                 // The width the panel gives it: the figure's when there is one (this branch), else the square.
                 let figure = meter.subviews.compactMap { $0 as? LabelView }.first { !$0.isHidden && !$0.text.isEmpty }
