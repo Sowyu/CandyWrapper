@@ -203,6 +203,50 @@ struct LotusPlacementTests {
         #expect(shown[0] == 90)
     }
 
+    /// Light's ground shows wherever the flower is not: every 8 x 8 block of its field holds dots, also at the bottom
+    /// right, where Gradient's field thins to almost nothing and the gaps between the petals were bare off-white. Dark's
+    /// field is Gradient's own.
+    @Test func lightFieldNeverLeavesTheGroundBare() throws {
+        let full = try #require(LotusArt.fullCanvas(content: CGRect(x: 0, y: 0, width: 900, height: 600)))
+        for t in [0.0, 0.3, 0.7] {
+            let light = LotusArt.field(full, t: t, dark: false), dark = LotusArt.field(full, t: t, dark: true)
+            #expect(dark == LotusArt.field(full, t: t))
+            var sparsestDark = 64
+            for by in stride(from: 0, to: full.height - 7, by: 8) {
+                for bx in stride(from: 0, to: full.width - 7, by: 8) {
+                    var l = 0, d = 0
+                    for y in by..<(by + 8) { for x in bx..<(bx + 8) { l += Int(light[y * full.width + x]); d += Int(dark[y * full.width + x]) } }
+                    #expect(l >= 8, "light block at \(bx), \(by) of t \(t): \(l) dots")
+                    sparsestDark = min(sparsestDark, d)
+                }
+            }
+            // The case it fixes: dark's field thins below that at the bottom right.
+            #expect(sparsestDark < 8)
+        }
+    }
+
+    /// The turn's one-pass frame is byte for byte the composed one: codes unpacked over the field, a covered cell hiding
+    /// it, with a flower canvas that runs past the full canvas's edges, in both appearances.
+    @Test func onePassFrameMatchesTheComposedOne() throws {
+        let full = try #require(LotusArt.fullCanvas(content: CGRect(x: 0, y: 0, width: 300, height: 200)))
+        var flower = full
+        flower.width = 61; flower.height = 33; flower.originX = full.originX + full.width - 40; flower.originY = full.originY + 7
+        var rng = SystemRandomNumberGenerator()
+        let codes = (0..<(flower.width * flower.height)).map { _ in UInt8.random(in: 0...3, using: &rng) }
+        func bytes(_ image: CGImage?) -> [UInt8] {
+            guard let image, let data = image.dataProvider?.data, let base = CFDataGetBytePtr(data) else { return [] }
+            return (0..<image.height).flatMap { y in (0..<image.width).map { base[y * image.bytesPerRow + $0] } }
+        }
+        for dark in [true, false] {
+            for t in [0.0, 0.41] {
+                let composed = LotusArt.image(LotusArt.compose(codes: codes, flower: flower, full: full, field: LotusArt.field(full, t: t, dark: dark),
+                                                               fieldAlpha: LotusArt.fieldAlpha(dark: dark)), width: full.width, height: full.height)
+                let fast = LotusArt.frame(packed: LotusArt.pack(codes), flower: flower, full: full, t: t, dark: dark)
+                #expect(!bytes(fast).isEmpty && bytes(fast) == bytes(composed), "dark \(dark), t \(t)")
+            }
+        }
+    }
+
     /// The idle loop packs into a quarter of the bytes and unpacks exactly.
     @Test func packingIsLossless() {
         let p = LotusArt.Placement(width: 61, height: 23, centreX: 30, centreY: 22, radius: 20)
