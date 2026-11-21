@@ -128,7 +128,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         let toggle = ToggleGroupView(variant: .segmented, items: [("Picture", nil), ("Blur", nil), ("Gradient", nil), ("Flower", nil)], selected: 0)
         toggle.setAccessibilityLabel("Background")
         let r = row("redesign-background", title: "Background",
-                    detail: "Picture draws your picture in dots behind the chat. Blur softens it behind the whole window. Gradient and Flower use no picture: accent-colored dots fade in at the top of a new thread, or a dotted lotus blooms above the composer and beside a thread.",
+                    detail: "Picture draws your picture in dots behind the chat. Blur softens it behind the whole window. Gradient and Flower use no picture: accent dots at the top of a new thread, or a dotted lotus.",
                     control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
