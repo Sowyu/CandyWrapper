@@ -65,7 +65,7 @@ public struct ClientSettings: Equatable, Sendable {
         "environmentIdentificationMode": SettingSpec(.literals(["artwork", "nightly-artwork", "dev-artwork", "pill", "none"]), .string("artwork")),
         "glassOpacity": SettingSpec(.int(10...100), .number(80)),
         "ditherBackgroundDim": SettingSpec(.int(0...90), .number(35)),  // CandyWrapper only: Redesign's dim over the art in threads  // T3 stops at 40 (settings.ts:94); CandyWrapper goes to 10, the value stays local
-        "ignoreReduceTransparency": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign and Glass ignore macOS's Reduce Transparency
+        "ignoreReduceTransparency": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign ignores macOS's Reduce Transparency
         "ditherAccent": SettingSpec(.string(maxLength: 32), .string("teal")),  // CandyWrapper only: Redesign's accent, a DitherAccent id
         "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient", "flower"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, accent dots with no picture, or a dithered lotus
         "redesignProjectAvatars": SettingSpec(.literals(["sprites", "letters"]), .string("sprites")),  // CandyWrapper only: Redesign's generated project and account avatars, pixel sprites or T3's letters

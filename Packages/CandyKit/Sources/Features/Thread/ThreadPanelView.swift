@@ -696,8 +696,8 @@ public final class ThreadPanelView: DSView {
     }
     /// The top fade (a user decision, 2026-10-21, instead of T3's header bar and `topbar-scroll-fade`): the rows run
     /// on under the thread header and fade out toward the panel's top, so no band marks the header. Over an opaque
-    /// background it is a background-colored overlay, which costs scrolling nothing; Glass's background is see-through,
-    /// so there the timeline wears the same curve as an alpha mask.
+    /// background it is a background-colored overlay, which costs scrolling nothing; over Redesign's art the timeline
+    /// wears an alpha mask instead.
     private let fade = CAGradientLayer()
     private let defaultFade = ThreadTopFadeView()
     private let fadeMask = CAGradientLayer()

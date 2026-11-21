@@ -136,7 +136,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     /// Space above the first row: the `topbar-scroll-fade` spacer (1.5rem), under the header view if any.
     public var topInset: CGFloat = 24 { didSet { if topInset != oldValue { relayout() } } }
-    /// The top of the timeline the thread header covers. Glass scrolls rows on under the header, so the
+    /// The top of the timeline the thread header covers. Redesign scrolls rows on under the header, so the
     /// timeline starts at the panel's top and the rows, scroller and minimap keep clear of this much.
     public var topClearance: CGFloat = 0 {
         didSet {

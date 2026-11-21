@@ -156,7 +156,7 @@ final class StageBackdropView: DSView {
     }
 
     private func drawFadeMask(_ ctx: CGContext) {
-        // One smooth alpha fade keeps the candy's color as it dissolves into Glass. A dark
+        // One smooth alpha fade keeps the candy's color as it dissolves into the sidebar. A dark
         // overlay followed by an alpha mask made a black stripe across the old header.
         let stops = (0...16).map { CGFloat($0) / 16 }
         let colors = stops.map { position -> CGColor in

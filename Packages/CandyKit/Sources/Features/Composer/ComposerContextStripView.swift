@@ -18,7 +18,7 @@ public struct RunOnOption: Equatable, Sendable {
 /// below a 576pt composer (`@xl/composer-surface`, #27114) the branch follows the run context
 /// (`RunContextSelector`); from 576pt the machine (`BranchToolbarEnvironmentSelector`), a separator and the
 /// workspace (`BranchToolbarEnvModeSelector`) sit left and the branch at the end (BranchToolbar.tsx:774-850 at
-/// 4928). Glass keeps its run context and branch at the strip's ends. Elsewhere only the "Run on" control. The strip is inset 22 per side,
+/// 4928). Elsewhere only the "Run on" control. The strip is inset 22 per side,
 /// starts 16 above the composer's bottom (`-mt-4`) and shows 32 below it (`pt-5`, a 24 row, `pb-1`).
 /// Its top 16 sit under the composer and are masked off (`mask-b-from-4`); below that it continues the
 /// composer's glass, outline (`rounded-b-2xl`) and, in dark, the 10px seam shade (`composer-seam-below`).

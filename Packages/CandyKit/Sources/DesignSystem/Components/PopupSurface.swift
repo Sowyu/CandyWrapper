@@ -15,7 +15,7 @@ public enum PopupSurface {
     /// a glass opacity change triggers.
     // ponytail: solid color instead of a live 12/16px backdrop blur; identical over flat backgrounds, use an
     // NSVisualEffectView-like blur if popups ever sit over busy content and users notice
-    /// Classic Glass shows the popover's own frosted pane over a live blur instead (`WindowGlass.Level.floating`).
+    /// Redesign shows its solid popover instead.
     public static var glassFill: NSColor {
         let solid = Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: dropdownGlassAlpha)
         let pane = Themed.color(\.popover)

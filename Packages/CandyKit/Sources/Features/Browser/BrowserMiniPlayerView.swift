@@ -130,7 +130,7 @@ public final class BrowserMiniPlayerView: DSView {
     }
 
     public override func updateLayer() {
-        // A preview floats above live text. Glass's muted overlay is not a backing surface.
+        // A preview floats above live text, so its card is opaque.
         card.layer?.backgroundColor = Themed.color(\.background).withAlphaComponent(1).cgColor(in: self)
         card.layer?.shadowColor = Themed.black(0.35).cgColor(in: self)
     }

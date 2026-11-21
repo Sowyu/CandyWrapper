@@ -523,7 +523,7 @@ final class RightPanelView: DSView {
     private let stripFade = CAGradientLayer()
     private var lastStripWidth: CGFloat = -1
 
-    /// Over the thread in a narrow window, where the Glass theme's clear fill would show the thread through.
+    /// Over the thread in a narrow window.
     var isSheet = false { didSet { if isSheet != oldValue { needsDisplay = true } } }
     var isMaximized = false { didSet { if isMaximized != oldValue { needsLayout = true } } }
 

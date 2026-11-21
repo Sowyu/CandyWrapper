@@ -128,7 +128,7 @@ enum DiffStyle {
     }
 
     /// T3's t3-light palette (lib/readableSyntaxTheme.ts:6-58), with the previous palettes
-    /// retained for Glass and Redesign. Cache per token, rather than darkening on each line draw.
+    /// retained for Redesign. Cache per token, rather than darkening on each line draw.
     static func syntaxColor(_ kind: CodeTokenKind) -> NSColor { syntaxColors[Int(kind.rawValue)] }
     private static let syntaxColors: [NSColor] = CodeTokenKind.allCases.map { kind in
         let original = kind.color
