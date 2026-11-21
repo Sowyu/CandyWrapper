@@ -517,8 +517,8 @@ public final class ThemeLibrary {
         input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
         input.ditherDim = client.int("ditherBackgroundDim")
         input.ditherBlur = client.string("redesignBackground") == "blur"
-        input.ditherGradient = client.string("redesignBackground") == "gradient"
-        input.ditherFlower = client.string("redesignBackground") == "flower"
+        // Gradient's dots became Flower's field (2026-11-21); a 1.16.0 "gradient" shows Flower.
+        input.ditherFlower = ["flower", "gradient"].contains(client.string("redesignBackground"))
         input.ditherGradientAnimates = client.bool("redesignGradientAnimate")
         input.ditherInk = DitherInk(mode: client.string("redesignInk"), color: client.string("redesignInkColor"))
         input.ditherDotSize = DitherDotSize(rawValue: client.string("redesignDotSize")) ?? .medium

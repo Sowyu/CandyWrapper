@@ -80,7 +80,7 @@ public class ComposerBannerView: DSView {
         needsLayout = true
         let dark = effectiveAppearance.isDark
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        surface.layer?.backgroundColor = ditherFloating ? DitherPill.fill(in: self)
+        surface.layer?.backgroundColor = ditherFloating ? RedesignTokens.Surface.fill(in: self)
             : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         switch variant {
         case .neutral:

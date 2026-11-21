@@ -344,6 +344,8 @@ public final class ComposerView: DSView {
     let previousCompact = ButtonView(nil, icon: .chevronLeft, variant: .outline, size: .iconSm)
     /// The backdrop blur under the glass fill.
     private let blur = BackdropBlurView()
+    /// What shows through the glass fill over Redesign's Flower background.
+    private let flowerBacking = FlowerGlassView()
     private var separators: [SeparatorView] = []
     private var alternateHeld = false
     private var editorHeight = ComposerView.editorMin
@@ -365,6 +367,7 @@ public final class ComposerView: DSView {
         // Glass: `card` / `surface-raised` at 80% over a 12px backdrop blur, saturate 1.14.
         blur.cornerRadius = cardRadius
         addSubview(blur)
+        addSubview(flowerBacking)
         glass.layer?.cornerRadius = cardRadius
         glass.layer?.masksToBounds = true
         addSubview(glass)
@@ -965,7 +968,7 @@ public final class ComposerView: DSView {
         dropHighlight.cornerRadius = cardRadius
         outline.layer?.cornerRadius = cardRadius
         glass.layer?.backgroundColor = ThemeRuntime.isDither(dark: dark)
-            ? RedesignTokens.Surface.fill(in: self)
+            ? RedesignTokens.Surface.floatingFill(in: self)
             : Themed.color(light: \.card, 0.8, dark: \.surfaceRaised, 0.8).cgColor(in: self)
         outline.layer?.borderColor = ThemeRuntime.isDither(dark: dark) ? DitherChrome.rim(dark: dark).cgColor
             : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
@@ -1008,6 +1011,8 @@ public final class ComposerView: DSView {
         shadowMask.path = maskPath
         CATransaction.commit()
         blur.frame = box
+        flowerBacking.frame = box
+        flowerBacking.radius = cardRadius
         glass.frame = box
         outline.frame = box
         if joinsContextStrip && !modern {

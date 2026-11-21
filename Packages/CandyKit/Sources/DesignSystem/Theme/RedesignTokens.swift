@@ -71,7 +71,24 @@ public enum RedesignTokens {
         }
     }
 
-    /// Solid surfaces: an opaque fill, a 1pt hairline rim and the token shadow. Redesign draws no backdrop blur (the
+    /// The one blur Redesign allows (the user, 2026-11-21, of the composer over the lotus: "have a very very slight blur
+    /// but still solid enough so it feels premium", then "i kinda hate blur it just looks unpremium but also i like
+    /// blur"): surfaces over the Flower are frosted glass. Through `fill` of their fill shows the flower blurred by `blur`
+    /// points, wide enough that no petal or dot survives, a soft light stronger where the flower is behind
+    /// (`LotusArt.glow`, `FlowerGlassView`). Never transparency without blur.
+    public enum FlowerGlass {
+        /// The fill's share over the blurred flower, and the blur's sigma in points.
+        public static let fill: CGFloat = 0.76
+        public static let blur: CGFloat = 36
+        /// How much more chroma the light under the glass has than the ink, so it stays violet and not grey.
+        public static let saturation: Double = 1.3
+
+        @MainActor public static func isOn(dark: Bool) -> Bool {
+            ThemeRuntime.ditherFlower && ThemeRuntime.isDither(dark: dark) && !ThemeRuntime.reducesTransparency()
+        }
+    }
+
+    /// Solid surfaces: an opaque fill, a 1pt hairline rim and the token shadow. Redesign draws no backdrop blur except `FlowerGlass` (the
     /// user, 2026-11-21: "in redesign no more blurs its no premium").
     public enum Surface {
         /// A card on a surface, in the text color over the panel's ground: code blocks, tables, tool output.
@@ -90,6 +107,14 @@ public enum RedesignTokens {
         @MainActor public static func fill(in view: NSView) -> CGColor {
             let dark = view.effectiveAppearance.isDark
             return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view)
+        }
+
+        /// `fill` for a surface that floats over the Flower background: a little of the flower, blurred, shows through
+        /// (`FlowerGlass`). Every other background, the default themes and Reduce Transparency keep it solid.
+        @MainActor public static func floatingFill(in view: NSView) -> CGColor {
+            let solid = fill(in: view)
+            guard FlowerGlass.isOn(dark: view.effectiveAppearance.isDark) else { return solid }
+            return solid.copy(alpha: solid.alpha * FlowerGlass.fill) ?? solid
         }
 
         /// The fill of a card on a surface: a step in the text color over the panel's ground, opaque so the picture

@@ -33,6 +33,10 @@ public final class ClientSettingsStore {
             json = moved
             if let data = try? JSONEncoder().encode(ClientSettings(decoding: moved).encoded) { defaults.set(data, forKey: Self.defaultsKey) }
         }
+        if let moved = Self.moveGradientToFlower(json) {
+            json = moved
+            if !ephemeral, let data = try? JSONEncoder().encode(ClientSettings(decoding: moved).encoded) { defaults.set(data, forKey: Self.defaultsKey) }
+        }
         current = ClientSettings(decoding: json)
         readFailed = !ephemeral && defaults.data(forKey: Self.defaultsKey) != nil && json?.objectValue == nil
     }
@@ -46,6 +50,14 @@ public final class ClientSettingsStore {
         defaults.set(true, forKey: stackedPickerMoveKey)
         guard case .object(var o)? = json, o["redesignStackedPicker"] == .bool(true) else { return nil }
         o.removeValue(forKey: "redesignStackedPicker")
+        return .object(o)
+    }
+
+    /// Redesign's Gradient background became Flower's field (2026-11-21: "i like the gradient so put it in flower too
+    /// and then remove gradient"): a stored "gradient" loads as "flower" and is saved so, once. Nil when nothing moves.
+    static func moveGradientToFlower(_ json: JSONValue?) -> JSONValue? {
+        guard case .object(var o)? = json, o["redesignBackground"] == .string("gradient") else { return nil }
+        o["redesignBackground"] = .string("flower")
         return .object(o)
     }
 

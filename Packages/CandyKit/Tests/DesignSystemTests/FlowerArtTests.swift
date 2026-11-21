@@ -3,7 +3,8 @@ import Testing
 @testable import DesignSystem
 
 /// Flower, Redesign's fourth background: the bloom plays once per opening, the motion stops whenever the flower can't
-/// be seen or isn't wanted and holds the open flower, frame sets follow radius buckets, and other pages show none.
+/// be seen or isn't wanted and holds the open flower, a resize scales the shown frame and renders once it settles, and
+/// other pages show none.
 @MainActor
 struct FlowerArtTests {
     private func setUp() throws -> (art: DitherArtView, page: NSView, window: NSWindow, input: ThemeRuntimeInput) {
@@ -13,7 +14,7 @@ struct FlowerArtTests {
         ThemeRuntime.apply(input)
         let shell = SidebarLayoutView(defaults: UserDefaults(suiteName: "cw.dither-flower.\(UUID().uuidString)")!)
         // Small, with a tall composer, so the flower renders at a small radius and the test stays quick.
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: true)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 340), styleMask: [.titled], backing: .buffered, defer: true)
         window.isReleasedWhenClosed = false
         window.contentView = shell
         shell.layoutSubtreeIfNeeded()
@@ -25,12 +26,12 @@ struct FlowerArtTests {
         return (art, page, window, input)
     }
 
-    /// The page's stage: the whole page below a 52pt band, a composer 320 x 150pt centred near the bottom.
-    private func stage(_ page: NSView, kind: LotusArt.Kind = .hero, composerWidth: CGFloat = 320) {
+    /// The page's stage: the whole page, and the top of the composer group (page coordinates, y up) when the opening
+    /// should play its two beats.
+    private func stage(_ page: NSView, kind: LotusArt.Kind = .hero, width: CGFloat? = nil, floorTop: CGFloat? = nil) {
         let b = page.bounds
-        let content = NSRect(x: 0, y: 0, width: b.width, height: b.height - 52)
-        let composer = NSRect(x: (b.width - composerWidth) / 2, y: 24, width: composerWidth, height: 150)
-        DitherArtView.setFlowerStage(kind: kind, content: content, keepOut: [composer], from: page)
+        let content = NSRect(x: 0, y: 0, width: width ?? b.width, height: b.height)
+        DitherArtView.setFlowerStage(kind: kind, content: content, floorTop: floorTop, from: page)
     }
 
     @Test func bloomsOncePerOpeningAndHoldsTheOpenFlowerWhenStopped() throws {
@@ -38,8 +39,9 @@ struct FlowerArtTests {
     }
 
     private func bloomsOncePerOpening() throws {
-        let previous = ThemeRuntime.input, motion = Motion.reducedOverride
-        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion }
+        let previous = ThemeRuntime.input, motion = Motion.reducedOverride, patience = DitherArtView.bloomPatience
+        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion; DitherArtView.bloomPatience = patience }
+        DitherArtView.bloomPatience = 600
         Motion.reducedOverride = false
         let (art, page, window, start) = try setUp()
         var input = start
@@ -85,6 +87,7 @@ struct FlowerArtTests {
         input.ditherGradientAnimates = false
         ThemeRuntime.apply(input)
         #expect(!art.flowerIdlingForTesting && !art.flowerBloomingForTesting)
+        // The bloom and the packed loop are gone; only the open still stays.
         #expect(art.flowerSet?.bloom.isEmpty == true && art.flowerSet?.idle.isEmpty == true)
         #expect(art.flowerContentsForTesting === art.flowerSet?.open)
         // An opening with Animate off shows the open flower at once.
@@ -96,52 +99,154 @@ struct FlowerArtTests {
 
         // Another page (Settings, Issues, Usage): the plain ground, the frames dropped.
         DitherArtView.setEmphasis(.page, from: page)
-        #expect(art.flowerSet == nil && art.flower.isHidden)
+        #expect(art.flowerSet == nil && art.flowerHost.isHidden)
         #expect(!art.flowerIdlingForTesting)
         // Back on the page: the flower returns without a bloom; only openings bloom.
         DitherArtView.setEmphasis(.hero, from: page)
-        #expect(!art.flower.isHidden && art.flowerIdlingForTesting && !art.flowerBloomingForTesting)
+        #expect(!art.flowerHost.isHidden && art.flowerIdlingForTesting && !art.flowerBloomingForTesting)
 
         // Another Background takes it out.
         input.ditherFlower = false
         ThemeRuntime.apply(input)
-        #expect(art.flowerSet == nil && art.flower.isHidden)
+        #expect(art.flowerSet == nil && art.flowerHost.isHidden)
     }
 
-    /// A composer that takes the room hides the flower; the flower's frame keeps clear of it; a change within one
-    /// radius bucket keeps the set, crossing a bucket renders one more.
-    @Test func followsTheStageAndKeepsItsSetWithinABucket() throws {
+    /// The flower fills the content area: one cell per mask pixel inside the area, nothing outside it. A drag scales
+    /// the shown frame and renders once, after it settles. A thread masks it behind the column; the new thread doesn't.
+    /// A surface floating over it shows the ground and the blurred flower.
+    @Test func fillsTheAreaAndRendersOnceAfterADrag() throws {
         try DitherArtView.$flowerSamples.withValue(1) { try followsTheStage() }
     }
 
     private func followsTheStage() throws {
-        let previous = ThemeRuntime.input, motion = Motion.reducedOverride
-        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion }
+        let previous = ThemeRuntime.input, motion = Motion.reducedOverride, patience = DitherArtView.bloomPatience
+        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion; DitherArtView.bloomPatience = patience }
+        DitherArtView.bloomPatience = 600
         Motion.reducedOverride = true
         let (art, page, window, _) = try setUp()
         defer { window.contentView = nil; DitherArtView.setEmphasis(nil, from: page); DitherArtView.clearFlowerStage(from: page) }
         DitherArtView.setEmphasis(.hero, from: page)
         stage(page)
-        let spot = try #require(art.flowerSpot)
-        let frame = try #require(art.flowerFrame(settled: true))
-        // Settled, every dot is one 3pt cell: the layer is the canvas at one cell a pixel.
         let key = try #require(art.flowerSet?.key)
-        let canvas = LotusArt.canvas(radius: key.radius)
-        #expect(abs(frame.width - CGFloat(canvas.width) * 3) < 0.01 && abs(frame.height - CGFloat(canvas.height) * 3) < 0.01)
-        #expect(CGFloat(key.radius) * 3 <= spot.radius)
-        // The flower's frame stays above the composer (unflipped: the composer's top is 174pt up).
-        #expect(art.convert(frame, to: page).minY >= 174)
+        let frame = try #require(art.flowerFrame())
+        // The layer is the content area's whole canvas, one cell per mask pixel: the field and the flower share it.
+        let p = key.full
+        #expect(abs(frame.width - CGFloat(p.width) * 3) < 0.01 && abs(frame.height - CGFloat(p.height) * 3) < 0.01)
+        let pageFrame = art.convert(frame, to: page)
+        #expect(pageFrame.minX >= -0.01 && pageFrame.maxX <= page.bounds.width + 3 && pageFrame.minY >= -3)
+        #expect(pageFrame.maxY >= page.bounds.height - 0.01)
+        // Reduce Motion: the open flower at once, no bloom, no turn, and no bloom or loop frames held.
+        #expect(!art.flowerBloomingForTesting && !art.flowerIdlingForTesting && art.flowerContentsForTesting === art.flowerSet?.open)
+        #expect(art.flowerSet?.bloom.isEmpty == true && art.flowerSet?.idle.isEmpty == true)
+        #expect(art.flowerHost.mask == nil)
+        // The surfaces over the flower get its blurred copy.
+        let glass = FlowerGlassView(frame: NSRect(x: 100, y: 30, width: 200, height: 80))
+        page.addSubview(glass)
+        glass.layout()
+        #expect(glass.glowShownForTesting)
 
+        // The same stage again: nothing renders.
         let renders = art.rendersForTesting
-        // Same bucket: no render.
-        let content = NSRect(x: 0, y: 0, width: page.bounds.width, height: page.bounds.height - 52)
-        DitherArtView.setFlowerStage(kind: .hero, content: content.insetBy(dx: 1, dy: 0),
-                                     keepOut: [NSRect(x: (page.bounds.width - 320) / 2, y: 24, width: 320, height: 150)], from: page)
-        if LotusArt.bucket(try #require(art.flowerSpot).radius) == key.radius { #expect(art.rendersForTesting == renders) }
+        stage(page)
+        #expect(art.rendersForTesting == renders)
 
-        // A composer filling the page: no room, no flower, no frames.
-        DitherArtView.setFlowerStage(kind: .hero, content: content,
-                                     keepOut: [NSRect(x: 0, y: 24, width: page.bounds.width, height: page.bounds.height - 60)], from: page)
-        #expect(art.flower.isHidden && art.flowerSet == nil)
+        // A drag: the first change renders, the next ones within the gap scale the shown frame instead.
+        stage(page, width: page.bounds.width - 30)
+        let afterFirst = art.rendersForTesting
+        // A debug render outlasts the drag gap, so the test says the last change was just now.
+        art.flowerMovedAt = CACurrentMediaTime()
+        stage(page, width: page.bounds.width - 60)
+        #expect(art.rendersForTesting == afterFirst && art.flowerResizing)
+        // The shown set is the earlier area's, placed for the new one.
+        #expect(art.flowerSet?.key != art.flowerTarget && art.flowerFrame() != nil)
+        art.settleFlower()
+        #expect(art.rendersForTesting == afterFirst + 1 && !art.flowerResizing)
+        #expect(art.flowerSet?.key.placement == LotusArt.canvas(content: CGRect(x: 0, y: 0, width: page.bounds.width - 60, height: page.bounds.height)))
+
+        // A thread: the still column mask, built from the column, and the same frames.
+        let before = art.rendersForTesting
+        DitherArtView.setEmphasis(.thread, from: page)
+        DitherArtView.setColumn(NSRect(x: 150, y: 0, width: 300, height: page.bounds.height), from: page)
+        stage(page, kind: .thread, width: page.bounds.width - 60)
+        #expect(art.flowerHost.mask === art.columnLayer && art.columnLayer.contents != nil)
+        // Moving the column rebuilds only the mask.
+        let renderedThread = art.rendersForTesting
+        DitherArtView.setColumn(NSRect(x: 120, y: 0, width: 300, height: page.bounds.height), from: page)
+        #expect(art.rendersForTesting == renderedThread)
+        #expect(renderedThread - before <= 1)
+    }
+
+    /// Behind the reading column the worst cell (the ink at the cap, under light's faintness) keeps body text at 12:1
+    /// and muted at 6:1 in dark, muted at 4.5:1 in light, with Redesign's own palettes and every accent.
+    @Test func columnKeepsTheTextFloorsInBothAppearances() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        for accent in DitherAccent.all.map(\.id) {
+            var input = ThemeRuntimeInput(light: ThemeDefinition.dither.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
+                                          dark: ThemeDefinition.dither.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
+            input.ditherLight = true; input.ditherDark = true; input.ditherFlower = true; input.ditherAccent = accent
+            ThemeRuntime.apply(input)
+            for dark in [true, false] {
+                let p = ThemeRuntime.palettes.palette(dark: dark, sidebar: false)
+                let g = p.background.srgb, t = p.foreground.srgb, m = p.mutedForeground.srgb
+                let ground = SIMD3(g.x, g.y, g.z), ink = DitherArtView.flowerInkRGB(p, dark: dark)
+                let opacity = Double(DitherArtView.flowerOpacity(dark: dark))
+                let cap = LotusArt.columnCap(ground: ground, ink: ink, text: SIMD3(t.x, t.y, t.z), muted: SIMD3(m.x, m.y, m.z),
+                                             opacity: opacity, dark: dark)
+                let worst = PictureInk.luminance(ground + (ink - ground) * Double(cap) * opacity)
+                let body = PictureInk.contrast(worst, PictureInk.luminance(SIMD3(t.x, t.y, t.z)))
+                let muted = PictureInk.contrast(worst, PictureInk.luminance(SIMD3(m.x, m.y, m.z)))
+                print("flower column \(accent) \(dark ? "dark" : "light"): cap \(Int(cap * 255))/255, body \(String(format: "%.2f", body)):1, muted \(String(format: "%.2f", muted)):1")
+                let floors = LotusArt.textFloors(dark: dark)
+                #expect(body >= floors.body && muted >= floors.muted, "\(accent) \(dark)")
+                // Some of the flower still shows behind the column.
+                #expect(cap > 0.05, "\(accent) \(dark)")
+            }
+        }
+    }
+
+    /// The new thread opens in two beats: the bloom above the composer, then the move down, rendered ahead on the full
+    /// canvas and freed on landing, which shows the resting frame and starts the turn. A quick return shows it at rest.
+    @Test func newThreadOpensInTwoBeats() throws {
+        try DitherArtView.$flowerSamples.withValue(1) { try twoBeats() }
+    }
+
+    private func twoBeats() throws {
+        let previous = ThemeRuntime.input, motion = Motion.reducedOverride, patience = DitherArtView.bloomPatience
+        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion; DitherArtView.bloomPatience = patience }
+        DitherArtView.bloomPatience = 600
+        Motion.reducedOverride = false
+        let (art, page, window, _) = try setUp()
+        defer { window.contentView = nil; DitherArtView.setEmphasis(nil, from: page); DitherArtView.clearFlowerStage(from: page) }
+        DitherArtView.setEmphasis(.hero, from: page)
+        stage(page, floorTop: 100)
+        let set = try #require(art.flowerSet)
+        let o = try #require(set.opening)
+        #expect(art.openingPlaying && art.flowerBloomingForTesting && !art.flowerIdlingForTesting)
+        #expect(set.openingBloom.count == LotusArt.openingBloomPoses().count && set.flight.count == LotusArt.flightFrames(o).count)
+        #expect(art.flowerFrame()?.width == CGFloat(o.canvas.width) * 3)
+        // The hold is over: the move plays and the bloom's frames go.
+        art.openingFly?.cancel(); art.openingFly = nil
+        art.bloomEnds = -1000
+        art.fly()
+        #expect(art.flowerMask.animation(forKey: "flight") != nil && art.flowerSet?.openingBloom.isEmpty == true)
+        // Landed: the resting frame on the resting canvas, the opening's frames gone, the turn going.
+        art.openingLand?.cancel()
+        art.land()
+        #expect(!art.openingPlaying && art.flowerContentsForTesting === art.flowerSet?.open)
+        #expect(art.flowerSet?.flight.isEmpty == true && art.flowerSet?.opening == nil && art.flowerIdlingForTesting)
+        #expect(art.flowerFrame()?.width == CGFloat(try #require(art.flowerSet).key.placement.width) * 3)
+        #expect(try #require(art.flowerSet).bytes < 10 * 1_048_576)
+
+        // Away and straight back: at rest, no opening.
+        DitherArtView.setEmphasis(.page, from: page)
+        DitherArtView.setEmphasis(.hero, from: page)
+        DitherArtView.flowerOpened(from: page)
+        #expect(!art.openingPlaying && !art.flowerBloomingForTesting)
+        // Reduce Motion: at rest, no opening.
+        art.heroLeftAt = nil
+        Motion.reducedOverride = true
+        DitherArtView.flowerOpened(from: page)
+        #expect(!art.openingPlaying && !art.flowerBloomingForTesting && art.flowerContentsForTesting === art.flowerSet?.open)
     }
 }

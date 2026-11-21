@@ -20,7 +20,7 @@ public enum BackdropMarks {
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
         if ThemeRuntime.isDither(dark: dark) {
             // Picture lays no dim, so its marks keep the default dim's strength whatever the slider says.
-            let picture = !ThemeRuntime.ditherBlur && !ThemeRuntime.ditherGradient
+            let picture = !ThemeRuntime.ditherBlur
             return DitherArt.worstBackground(background, dark: dark, dim: picture ? DitherArt.defaultDim : Double(ThemeRuntime.ditherDim), veiled: false)
         }
         return nil

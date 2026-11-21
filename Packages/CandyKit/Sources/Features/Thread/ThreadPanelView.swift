@@ -1993,22 +1993,17 @@ public final class ThreadPanelView: DSView {
                                    width: max(0, right - x), height: DitherThreadTitleView.height)
     }
 
-    /// Redesign's Flower background: the content area left of the right panel, and what the lotus keeps clear of, the
-    /// composer with its pills and cards, the reading column, the header pill and a right panel sheet.
+    /// Redesign's Flower background: the content area left of the right panel, from the window's top, which the lotus
+    /// fills, and on the new thread the top of the composer and its pills, which the opening bloom sits above.
     private func reportFlowerStage(chat: CGFloat, chatHeight: CGFloat) {
         guard ThemeRuntime.isDither(dark: effectiveAppearance.isDark), !isEmbedded, chat > 0 else {
             DitherArtView.clearFlowerStage(from: self)
             return
         }
-        var keepOut = ([composer] + ditherShown).filter { !$0.isHidden }.map(\.frame)
-        if isDraft, !hero.isHidden, hero.chipsWidth > 0 { keepOut.append(hero.frame) }
-        if !isDraft, readingLane.width > 0 { keepOut.append(readingLane) }
-        let pill = header.pill
-        if !pill.isHidden, pill.window != nil, let host = pill.superview { keepOut.append(convert(pill.frame, from: host)) }
-        if rightPanelSheetOpen { keepOut.append(rightPanel.frame) }
-        if let drawer = lazyTerminalDrawer.loaded, !drawer.isHidden, drawer.frame.height > 0 { keepOut.append(drawer.frame) }
-        DitherArtView.setFlowerStage(kind: isDraft ? .hero : .thread, content: NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop)),
-                                     keepOut: keepOut, from: self)
+        let floor = isDraft ? ([composer] + ditherShown).filter { !$0.isHidden }.map { isFlipped ? $0.frame.minY : $0.frame.maxY }
+            .reduce(nil as CGFloat?) { acc, y in acc.map { isFlipped ? min($0, y) : max($0, y) } ?? y } : nil
+        DitherArtView.setFlowerStage(kind: isDraft ? .hero : .thread, content: NSRect(x: 0, y: 0, width: chat, height: chatHeight),
+                                     floorTop: floor, from: self)
     }
 
     private var ditherDockViews: [ComposerBannerView?] {

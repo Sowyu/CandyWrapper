@@ -25,7 +25,7 @@ import T3Protocol
         // The theme picker turns Redesign on: the switch follows and the rows wake.
         lib.setTheme(ThemeDefinition.dither.id)
         #expect(page.master.isOn)
-        // Animate background waits for Gradient or Flower and Background dim for Blur; the default Background is Picture.
+        // Animate background waits for Flower and Background dim for Blur; the default Background is Picture.
         #expect(page.gated.allSatisfy { [nil, RedesignSettingsView.animateReason, RedesignSettingsView.dimReason].contains($0.inertReason) })
         // The switch turns it off, and on again: the picker follows.
         page.master.onChange?(false)
@@ -68,17 +68,30 @@ import T3Protocol
         #expect(!library().runtimeInput(client: old).0.ditherBlur)
         let blur = ClientSettings(decoding: .object(["redesignBackground": .string("blur")]))
         #expect(library().runtimeInput(client: blur).0.ditherBlur)
+        // 1.16.0's Gradient still loads, and shows Flower, whose field it became.
         let gradient = ClientSettings(decoding: .object(["redesignBackground": .string("gradient")]))
         #expect(gradient.string("redesignBackground") == "gradient")
-        #expect(library().runtimeInput(client: gradient).0.ditherGradient)
+        #expect(library().runtimeInput(client: gradient).0.ditherFlower)
         #expect(!library().runtimeInput(client: gradient).0.ditherBlur)
-        // Flower, the fourth choice, reaches the runtime alone; "Animate background" keeps Gradient's stored key.
+        // Flower reaches the runtime alone; "Animate background" keeps Gradient's stored key.
         let flower = ClientSettings(decoding: .object(["redesignBackground": .string("flower"), "redesignGradientAnimate": .bool(false)]))
         #expect(flower.string("redesignBackground") == "flower")
         let flowerInput = library().runtimeInput(client: flower).0
-        #expect(flowerInput.ditherFlower && !flowerInput.ditherGradient && !flowerInput.ditherBlur)
+        #expect(flowerInput.ditherFlower && !flowerInput.ditherBlur)
         #expect(!flowerInput.ditherGradientAnimates)
-        #expect(!library().runtimeInput(client: gradient).0.ditherFlower)
+    }
+
+    /// A 1.16.0 settings file with Background set to Gradient loads without error, as Flower, and is saved so once.
+    @Test func gradientFromSixteenLoadsAsFlower() throws {
+        let defaults = try #require(UserDefaults(suiteName: "cw.gradient-move.\(UUID().uuidString)"))
+        let saved = #"{"redesignBackground":"gradient","redesignGradientAnimate":true,"ditherAccent":"violet"}"#
+        defaults.set(Data(saved.utf8), forKey: ClientSettingsStore.defaultsKey)
+        let store = ClientSettingsStore(defaults: defaults)
+        #expect(!store.readFailed)
+        #expect(store.current.string("redesignBackground") == "flower")
+        #expect(store.current.string("ditherAccent") == "violet")
+        let stored = try #require(defaults.data(forKey: ClientSettingsStore.defaultsKey).flatMap { try? JSONValue(parsing: $0) })
+        #expect(stored.objectValue?["redesignBackground"] == .string("flower"))
     }
 
     @Test func searchFindsTheTabAndEveryRow() {
