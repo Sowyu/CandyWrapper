@@ -364,7 +364,8 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         c.text = action
         c.redesignOnly = true
         c.shortcutProvider = shortcut
-        c.textProvider = shortcut.map { shortcut in { shortcut().map { "\(action) (\($0))" } ?? action } }
+        c.textProvider = nil
+        if let shortcut { c.textProvider = { shortcut().map { "\(action) (\($0))" } ?? action } }
         return c
     }
 
