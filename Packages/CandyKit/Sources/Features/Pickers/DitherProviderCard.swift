@@ -115,8 +115,11 @@ final class DitherProviderCardView: DSView {
         setAccessibilityLabel([info.name, info.statusText, info.plan, info.used.map { "\($0.percent)% used" }].compactMap { $0 }.joined(separator: ", "))
     }
 
-    var preferredHeight: CGFloat {
-        Self.top + Self.titleHeight + (account != nil ? Self.lineHeight : 0) + (usedLabel != nil ? Self.lineHeight + 2 : 0) + Self.bottom
+    var preferredHeight: CGFloat { Self.height(info) }
+
+    /// The card's height for `info`, before it is built.
+    static func height(_ info: DitherProviderCardInfo) -> CGFloat {
+        top + titleHeight + (info.email != nil || info.plan != nil ? lineHeight : 0) + (info.used != nil ? lineHeight + 2 : 0) + bottom
     }
 
     override func layout() {

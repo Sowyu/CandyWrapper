@@ -5,10 +5,15 @@ import T3Protocol
 /// What Redesign's model picker shows, from the client settings on this device (the user, 2026-11-21).
 @MainActor
 enum RedesignPickerSettings {
-    /// One column: tabs, search, the list, Reasoning and the footer. Off keeps Redesign's two-column docked picker.
-    static var stacked: Bool { ClientSettingsStore.shared.current.bool("redesignStackedPicker") }
-    /// The provider's account card between the search and the list. Off, the tabs keep T3's status tooltip.
-    static var showsAccount: Bool { ClientSettingsStore.shared.current.bool("redesignPickerAccount") }
+    /// One column: tabs, search, the list (six rows, then it scrolls), Reasoning and the footer. Off, the default since
+    /// 2026-11-21, shows the rail and the list with a details pane at their right.
+    static var stacked: Bool { stackedOverride ?? ClientSettingsStore.shared.current.bool("redesignStackedPicker") }
+    /// Tests set the two switches per task, so suites running side by side don't share them.
+    @TaskLocal nonisolated static var stackedOverride: Bool?
+    @TaskLocal nonisolated static var accountOverride: Bool?
+    /// The provider's account card at the top of the details pane, or between the search and the list when stacked. Off,
+    /// the tabs keep T3's status tooltip.
+    static var showsAccount: Bool { accountOverride ?? ClientSettingsStore.shared.current.bool("redesignPickerAccount") }
 }
 
 /// The Redesign tab, CandyWrapper's own: the switch that turns Redesign on, then every setting only Redesign uses.
@@ -53,9 +58,9 @@ public final class RedesignSettingsView: SettingsPageBase {
         let collapse = clientSwitch("composer-collapse",
                                     "Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again.",
                                     key: "composerCollapseOnScroll", reset: "collapse composer on scroll", title: "Collapse composer on scroll")
-        let stacked = clientSwitch("redesign-stacked-picker", "One column with the list over Reasoning and the footer. Off shows the list and Reasoning side by side.",
+        let stacked = clientSwitch("redesign-stacked-picker", "One column with six models at a time over Reasoning and the footer. Off shows the models with a details pane beside them.",
                                    key: "redesignStackedPicker", reset: "stacked model picker", title: "Stacked model picker")
-        let account = clientSwitch("redesign-picker-account", "The provider's account, usage bar and Manage between the search and the models.",
+        let account = clientSwitch("redesign-picker-account", "The provider's account and usage bar at the top of the details pane, or above the models when stacked.",
                                    key: "redesignPickerAccount", reset: "account and limits", title: "Account and limits in the model picker")
         gated = look + [collapse, stacked, account]
         binder.add { [weak self] in

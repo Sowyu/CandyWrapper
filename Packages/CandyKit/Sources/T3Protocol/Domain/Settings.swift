@@ -72,7 +72,7 @@ public struct ClientSettings: Equatable, Sendable {
         "redesignTintFromPicture": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's surfaces lean toward the picture's color
         "redesignInk": SettingSpec(.literals(["auto", "accent", "custom"]), .string("auto")),  // CandyWrapper only: where Redesign's Picture takes its two inks
         "redesignInkColor": SettingSpec(.string(maxLength: 9), .string("#86cdff")),  // CandyWrapper only: Picture's light ink when Ink is Custom, #rrggbb
-        "redesignStackedPicker": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's docked model picker as one column
+        "redesignStackedPicker": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's docked model picker as one column; off shows a details pane
         "redesignPickerAccount": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's account and limits card in the model picker
         "appIcon": SettingSpec(.literals(["sticker", "pink", "grape", "mint", "lemon", "orange", "classic"]), .string("sticker")),  // CandyWrapper only: the Dock icon (AppIconChoice)
         "appIconAppearance": SettingSpec(.literals(["auto", "light", "dark"]), .string("auto")),  // CandyWrapper only: the Dock icon's light or dark variant (AppIconChoice)

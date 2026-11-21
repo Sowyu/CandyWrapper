@@ -30,13 +30,23 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             // Rows read the layout when they are made, so a change rebuilds them.
             rowViews.forEach { $0.removeFromSuperview() }
             rowViews = []
-            if stacked { search.placeholder = "Search models..."; search.paddingOverride = (20, 0) }
+            if dockedCapy { search.placeholder = "Search models..."; search.paddingOverride = (20, 0) }
             reload()
         }
     }
     /// Redesign docked: tabs across the top, search under them, and the list under the search. Settings > Redesign >
     /// Stacked model picker off keeps the two-column dock.
     var stacked: Bool { docked && capy && RedesignPickerSettings.stacked }
+    /// Redesign docked with Stacked model picker off (the user's layout 2, 2026-11-21): search over the rail and the list,
+    /// with the dock's detail pane at the right. Rows look as in the stacked layout.
+    var detailed: Bool { docked && capy && !RedesignPickerSettings.stacked }
+    var dockedCapy: Bool { docked && capy }
+    /// The stacked layout shows at most this many rows before it scrolls, so it never outgrows the window.
+    static let stackedVisibleRows = 6
+    /// Rail and list in the detail layout.
+    static let detailListWidth: CGFloat = 300
+    /// The highlight, or the rows under it, changed.
+    var onHighlightChange: (@MainActor () -> Void)?
     /// The open provider's project models are still being scanned (ModelPickerContent.tsx:1225-1231 at 4928, #24585).
     var workspaceModelsScanning = false { didSet { emptyLabel.text = workspaceModelsScanning ? "Searching project models..." : "No models found" } }
     private(set) var rail: ModelPickerRail
@@ -51,7 +61,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     var highlightedRow: Int? {
         didSet {
             if let h = highlightedRow, !(0..<min(rowViews.count, sections.rows.count)).contains(h) { highlightedRow = nil }
-            if highlightedRow != oldValue { restyleHighlight(from: oldValue); scrollToHighlight() }
+            if highlightedRow != oldValue { restyleHighlight(from: oldValue); scrollToHighlight(); onHighlightChange?() }
         }
     }
     /// Keyboard focus in the rail (index into `railButtons`), nil while the search field has it.
@@ -219,21 +229,36 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         favoritesButton.restyle()
         needsLayout = true
         needsDisplay = true
+        onHighlightChange?()
     }
+
+    /// The highlighted row's model, nil on a heading or with no highlight.
+    var highlightedItem: ModelPickerItem? {
+        guard let h = highlightedRow, sections.rows.indices.contains(h), case .model(let item) = sections.rows[h] else { return nil }
+        return item
+    }
+    /// The listed model with `key` (`instance:slug`), if it is still listed.
+    func listedItem(_ key: String) -> ModelPickerItem? {
+        for row in sections.rows { if case .model(let item) = row, item.key == key { return item } }
+        return nil
+    }
+    /// Every listed model, in order.
+    var listedItems: [ModelPickerItem] { sections.rows.compactMap { if case .model(let item) = $0 { item } else { nil } } }
 
     /// Redesign's card for the rail's provider, while not searching. Rebuilt only when what it shows changes. Settings >
     /// Redesign > Account and limits turns it on; without it the tab keeps T3's status tooltip and dims while not ready.
     private func syncCard() {
-        guard capy, RedesignPickerSettings.showsAccount, !searching, case .instance(let id) = rail, let entry = catalog.entry(id) else { card = nil; return }
+        guard capy, !detailed, RedesignPickerSettings.showsAccount, !searching, case .instance(let id) = rail, let entry = catalog.entry(id) else { card = nil; return }
         let info = DitherProviderCardInfo(entry)
         if card?.info == info { return }
         card = DitherProviderCardView(info: info, onManage: onManage.map { open in { open(id) } })
     }
 
-    /// The list's height in the stacked layout: the card and its hairline, the rows, and the padding under them.
+    /// The list's height in the stacked layout: the card and its hairline, the rows up to `stackedVisibleRows`, and the
+    /// padding under them; more rows scroll.
     private func stackedListHeight(rows: Int, cardHeight: CGFloat?) -> CGFloat {
         let top = cardHeight.map { $0 + 1 + 6 } ?? 6
-        return rows == 0 ? top + 36 : top + CGFloat(rows) * 32 + listBottom
+        return rows == 0 ? top + 36 : top + CGFloat(min(rows, Self.stackedVisibleRows)) * 32 + listBottom
     }
 
     private static func rowKey(_ row: ModelPickerRow) -> String {
@@ -391,6 +416,12 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             let list = stackedListHeight(rows: sections.rows.count, cardHeight: card?.preferredHeight)
             return CGSize(width: Self.stackedWidth, height: tabsH + searchH + list + footerHeight)
         }
+        if detailed {
+            // The rows' own height; the dock sets the popup's height from this and the pane, within a floor and a ceiling.
+            if let frozenHeight { return CGSize(width: Self.detailListWidth, height: frozenHeight) }
+            let list = sections.rows.isEmpty ? listTop + 36 : listContentHeight + listTop + listBottom
+            return CGSize(width: Self.detailListWidth, height: searchH + list)
+        }
         if docked { return CGSize(width: Self.width(capy), height: capy ? Self.capyHeight : Self.maxHeight) }
         if let frozenHeight { return CGSize(width: Self.width(capy), height: frozenHeight) }
         let list = sections.rows.isEmpty ? 36 + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
@@ -486,6 +517,9 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         for l in [railFill, mainFill, divider, indicator] { l.isHidden = true }
         sharing?.frame = NSRect(x: 0, y: bodyHeight, width: bounds.width, height: footerHeight)
         search.frame = NSRect(x: 14, y: 7, width: bounds.width - 28, height: 26)
+        // The detail layout keeps the stacked picker's search with its icon.
+        searchIcon.isHidden = !detailed
+        if detailed { searchIcon.frame = NSRect(x: 14, y: 12, width: 16, height: 16) }
         underline.frame = CGRect(x: 0, y: searchH - 1, width: bounds.width, height: 1)
         mainBorder.isHidden = !railShown
         mainBorder.frame = CGRect(x: mainX, y: searchH, width: 1, height: max(0, bodyHeight - searchH))
@@ -833,7 +867,7 @@ final class ModelRowView: DSView {
     private var kbd: KbdView?
     /// Redesign: one line, the model's glyph first, a check at the right on the selected model.
     private let capy: Bool
-    /// Redesign docked: the check right after the name and the jump key always at the right.
+    /// Redesign docked (stacked or detail layout): the check right after the name and the jump key always at the right.
     private let stacked: Bool
     private var check: IconView?
 
@@ -843,7 +877,7 @@ final class ModelRowView: DSView {
         self.index = index
         self.jumpLabel = jumpLabel
         capy = picker.capy
-        stacked = picker.stacked
+        stacked = picker.dockedCapy
         super.init(frame: .zero)
         fill.cornerRadius = 6
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]

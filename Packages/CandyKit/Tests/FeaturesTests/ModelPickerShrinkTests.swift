@@ -12,16 +12,15 @@ import T3Store
     enum Theme: CaseIterable { case standard, redesign, glass }
 
     static func withTheme(_ theme: Theme, stacked: Bool = true, account: Bool = false, _ body: () throws -> Void) rethrows {
-        let store = ClientSettingsStore.shared
-        let before = ["redesignStackedPicker": store.current["redesignStackedPicker"], "redesignPickerAccount": store.current["redesignPickerAccount"]]
         let previous = ThemeRuntime.input
-        defer { ThemeRuntime.apply(previous); store.update(before) }
-        store.update(["redesignStackedPicker": .bool(stacked), "redesignPickerAccount": .bool(account)])
+        defer { ThemeRuntime.apply(previous) }
         var input = previous
         input.ditherLight = theme == .redesign; input.ditherDark = theme == .redesign
         input.glassLight = theme == .glass; input.glassDark = theme == .glass
         ThemeRuntime.apply(input)
-        try body()
+        try RedesignPickerSettings.$stackedOverride.withValue(stacked) {
+            try RedesignPickerSettings.$accountOverride.withValue(account) { try body() }
+        }
     }
 
     /// Claude with four current models and three legacy ones, as the report's picture, plus Codex for a second tab.

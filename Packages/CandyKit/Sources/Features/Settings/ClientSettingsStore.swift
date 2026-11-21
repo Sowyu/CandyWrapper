@@ -29,8 +29,24 @@ public final class ClientSettingsStore {
             json = seed
         }
         #endif
+        if !ephemeral, let moved = Self.moveStackedPickerDefault(json, defaults: defaults) {
+            json = moved
+            if let data = try? JSONEncoder().encode(ClientSettings(decoding: moved).encoded) { defaults.set(data, forKey: Self.defaultsKey) }
+        }
         current = ClientSettings(decoding: json)
         readFailed = !ephemeral && defaults.data(forKey: Self.defaultsKey) != nil && json?.objectValue == nil
+    }
+
+    static let stackedPickerMoveKey = "clientSettings.movedStackedPickerDefault"
+    /// `redesignStackedPicker` defaulted to true until 2026-11-21 and now defaults to false. Every save writes every key,
+    /// so a stored true can't be told from the old default and moves to the new one, once. A stored false differed from
+    /// the old default, so someone chose it, and it stays. Nil when nothing moves.
+    static func moveStackedPickerDefault(_ json: JSONValue?, defaults: UserDefaults) -> JSONValue? {
+        guard !defaults.bool(forKey: stackedPickerMoveKey) else { return nil }
+        defaults.set(true, forKey: stackedPickerMoveKey)
+        guard case .object(var o)? = json, o["redesignStackedPicker"] == .bool(true) else { return nil }
+        o.removeValue(forKey: "redesignStackedPicker")
+        return .object(o)
     }
 
     public func retryRead() {

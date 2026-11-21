@@ -253,9 +253,16 @@ final class ComposerEffortRowView: ControlView {
 final class ComposerEffortColumnView: DSView {
     static let width: CGFloat = 192
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    /// Redesign stacks the section under the model list: the header across, the levels as segmented lines, then the
-    /// option rows (the user's layout, 2026-11-20). Only Redesign docks a capy column, so the two go together.
-    var stacked: Bool { capy && RedesignPickerSettings.stacked }
+    /// Redesign puts the section under the model list in both its layouts: the levels as one segmented track, then the
+    /// option rows (the user's layouts, 2026-11-20 and 2026-11-21). Only Redesign docks a capy column.
+    var stacked: Bool { capy }
+    /// The detail layout puts "Reasoning" on the track's line, so the row is one 28pt track tall (the user found
+    /// the mock's 36pt track under its own heading too big, 2026-11-21).
+    var inlineHeading = false { didSet { if inlineHeading != oldValue { buildSegments(); needsLayout = true } } }
+    /// The section's width, which the level lines wrap in.
+    var layoutWidth: CGFloat = ModelPickerView.stackedWidth { didSet { if layoutWidth != oldValue { buildSegments(); needsLayout = true } } }
+    /// The heading's width when it shares the track's line.
+    private var inlineHeadingWidth: CGFloat { inlineHeading ? ceil(heading.textWidth) + 12 : 0 }
     /// The level segments in the stacked layout, keyed by their index in `rows`; their rows stay hidden.
     private(set) var segments: [Int: ComposerFooterSegmentView] = [:]
     private(set) var levelLines: [ComposerFooterGroupView] = []
@@ -307,6 +314,9 @@ final class ComposerEffortColumnView: DSView {
         let locked = locked && controls.effort?.id == primary
         heading.text = controls.effort?.label ?? (controls.others.isEmpty ? "Effort" : "Options")
         modelLabel.text = model
+        // Inline, the model's name moves to the heading's tooltip and VoiceOver label.
+        heading.toolTip = inlineHeading ? "\(heading.text) for \(model)" : nil
+        heading.setAccessibilityLabel("\(heading.text) for \(model)")
         note.text = locked ? "Your prompt contains \"ultrathink\" in the text. Remove it to change this option." : ""
         let previousFocus = focusIndex
         rows.forEach { $0.removeFromSuperview() }
@@ -368,7 +378,7 @@ final class ComposerEffortColumnView: DSView {
         levelLines = []; segments = [:]
         guard stacked else { return }
         var line: [ComposerFooterSegmentView] = [], lineWidth: CGFloat = 4
-        let available = ModelPickerView.stackedWidth - 16
+        let available = layoutWidth - 16 - inlineHeadingWidth
         func flush() {
             guard !line.isEmpty else { return }
             let group = ComposerFooterGroupView(line)
@@ -520,17 +530,25 @@ final class ComposerEffortColumnView: DSView {
     /// the option rows. Returns the height.
     @discardableResult
     private func placeStacked(width w: CGFloat, apply: Bool) -> CGFloat {
+        // A model with no effort levels or options has no section at all, so the popup shrinks instead of keeping a hole.
+        if apply {
+            for v in [heading, modelLabel, empty] as [NSView] { v.isHidden = rows.isEmpty }
+            empty.isHidden = true
+            leftRule.isHidden = rows.isEmpty
+        }
+        if rows.isEmpty { return 0 }
+        // The ultrathink note needs the heading above it, so the heading goes back up while it shows.
+        let inline = inlineHeading && !levelLines.isEmpty && note.text.isEmpty
         if apply {
             leftRule.frame = CGRect(x: 0, y: 0, width: w, height: 1)
             headerRule.isHidden = true; optionsRule.isHidden = true
             let headingW = min(ceil(heading.textWidth), w - 24)
-            heading.frame = NSRect(x: 12, y: 10, width: headingW, height: 20)
+            heading.frame = NSRect(x: 12, y: inline ? 12 : 10, width: headingW, height: 20)
             let modelX = 12 + headingW + 8
+            modelLabel.isHidden = inline
             modelLabel.frame = NSRect(x: modelX, y: 12, width: max(0, w - 12 - modelX), height: 16)
-            empty.frame = NSRect(x: 12, y: 36, width: w - 24, height: 20)
         }
-        var y: CGFloat = 36, bottom = y
-        if rows.isEmpty { return y + 20 + 10 }
+        var y: CGFloat = inline ? 8 : 36, bottom = y
         if !note.text.isEmpty {
             let h = note.layout(forWidth: w - 24).height
             if apply { note.frame = NSRect(x: 12, y: y, width: w - 24, height: h) }
@@ -538,9 +556,10 @@ final class ComposerEffortColumnView: DSView {
         } else if apply {
             note.frame = .zero
         }
+        let trackX = inline ? 12 + inlineHeadingWidth : 8
         for line in levelLines {
             // The track runs nearly edge to edge, 8pt in, as the user's picture has it.
-            if apply { line.frame = NSRect(x: 8, y: y, width: w - 16, height: 28); line.needsLayout = true }
+            if apply { line.frame = NSRect(x: trackX, y: y, width: w - 8 - trackX, height: 28); line.needsLayout = true }
             bottom = y + 28
             y += 28 + 4
         }
@@ -550,7 +569,7 @@ final class ComposerEffortColumnView: DSView {
             bottom = y + row.height
             y += row.height + 2
         }
-        return bottom + 12
+        return bottom + (inline ? 8 : 12)
     }
 
     override func layout() {
@@ -733,8 +752,8 @@ final class ComposerPickerFooterView: DSView {
     var onSelect: ((ProviderOptionDescriptor, String) -> Void)?
     var onBoolean: ((String, Bool) -> Void)?
     var onPermissions: ((NSView) -> Void)?
-    /// Redesign's stacked picker: the controls wrap to a second line when they don't fit its 335pt.
-    var stacked: Bool { capy && RedesignPickerSettings.stacked }
+    /// Redesign's pickers: the controls wrap to a second line when they don't fit (335pt stacked, wider in the detail layout).
+    var stacked: Bool { capy }
     var onSizeChange: (() -> Void)?
     /// Keyboard focus among the segments and the permissions trigger, in reading order (stacked only).
     private(set) var focusIndex: Int? { didSet { showFocus() } }
@@ -900,6 +919,17 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
 
     /// Redesign: one 335pt column, the list over the Reasoning section over the footer (the user's layout, 2026-11-20).
     var stacked: Bool { picker.stacked }
+    /// Redesign's detail layout: the rail and list with the detail pane at their right, then the Reasoning row and the
+    /// footer across both (the user's layout 2, 2026-11-21).
+    var detailed: Bool { picker.detailed }
+    /// Either Redesign layout: the sections take keyboard focus in turn.
+    private var sectioned: Bool { stacked || detailed }
+    let pane = ModelDetailPaneView()
+    /// The model the pane shows: the highlighted one, kept while the pointer crosses to the pane.
+    private var paneKey: String?
+    /// The top area's floor, so a one-model provider is not a strip, and its ceiling, so the popup fits above the
+    /// composer in a 700pt window (measured on screen 2026-11-21); the host trims it further in a shorter window.
+    static let detailMinHeight: CGFloat = 232, detailMaxHeight: CGFloat = 400
     /// Stacked: keyboard focus sits on the list, between the search and the Reasoning section in Tab order.
     private(set) var listFocused = false
 
@@ -911,7 +941,50 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         for v in [picker, column, footer] as [NSView] { addSubview(v) }
         column.onSizeChange = { [weak self] in self?.contentChanged() }
         footer.onSizeChange = { [weak self] in self?.contentChanged() }
+        if picker.detailed {
+            addSubview(pane)
+            column.inlineHeading = true
+            column.layoutWidth = Self.detailWidth
+            picker.onHighlightChange = { [weak self] in self?.syncPane() }
+            syncPane()
+        }
     }
+
+    static var detailWidth: CGFloat { ModelPickerView.detailListWidth + ModelDetailPaneView.width }
+
+    /// Shows the highlighted model in the pane. Off the rows (the pointer on its way to the pane, or on Show more) it keeps
+    /// the model it showed while that is still listed, else the selected model, else the first.
+    func syncPane() {
+        guard detailed else { return }
+        let items = picker.listedItems
+        let item = picker.highlightedItem ?? paneKey.flatMap(picker.listedItem) ?? items.first { $0.isSelected } ?? items.first
+        paneKey = item?.key
+        let content = item.map(ModelDetailContent.make)
+        pane.show(content, card: cardInfo(item))
+        let height = naturalSize.height
+        if abs(height - bounds.height) > 0.5, window != nil { contentChanged() }
+    }
+
+    private func cardInfo(_ item: ModelPickerItem?) -> DitherProviderCardInfo? {
+        guard RedesignPickerSettings.showsAccount, let item else { return nil }
+        return DitherProviderCardInfo(item.entry)
+    }
+
+    /// The top area's height: the list's rows or the tallest pane among the listed models, whichever is more, kept
+    /// between the floor and the ceiling. The pane's tallest model sets it, so arrowing through rows never resizes the popup.
+    var detailTopHeight: CGFloat {
+        let items = picker.listedItems
+        let keys = items.map(\.key) + [picker.activeModel, picker.rail == .favorites ? "*" : ""]
+        // While searching the height stays where it was when typing started, as the list's own does.
+        if let topCache, topCache.keys == keys || picker.searching { return topCache.height }
+        let tallestPane = items.prefix(40).map { item in
+            pane.height(for: ModelDetailContent.make(item), card: cardInfo(item))
+        }.max() ?? pane.height(for: nil, card: nil)
+        let height = min(Self.detailMaxHeight, max(Self.detailMinHeight, picker.naturalSize.height, tallestPane))
+        topCache = (keys, height)
+        return height
+    }
+    private var topCache: (keys: [String], height: CGFloat)?
 
     private func contentChanged() {
         needsLayout = true
@@ -920,6 +993,10 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
 
     var naturalSize: CGSize {
         let list = picker.naturalSize
+        if detailed {
+            let w = Self.detailWidth
+            return CGSize(width: w, height: detailTopHeight + column.stackedHeight(width: w) + footer.stackedHeight(width: w))
+        }
         if stacked {
             let w = ModelPickerView.stackedWidth
             return CGSize(width: w, height: list.height + column.stackedHeight(width: w) + footer.stackedHeight(width: w))
@@ -952,7 +1029,7 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
 
     /// `composer.mode` aimed at the open picker: focus lands on the footer's permissions trigger.
     func focusPermissions() {
-        guard stacked else { return }
+        guard sectioned else { return }
         column.blur(); picker.focusRail(false); listFocused = false
         footer.focus(permissions: true)
     }
@@ -989,6 +1066,14 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         switch section {
         case .reasoning: return column.handleKey(key)
         case .footer: return footer.handleKey(key)
+        case .list where detailed && key == .right, .search where detailed && key == .right && caretAtEnd:
+            // Right picks the highlighted model, whose levels then take focus, as T3's dock (ModelPickerContent.tsx:1073-1094).
+            if let h = picker.highlightedRow, picker.isOtherModel(h) { picker.activate(h); return true }
+            focusEffort(levelsOnly: false)
+            return true
+        case .list where detailed && key == .left:
+            // The rail runs down the left side here, as in T3's dock.
+            return picker.handleKey(key)
         case .list where key == .left || key == .right: return true
         default: return picker.handleKey(key)
         }
@@ -1000,7 +1085,7 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         // From the keyboard (Right, the effort shortcut) the focus shows; after a model click it does not.
         column.focusVisible = NSApp.currentEvent?.type == .keyDown
         let focused = column.focus(levelsOnly: levelsOnly)
-        if focused, stacked {
+        if focused, sectioned {
             // The pointer's row keeps its hover; only a keyboard highlight leaves.
             footer.blur(); picker.focusRail(false); listFocused = false
             picker.clearKeyboardHighlight()
@@ -1011,7 +1096,7 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
     }
 
     func handleKey(_ key: PopupKey) -> Bool {
-        if stacked { return handleStackedKey(key) }
+        if sectioned { return handleStackedKey(key) }
         if column.focusIndex != nil {
             // ArrowLeft in the column returns to the search field (ProviderModelPicker.tsx:482-488).
             if key == .left { column.blur(); window?.makeFirstResponder(picker.search); return true }
@@ -1033,6 +1118,18 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
 
     override func layout() {
         super.layout()
+        if detailed {
+            // The host caps the height; the list and the pane give up the space, and the list scrolls.
+            let w = bounds.width
+            let footerH = footer.stackedHeight(width: w), columnH = column.stackedHeight(width: w)
+            let topH = max(0, bounds.height - columnH - footerH)
+            let listW = ModelPickerView.detailListWidth
+            picker.frame = NSRect(x: 0, y: 0, width: listW, height: topH)
+            pane.frame = NSRect(x: listW, y: 0, width: w - listW, height: topH)
+            column.frame = NSRect(x: 0, y: topH, width: w, height: columnH)
+            footer.frame = NSRect(x: 0, y: topH + columnH, width: w, height: footerH)
+            return
+        }
         if stacked {
             // The host caps the height; the list gives up the space and scrolls.
             let w = bounds.width

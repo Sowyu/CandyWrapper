@@ -11,6 +11,8 @@ for name, version, license, source, path in [
     ('pele', '1.8.0', 'MIT', 'https://github.com/obsidianmd/pele', 'Packages/CandyKit/Sources/Features/Resources/LICENSE-pele.txt'),
     ('Latin Modern Math', '1.959', 'GUST Font License', 'https://www.gust.org.pl/projects/e-foundry/lm-math',
      'Packages/CandyKit/Sources/Features/Resources/LICENSE-latin-modern-math.txt'),
+    # The model picker's descriptions and facts, bundled by scripts/gen-model-notes.
+    ('models.dev', None, 'MIT', 'https://github.com/anomalyco/models.dev', 'docs/research/models-dev/LICENSE.txt'),
 ]:
     entries.append(dict(bundles=['CandyWrapper'], kind='package', license=license, name=name,
                         noticeText=(root/path).read_text(), sourceUrl=source, version=version))
