@@ -273,7 +273,7 @@ public final class ThreadImageGalleryController {
     private weak var view: ThreadImageGalleryView?
     /// The full gallery while it shows; nil holds nothing.
     public private(set) var wall: ThreadImageWallView?
-    private weak var wallFocus: NSResponder?
+    private var modal: AppRouteModalView?
 
     /// The gallery opened: read children that changed since their last read.
     public var onOpen: (() -> Void)?
@@ -446,69 +446,46 @@ public final class ThreadImageGalleryController {
         return (bottom - 6 - RedesignTokens.Space.l).rounded(.down)
     }
 
-    public var isWallOpen: Bool { wall != nil }
+    public var isWallOpen: Bool { modal?.isClosing == false }
 
     /// ⌥⌘I and the card's "Open gallery".
     public func toggleWall() {
-        if wall != nil { closeWall() } else { openWall(showing: nil) }
+        if isWallOpen { closeWall() } else { openWall(showing: nil) }
     }
 
-    /// The full gallery over the thread panel: its header, timeline and right panel, with the sidebar still beside it.
-    /// `showing` opens that picture large on top of the wall.
+    /// The full gallery as a route modal over the window, a sibling of Settings: the same card, scrim and motion.
+    /// `showing` opens that picture large inside the card.
     public func openWall(showing image: GalleryImage?) {
-        guard wall == nil, !images.isEmpty, let window = pill.window, let host = Self.wallHost(for: pill) else { return }
+        guard wall == nil, !images.isEmpty, let window = pill.window, !AppRouteModalView.isPresented(in: window) else { return }
         close()
-        // Under Redesign the panel starts below the tab band; the wall reaches up through it, under the pill and the
-        // thread title, so its ground meets the window's top with no strip of the band's fade above it.
-        let band = (host as? ThreadPanelView)?.ditherOverhang ?? 0
-        let wall = ThreadImageWallView(frame: NSRect(x: 0, y: -band, width: host.bounds.width, height: host.bounds.height + band))
-        wall.topInset = band
-        wall.autoresizingMask = [.width, .height]
-        wall.layer?.cornerRadius = host.layer?.cornerRadius ?? 0
-        wall.layer?.cornerCurve = .continuous
-        wall.layer?.masksToBounds = true
+        let focus = window.firstResponder
+        let wall = ThreadImageWallView(frame: .zero)
         wall.images = images
         wall.onClose = { [weak self] in self?.closeWall() }
         wall.onHash = { [weak self] image, hash in self?.recordHash(image, hash) }
         wall.onFailed = { [weak self] failed in for image in failed { self?.markFailed(image) } }
         wall.onOpenInThread = { [weak self] image in self?.closeWall(animated: false); self?.onOpenInThread?(image) }
-        wallFocus = window.firstResponder
-        host.addSubview(wall)
         self.wall = wall
+        let modal = AppRouteModalView.present(label: "Agent images", content: wall, in: window)
+        modal.finalFocus = focus
+        modal.onDismiss = { [weak self] in self?.wallDismissed() }
+        self.modal = modal
         if let image, let index = images.firstIndex(where: { $0.pixelKey == image.pixelKey }) { wall.openViewer(at: index) }
         window.makeFirstResponder(wall)
-        ThreadImageWallView.fade(wall, in: true, rise: true) {}
         pill.galleryUnseen = false
         onOpen?()
     }
 
-    /// Closes the full gallery and lets go of every tile and decode it held, once its fade ends.
-    public func closeWall(animated: Bool = true) {
+    /// Closes the full gallery; its tiles and decodes go once the modal's exit ends.
+    public func closeWall(animated: Bool = true) { modal?.close(animated: animated) }
+
+    private func wallDismissed() {
         guard let wall else { return }
         self.wall = nil
+        modal = nil
         if let id = threadId { lookedAt[id] = TimestampFormat.nowMs() }
-        let window = wall.window
-        let finish: @MainActor () -> Void = { [weak self] in
-            wall.releaseImages()
-            wall.removeFromSuperview()
-            self?.sync()
-        }
-        if let focus = wallFocus, let window, (focus as? NSView)?.window === window { window.makeFirstResponder(focus) }
-        else { window?.makeFirstResponder(nil) }
-        if animated { ThreadImageWallView.fade(wall, in: false, rise: true, done: finish) } else { finish() }
-    }
-
-    /// The window's thread panel, beside the sidebar; the pill floats over it in a band of its own, so it is found in
-    /// the window rather than above the pill. The content view when there is none, as in tests.
-    static func wallHost(for pill: NSView) -> NSView? {
-        guard let content = pill.window?.contentView else { return nil }
-        var queue: [NSView] = [content]
-        while !queue.isEmpty {
-            let view = queue.removeFirst()
-            if view is ThreadPanelView, !view.isHiddenOrHasHiddenAncestor { return view }
-            queue += view.subviews
-        }
-        return content
+        wall.releaseImages()
+        sync()
     }
 }
 

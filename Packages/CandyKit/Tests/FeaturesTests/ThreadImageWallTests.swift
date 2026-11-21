@@ -154,6 +154,65 @@ struct ThreadImageWallTests {
         #expect(tiles.allSatisfy { $0.window == nil && $0.thumb.image == nil }, "its tiles left the window with their pixels")
     }
 
+    /// A gallery opened over a window with its measured pictures, the pill in the window.
+    private func openedGallery(_ window: NSWindow, showing first: Bool) throws -> (ThreadImageGalleryController, AppRouteModalView) {
+        let (gallery, pill) = ThreadImageGalleryTests.controller(fileExists: true)
+        window.contentView!.addSubview(pill)
+        pill.frame = NSRect(x: 700, y: 12, width: 160, height: 30)
+        let projection = try ThreadImageGalleryTests.projection("t", items: [], messages: Self.measuredImages().enumerated().map { i, image in
+            guard case .url(let uri) = image.source else { return ("m\(i)", "", "2026-10-23T10:00:00Z") }
+            return ("m\(i)", "![x](\(uri))", "2026-10-23T10:0\(i):00Z")
+        })
+        gallery.update(threadId: "t", projection: projection)
+        gallery.openWall(showing: first ? gallery.images.first : nil)
+        let modal = try #require(window.contentView!.subviews.compactMap { $0 as? AppRouteModalView }.first)
+        return (gallery, modal)
+    }
+
+    /// The wall is a route modal's content, like Settings', and Escape steps back from the large view to the wall, then
+    /// closes. The card sits in Settings' frame.
+    @Test func theGalleryOpensInARouteModalAndEscapeStepsBack() throws {
+        let window = Self.window(1200, 800)
+        defer { window.contentView = nil; window.close() }
+        let (gallery, modal) = try openedGallery(window, showing: true)
+        let wall = try #require(gallery.wall)
+        #expect(gallery.isWallOpen && AppRouteModalView.isPresented(in: window))
+        #expect(wall.isDescendant(of: modal.surface))
+        #expect(modal.surface.convert(modal.surface.bounds, to: modal) == AppRouteModalView.surfaceFrame(in: modal.bounds.size))
+        #expect(wall.viewer != nil && window.firstResponder === wall)
+        #expect(modal.escapeTaken(), "the first Escape closes the large view")
+        #expect(wall.viewer == nil && gallery.isWallOpen)
+        #expect(!modal.escapeTaken(), "the second goes to the modal, which closes")
+        modal.close(animated: false)
+        #expect(!gallery.isWallOpen && gallery.wall == nil && !AppRouteModalView.isPresented(in: window))
+    }
+
+    @Test func aClickOnTheScrimClosesAndFocusReturns() throws {
+        let window = Self.window(1200, 800)
+        defer { window.contentView = nil; window.close() }
+        final class Focusable: NSView { override var acceptsFirstResponder: Bool { true } }
+        let opener = Focusable(frame: NSRect(x: 10, y: 10, width: 20, height: 20))
+        window.contentView!.addSubview(opener)
+        window.makeFirstResponder(opener)
+        let (gallery, modal) = try openedGallery(window, showing: false)
+        #expect(window.firstResponder === gallery.wall)
+        func click(_ point: NSPoint) throws {
+            let at = modal.convert(point, to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let event = try #require(NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                            context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+                if type == .leftMouseDown { modal.mouseDown(with: event) } else { modal.mouseUp(with: event) }
+            }
+        }
+        // Inside the card a click doesn't close; on the scrim it does.
+        try click(NSPoint(x: 600, y: 400))
+        #expect(gallery.isWallOpen)
+        try click(NSPoint(x: 8, y: 8))
+        // The exit runs over the modal motion; the model is closed at once.
+        #expect(!gallery.isWallOpen)
+        #expect(window.firstResponder === opener, "focus goes back to where it was")
+    }
+
     /// With every size known before the card opens, as after the wall measured them, the card still makes its tiles
     /// once its scroll view has a frame. On screen the card came up empty.
     @Test func aCardOfMeasuredPicturesTilesOnLayout() {

@@ -343,8 +343,8 @@ final class GalleryTileView: ControlView {
     }
 }
 
-/// One picture large inside the full gallery, over a veil of the page: previous and next, the count, its source and
-/// "Open in thread". A click on the veil returns to the wall.
+/// One picture large inside the gallery's card, over the wall: back to the wall, the count, previous and next, its source,
+/// "Open in thread" and the card's close. A click on the ground returns to the wall.
 final class GalleryViewerView: DSView {
     var images: [GalleryImage] = [] { didSet { if images != oldValue { show() } } }
     var index = 0 { didSet { if index != oldValue { show() } } }
@@ -352,19 +352,20 @@ final class GalleryViewerView: DSView {
     var preview: ((Int) -> CGImage?)?
     var makeLoader: ((GalleryImage) -> AsyncImageView.Loader)?
     var onClose: (() -> Void)?
+    /// The close button: the whole gallery, as the wall's own close does.
+    var onCloseGallery: (() -> Void)?
     var onOpenInThread: ((GalleryImage) -> Void)?
 
     let picture = AsyncImageView()
-    let count = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    let count = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
     let detail = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    let back = ButtonView(nil, icon: .arrowLeft, variant: .ghost, size: .iconSm)
     let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
     let previous = ButtonView(nil, icon: .chevronLeft, variant: .ghost, size: .iconSm)
     let next = ButtonView(nil, icon: .chevronRight, variant: .ghost, size: .iconSm)
     let openInThread = ButtonView("Open in thread", icon: .arrowUpRight, variant: .ghost, size: .xs)
     private(set) lazy var zoom = ZoomableImageView(picture: picture)
-    static let bar: CGFloat = 52
-    /// The band above the viewer's top bar that its ground covers: Redesign's tab band, where the header pill sits.
-    var topInset: CGFloat = 0 { didSet { if topInset != oldValue { needsLayout = true } } }
+    static let bar = ThreadImageWallView.header
     /// Horizontal two-finger travel at fit in the current gesture, and whether it already changed the picture.
     private var swipe: (dx: CGFloat, dy: CGFloat, done: Bool, at: TimeInterval) = (0, 0, false, 0)
 
@@ -379,11 +380,13 @@ final class GalleryViewerView: DSView {
         zoom.fit = { natural, area, backing in GalleryLayout.fit(natural, in: area, scale: backing) }
         zoom.onBackgroundClick = { [weak self] in self?.onClose?() }
         zoom.onFitScroll = { [weak self] event in self?.swipe(event) }
-        for view in [zoom, count, detail, close, previous, next, openInThread] as [NSView] { addSubview(view) }
-        close.toolTip = "Back to all images"; close.setAccessibilityLabel("Back to all images")
+        for view in [zoom, back, count, detail, close, previous, next, openInThread] as [NSView] { addSubview(view) }
+        back.toolTip = "Back to all images (Esc)"; back.setAccessibilityLabel("Back to all images")
+        close.toolTip = "Close (Esc)"; close.setAccessibilityLabel("Close")
         previous.toolTip = "Previous image"; previous.setAccessibilityLabel("Previous image")
         next.toolTip = "Next image"; next.setAccessibilityLabel("Next image")
-        close.action = { [weak self] in self?.onClose?() }
+        back.action = { [weak self] in self?.onClose?() }
+        close.action = { [weak self] in self?.onCloseGallery?() }
         previous.action = { [weak self] in self?.step(-1) }
         next.action = { [weak self] in self?.step(1) }
         openInThread.action = { [weak self] in self?.shown.map { self?.onOpenInThread?($0) } }
@@ -418,7 +421,7 @@ final class GalleryViewerView: DSView {
     /// The area the picture fits and zooms in: below the top bar, above the footer, clear of the side arrows.
     var pictureArea: CGRect {
         let side = Tokens.Space.xl + 32 + Tokens.Space.s
-        return CGRect(x: side, y: topInset + Self.bar, width: max(1, bounds.width - 2 * side), height: max(1, bounds.height - topInset - 2 * Self.bar))
+        return CGRect(x: side, y: Self.bar, width: max(1, bounds.width - 2 * side), height: max(1, bounds.height - 2 * Self.bar))
     }
 
     /// At fit, a two-finger swipe sideways changes the picture once per gesture; momentum and vertical travel do nothing.
@@ -438,10 +441,8 @@ final class GalleryViewerView: DSView {
     override func layout() {
         super.layout()
         let pad = Tokens.Space.xl, w = bounds.width, h = bounds.height
-        let mid = (topInset + Self.bar / 2).rounded()
-        count.frame = NSRect(x: pad, y: mid - 9, width: 160, height: 18)
-        close.frame = NSRect(x: w - pad - 32, y: mid - 16, width: 32, height: 32)
-        let middle = ((topInset + h) / 2 - 16).rounded()
+        ThreadImageWallView.placeBar(back: back, labels: [count], close: close, width: w)
+        let middle = (h / 2 - 16).rounded()
         previous.frame = NSRect(x: pad, y: middle, width: 32, height: 32)
         next.frame = NSRect(x: w - pad - 32, y: middle, width: 32, height: 32)
         zoom.frame = pictureArea
@@ -475,8 +476,8 @@ final class GalleryViewerView: DSView {
     override func magnify(with event: NSEvent) { zoom.magnify(with: event) }
 }
 
-/// The full gallery: every agent image of the thread as a masonry wall over the main panel, on Redesign's background.
-/// Escape or the back button returns to the thread. A click opens one picture large.
+/// The full gallery: every agent image of the thread as a masonry wall, the content of a route modal like Settings'.
+/// Escape or the close button closes it. A click opens one picture large inside the same card.
 public final class ThreadImageWallView: DSView {
     public var images: [GalleryImage] = [] {
         didSet {
@@ -493,18 +494,18 @@ public final class ThreadImageWallView: DSView {
     public var onFailed: (([GalleryImage]) -> Void)?
     public var onHash: ((GalleryImage, String) -> Void)?
 
-    static let header: CGFloat = 52
-    /// The band above the header that the wall's ground covers: Redesign's tab band, where the header pill sits.
-    var topInset: CGFloat = 0 { didSet { if topInset != oldValue { viewer?.topInset = topInset; needsLayout = true } } }
+    /// Settings' route-modal bar height (`SettingsHeaderView.barHeight`).
+    static let header: CGFloat = 48
     /// The wall's density for the rest of the session, once a pinch or ⌘+ / ⌘- chose one.
     // ponytail: session only, one number; persist it if the user wants it across launches
     static var sessionColumns: Int?
     /// The pinch in progress: the columns it started from and how far it has zoomed.
     private var pinch: (columns: Int, zoom: CGFloat)?
 
-    let back = ButtonView(nil, icon: .arrowLeft, variant: .ghost, size: .iconSm)
-    let title = LabelView("Agent images", font: DSFont.ui(13, weight: .medium), color: Themed.color(\.foreground))
-    let count = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
+    let title = LabelView("Agent images", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    let count = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.mutedForeground))
+    private let rule = DSView()
     let masonry = GalleryMasonryView(metrics: .init(inset: NSEdgeInsets(top: Tokens.Space.s, left: Tokens.Space.xl, bottom: Tokens.Space.xl, right: Tokens.Space.xl),
                                                     gap: Tokens.Space.l, minColumn: 160, radius: Tokens.Radius.card))
     private lazy var scroll = ScrollAreaView(documentView: masonry, scrollFade: true)
@@ -512,12 +513,11 @@ public final class ThreadImageWallView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        count.alignment = .right
-        for view in [back, title, count, scroll] as [NSView] { addSubview(view) }
+        for view in [title, count, close, rule, scroll] as [NSView] { addSubview(view) }
         scroll.scrollsHorizontally = false
-        back.toolTip = "Back to thread"
-        back.setAccessibilityLabel("Back to thread")
-        back.action = { [weak self] in self?.onClose?() }
+        close.toolTip = "Close (Esc)"
+        close.setAccessibilityLabel("Close")
+        close.action = { [weak self] in self?.onClose?() }
         masonry.sharedCache = false
         masonry.makeLoader = { [weak self] image in
             ThreadImageGalleryView.loader(image, onHash: { hash in self?.onHash?(image, hash) })
@@ -538,12 +538,10 @@ public final class ThreadImageWallView: DSView {
 
     public override func layout() {
         super.layout()
-        let pad = Tokens.Space.xl, w = bounds.width
-        let mid = (topInset + Self.header / 2).rounded()
-        back.frame = NSRect(x: pad - 6, y: mid - 16, width: 32, height: 32)
-        title.frame = NSRect(x: back.frame.maxX + Tokens.Space.xs, y: mid - 9, width: 200, height: 18)
-        count.frame = NSRect(x: w - pad - 120, y: mid - 9, width: 120, height: 18)
-        let top = topInset + Self.header
+        let w = bounds.width
+        Self.placeBar(back: nil, labels: [title, count], close: close, width: w)
+        rule.frame = NSRect(x: 0, y: Self.header - 1, width: w, height: 1)
+        let top = Self.header
         scroll.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top))
         scroll.layoutSubtreeIfNeeded()
         masonry.fitWidth()
@@ -557,6 +555,25 @@ public final class ThreadImageWallView: DSView {
 
     private func restyle() {
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        rule.layer?.backgroundColor = Themed.color(\.border).cgColor(in: self)
+    }
+
+    /// Settings' route-modal bar (`SettingsHeaderView.layout`): the title 20pt in, the close a 28pt square 8pt from the
+    /// right edge, both centred in `header`. A back button takes the title's inset and the title follows it.
+    static func placeBar(back: NSView?, labels: [LabelView], close: NSView, width: CGFloat) {
+        let mid = header / 2
+        var x: CGFloat = 20
+        if let back {
+            back.frame = NSRect(x: 8, y: mid - 14, width: 28, height: 28)
+            x = back.frame.maxX + 4
+        }
+        for label in labels {
+            label.lineHeight = 20
+            let w = ceil(label.textWidth) + 1
+            label.frame = NSRect(x: x, y: mid - 10, width: max(0, min(w, width - 44 - x)), height: 20)
+            x += w + 8
+        }
+        close.frame = NSRect(x: width - 8 - 28, y: mid - 14, width: 28, height: 28)
     }
 
     /// One picture large, over the wall.
@@ -564,7 +581,6 @@ public final class ThreadImageWallView: DSView {
         guard images.indices.contains(index) else { return }
         if let viewer { viewer.index = index; return }
         let viewer = GalleryViewerView(frame: bounds)
-        viewer.topInset = topInset
         viewer.preview = { [weak self] index in self?.masonry.tiles[index]?.thumb.image }
         viewer.makeLoader = { [weak self] image in
             ThreadImageGalleryView.loader(image, onHash: { hash in self?.onHash?(image, hash) })
@@ -572,10 +588,11 @@ public final class ThreadImageWallView: DSView {
         viewer.images = images
         viewer.index = index
         viewer.onClose = { [weak self] in self?.closeViewer() }
+        viewer.onCloseGallery = { [weak self] in self?.onClose?() }
         viewer.onOpenInThread = { [weak self] image in self?.onOpenInThread?(image) }
         addSubview(viewer)
         self.viewer = viewer
-        Self.fade(viewer, in: true, rise: false) {}
+        Self.fade(viewer, in: true) {}
         window?.makeFirstResponder(self)
     }
 
@@ -584,7 +601,7 @@ public final class ThreadImageWallView: DSView {
         self.viewer = nil
         let index = viewer.index
         masonry.reveal(index)
-        Self.fade(viewer, in: false, rise: false) { viewer.removeFromSuperview() }
+        Self.fade(viewer, in: false) { viewer.removeFromSuperview() }
     }
 
     /// Pinching over the wall changes its density in whole columns as the fingers move: apart for fewer, larger
@@ -621,7 +638,8 @@ public final class ThreadImageWallView: DSView {
         setAccessibilityValue("\(masonry.columnCount) columns")
     }
 
-    /// Escape closes the large picture, then the gallery. Arrows step the large picture, or move the focus ring over
+    /// Escape closes the large picture, then the gallery (inside the route modal its key monitor asks
+    /// `takeRouteModalEscape` first). Arrows step the large picture, or move the focus ring over
     /// the wall, where Return opens the focused picture.
     public override func keyDown(with event: NSEvent) {
         if !handle(event) { super.keyDown(with: event) }
@@ -682,28 +700,27 @@ public final class ThreadImageWallView: DSView {
         masonry.releaseDecodes()
     }
 
-    /// One short fade, with a 4pt rise unless Reduce Motion is on; it ends on the resting pixels.
-    static func fade(_ view: NSView, in appearing: Bool, rise: Bool, done: @escaping @MainActor () -> Void) {
+    /// The large view's short fade in and out over the wall; it ends on the resting pixels.
+    static func fade(_ view: NSView, in appearing: Bool, done: @escaping @MainActor () -> Void) {
         guard let layer = view.layer else { done(); return }
-        let duration = rise ? Tokens.Motion.appear : Tokens.Motion.quick
         CATransaction.begin()
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { done() } }
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = appearing ? 0 : 1
         fade.toValue = appearing ? 1 : 0
-        fade.duration = duration
+        fade.duration = Tokens.Motion.quick
         fade.timingFunction = Tokens.Motion.curve
         layer.opacity = appearing ? 1 : 0
         layer.add(fade, forKey: "fade")
-        if rise, !Motion.reduced {
-            let move = CABasicAnimation(keyPath: "transform.translation.y")
-            // Layers are unflipped: a positive y is up, so the wall rises from 4pt below its place.
-            move.fromValue = appearing ? -Tokens.Motion.rise : 0
-            move.toValue = appearing ? 0 : -Tokens.Motion.rise
-            move.duration = duration
-            move.timingFunction = Tokens.Motion.curve
-            layer.add(move, forKey: "rise")
-        }
         CATransaction.commit()
+    }
+}
+
+extension ThreadImageWallView: RouteModalEscapeHandler {
+    /// Escape inside the route modal: the large view goes back to the wall; on the wall the modal closes.
+    func takeRouteModalEscape() -> Bool {
+        guard viewer != nil else { return false }
+        closeViewer()
+        return true
     }
 }
