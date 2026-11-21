@@ -351,7 +351,7 @@ public final class MarkdownView: DSView {
     /// for a streaming answer, whose next layout reuses its blocks and lays out only the new end on the main thread.
     private func layoutInBackground(_ width: CGFloat, make: @escaping @Sendable () -> MarkdownLayout) {
         guard running == nil else { return }
-        let started = generation, startedIdentity = identity, startedInputs = inputs
+        let started = generation, startedIdentity = identity, startedInputs = inputs, startedTheme = (ThemeRuntime.generation, FontRuntime.generation)
         jobs += 1
         let token = jobs
         nonisolated(unsafe) let appearance = effectiveAppearance
@@ -366,6 +366,8 @@ public final class MarkdownView: DSView {
                     guard let self else { return }
                     if self.running?.token == token { self.running = nil }
                     guard self.identity == startedIdentity else { self.needsLayout = true; return }
+                    // The theme or the fonts changed while it ran, so it may have read either one's metrics: lay out again.
+                    guard (ThemeRuntime.generation, FontRuntime.generation) == startedTheme else { _ = self.layout(forWidth: width); return }
                     Self.release([self.lastLayout].compactMap { $0 })
                     self.lastLayout = made
                     if self.generation == started {
