@@ -30,6 +30,10 @@ final class GalleryMasonryView: DSView {
             loaders = loaders.filter { keys.contains($0.key) }
             let gone = tileViews.keys.filter { !keys.contains($0) }
             for key in gone { tileViews.removeValue(forKey: key)?.removeFromSuperview() }
+            for image in oldValue where !keys.contains(image.pixelKey) {
+                MediaPriority.forget(image.key)
+                image.stored.map { MediaPriority.forget($0.key) }
+            }
             ImageTiming.mark("wall-list", "\(images.count) images, \(gone.count) tiles removed, \(tileViews.count) kept")
             relayout()
         }
@@ -184,9 +188,14 @@ final class GalleryMasonryView: DSView {
         let live = liveRect
         var wanted: [String: Int] = [:]
         for index in frames.indices where frames[index].intersects(live) { wanted[images[index].pixelKey] = wanted[images[index].pixelKey] ?? index }
-        for key in tileViews.keys where wanted[key] == nil { tileViews.removeValue(forKey: key)?.removeFromSuperview() }
+        for key in tileViews.keys where wanted[key] == nil {
+            tileViews.removeValue(forKey: key)?.removeFromSuperview()
+            if let image = images.first(where: { $0.pixelKey == key }) { rank(image, visible: false) }
+        }
+        let visible = visibleRect
         for (key, index) in wanted.sorted(by: { $0.value < $1.value }) {
             let image = images[index]
+            rank(image, visible: frames[index].intersects(visible))
             let tile = tileViews[key] ?? {
                 let tile = GalleryTileView(radius: metrics.radius)
                 addSubview(tile)
@@ -201,6 +210,15 @@ final class GalleryMasonryView: DSView {
             tile.show(image, key: image.pixelKey, loader: failed.contains(image.pixelKey) ? { @Sendable _ in nil } : loader(image),
                       preview: measured.removeValue(forKey: image.pixelKey))
         }
+    }
+
+    /// The download order `MediaFetchQueue` reads: pictures on screen first, then smaller ones first, pixel area
+    /// standing in for bytes, so a small picture never waits behind two large sheets. Unmeasured ones go last.
+    // ponytail: pixel area as the size, the queue never sees bytes; rank by the signed Content-Length if the server sends one
+    private func rank(_ image: GalleryImage, visible: Bool) {
+        let size = image.naturalSize ?? .zero
+        let order = size.width > 0 ? -Double(size.width * size.height) : -Double.greatestFiniteMagnitude
+        for key in [image.key] + (image.stored.map { [$0.key] } ?? []) { MediaPriority.set(key, visible: visible, recency: order) }
     }
 
     private func loader(_ image: GalleryImage) -> AsyncImageView.Loader {
@@ -219,6 +237,7 @@ final class GalleryMasonryView: DSView {
         for image in images[frames.count...].prefix(12) where measuring.count < 6 {
             guard aspect(image) == nil, !measuring.contains(image.pixelKey) else { continue }
             measuring.insert(image.pixelKey)
+            rank(image, visible: false)
             let load = loader(image), side = measureSide
             Task { [weak self] in
                 // The loader itself, not the cache's shared request: a cache clear (Force Reload) cancels those, and a

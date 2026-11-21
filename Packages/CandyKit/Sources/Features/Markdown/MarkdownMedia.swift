@@ -240,6 +240,14 @@ public enum MarkdownImages {
     /// Fetches a signed asset URL to a file. Tests replace it to count transfers.
     nonisolated(unsafe) static var transfer: @Sendable (URL) async -> ImageDownloadFile? = { await MarkdownImageDownload.fetch($0) }
 
+    /// `transfer` behind `MediaFetchQueue`, in `MediaPriority` order for `key`.
+    nonisolated static func queuedTransfer(key: String, url: URL) async -> ImageDownloadFile? {
+        guard await MediaFetchQueue.shared.acquire(key) else { return nil }
+        let file = await transfer(url)
+        await MediaFetchQueue.shared.release()
+        return file
+    }
+
     private final class WeakDownload: @unchecked Sendable { weak var value: MarkdownImageDownload? }
     nonisolated private static let downloadsLock = NSLock()
     nonisolated(unsafe) private static var downloads: [String: WeakDownload] = [:]
@@ -324,7 +332,7 @@ public enum MarkdownImages {
         let download = MarkdownImageDownload(grace: .seconds(2)) {
             guard let asset = await signedURL(resource: resource) else { return nil }
             if let size = asset.size { await record(size, for: key) }
-            let file = await transfer(asset.url)
+            let file = await queuedTransfer(key: key, url: asset.url)
             if let file, let onFile { await onFile(file.url) }
             return file
         }

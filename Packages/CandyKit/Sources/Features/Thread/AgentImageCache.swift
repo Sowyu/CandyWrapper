@@ -153,8 +153,10 @@ extension AgentImageCache {
     /// A remote environment's file, fetched once through the same signed asset URL the gallery loads it with.
     public func keepRemote(env: String, thread: String, item: String, resource: JSONValue) async -> Entry? {
         if let kept = entry(env: env, thread: thread, item: item) { return kept }
+        // Queued under the gallery tile's key, so a tile on screen moves this copy ahead too.
+        let key = resource["path"]?.stringValue.map { "media-file:" + $0 } ?? ""
         guard let asset = await MarkdownImages.signedURL(resource: resource),
-              let file = await MarkdownImageDownload.fetch(asset.url) else { return nil }
+              let file = await MarkdownImages.queuedTransfer(key: key, url: asset.url) else { return nil }
         let data = withExtendedLifetime(file) { try? Data(contentsOf: file.url) }
         guard let data, !data.isEmpty, data.count <= 50 << 20 else { return nil }
         return store(env: env, thread: thread, item: item, data: data, ext: Self.imageExtension(data))

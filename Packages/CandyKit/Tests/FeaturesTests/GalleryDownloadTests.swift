@@ -60,3 +60,36 @@ import T3Protocol
         #expect(count.value == 1, "one transfer, not a restart from the first byte")
     }
 }
+
+extension GalleryDownloadTests {
+    /// Tool outputs and remote kept copies share the two download slots with reply images.
+    @Test func toolOutputDownloadsTakeTheFetchQueue() async {
+        let running = Count(), peak = Count()
+        let gate = NSLock()
+        nonisolated(unsafe) var now = 0
+        let savedResource = MarkdownImages.resourceURL, savedTransfer = MarkdownImages.transfer
+        defer { MarkdownImages.resourceURL = savedResource; MarkdownImages.transfer = savedTransfer }
+        MarkdownImages.resourceURL = { resource in (URL(string: "http://127.0.0.1:1/\(resource["path"]?.stringValue ?? "").png")!, nil, nil) }
+        MarkdownImages.transfer = { _ in
+            let n = gate.withLock { now += 1; return now }
+            while peak.value < n { peak.bump() }
+            running.bump()
+            try? await Task.sleep(for: .milliseconds(80))
+            gate.withLock { now -= 1 }
+            return Self.pngFile()
+        }
+        let loaders = (0..<6).map { _ in
+            let resource = Self.resource()
+            return MarkdownImages.assetLoader(key: "media-file:" + (resource["path"]?.stringValue ?? ""), resource: resource)
+        }
+        let images = await withTaskGroup(of: Bool.self) { group in
+            for load in loaders { group.addTask { await load(32) != nil } }
+            var n = 0
+            for await ok in group where ok { n += 1 }
+            return n
+        }
+        #expect(images == 6)
+        #expect(running.value == 6)
+        #expect(peak.value <= 2, "at most the queue's two transfers at once")
+    }
+}
