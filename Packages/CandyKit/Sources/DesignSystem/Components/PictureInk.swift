@@ -225,10 +225,13 @@ public enum PictureInk {
         return around * (0.25 + 0.75 * edge)
     }
 
-    /// How far beside the reading column the art comes back to full, in points.
-    nonisolated static let columnFeather: Double = 120
-    /// The share of the dots left right behind the column.
-    nonisolated static let columnDensity = 0.4
+    /// How much darker the picture gets toward the middle of a thread in dark (the user, 2026-11-21: "no plain near
+    /// black just more blacker near the middle subtly so its not super obvious"): right behind the text this share of
+    /// the dots drops out and the rest lose this share of their light, easing to none by the margins.
+    nonisolated static let readingCalm = 0.7
+    /// The darkening's shape: full to `calmInset` inside the column's edges, then gone over the margin beside it,
+    /// at least `calmReach.lowerBound` and at most `calmReach.upperBound` wide.
+    nonisolated static let calmInset: Double = 48, calmReach: ClosedRange<Double> = 96...240
     /// Light's share behind the column: none. Muted text needs a cell of luminance 0.94 or more there, so any dot left
     /// behind the column is a near-white smudge; light keeps a clean reading column and the ink on the margins.
     nonisolated static let lightColumnDensity = 0.0
@@ -240,11 +243,25 @@ public enum PictureInk {
     /// the margins a solid band of the picture on either side of a clean page.
     nonisolated static let lightColumnGap: Double = 16, lightColumnFeather: Double = 32
 
-    /// 0 behind the column, easing to 1 `columnFeather` beside it (in light, `lightColumnGap` and `lightColumnFeather`).
-    nonisolated static func columnOpen(_ x: Double, column c: [Double], dark: Bool = true) -> Double {
+    /// 0 behind the column, easing to 1 over the darkening's reach beside it (`columnReach`), so the text's contrast
+    /// cap and the far ink come back as gradually as the dots do; in light, `lightColumnGap` and `lightColumnFeather`.
+    nonisolated static func columnOpen(_ x: Double, column c: [Double], panelWidth: Double, dark: Bool = true) -> Double {
         let d = x < c[0] ? c[0] - x : x > c[0] + c[2] ? x - c[0] - c[2] : 0
         if !dark { return DitherArt.smoothstep(lightColumnGap, lightColumnGap + lightColumnFeather, d) }
-        return DitherArt.smoothstep(0, 1, d / columnFeather)
+        return DitherArt.smoothstep(0, columnReach(column: c, panelWidth: panelWidth), d)
+    }
+
+    /// How far beside the column the darkening reaches: the narrower margin, held to `calmReach`.
+    nonisolated static func columnReach(column c: [Double], panelWidth: Double) -> Double {
+        let margin = max(min(c[0], panelWidth - c[0] - c[2]), 0)
+        return min(max(margin, calmReach.lowerBound), calmReach.upperBound)
+    }
+
+    /// The darkening's weight at `x` for a thread's reading column, before `readingCalm`: 1 behind the text, easing
+    /// on a smoothstep (no step, no slope at either end) to 0 a margin's width beside the column.
+    nonisolated static func columnCalm(_ x: Double, column c: [Double], panelWidth: Double) -> Double {
+        let half = c[2] / 2, d = abs(x - (c[0] + half))
+        return 1 - DitherArt.smoothstep(half - calmInset, half + columnReach(column: c, panelWidth: panelWidth), d)
     }
 
     // MARK: Threshold
@@ -253,7 +270,7 @@ public enum PictureInk {
     /// ink (ground, deep, light); in light the dark parts do (ground, light, deep). Dither runs only between
     /// neighbouring levels. `text` is the body and muted text colors (sRGB 0...1), whose floors hold behind a column.
     nonisolated static func render(_ tone: Tone, inks: Inks, ground: SIMD3<Double>, dark: Bool, shape: Shape,
-                                   text: [SIMD3<Double>]) -> CGImage? {
+                                   text: [SIMD3<Double>], calmStrength: Double = readingCalm) -> CGImage? {
         let w = tone.width, h = tone.height
         guard w > 0, h > 0,
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
@@ -275,10 +292,24 @@ public enum PictureInk {
         let bound = textBound(text, dark: dark)
         let capped = levels.map { capToward(ground: ground, ink: $0, groundY: groundY, bound: bound, dark: dark) }
         var row = [Double](repeating: 1, count: w)
-        var open = [Double](repeating: 1, count: w)
+        var open = [Double](repeating: 1, count: w), calm = [Double](repeating: 0, count: w)
         if case let .thread(column?) = shape, column.count == 4 {
-            for x in 0..<w { open[x] = columnOpen((Double(x) + 0.5) * unit, column: column, dark: dark) }
+            for x in 0..<w {
+                let px = (Double(x) + 0.5) * unit
+                open[x] = columnOpen(px, column: column, panelWidth: panel.width, dark: dark)
+                if dark { calm[x] = calmStrength * columnCalm(px, column: column, panelWidth: panel.width) }
+            }
         }
+        // Each column's two inks: capped for the text near the column, then darkened toward the ground in linear light.
+        let gl = SIMD3(lin(ground.x), lin(ground.y), lin(ground.z))
+        let columnInks: [(UInt8, UInt8, UInt8)]? = open.allSatisfy({ $0 >= 1 }) && calm.allSatisfy({ $0 <= 0 }) ? nil
+            : (0..<(w * 2)).map { i in
+                let x = i / 2, k = i % 2
+                let c = capped[k] + (levels[k] - capped[k]) * open[x]
+                guard calm[x] > 0 else { return c.byteTriple }
+                let m = gl + (SIMD3(lin(c.x), lin(c.y), lin(c.z)) - gl) * (1 - calm[x])
+                return SIMD3(enc(m.x), enc(m.y), enc(m.z)).byteTriple
+            }
         for y in 0..<h {
             let py = (Double(y) + 0.5) * unit
             for x in 0..<w {
@@ -288,10 +319,13 @@ public enum PictureInk {
                 case .plain: break
                 case let .hero(composer): density = heroDensity(px, py, panel: panel, composer: composer)
                 case .thread:
-                    // Behind the column the dots thin and stay on the near level, then come back over the feather.
-                    let z = open[x], floor = dark ? columnDensity : lightColumnDensity
-                    density = floor + (1 - floor) * z
-                    top = coverage + (2 - coverage) * z
+                    // Dark thins the dots toward the middle on the wide falloff; both inks are capped to the text's
+                    // floor there, so neither level needs to drop. Light keeps a clean column and the near level beside it.
+                    let z = open[x]
+                    if dark { density = 1 - calm[x] } else {
+                        density = lightColumnDensity + (1 - lightColumnDensity) * z
+                        top = coverage + (2 - coverage) * z
+                    }
                 }
                 row[x] = min(lut[Int(tone.values[y * w + x])] * coverage * 2 * density, top)
             }
@@ -302,12 +336,7 @@ public enum PictureInk {
                 let level = lo < 2 && v - Double(lo) > threshold ? lo + 1 : lo
                 let i = (y * w + x) * 4
                 guard level > 0 else { data[i] = groundBytes.0; data[i + 1] = groundBytes.1; data[i + 2] = groundBytes.2; continue }
-                var c = levelBytes[level - 1]
-                if open[x] < 1 {
-                    // Over the feather the cap eases from the text's floor to the ink itself.
-                    let mixed = capped[level - 1] + (levels[level - 1] - capped[level - 1]) * open[x]
-                    c = mixed.byteTriple
-                }
+                let c = columnInks?[x * 2 + level - 1] ?? levelBytes[level - 1]
                 data[i] = c.0; data[i + 1] = c.1; data[i + 2] = c.2
             }
         }

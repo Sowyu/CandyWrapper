@@ -106,10 +106,60 @@ struct PictureInkTests {
                         worst = dark ? max(worst, l) : min(worst, l)
                     }
                 }
-                #expect(PictureInk.contrast(PictureInk.luminance(text[0]), worst) >= 7)
-                #expect(PictureInk.contrast(PictureInk.luminance(text[1]), worst) >= 4.5)
+                // Dark also darkens toward the middle (`readingCalm`): at 0.7 the photos measured body 14.1:1 and muted
+                // 6.6:1 at the worst cell, so its floor sits above the 7:1 and 4.5:1 the cap alone guarantees.
+                let floors = dark ? (body: 12.0, muted: 6.0) : (body: 7.0, muted: 4.5)
+                #expect(PictureInk.contrast(PictureInk.luminance(text[0]), worst) >= floors.body)
+                #expect(PictureInk.contrast(PictureInk.luminance(text[1]), worst) >= floors.muted)
             }
         }
+    }
+
+    /// The darkening toward the middle of a thread has no edge: from the column's centre out to the panel's edge it
+    /// never rises, it moves by under 1% a point, it is full behind the text and gone by the window's edge.
+    @Test(arguments: [1100.0, 1440, 2200])
+    func theDarkeningFallsOffWithNoStep(panel: Double) {
+        let columns: [Double: [Double]] = [1100: [180, 0, 740, 800], 1440: [360, 0, 720, 900], 2200: [500, 0, 1200, 900]]
+        let column = columns[panel]!
+        let centre = column[0] + column[2] / 2
+        var last = PictureInk.columnCalm(centre, column: column, panelWidth: panel)
+        #expect(last == 1)
+        for side in [1.0, -1.0] {
+            last = 1
+            var x = centre
+            while x >= 0, x <= panel {
+                let v = PictureInk.columnCalm(x, column: column, panelWidth: panel)
+                #expect(v <= last + 1e-12 && last - v < 0.01, "x \(x): \(last) to \(v)")
+                last = v
+                x += side * 0.5
+            }
+        }
+        // Behind the text, edge to edge, it holds at 85% or more.
+        #expect(PictureInk.columnCalm(column[0], column: column, panelWidth: panel) > 0.85)
+        #expect(PictureInk.columnCalm(column[0] + column[2], column: column, panelWidth: panel) > 0.85)
+        // Gone a margin's width out, and 240pt out at most.
+        #expect(PictureInk.columnCalm(column[0] + column[2] + 240, column: column, panelWidth: panel) == 0)
+    }
+
+    /// Rendered over an even picture, the dots get fewer toward the column's centre band by band, and in light the
+    /// column stays clean as before.
+    @Test func theDotsThinTowardTheMiddle() throws {
+        let w = 480, h = 64, ground = SIMD3<Double>(repeating: 8.0 / 255)
+        let column: [Double] = [360, 0, 720, 192]
+        let tone = PictureInk.Tone(width: w, height: h, values: [UInt8](repeating: 150, count: w * h), hue: 0, median: 0.5)
+        let art = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 200), ground: ground, dark: true,
+                                                 shape: .thread(column: column), text: []))
+        let b = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
+        // Eight-cell bands, one Bayer tile wide, from the centre out to the right edge.
+        var density: [Double] = []
+        for band in stride(from: 240, to: w - 7, by: 8) {
+            var on = 0
+            for y in 0..<h { for x in band..<(band + 8) where b[y * row + x * 4 + 2] != 8 { on += 1 } }
+            density.append(Double(on) / Double(8 * h))
+        }
+        #expect(zip(density, density.dropFirst()).allSatisfy { $0.1 >= $0.0 - 1e-9 }, "\(density)")
+        #expect(density.first! < density.last! * (1 - PictureInk.readingCalm) + 0.05, "\(density)")
+        #expect(density.last! > 0.5, "\(density)")
     }
 
     /// The same tone, inks and shape give the same cells, byte for byte, and the cells sit on the Bayer lattice:
