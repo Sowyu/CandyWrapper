@@ -234,10 +234,15 @@ public enum PictureInk {
     /// black just more blacker near the middle subtly so its not super obvious"): right behind the text this share of
     /// the dots drops out and the rest lose this share of their light, easing to none by the margins.
     nonisolated static let readingCalm = 0.7
-    /// The darkening's shape: full to `calmInset` inside the column's edges, then gone over the whole margin beside
-    /// it, at least `calmReachMin` wide. The user chose this over a 240pt fall-off on the Great Wave in a 1975pt window,
-    /// whose 430pt margins showed a darker middle with bright sides (picture-fix-2026-11-21/5-great-wave-1975x1235.png).
-    nonisolated static let calmInset: Double = 48, calmReachMin: Double = 96
+    /// How the darkening lets go beside the column (`calmFalloff`): the power on the distance before its smoothstep.
+    /// Above 1 the fade spreads out toward the window's edge. I compared powers on the Great Wave at 1975pt and the
+    /// street lamps at half size: curves that let go near the column (a smoothstep squared or cubed) left a bright
+    /// strip beside it, and a plain smoothstep a softer one, so the user's "even more subtle fade out on the edges"
+    /// got 1.3, whose fade runs evenly to the edge.
+    nonisolated static let calmSpread = 1.3
+    /// The threshold jitter along the fade, in levels: a hash, strongest mid-fade and none at either end, so the line
+    /// where a smooth fade crosses from the deep ink to the light one breaks into dots instead of a solid strip.
+    nonisolated static let calmJitter = 0.16
     /// Light's share behind the column: none. Muted text needs a cell of luminance 0.94 or more there, so any dot left
     /// behind the column is a near-white smudge; light keeps a clean reading column and the ink on the margins.
     nonisolated static let lightColumnDensity = 0.0
@@ -249,24 +254,30 @@ public enum PictureInk {
     /// the margins a solid band of the picture on either side of a clean page.
     nonisolated static let lightColumnGap: Double = 16, lightColumnFeather: Double = 32
 
-    /// 0 behind the column, easing to 1 over the darkening's reach beside it (`columnReach`), so the text's contrast
-    /// cap and the far ink come back as gradually as the dots do; in light, `lightColumnGap` and `lightColumnFeather`.
+    /// 0 behind the column, easing to 1 at the panel's edges on the darkening's curve, so the text's contrast cap and
+    /// the far ink come back as gradually as the dots do; in light, `lightColumnGap` and `lightColumnFeather`.
     nonisolated static func columnOpen(_ x: Double, column c: [Double], panelWidth: Double, dark: Bool = true) -> Double {
-        let d = x < c[0] ? c[0] - x : x > c[0] + c[2] ? x - c[0] - c[2] : 0
-        if !dark { return DitherArt.smoothstep(lightColumnGap, lightColumnGap + lightColumnFeather, d) }
-        return DitherArt.smoothstep(0, columnReach(column: c, panelWidth: panelWidth), d)
+        if !dark {
+            let d = x < c[0] ? c[0] - x : x > c[0] + c[2] ? x - c[0] - c[2] : 0
+            return DitherArt.smoothstep(lightColumnGap, lightColumnGap + lightColumnFeather, d)
+        }
+        return 1 - columnCalm(x, column: c, panelWidth: panelWidth)
     }
 
-    /// How far beside the column the darkening reaches: the narrower margin, at least `calmReachMin`.
-    nonisolated static func columnReach(column c: [Double], panelWidth: Double) -> Double {
-        max(min(c[0], panelWidth - c[0] - c[2]), calmReachMin)
-    }
-
-    /// The darkening's weight at `x` for a thread's reading column, before `readingCalm`: 1 behind the text, easing
-    /// on a smoothstep (no step, no slope at either end) to 0 a margin's width beside the column.
+    /// The darkening's weight at `x` for a thread's reading column, before `readingCalm`: 1 across the column, then
+    /// `calmFalloff` of the way to the panel's edge on that side, so a narrow margin (a small window, a right panel)
+    /// gets the whole curve squeezed into it and never ends in a step.
     nonisolated static func columnCalm(_ x: Double, column c: [Double], panelWidth: Double) -> Double {
-        let half = c[2] / 2, d = abs(x - (c[0] + half))
-        return 1 - DitherArt.smoothstep(half - calmInset, half + columnReach(column: c, panelWidth: panelWidth), d)
+        let left = c[0], right = c[0] + c[2]
+        if x >= left, x <= right { return 1 }
+        let (d, margin) = x < left ? (left - x, left) : (x - right, panelWidth - right)
+        return calmFalloff(margin < 1 ? 1 : d / margin)
+    }
+
+    /// The darkening at `t` of the way from the column's edge (0) to the panel's edge (1): 1 to 0 on a smoothstep of
+    /// `t` to the `calmSpread`, so it has no slope at either end and no visible start or end.
+    nonisolated static func calmFalloff(_ t: Double) -> Double {
+        1 - DitherArt.smoothstep(0, 1, pow(min(max(t, 0), 1), calmSpread))
     }
 
     // MARK: Threshold
@@ -298,11 +309,16 @@ public enum PictureInk {
         let capped = levels.map { capToward(ground: ground, ink: $0, groundY: groundY, bound: bound, dark: dark) }
         var row = [Double](repeating: 1, count: w)
         var open = [Double](repeating: 1, count: w), calm = [Double](repeating: 0, count: w)
+        var fade = [Double](repeating: 0, count: w)
         if case let .thread(column?) = shape, column.count == 4 {
             for x in 0..<w {
                 let px = (Double(x) + 0.5) * unit
                 open[x] = columnOpen(px, column: column, panelWidth: panel.width, dark: dark)
-                if dark { calm[x] = calmStrength * columnCalm(px, column: column, panelWidth: panel.width) }
+                if dark {
+                    let c = columnCalm(px, column: column, panelWidth: panel.width)
+                    calm[x] = calmStrength * c
+                    fade[x] = calmJitter * 4 * c * (1 - c)
+                }
             }
         }
         // Each column's two inks: capped for the text near the column, then darkened toward the ground in linear light.
@@ -333,6 +349,11 @@ public enum PictureInk {
                     }
                 }
                 row[x] = min(lut[Int(tone.values[y * w + x])] * coverage * 2 * density, top)
+                if fade[x] > 0 {
+                    var hash = UInt32(truncatingIfNeeded: x &* 73_856_093 ^ y &* 19_349_663)
+                    hash = (hash ^ (hash >> 13)) &* 1_274_126_177
+                    row[x] = min(max(row[x] + fade[x] * (Double(hash >> 24) / 255 - 0.5), 0), top)
+                }
             }
             let b = (y & 7) * 8
             for x in 0..<w {

@@ -148,12 +148,31 @@ struct PictureInkTests {
                 x += side * 0.5
             }
         }
-        // Behind the text, edge to edge, it holds at 85% or more.
-        #expect(PictureInk.columnCalm(column[0], column: column, panelWidth: panel) > 0.85)
-        #expect(PictureInk.columnCalm(column[0] + column[2], column: column, panelWidth: panel) > 0.85)
+        // Behind the text, edge to edge, it holds in full.
+        #expect(PictureInk.columnCalm(column[0], column: column, panelWidth: panel) == 1)
+        #expect(PictureInk.columnCalm(column[0] + column[2], column: column, panelWidth: panel) == 1)
         // Gone by the panel's edge, the whole margin out.
         #expect(PictureInk.columnCalm(panel, column: column, panelWidth: panel) == 0)
         #expect(PictureInk.columnCalm(column[0] + column[2] + 120, column: column, panelWidth: panel) > 0)
+    }
+
+    /// The fall-off curve: full at the column's edge, none at the panel's, never rising, and flat at both ends so the
+    /// fade has no visible start or end.
+    @Test func theFalloffCurveIsFlatAtBothEnds() {
+        #expect(PictureInk.calmFalloff(0) == 1 && PictureInk.calmFalloff(1) == 0)
+        #expect(PictureInk.calmFalloff(-0.5) == 1 && PictureInk.calmFalloff(1.5) == 0)
+        var last = 1.0
+        for i in 1...1000 {
+            let v = PictureInk.calmFalloff(Double(i) / 1000)
+            #expect(v <= last, "t \(Double(i) / 1000)")
+            last = v
+        }
+        let h = 1e-3
+        #expect(abs(PictureInk.calmFalloff(h) - 1) / h < 0.01)
+        #expect(abs(PictureInk.calmFalloff(1 - h)) / h < 0.02)
+        // Its steepest point stays gentle: no step for the one-bit dots to show as a contour.
+        let slopes = (0..<1000).map { abs(PictureInk.calmFalloff(Double($0 + 1) / 1000) - PictureInk.calmFalloff(Double($0) / 1000)) * 1000 }
+        #expect(slopes.max()! < 2)
     }
 
     /// Rendered over an even picture, the dots get fewer toward the column's centre band by band, and in light the
