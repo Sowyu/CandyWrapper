@@ -1172,15 +1172,21 @@ public final class SidebarContentView: DSView {
         if navSection.superview == nil { navSection.lineHeight = 16; addSubview(navSection) }
         navSection.isHidden = !capy
         if capy {
-            listTop += 14
-            navSection.frame = NSRect(x: 16, y: listTop, width: max(0, w - 32), height: 16)
-            // The list's own controls, at the label's right like Capy's section actions.
-            var bx = w - 8
+            // One rhythm: rows 30pt apart inside a group (28 and a 2pt gap), and `Space.s` more between groups, centre
+            // to centre: Settings to the "Threads" label, and that label to the first project.
+            let groupPitch = SidebarNavRowView.height + 2 + RedesignTokens.Space.s
+            let lastCentre = listTop - 2 - SidebarNavRowView.height / 2
+            let labelCentre = lastCentre + groupPitch
+            // On the icon column's ink: a Tabler glyph leaves 2 of its 24 units clear, 1pt at 16pt.
+            let x = 16 + (16 * 2 / 24 as CGFloat).rounded()
+            navSection.frame = NSRect(x: x, y: labelCentre - 8, width: max(0, w - x - 16), height: 16)
+            // The list's own controls at the label's right, their 16pt icons ending 16 in like the collapse button's.
+            var bx = w - RedesignTokens.Space.l + (24 - 16) / 2
             for b in [addProjectButton, filterButton] where !b.isHidden {
-                b.frame = NSRect(x: bx - 24, y: listTop - 4, width: 24, height: 24)
+                b.frame = NSRect(x: bx - 24, y: labelCentre - 12, width: 24, height: 24)
                 bx -= 24 + 2
             }
-            listTop += 16 + 6
+            listTop = labelCentre + groupPitch - SidebarProjectHeaderRowView.nameCentre
         }
         var fx: CGFloat = 8
         for b in [settingsButton, pullRequestsButton, issuesButton, usageButton] {

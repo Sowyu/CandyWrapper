@@ -1597,6 +1597,9 @@ final class TerminalStatusGlyph: DSView {
 /// in the muted 12pt of the "Threads" label, the count a step lighter, and a chevron after the count that shows on
 /// hover or while the section is folded. It sits on the lower part of its 32pt, so sections breathe above.
 final class SidebarProjectHeaderRowView: SidebarRowBase {
+    /// The name's line: the header's bottom 22pt, centred this far from the top of a 32pt header.
+    static let contentRow: CGFloat = 22
+    static var nameCentre: CGFloat { 32 - contentRow / 2 }
     private let icon = ProjectMonogramView()
     private let pinIcon = IconView(name: .pin, size: 16)
     private let label = LabelView("", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
@@ -1690,12 +1693,15 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
             return
         }
         // The content row is the bottom 22pt.
-        let mid = bounds.height - 11
+        let mid = bounds.height - Self.contentRow / 2
         // 16pt, flush with the rows' left edge (8) and centered on the name's line.
         icon.frame = NSRect(x: 8, y: (mid - 8).rounded(), width: 16, height: 16)
         pinIcon.frame = icon.frame
-        let lw = min(ceil(label.textWidth) + 1, max(0, bounds.width - 30 - 60))
-        label.frame = NSRect(x: 30, y: (mid - 8).rounded(), width: lw, height: 16)
+        // Redesign: the label on the nav rows' label edge, the icon's 16pt then `Space.s` (the user, 2026-11-21: "is
+        // it just me or is the spacing here a bit strange"); T3's folder header keeps its 30.
+        let labelX: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 8 + 16 + RedesignTokens.Space.s : 30
+        let lw = min(ceil(label.textWidth) + 1, max(0, bounds.width - labelX - 60))
+        label.frame = NSRect(x: labelX, y: (mid - 8).rounded(), width: lw, height: 16)
         let cw = ceil(count.textWidth) + 1
         count.frame = NSRect(x: label.frame.maxX + 5, y: label.frame.minY, width: cw, height: 16)
         chevron.frame = NSRect(x: count.frame.maxX + 4, y: (mid - 6).rounded(), width: 12, height: 12)
