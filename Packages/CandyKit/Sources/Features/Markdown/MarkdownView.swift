@@ -209,6 +209,19 @@ public final class MarkdownView: DSView {
     public func setMediaVisible(_ visible: Bool) {
         mediaVisible = visible
         audioViews.values.forEach { $0.setVisible(visible) }
+        updateMediaPriority()
+    }
+
+    /// Tells the image queue which of this message's pictures are on screen and how recent they are (lower in the
+    /// window is more recent). Runs on each layout and each timeline scroll pass.
+    private func updateMediaPriority() {
+        let shown = mediaVisible && window != nil ? visibleRect : .zero
+        for view in imageViews {
+            guard let key = view.key, !key.hasPrefix("diagram-") else { continue }
+            let onScreen = !shown.isEmpty && view.frame.intersects(shown)
+            let recency = window != nil ? -view.convert(view.bounds, to: nil).minY : MediaPriority.rank(key).recency
+            MediaPriority.set(key, visible: onScreen, recency: recency)
+        }
     }
     private var imageViews: [AsyncImageView] = []
     private var imageItems: [ExpandedImagePreviewView.Item] = []
@@ -253,6 +266,7 @@ public final class MarkdownView: DSView {
         let dropped = Array(cache.values) + [lastLayout, reusable].compactMap { $0 }
         cache = [:]; lastLayout = nil; reusable = nil
         Self.release(dropped)
+        imageProgressObservers.forEach(NotificationCenter.default.removeObserver)
     }
 
     public override func fontRuntimeDidChange() {
@@ -811,7 +825,7 @@ public final class MarkdownView: DSView {
                     }
                     let failed = source == .blocked || MarkdownImages.failed.contains(key)
                     imageItems.append(.init(key: key.isEmpty ? "blocked-\(imageItems.count)" : key, name: alt.isEmpty ? "image" : alt,
-                                            load: MarkdownImages.loader(source), reference: reference))
+                                            load: MarkdownImages.loader(source, scope: MarkdownImages.cacheScope), reference: reference))
                     imageKeys.insert(key)
                     let sized = MarkdownImages.sizes[key] != nil && !failed
                     placed.append((rect, sized ? (source.framed ? 9 : 0) : 10, failed ? MarkdownImages.unavailableLabel(alt, detail: MarkdownImages.missingFileAccess.contains(key) ? MarkdownImages.missingFileAccessMessage : nil) : ""))
@@ -847,7 +861,11 @@ public final class MarkdownView: DSView {
             let item = imageItems[index], place = placed[index]
             view.frame = place.frame
             view.layer?.cornerRadius = place.radius
-            view.cacheable = item.key.hasPrefix("diagram-")
+            // Host files of the open environment carry their revision in the disk cache, which drops their pixels when
+            // the file changes (`MarkdownImages.didChange`), so their decodes can live in memory too.
+            // ponytail: memory keys omit the environment; add it if two environments show different files at one path
+            view.cacheable = item.key.hasPrefix("diagram-") || (item.key.hasPrefix("media-file:") && MarkdownImages.cacheScope != nil && MediaDiskCache.shared != nil)
+            view.progress = MarkdownImages.progress[item.key]
             view.skeleton = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
             view.set(key: item.key, fallbackText: place.fallback, loader: item.load)
             view.setAccessibilityLabel("Preview " + item.name)
@@ -856,18 +874,43 @@ public final class MarkdownView: DSView {
                                                 reference: item.reference, openFile: self?.openInFileViewer(item.reference))
             }
         }
+        updateMediaPriority()
     }
 
     /// Sources of the images this message shows, to relayout when one of them reports its size.
     private var imageKeys: Set<String> = []
     private var imageSizeObserver: NSObjectProtocol?
+    private var imageProgressObservers: [NSObjectProtocol] = []
 
     private func observeImageSizes() {
         guard !imageKeys.isEmpty else {
             if let imageSizeObserver { NotificationCenter.default.removeObserver(imageSizeObserver); self.imageSizeObserver = nil }
+            imageProgressObservers.forEach(NotificationCenter.default.removeObserver)
+            imageProgressObservers = []
             return
         }
         guard imageSizeObserver == nil else { return }
+        imageProgressObservers = [
+            NotificationCenter.default.addObserver(forName: MarkdownImages.didProgress, object: nil, queue: .main) { [weak self] note in
+                let key = note.userInfo?["key"] as? String
+                MainActor.assumeIsolated {
+                    guard let self, let key, self.imageKeys.contains(key) else { return }
+                    for view in self.imageViews where view.key == key { view.progress = MarkdownImages.progress[key] }
+                }
+            },
+            // A kept copy that changed on the server: its views load the new bytes.
+            NotificationCenter.default.addObserver(forName: MarkdownImages.didChange, object: nil, queue: .main) { [weak self] note in
+                let key = note.userInfo?["key"] as? String
+                MainActor.assumeIsolated {
+                    guard let self, let key, self.imageKeys.contains(key) else { return }
+                    let source = MarkdownImageSource.workspaceFile(String(key.dropFirst("media-file:".count)))
+                    for view in self.imageViews where view.key == key {
+                        view.reload(loader: MarkdownImages.loader(source, scope: MarkdownImages.cacheScope))
+                    }
+                    self.invalidate()
+                }
+            },
+        ]
         imageSizeObserver = NotificationCenter.default.addObserver(forName: MarkdownImages.didMeasure, object: nil, queue: .main) { [weak self] note in
             let key = note.userInfo?["key"] as? String
             MainActor.assumeIsolated {
@@ -1272,6 +1315,7 @@ public final class MarkdownView: DSView {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil { clearAssistantSelection() }
+        updateMediaPriority()
     }
 
     /// The active find match's first line box, counted as `draw` counts. A match in a diagram's source switches the

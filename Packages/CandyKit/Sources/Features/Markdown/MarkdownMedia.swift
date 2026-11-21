@@ -63,10 +63,13 @@ public enum MarkdownImages {
     /// A signed URL for a host file (`assets.createUrl`, resource `media-file` on the open thread) and the
     /// pixel size the server read from its header. Set by the app; nil without an open thread. It must sign through
     /// `signedURL(resource:)`, the one place that takes a turn of `AssetURLLimit`.
-    public static var assetURL: ((_ path: String) async -> (url: URL, size: CGSize?)?)?
+    public static var assetURL: ((_ path: String) async -> SignedAsset?)?
     /// A signed URL and pixel size for any `assets.createUrl` resource on the open thread's environment
     /// (`useAssetUrlState`, apps/web/src/assets/assetUrls.ts:20-41). Set by the app.
-    public static var resourceURL: ((_ resource: JSONValue) async -> (url: URL, size: CGSize?)?)?
+    public static var resourceURL: ((_ resource: JSONValue) async -> SignedAsset?)?
+    /// A signed URL, the pixel size the server read from the file's header, and the file's revision
+    /// (`fileRevision`, contracts assets.ts:103), absent on older servers and for resources that are not host files.
+    public typealias SignedAsset = (url: URL, size: CGSize?, revision: String?)
     /// How long `resourceURL` waits for `assets.createUrl` before it gives up. T3 sets no limit and lets an unmounted
     /// image interrupt the call, but a reply that stays on screen would keep its turn of `AssetURLLimit` forever.
     // ponytail: one fixed limit for loopback and T3 Connect; scale it by route if slow relays fail images that would have loaded
@@ -86,7 +89,19 @@ public enum MarkdownImages {
     public static let didMeasure = Notification.Name("MarkdownImages.didMeasure")
 
     /// Force Reload: images measure and load again.
-    static func clear() { sizes = [:]; failed = []; missingFileAccess = [] }
+    static func clear() { sizes = [:]; failed = []; missingFileAccess = []; revalidated = []; forgetDownloads() }
+
+    /// "Clear image cache": the kept files go, and every image loads from the server again.
+    public static func clearDiskCache() async {
+        await MediaDiskCache.shared?.clear()
+        clear()
+        ImageDecodeCache.clear()
+    }
+
+    /// Sizes the disk cache kept from earlier launches, before any reply lays out; posts nothing.
+    public static func preload(_ kept: [String: CGSize]) {
+        sizes.merge(kept) { current, _ in current }
+    }
 
     static func record(_ size: CGSize, for key: String) {
         guard size.width > 0, size.height > 0, sizes[key] != size else { return }
@@ -103,11 +118,70 @@ public enum MarkdownImages {
         return CGSize(width: natural.width * scale + 2 * border, height: natural.height * scale + 2 * border)
     }
 
-    /// Decodes `source` for a pixel side and records its natural size on the way.
-    nonisolated static func loader(_ source: MarkdownImageSource) -> AsyncImageView.Loader {
+    /// The open thread's environment: the disk cache's scope for host files. Set by the app.
+    public static var cacheScope: String?
+    /// Kept copies checked against the server this session, by cache key.
+    static var revalidated: Set<String> = []
+    /// Posted with the source key when a kept copy turned out stale: views showing it load it again.
+    public static let didChange = Notification.Name("MarkdownImages.didChange")
+    /// Posted with the source key while a download moves; `progress` holds the fraction, nil once done.
+    public static let didProgress = Notification.Name("MarkdownImages.didProgress")
+    private(set) static var progress: [String: Double] = [:]
+
+    nonisolated private static let progressLock = NSLock()
+    nonisolated(unsafe) private static var progressPosted: [String: ContinuousClock.Instant] = [:]
+
+    /// Ten updates a second at most per image, and one when it ends.
+    nonisolated static func reportProgress(_ key: String, received: Int64, expected: Int64, done: Bool = false) {
+        let fraction: Double? = done ? nil : (expected > 0 ? min(1, Double(received) / Double(expected)) : nil)
+        if !done {
+            guard fraction != nil else { return }
+            let now = ContinuousClock.now
+            let due = progressLock.withLock {
+                if let last = progressPosted[key], now - last < .milliseconds(100) { return false }
+                progressPosted[key] = now
+                return true
+            }
+            guard due else { return }
+        } else {
+            progressLock.withLock { progressPosted[key] = nil }
+        }
+        Task { @MainActor in
+            if progress[key] == fraction { return }
+            progress[key] = fraction
+            NotificationCenter.default.post(name: didProgress, object: nil, userInfo: ["key": key])
+        }
+    }
+
+    /// The disk cache's handle on a host file of the open environment, nil for other sources and without a cache.
+    struct Kept: Sendable {
+        let cache: MediaDiskCache
+        let id: String
+        let scope: String
+        let path: String
+        init?(_ source: MarkdownImageSource, scope: String?) {
+            guard case .workspaceFile(let path) = source, let scope, let cache = MediaDiskCache.shared else { return nil }
+            self.cache = cache; self.scope = scope; self.path = path
+            id = MediaDiskCache.key(scope: scope, path: path)
+        }
+    }
+
+    /// Decodes `source` for a pixel side and records its natural size on the way. A host file of the open environment
+    /// (`scope`) comes from the disk cache when it holds it, with no sign and no download: the timeline's own thumbnail
+    /// when it is large enough, else the kept original. The kept copy is checked against the server once a session,
+    /// behind the pictures still loading.
+    nonisolated static func loader(_ source: MarkdownImageSource, scope: String? = nil) -> AsyncImageView.Loader {
         let key = source.key
-        let download = MarkdownImageDownload {
+        let kept = Kept(source, scope: scope)
+        let download = sharedDownload("\(scope ?? "")|\(key)") { MarkdownImageDownload(grace: .seconds(2)) {
+            if let kept, let hit = await kept.cache.lookup(kept.id) {
+                ImageTiming.mark("disk", key)
+                await revalidate(kept, key: key, entry: hit.entry)
+                return ImageDownloadFile(hit.file, owned: false)
+            }
             let url: URL
+            var revision: String?
+            var natural: CGSize?
             switch source {
             case .direct(let uri):
                 guard let parsed = URL(string: uri.hasPrefix("//") ? "https:" + uri : uri) else { return nil }
@@ -116,22 +190,101 @@ public enum MarkdownImages {
                 guard let asset = await signedURL(path) else { return nil }
                 if let size = asset.size { await record(size, for: key) }
                 url = asset.url
+                revision = asset.revision
+                natural = asset.size
             case .blocked: return nil
             }
-            return await MarkdownImageDownload.fetch(url)
-        }
+            guard await MediaFetchQueue.shared.acquire(key) else { return nil }
+            ImageTiming.mark("download", key)
+            let result = await MediaTransfer.shared.download(url) { received, expected in
+                reportProgress(key, received: received, expected: expected)
+            }
+            await MediaFetchQueue.shared.release()
+            reportProgress(key, received: 0, expected: 0, done: true)
+            guard let result else { return nil }
+            ImageTiming.mark("downloaded", "\(key) \(result.response.expectedContentLength)")
+            if let kept, let file = await kept.cache.store(kept.id, scope: kept.scope, path: kept.path, file: result.file, revision: revision,
+                                                             etag: result.response.value(forHTTPHeaderField: "ETag"), natural: natural) {
+                return Task.isCancelled ? nil : ImageDownloadFile(file, owned: false)
+            }
+            let downloaded = ImageDownloadFile(result.file)
+            return Task.isCancelled ? nil : downloaded
+        } }
         return { side in
             let decoded: (image: CGImage, natural: CGSize)?
             if case .direct(let uri) = source, uri.lowercased().hasPrefix("data:") {
                 decoded = await decodeData(uri, side: side)
+            } else if let kept, let thumb = await kept.cache.thumbnail(kept.id, side: side), thumb.entry.width > 0,
+                      let small = await decodeFile(thumb.url, side: side) {
+                ImageTiming.mark("thumbnail", "\(key) \(thumb.entry.thumbSide)/\(side)")
+                await revalidate(kept, key: key, entry: thumb.entry)
+                decoded = (small.image, thumb.entry.natural)
             } else {
                 guard let file = await download.value() else { return nil }
                 defer { withExtendedLifetime(file) {} }
                 decoded = await decodeFile(file.url, side: side)
+                if let kept, let decoded {
+                    await kept.cache.setNatural(kept.id, decoded.natural)
+                    if side <= MediaDiskCache.thumbMaxSide {
+                        let image = decoded.image
+                        Task.detached(priority: .utility) { await kept.cache.storeThumbnail(kept.id, image: image, side: side) }
+                    }
+                }
             }
             guard !Task.isCancelled, let decoded else { return nil }
             await record(decoded.natural, for: key)
             return decoded.image
+        }
+    }
+
+    private final class WeakDownload: @unchecked Sendable { weak var value: MarkdownImageDownload? }
+    nonisolated private static let downloadsLock = NSLock()
+    nonisolated(unsafe) private static var downloads: [String: WeakDownload] = [:]
+
+    /// One download per source while any loader holds it, so every view and every layout pass shares its progress.
+    nonisolated static func sharedDownload(_ id: String, make: () -> MarkdownImageDownload) -> MarkdownImageDownload {
+        downloadsLock.withLock {
+            if let live = downloads[id]?.value { return live }
+            if downloads.count > 256 { downloads = downloads.filter { $0.value.value != nil } }
+            let made = make()
+            let box = WeakDownload()
+            box.value = made
+            downloads[id] = box
+            return made
+        }
+    }
+
+    /// Drops the shared download for `id`, or every one: the next loader fetches again.
+    nonisolated static func forgetDownloads(_ id: String? = nil) {
+        downloadsLock.withLock { if let id { downloads[id] = nil } else { downloads = [:] } }
+    }
+
+    /// Checks a kept copy against the server once a session: the file's revision from a fresh sign, or its ETag from a
+    /// `HEAD` when the server reports no revision. A changed file leaves the cache and its views load it again.
+    nonisolated static func revalidate(_ kept: Kept, key: String, entry: MediaDiskCache.Entry) async {
+        let first = await MainActor.run { cacheScope == kept.scope && revalidated.insert(kept.id).inserted }
+        guard first else { return }
+        Task.detached(priority: .utility) {
+            guard let asset = await signedURL(kept.path) else { return }
+            if let size = asset.size { await record(size, for: key) }
+            let fresh: Bool
+            if let revision = asset.revision, entry.revision != nil || entry.etag == nil {
+                fresh = revision == entry.revision
+            } else if let etag = entry.etag {
+                let head = await MediaTransfer.shared.download(asset.url, method: "HEAD")
+                if let head { try? FileManager.default.removeItem(at: head.file) }
+                fresh = head?.response.value(forHTTPHeaderField: "ETag") == etag
+            } else {
+                fresh = true
+            }
+            ImageTiming.mark(fresh ? "fresh" : "stale", key)
+            guard !fresh else { return }
+            await kept.cache.remove(kept.id)
+            forgetDownloads("\(kept.scope)|\(key)")
+            await MainActor.run {
+                ImageDecodeCache.remove(key)
+                NotificationCenter.default.post(name: didChange, object: nil, userInfo: ["key": key])
+            }
         }
     }
 
@@ -182,13 +335,17 @@ public enum MarkdownImages {
 
     /// Takes no turn of `AssetURLLimit`: the app's `assetURL` signs through `signedURL(resource:)`, which takes it.
     /// Taking one here as well held six turns while six images each waited for a second one, forever.
-    static func signedURL(_ path: String) async -> (url: URL, size: CGSize?)? {
+    static func signedURL(_ path: String) async -> SignedAsset? {
         await assetURL?(path)
     }
 
-    public static func signedURL(resource: JSONValue) async -> (url: URL, size: CGSize?)? {
+    public static func signedURL(resource: JSONValue) async -> SignedAsset? {
         guard let resourceURL, await AssetURLLimit.shared.acquire() else { return nil }
+        let name = resource["path"]?.stringValue.map { ($0 as NSString).lastPathComponent } ?? ""
+        ImageTiming.mark("sign", name)
+        await SlowLink.roundTrip()
         let result = await resourceURL(resource)
+        ImageTiming.mark("signed", name)
         await AssetURLLimit.shared.release()
         return result
     }
@@ -200,10 +357,13 @@ public enum MarkdownImages {
     }
 
     nonisolated static func decodeFile(_ url: URL, side: Int) async -> (image: CGImage, natural: CGSize)? {
-        await ImageDecodeWorker.shared.run {
+        let start = ContinuousClock.now
+        let decoded = await ImageDecodeWorker.shared.run {
             CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
                 .flatMap { decode($0, side: side) }
         }
+        ImageTiming.mark("decoded", "\(url.lastPathComponent) \(side) \(ContinuousClock.now - start)")
+        return decoded
     }
 
     /// A `data:` URL; Foundation reads base64 and percent-encoded payloads.

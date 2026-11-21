@@ -611,7 +611,23 @@ public final class GeneralSettingsView: SettingsPageBase {
             diagnostics?.detail = self.context.scope.isEnvironmentScope ? "Inspect processes, resource use, and logs on this environment."
                 : "Inspect processes, resource use, and logs on one environment at a time."
         }
-        return section(nil, "Diagnostics", [diagnostics])
+        // CandyWrapper's own: reply images kept on this Mac (`MediaDiskCache`); T3 leaves them to the browser cache.
+        let clear = ButtonView("Clear image cache", variant: .outline, size: .sm)
+        let images = row(nil, title: "Image cache", detail: "Pictures from replies, kept so they show without downloading again.", control: clear)
+        let describe: @MainActor (Int64?) -> Void = { [weak images] bytes in
+            let size = bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
+            images?.detail = "Pictures from replies, kept so they show without downloading again." + (size.map { " Using \($0)." } ?? "")
+        }
+        clear.action = { [weak clear] in
+            clear?.isEnabled = false
+            Task { @MainActor in
+                await MarkdownImages.clearDiskCache()
+                describe(0)
+                clear?.isEnabled = true
+            }
+        }
+        if let cache = MediaDiskCache.shared { Task { @MainActor in describe(await cache.totalBytes) } }
+        return section(nil, "Diagnostics", [diagnostics, images])
     }
 
 }

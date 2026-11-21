@@ -37,3 +37,5 @@ Traps earlier agents hit the hard way. Skim the ones in your area before you cod
 - `server.getConfig` is about 80 KB and includes providers, models and keybindings.
 - Idle sandbox server: `t3` 0.14% CPU, about 10.7 interrupt wakeups per second, 205 MB footprint. An attached idle `claude` session adds 0.45% CPU and 10 wakeups per second.
 
+- A new `Comparable` type in the Features module (2026-11-21) pushed an unrelated tuple sort, `PaletteAddProjectPaths.filter`'s `$0.2 != $1.2 ? $0.2 < $1.2 : $0.0 < $1.0`, past the type checker's time limit, so the app target stopped compiling. Every conformance adds a `<` candidate the solver tries. Give ranking types a method such as `outranks(_:)` instead.
+- A Swift `lazy var` is not thread safe (2026-11-21). `MediaTransfer` built its URLSession lazily, two first downloads at once each built one, and since task ids start at 1 in every session, two transfers shared one entry in its state table and one image never loaded. Build shared sessions in `init`. Its cancellation handler also answers the caller itself, because a task cancelled before `resume()` may not report completion.

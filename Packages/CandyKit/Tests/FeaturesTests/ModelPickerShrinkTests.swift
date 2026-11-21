@@ -322,17 +322,24 @@ import T3Store
 
     // MARK: Stress
 
+    nonisolated static let sequenceChunks: [(Theme, Bool, Int)] = [(Theme.redesign, true), (.redesign, false), (.standard, true), (.glass, true)]
+        .flatMap { combo in (0..<15).map { (combo.0, combo.1, $0) } }
+
     /// A few thousand random sequences of expand, collapse, tab switch, search, catalog refresh, hover and keys, in both
     /// layouts and every theme. The picker never traps and its highlight always names a row that exists.
-    @Test(arguments: [(Theme.redesign, true), (.redesign, false), (.standard, true), (.glass, true)])
-    func randomSequences(_ theme: Theme, _ stacked: Bool) throws {
+    /// 750 sequences per layout and theme, run as 15 cases of 50: each case holds the main actor while it runs (it sets
+    /// the theme globally, so it must not yield), and one 750-sequence case held it for up to 45 s in a full run,
+    /// which starved every other main-actor test (ImageSigningDeadlockTests waited on it).
+    @Test(arguments: Self.sequenceChunks)
+    func randomSequences(_ theme: Theme, _ stacked: Bool, _ chunk: Int) throws {
         try Self.withTheme(theme, stacked: stacked, account: stacked && theme == .redesign) {
-            var rng = PickerShrinkRandom(seed: 0x51C4_2026 &+ UInt64(stacked ? 1 : 0) &+ UInt64(Theme.allCases.firstIndex(of: theme)!) << 8)
+            var rng = PickerShrinkRandom(seed: 0x51C4_2026 &+ UInt64(stacked ? 1 : 0) &+ UInt64(Theme.allCases.firstIndex(of: theme)!) << 8
+                                         &+ UInt64(chunk) << 16)
             let catalogs = [Self.catalog(), Self.catalog(legacy: 1), Self.catalog(legacy: 0, current: 2), Self.catalog(legacy: 5, current: 9),
                             Self.catalog(subProviders: true), Self.catalog(codex: false)]
             let queries = ["", "", "Legacy", "Model 1", "zzz", "Claude", "GPT", " "]
             let keys: [PopupKey] = [.up, .down, .enter, .left, .right]
-            for sequence in 0..<750 {
+            for sequence in chunk * 50..<(chunk + 1) * 50 {
                 let rig = Rig(catalog: catalogs[Int(rng.next() % UInt64(catalogs.count))])
                 let picker = rig.picker
                 for step in 0..<12 {
