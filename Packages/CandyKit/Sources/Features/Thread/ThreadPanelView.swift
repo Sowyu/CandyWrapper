@@ -782,8 +782,12 @@ public final class ThreadPanelView: DSView {
     /// timeline, so the drawer stops where it would push the composer into the header. The composer's
     /// share is the room the timeline keeps clear for it (`composerReservedHeight`).
     public var terminalMaxHeight: CGFloat {
-        TerminalDrawerState.maxHeight(windowHeight: window?.contentView?.bounds.height ?? bounds.height, columnHeight: bounds.height,
+        TerminalDrawerState.maxHeight(windowHeight: window?.contentView?.bounds.height ?? bounds.height,
+                                      columnHeight: bounds.height - (drawerIsCard ? RedesignTokens.Space.s : 0),
                                       headerHeight: chatTop, composerHeight: timeline.bottomInset)
+    }
+    /// Redesign draws the drawer as a card `Space.s` in from the thread's sides and the window's bottom.
+    var drawerIsCard: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isEmbedded
     }
     /// The header's terminal toggle was clicked (`terminal.toggle`).
     public var onTerminalToggle: (@MainActor () -> Void)?
@@ -1201,6 +1205,13 @@ public final class ThreadPanelView: DSView {
 
     /// The browser surface, for the app to fill.
     private let panelResize = RightPanelResizeView()
+    /// Redesign's drawer height handle, in the gap above the drawer card.
+    let terminalResize = RightPanelResizeView()
+    /// A drag on `terminalResize`: the drawer's height when it started, the pointer's travel up, and whether the height
+    /// sits at a limit (for the haptic once on reaching it).
+    private var terminalDragStart: CGFloat?
+    private var terminalDragTravel: CGFloat = 0
+    private var terminalDragAtLimit = false
     private var preferredPanelWidth: CGFloat = {
         let value = UserDefaults.standard.double(forKey: "t3code:preview-panel-width")
         return value > 0 ? value : RightPanelView.defaultWidth
@@ -1336,7 +1347,7 @@ public final class ThreadPanelView: DSView {
     }
 
     /// Redesign: a still image of `view` leaves over it the way `RedesignMotion.panel` closes, then goes.
-    private func leaveAsStill(_ view: NSView) {
+    private func leaveAsStill(_ view: NSView, vertical: Bool = false) {
         guard !view.isHidden, view.bounds.width > 0, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let still = CALayer()
@@ -1346,7 +1357,7 @@ public final class ThreadPanelView: DSView {
         still.zPosition = 21
         Self.copyCorners(of: view, to: still)
         layer?.addSublayer(still)
-        RedesignMotion.panel(still, entering: false) { still.removeFromSuperlayer() }
+        RedesignMotion.panel(still, entering: false, vertical: vertical) { still.removeFromSuperlayer() }
     }
 
     /// The terminal and panel toggles sit on the panel's tab bar while the panel shows, closing slide
@@ -1485,14 +1496,35 @@ public final class ThreadPanelView: DSView {
         setPanelState(next)
     }
 
+    /// Redesign's handle in the gap above the drawer card. The height counts from the card's own height when the drag
+    /// started, so the card stays under the pointer, and taps once on reaching the minimum or the maximum, like the
+    /// panel dividers.
+    private func dragTerminal(by delta: CGFloat, ended: Bool) {
+        guard let drawer = lazyTerminalDrawer.loaded, !drawer.isHidden else { return }
+        let start = terminalDragStart ?? drawer.frame.height
+        terminalDragStart = ended ? nil : start
+        terminalDragTravel += delta
+        let travel = terminalDragTravel
+        if ended { terminalDragTravel = 0 }
+        let proposed = (start + travel).rounded()
+        let atLimit = TerminalDrawerState.clampHeight(proposed, maxHeight: terminalMaxHeight) != proposed
+        if atLimit, !terminalDragAtLimit, !ended { Haptics.tap(.alignment) }
+        terminalDragAtLimit = ended ? false : atLimit
+        drawer.onDrag?(start, travel, ended)
+    }
+
     /// Shows or hides the terminal drawer at `height`. Opening or closing slides, except on a thread switch,
     /// which shows the new thread's drawer at once (`usePanelNavigationSuppression`).
     public func setTerminal(open: Bool, height: CGFloat) {
         guard open != terminalOpen || height != terminalHeight else { return }
         let wasOpen = terminalOpen
         let slides = open != wasOpen && !switchingThread
+        // Redesign with Panel animations off (T3's default): the card takes its room at once and slides up a short way as
+        // one fading layer (`RedesignMotion.panel`), and a closing one leaves as a still image, as the right panel does.
+        let redesignMotion = slides && SettingsPanelMotion.duration == 0 && window != nil && drawerIsCard
+        if redesignMotion, !open, let drawer = lazyTerminalDrawer.loaded { leaveAsStill(drawer, vertical: true) }
         // The controller empties a closed drawer right after this; a still image of it slides down.
-        if slides, !open, let drawer = lazyTerminalDrawer.loaded { terminalGhost = ghost(of: drawer, replacing: terminalGhost) }
+        if slides, !redesignMotion, !open, let drawer = lazyTerminalDrawer.loaded { terminalGhost = ghost(of: drawer, replacing: terminalGhost) }
         if open { dropGhost(&terminalGhost) }
         terminalOpen = open
         terminalHeight = height
@@ -1503,6 +1535,7 @@ public final class ThreadPanelView: DSView {
             terminalSlide.run(to: open ? 1 : 0, duration: slides ? SettingsPanelMotion.duration : 0, in: self)
             layoutNow()
         }
+        if redesignMotion, open, let layer = lazyTerminalDrawer.loaded?.layer { RedesignMotion.panel(layer, entering: true, vertical: true) }
     }
 
     /// Cmd+D (`diff.toggle`, `toggle(ref, "diff")`): the panel on the diff, or closed.
@@ -1962,6 +1995,7 @@ public final class ThreadPanelView: DSView {
         let pill = header.pill
         if !pill.isHidden, pill.window != nil, let host = pill.superview { keepOut.append(convert(pill.frame, from: host)) }
         if rightPanelSheetOpen { keepOut.append(rightPanel.frame) }
+        if let drawer = lazyTerminalDrawer.loaded, !drawer.isHidden, drawer.frame.height > 0 { keepOut.append(drawer.frame) }
         DitherArtView.setFlowerStage(kind: isDraft ? .hero : .thread, content: NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop)),
                                      keepOut: keepOut, from: self)
     }
@@ -2367,15 +2401,30 @@ public final class ThreadPanelView: DSView {
         // The drawer sits under the chat column, left of the right panel (ChatView.tsx:11905-11921);
         // the column above it keeps the header and the composer (`terminalMaxHeight`).
         let drawer = terminalOpen && chat > 0 ? max(0, min(terminalHeight, terminalMaxHeight)) : 0
-        let shownDrawer = !terminalSlide.isRunning ? drawer
-            : ((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) * terminalSlide.value * scale).rounded() / scale
+        // Redesign's card keeps `Space.s` to the thread's sides and the window's bottom, and to the right panel's card
+        // when it shows, which already sits that far right of the chat. Its handle fills the same gap above it. The
+        // thread reaches down to the card's top, so the composer keeps the distance it has from the window's foot.
+        let drawerCard = drawerIsCard
+        let gap = drawerCard ? RedesignTokens.Space.s : 0
+        let shownDrawer = !terminalSlide.isRunning ? (drawer > 0 ? drawer + gap : 0)
+            : (((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) + gap) * terminalSlide.value * scale).rounded() / scale
         let chatHeight = bounds.height - shownDrawer
+        let drawerX = gap, drawerWidth = max(0, min(chat, bounds.width - gap) - gap)
         if let terminalDrawer = drawer > 0 ? self.terminalDrawer : lazyTerminalDrawer.loaded {
             terminalDrawer.isHidden = drawer == 0
+            terminalDrawer.isCard = drawerCard
             // Mid-slide the drawer keeps its height and hangs below the window's edge, so its terminal keeps its grid.
-            terminalDrawer.frame = NSRect(x: 0, y: chatHeight, width: chat, height: drawer)
+            terminalDrawer.frame = NSRect(x: drawerX, y: chatHeight, width: drawerWidth, height: drawer)
         }
         terminalGhost?.frame.origin.y = chatHeight
+        if terminalResize.superview == nil, drawerCard, drawer > 0 {
+            terminalResize.vertical = true
+            addSubview(terminalResize)
+            terminalResize.onDrag = { [weak self] delta in self?.dragTerminal(by: delta, ended: false) }
+            terminalResize.onDragEnd = { [weak self] in self?.dragTerminal(by: 0, ended: true) }
+        }
+        terminalResize.isHidden = !drawerCard || drawer == 0 || lazyTerminalDrawer.loaded?.isHidden != false
+        terminalResize.frame = NSRect(x: drawerX, y: chatHeight - gap, width: drawerWidth, height: gap)
         // The rows run on under the header and fade out toward the top (`fade`).
         let glass = WindowGlass.isActive(for: self)
         // In an open Redesign thread the first row starts below the rows' fade-in (the timeline mask), which is

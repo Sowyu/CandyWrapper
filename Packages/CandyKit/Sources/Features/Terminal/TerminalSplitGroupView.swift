@@ -151,6 +151,18 @@ public final class TerminalListAsideView: DSView {
     private let scroll = NSScrollView()
     private let content = FlippedContent()
     private var model = TerminalListModel(groups: [], showHeaders: false)
+    /// Inside Redesign's drawer card: no box, a hairline on the left where it meets the terminals, and no header
+    /// buttons, since the card's own action row sits over the list's top.
+    var isCard = false {
+        didSet {
+            guard isCard != oldValue else { return }
+            for button in buttons.values { button.isHidden = isCard }
+            for rule in headerRules { rule.isHidden = isCard }
+            headerRule.isHidden = isCard
+            needsLayout = true; needsDisplay = true
+        }
+    }
+    private let cardRule = CALayer()
 
     public var onAction: ((TerminalActionCluster.Action) -> Void)?
     public var onActivate: ((String) -> Void)?
@@ -160,6 +172,8 @@ public final class TerminalListAsideView: DSView {
         super.init(frame: frameRect)
         box.host = self
         layer?.addSublayer(box)
+        cardRule.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        layer?.addSublayer(cardRule)
         for layer in [headerRule] + (0..<3).map({ _ in CALayer() }) {
             layer.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
             self.layer?.addSublayer(layer)
@@ -231,9 +245,11 @@ public final class TerminalListAsideView: DSView {
             // `border-l` on every button but the first.
             if i < 3 { x -= 1; headerRules[i].frame = CGRect(x: x, y: 1, width: 1, height: 22) }
         }
+        cardRule.frame = isCard ? CGRect(x: 0, y: 0, width: 1, height: bounds.height) : .zero
         CATransaction.commit()
-        let top: CGFloat = 1 + 22 + 1
-        scroll.frame = NSRect(x: 1, y: top, width: max(0, bounds.width - 2), height: max(0, bounds.height - top - 1))
+        let top: CGFloat = isCard ? CardTopRow.rowHeight : 1 + 22 + 1
+        scroll.frame = isCard ? NSRect(x: 1, y: top, width: max(0, bounds.width - 1), height: max(0, bounds.height - top))
+            : NSRect(x: 1, y: top, width: max(0, bounds.width - 2), height: max(0, bounds.height - top - 1))
         // `px-1 py-1`; groups `pb-0.5`, rows `gap-0.5`.
         let w = scroll.frame.width - 8
         var y: CGFloat = 4
@@ -259,8 +275,9 @@ public final class TerminalListAsideView: DSView {
     public override func updateLayer() {
         var style = BoxStyle()
         style.fill = Themed.color(\.muted, 0.1)
-        style.border = Themed.color(\.border, 0.7)
+        style.border = isCard ? nil : Themed.color(\.border, 0.7)
         box.boxStyle = style
+        cardRule.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
         box.setNeedsDisplay()
         let rule = Themed.color(\.border, 0.7).cgColor(in: self)
         headerRule.backgroundColor = rule
