@@ -362,7 +362,13 @@ public final class SettingsGroupView: BoxView {
 
     public override func layout() {
         super.layout()
-        if let rowFilter { for row in rows where !rowFilter(row) { row.isHidden = true } }
+        // A refused row leaves the view tree: hiding it was not enough, since a page's binder can unhide it later
+        // (About's Server runtime row drew its button at the card's bottom left).
+        for row in rows {
+            let keep = rowFilter?(row) != false
+            if !keep, row.superview === self { row.removeFromSuperview() }
+            if keep, row.superview !== self { addSubview(row) }
+        }
         var y = inset
         CATransaction.begin()
         CATransaction.setDisableActions(true)

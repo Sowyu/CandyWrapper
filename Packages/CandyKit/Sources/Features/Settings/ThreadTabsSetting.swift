@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Experimental Tabs switch: Redesign's tab strip of open routes, Cmd-click and "Open in new tab". Off by default
+/// The Tabs switch in Labs: Redesign's tab strip of open routes, Cmd-click and "Open in new tab". Off by default
 /// (the user, 2026-10-29: they don't use tabs). Turning it off only hides the tabs; the open ones come back with it.
 @MainActor
 public enum ThreadTabsSetting {

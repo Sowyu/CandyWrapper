@@ -233,7 +233,6 @@ struct RedesignBaselineTests {
         case .sourceControl: SourceControlSettingsView(context: context, discoveryEnabled: false)
         case .archive: ArchiveSettingsView(context: context)
         case .scheduledTasks: ScheduledTasksSettingsView(context: context)
-        case .experimental: ExperimentalSettingsView(context: context)
         case .redesign: RedesignSettingsView(context: context)
         case .beta: BetaSettingsView(context: context)
         case .integrations: IntegrationsSettingsView(context: context)

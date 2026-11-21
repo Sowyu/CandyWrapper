@@ -107,7 +107,7 @@ KEEP_AFTER = {
     "providers": '        .item(SettingsSearchItem(id: "cursor-keychain-usage", title: "Cursor account usage", to: .providers, searchTerms: ["cursor macOS keychain usage tokens cost limits permission"], flags: [.providerSettingsOnly, .macProviderSettingsOnly])),',
 }
 
-# CandyWrapper's own Redesign tab (RedesignSettingsView), after T3's items, in the tab's order.
+# CandyWrapper's own Redesign tab (RedesignSettingsView), after T3's items, in the tab's order, then its Labs rows.
 CANDY_ITEMS = [
     '        .item(SettingsSearchItem(id: "redesign", title: "Redesign", to: .redesign, searchTerms: ["theme look dither picture wallpaper candywrapper own experimental"])),',
     '        .item(SettingsSearchItem(id: "redesign-picture", title: "Picture", to: .redesign, searchTerms: ["redesign background wallpaper image photo desktop picture art"])),',
@@ -119,6 +119,8 @@ CANDY_ITEMS = [
     '        .item(SettingsSearchItem(id: "composer-collapse", title: "Collapse composer on scroll", to: .redesign, searchTerms: ["composer rest resting scroll wheel conversation timeline shrink minimize"])),',
     '        .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout two columns"])),',
     '        .item(SettingsSearchItem(id: "redesign-picker-account", title: "Account and limits in the model picker", to: .redesign, searchTerms: ["redesign model picker account usage limits manage provider card email plan"])),',
+    # CandyWrapper's own experiments, in Labs below T3's Beta group (BetaSettingsView.candyToggles).
+    '        .item(SettingsSearchItem(id: "thread-tabs", title: "Tabs", to: .beta, searchTerms: ["experimental tab strip open threads pages cmd click new tab redesign"])),',
 ]
 
 # Pages CandyWrapper doesn't have yet: voice dictation and the secrets store. Their rows stay out of search.

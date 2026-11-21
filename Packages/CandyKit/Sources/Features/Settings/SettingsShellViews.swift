@@ -6,9 +6,7 @@ import DesignSystem
 public enum SettingsSection: String, CaseIterable, Sendable {
     case general, appearance, chat, diffs, keybindings, voice, snapShots, providers, threads, browser, devices, scheduledTasks, projects, sourceControl, worktrees, connections, access, maintenance, beta, about, archive
     case integrations, storage
-    /// CandyWrapper's own experimental switches, so it sits last in T3's nav too.
-    case experimental
-    /// CandyWrapper's own: the Redesign switch and every Redesign-only setting, beside Experimental.
+    /// CandyWrapper's own: the Redesign switch and every Redesign-only setting. Its other experiments sit in Labs.
     case redesign
     /// Reached from General > Diagnostics; not in the nav (`SETTINGS_BREADCRUMB_LABELS`).
     case diagnostics, licenses
@@ -38,7 +36,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: "Environments"
         case .beta: "Labs"
         case .archive: "Archive"
-        case .experimental: "Experimental"
         case .redesign: "Redesign"
         case .diagnostics: "Diagnostics"
         case .licenses: "Open source licenses"
@@ -70,7 +67,6 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .connections: .server
         case .beta: .flaskConical
         case .archive: .archive
-        case .experimental: .flaskConical
         case .redesign: .paintbrush
         case .diagnostics: .activity
         case .licenses: .fileText
@@ -82,7 +78,8 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         guard path == "/settings" || path.hasPrefix("/settings/") else { return nil }
         let name = path.dropFirst("/settings".count).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         switch name {
-        case "labs", "beta": return .beta
+        // The Experimental page merged into Labs (round 3), so its old links land there.
+        case "labs", "beta", "experimental": return .beta
         case "archived": return .archive
         case "scheduled-tasks": return .scheduledTasks
         case "snap-shot": return .snapShots
@@ -97,15 +94,30 @@ public enum SettingsSection: String, CaseIterable, Sendable {
     /// Pages that work.
     public var isAvailable: Bool { true }
 
-    /// The nav lists Project only for a project scope (`isSettingsOverviewVisible`).
-    static let navGroups: [(label: String?, sections: [SettingsSection])] = [
+    /// T3's nav (settingsSearch.ts:132-175 at 4928) with CandyWrapper's Redesign page after it. The nav lists Project
+    /// only for a project scope (`isSettingsOverviewVisible`).
+    static let defaultNavGroups: [(label: String?, sections: [SettingsSection])] = [
         (nil, [.general, .appearance, .chat, .diffs, .keybindings, .voice, .snapShots]),
         ("Agents", [.providers, .threads, .browser, .devices, .scheduledTasks]),
         ("Code", [.projects, .sourceControl, .worktrees]),
         ("Connections", [.connections, .access]),
-        (nil, [.maintenance, .beta, .about, .archive, .redesign, .experimental]),
+        (nil, [.maintenance, .beta, .about, .archive, .redesign]),
     ]
-    static let navSections = navGroups.flatMap(\.sections)
+    /// Redesign's own order, every group labelled. App: the look (Redesign beside Appearance) and the composer's inputs
+    /// (Chat, Voice, SnapShots' window capture). Agents: what runs threads, with Archive's archived threads beside Threads.
+    /// Code: repositories, their diffs and pull requests, worktrees. System: upkeep, previews, then About last.
+    static let redesignNavGroups: [(label: String?, sections: [SettingsSection])] = [
+        ("App", [.general, .appearance, .redesign, .keybindings, .chat, .voice, .snapShots]),
+        ("Agents", [.providers, .threads, .archive, .scheduledTasks, .browser, .devices]),
+        ("Code", [.projects, .sourceControl, .diffs, .worktrees]),
+        ("Connections", [.connections, .access]),
+        ("System", [.maintenance, .beta, .about]),
+    ]
+    static func navGroups(dither: Bool) -> [(label: String?, sections: [SettingsSection])] {
+        dither ? redesignNavGroups : defaultNavGroups
+    }
+    static func navSections(dither: Bool) -> [SettingsSection] { navGroups(dither: dither).flatMap(\.sections) }
+    static let navSections = navSections(dither: false)
 
     /// SettingsSidebarNav.tsx `SnapShotIcon` (a `createLucideIcon` glyph outside the generated set).
     static let snapShotIcon = IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
@@ -237,8 +249,8 @@ public final class SettingsSidebarView: DSView {
         navScroll.scrollsHorizontally = false
         navScroll.hideScrollbars = true
         for item in items.values { navDocument.addSubview(item) }
-        for group in SettingsSection.navGroups {
-            if let title = group.label {
+        for group in SettingsSection.defaultNavGroups + SettingsSection.redesignNavGroups {
+            if let title = group.label, groupLabels[title] == nil {
                 let label = LabelView(title, font: DSFont.ui(12, weight: .medium), color: Themed.color(\.sidebarMutedForeground, sidebar: true))
                 label.lineHeight = 16
                 label.color = Themed.color(\.sidebarMutedForeground, 0.8, sidebar: true)
@@ -246,7 +258,8 @@ public final class SettingsSidebarView: DSView {
                 navDocument.addSubview(label)
             }
         }
-        for section in SettingsSection.navSections {
+        // Added in Redesign's order, so Tab walks the rows top to bottom.
+        for section in SettingsSection.navSections(dither: true) {
             let row = DitherSettingsNavRow(section.label, icon: section.icon)
             row.action = { [weak self] in self?.select(section) }
             concernRows[section] = row
@@ -490,9 +503,11 @@ public final class SettingsSidebarView: DSView {
     private func layoutConcernNavigation(top: CGFloat, bottom: CGFloat, dither: Bool) {
         navScroll.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bottom - top))
         var y: CGFloat = 0
-        for (index, group) in SettingsSection.navGroups.enumerated() {
+        groupLabels.values.forEach { $0.isHidden = true }
+        for (index, group) in SettingsSection.navGroups(dither: dither).enumerated() {
             if index > 0 { y += dither ? 12 : 16 }
             if let title = group.label, let label = groupLabels[title] {
+                label.isHidden = isSearching
                 // Nightly 3754 SettingsSidebarNav.tsx:368-380: 16px heading, then gap-1.
                 label.color = Themed.color(\.sidebarMutedForeground, dither ? 1 : 0.8, sidebar: !isRouteModal)
                 label.frame = NSRect(x: 16, y: y + (dither ? 4 : 0), width: max(0, bounds.width - 32), height: 16)
@@ -593,19 +608,18 @@ final class SettingsSearchResultRow: ControlView {
         restyle()
     }
 
-    /// Under Redesign the result names the section it opens in.
+    /// A search result row: its title over the name of the page it opens.
     func configure(_ item: SettingsSearchItem, dither: Bool = false) {
         self.dither = dither
         title.color = Themed.color(\.sidebarForeground, sidebar: dither)
         subtitle.color = Themed.color(\.sidebarMutedForeground, 0.75, sidebar: dither)
-        let home = dither ? DitherSettingsSection.home(of: item.to, anchor: item.anchor) : nil
-        let label = home?.label ?? item.to.label
+        // The result names the nav page it opens, as the nav lists it in either look.
+        let label = item.to.label
         title.text = item.title
         subtitle.text = label
         icon.removeFromSuperview()
         let color = dither ? Themed.color(\.sidebarMutedForeground, 0.6, sidebar: dither) : Themed.color(\.sidebarIconColor, sidebar: dither)
-        icon = home.map { IconView(name: $0.icon, size: 14, strokeColor: color) }
-            ?? (item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: dither ? 14 : 16, color: color)
+        icon = (item.to == .snapShots ? IconView(definition: SettingsSection.snapShotIcon, size: dither ? 14 : 16, color: color)
                 : IconView(name: item.to.icon, size: dither ? 14 : 16, strokeColor: color))
         addSubview(icon)
         restyle()
