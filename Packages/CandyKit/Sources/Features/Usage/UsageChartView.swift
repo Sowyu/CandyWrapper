@@ -129,6 +129,30 @@ public enum UsageChartLogic {
             return (a, CGPoint(x: a.x + dx / 3, y: a.y + t[i] * dx / 3), CGPoint(x: b.x - dx / 3, y: b.y - t[i + 1] * dx / 3), b)
         }
     }
+
+    /// The curve's y at `x`. The controls sit at thirds of each segment, so x runs linearly in the segment's t.
+    public static func sample(_ segs: [(CGPoint, CGPoint, CGPoint, CGPoint)], x: CGFloat) -> CGFloat {
+        guard let first = segs.first, let last = segs.last else { return viewHeight }
+        if x <= first.0.x { return first.0.y }
+        if x >= last.3.x { return last.3.y }
+        let s = segs.first { x <= $0.3.x } ?? last
+        let dx = s.3.x - s.0.x
+        let t = dx == 0 ? 0 : (x - s.0.x) / dx, u = 1 - t
+        return u * u * u * s.0.y + 3 * u * u * t * s.1.y + 3 * u * t * t * s.2.y + t * t * t * s.3.y
+    }
+
+    /// One series' points in view units, a column apart.
+    public static func points(_ values: [Double], max: Double) -> [CGPoint] {
+        let stepX = values.count < 2 ? 0 : viewWidth / CGFloat(values.count - 1)
+        return values.enumerated().map { i, v in CGPoint(x: CGFloat(i) * stepX, y: y(v, max: max)) }
+    }
+
+    /// The period nearest to `x` across a plot `width` wide with `count` periods.
+    public static func nearestIndex(x: CGFloat, width: CGFloat, count: Int) -> Int? {
+        guard count > 0, width > 0 else { return nil }
+        let f = Double(min(width, max(0, x)) / width)
+        return min(count - 1, max(0, Int(UsageFormat.jsRound(f * Double(count - 1)))))
+    }
 }
 
 /// `UsageProviderChart`: the y labels in a 56pt column, the 224pt plot with layered area series per
@@ -183,6 +207,15 @@ public final class UsageChartView: DSView {
         }
     }
 
+    /// The chart at a glance for VoiceOver: the span and the busiest period's total.
+    static func accessibilitySummary(_ m: Model, columns: [UsageChartLogic.Column], period: (String) -> String, format: (Double) -> String) -> String? {
+        guard let first = m.periods.first, let last = m.periods.last else { return nil }
+        let span = m.periods.count == 1 ? period(first) : "\(period(first)) to \(period(last))"
+        guard let peak = columns.indices.max(by: { columns[$0].total < columns[$1].total }), columns[peak].total > 0,
+              peak < m.periods.count else { return span + ", no usage" }
+        return span + ", peak \(format(columns[peak].total)) on \(period(m.periods[peak]))"
+    }
+
     private func format(_ v: Double) -> String { model.tokens ? UsageFormat.tokens(v) : UsageFormat.usd(v) }
     func formatPeriod(_ p: String) -> String { model.hourly ? UsageFormat.hourShort(p, timeZone: model.timeZone, hour12: UsageTime.hour12()) : UsageFormat.dayShort(p) }
     func formatTooltipPeriod(_ p: String) -> String {
@@ -209,6 +242,7 @@ public final class UsageChartView: DSView {
         xLabels[1].text = ps.isEmpty ? "" : formatPeriod(ps[ps.count / 2]).uppercased()
         xLabels[2].text = ps.last.map(formatPeriod)?.uppercased() ?? ""
         setAccessibilityLabel(accessibilityCaption)
+        setAccessibilityValue(Self.accessibilitySummary(m, columns: columns, period: formatTooltipPeriod, format: format))
         yLabels.forEach { $0.setAccessibilityElement(false) }
         let rows = Self.accessibilityRows(m, columns: columns, period: formatTooltipPeriod, format: format)
         setAccessibilityChildren(rows.map { text in
@@ -259,6 +293,12 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
     private let crosshair = DSView()
     private let tooltip = UsageChartTooltipView()
     private var tracking: NSTrackingArea?
+    /// Redesign's dithered plot, alive only while Redesign shows.
+    private(set) var dither: UsageDitherPlotView?
+    /// Redesign anchors the readout to the day and glides it there; T3 hangs it off the pointer.
+    var redesign: Bool { Self.redesignOverride ?? ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// Tests draw Redesign's colors through T3's chart, for before and after pictures.
+    nonisolated(unsafe) static var redesignOverride: Bool?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -282,7 +322,34 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
     override func mouseEntered(with event: NSEvent) { pointerInside = true; followPointer() }
     override func mouseMoved(with event: NSEvent) { if pointerInside { followPointer() } }
     func hoverPointerMoved() { if pointerInside { followPointer() } }
-    override func mouseExited(with event: NSEvent) { pointerInside = false; hoverIndex = nil }
+    override func mouseExited(with event: NSEvent) {
+        pointerInside = false
+        if !(redesign && window?.firstResponder === self) { hoverIndex = nil }
+    }
+
+    // Redesign: a click focuses the chart and the arrow keys move the readout a period at a time.
+    override var acceptsFirstResponder: Bool { redesign && !(owner?.model.periods.isEmpty ?? true) }
+    override func mouseDown(with event: NSEvent) {
+        if redesign { window?.makeFirstResponder(self) } else { super.mouseDown(with: event) }
+    }
+    override func resignFirstResponder() -> Bool {
+        if !pointerInside { hoverIndex = nil }
+        return super.resignFirstResponder()
+    }
+    override func keyDown(with event: NSEvent) {
+        guard redesign, let n = owner?.model.periods.count, n > 0,
+              let step = [NSRightArrowFunctionKey: 1, NSLeftArrowFunctionKey: -1][Int(event.charactersIgnoringModifiers?.unicodeScalars.first?.value ?? 0)]
+        else { super.keyDown(with: event); return }
+        hoverIndex = Self.scrub(hoverIndex, by: step, count: n)
+    }
+
+    /// The period an arrow key moves to: from nothing, the last period (or the first going right); then a step,
+    /// held at the ends.
+    static func scrub(_ index: Int?, by step: Int, count: Int) -> Int? {
+        guard count > 0 else { return nil }
+        guard let index else { return step > 0 ? 0 : count - 1 }
+        return min(count - 1, max(0, index + step))
+    }
 
     /// `handleMove`: the nearest period to the pointer, the readout 12pt off it.
     private func followPointer() {
@@ -290,8 +357,7 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
         let p = convert(window.mouseLocationOutsideOfEventStream, from: nil)
         let x = min(bounds.width, max(0, p.x)), y = min(bounds.height, max(0, p.y))
         hoverPoint = CGPoint(x: x, y: y)
-        let n = owner.model.periods.count
-        hoverIndex = min(n - 1, max(0, Int(UsageFormat.jsRound(Double(x / bounds.width) * Double(n - 1)))))
+        hoverIndex = UsageChartLogic.nearestIndex(x: x, width: bounds.width, count: owner.model.periods.count)
         positionTooltip()
     }
 
@@ -309,15 +375,32 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
         let format: (Double) -> String = { tokens ? UsageFormat.tokens($0) : UsageFormat.usd($0) }
         let column = columns[i]
         let rows: [(UsageProviderKind, String, Bool)] = m.providers.map { p in (p, format(column.value(p)), m.loading.contains(p)) }
+        let wasHidden = tooltip.isHidden
+        tooltip.redesign = redesign
         tooltip.set(title: owner.formatTooltipPeriod(m.periods[i]), rows: rows,
                     total: format(columns[i].total), partial: m.providers.contains { m.loading.contains($0) })
         tooltip.isHidden = false
-        positionTooltip()
+        positionTooltip(glide: !wasHidden)
     }
 
-    private func positionTooltip() {
+    /// The x of period `i`'s column.
+    private func columnX(_ i: Int) -> CGFloat {
+        let n = owner?.model.periods.count ?? 0
+        return n < 2 ? 0 : CGFloat(i) * bounds.width / CGFloat(n - 1)
+    }
+
+    private func positionTooltip(glide: Bool = false) {
         let s = tooltip.fittingSize
         let gap: CGFloat = 12
+        if redesign, let i = hoverIndex {
+            // Beside the hairline, at the plot's top, so scrubbing moves it only sideways.
+            let x = columnX(i)
+            let left = x + gap + s.width <= bounds.width ? x + gap : x - gap - s.width
+            let top = UsageChartLogic.plotTop * bounds.height / UsageChartLogic.viewHeight
+            let frame = NSRect(x: min(max(0, left), max(0, bounds.width - s.width)).rounded(), y: top.rounded(), width: s.width, height: s.height)
+            Self.glide(tooltip, to: frame, animated: glide)
+            return
+        }
         let left = hoverPoint.x + gap + s.width <= bounds.width ? hoverPoint.x + gap : hoverPoint.x - gap - s.width
         let top = hoverPoint.y + gap + s.height <= bounds.height ? hoverPoint.y + gap : hoverPoint.y - gap - s.height
         tooltip.frame = NSRect(x: min(max(0, left), max(0, bounds.width - s.width)), y: min(max(0, top), max(0, bounds.height - s.height)),
@@ -326,19 +409,57 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
 
     override func layout() {
         super.layout()
+        syncDither()
         guard let i = hoverIndex, let n = owner?.model.periods.count else { crosshair.isHidden = true; return }
         let stepX = n < 2 ? 0 : bounds.width / CGFloat(n - 1)
         // The stroke centred on the column, on the half point the old drawn line used.
         let x = ((CGFloat(i) * stepX) * 2).rounded() / 2
         let top = UsageChartLogic.plotTop * bounds.height / UsageChartLogic.viewHeight
-        crosshair.frame = NSRect(x: x - 0.5, y: top, width: 1, height: max(0, bounds.height - top))
+        let frame = NSRect(x: x - 0.5, y: top, width: 1, height: max(0, bounds.height - top))
+        Self.glide(crosshair, to: frame, animated: redesign && !crosshair.isHidden && crosshair.frame.height == frame.height)
         crosshair.layer?.backgroundColor = Themed.color(\.mutedForeground).cgColor(in: self)
         crosshair.isHidden = false
         if !tooltip.isHidden { positionTooltip() }
     }
 
+    /// Redesign's scrub glides from period to period on the shared curve; Reduce Motion and T3's look jump.
+    static func glide(_ view: NSView, to frame: NSRect, animated: Bool) {
+        guard view.frame != frame else { return }
+        guard animated, !Motion.reduced else { view.frame = frame; return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = RedesignTokens.Motion.quick
+            ctx.timingFunction = RedesignTokens.Motion.curve
+            ctx.allowsImplicitAnimation = true
+            view.animator().frame = frame
+        }
+    }
+
+    /// Redesign's input for the dithered plot: the providers heaviest first, like the drawn series.
+    func ditherInput() -> UsageDitherPlotView.Input {
+        guard let m = owner?.model else { return .init() }
+        let series = m.providers.enumerated().map { i, p in
+            (i, p, columns.reduce(0) { $0 + $1.value(p) })
+        }.sorted { ($1.2, $0.0) < ($0.2, $1.0) }.map { _, p, _ in
+            UsageDitherPlotView.Series(id: p.rawValue, color: UsageStyle.color(p), values: columns.map { $0.value(p) },
+                                       dim: m.loading.contains(p) ? 0.4 : 1)
+        }
+        return .init(series: series, scaleMax: scaleMax, ticks: ticks)
+    }
+
+    private func syncDither() {
+        guard redesign else { dither?.removeFromSuperview(); dither = nil; return }
+        let d = dither ?? {
+            let d = UsageDitherPlotView()
+            addSubview(d, positioned: .below, relativeTo: crosshair)
+            dither = d
+            return d
+        }()
+        d.frame = bounds
+        d.input = ditherInput()
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        guard let owner, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        guard let owner, !redesign, let ctx = NSGraphicsContext.current?.cgContext else { return }
         let m = owner.model
         let sx = bounds.width / UsageChartLogic.viewWidth, sy = bounds.height / UsageChartLogic.viewHeight
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * sx, y: y * sy) }
@@ -400,17 +521,33 @@ final class UsageChartTooltipView: DSView {
     private let totalLabel = UsageStyle.label("Total", 12, color: Themed.color(\.mutedForeground))
     private let totalValue = UsageStyle.label("", 12, tabular: true)
 
+    /// Redesign's readout: the floating surface, and a color swatch per series instead of the provider mark.
+    var redesign = false { didSet { if redesign != oldValue { providers = []; applyBox() } } }
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        applyBox()
+        addSubview(box)
+        for v in [title, rule, totalLabel, totalValue] as [NSView] { addSubview(v) }
+        rule.layer?.backgroundColor = Themed.color(\.border).cgColor
+    }
+
+    private func applyBox() {
+        if redesign {
+            var s = BoxStyle()
+            s.radius = RedesignTokens.Radius.card
+            s.fill = Themed.color(\.popover)
+            s.border = NSColor(name: nil) { RedesignTokens.Surface.rim(dark: $0.isDark) }
+            s.shadows = [PopupSurface.redesignFloating]
+            box.boxStyle = s
+            return
+        }
         var s = BoxStyle()
         s.radius = 12
         s.fill = Themed.color(\.popover, 0.92)
         s.border = Themed.color(\.border, 0.5)
         s.shadows = [BoxShadow(y: 10, blur: 15, spread: -3, color: Themed.black(0.1)), BoxShadow(y: 4, blur: 6, spread: -4, color: Themed.black(0.1))]
         box.boxStyle = s
-        addSubview(box)
-        for v in [title, rule, totalLabel, totalValue] as [NSView] { addSubview(v) }
-        rule.layer?.backgroundColor = Themed.color(\.border).cgColor
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -422,7 +559,7 @@ final class UsageChartTooltipView: DSView {
             rows.forEach { $0.0.removeFromSuperview(); $0.1.removeFromSuperview(); $0.2.removeFromSuperview() }
             providers = data.map(\.0)
             rows = data.map { p, _, _ in
-                let icon = UsageStyle.mark(p, size: 12)
+                let icon = redesign ? UsageChartSwatchView(color: UsageStyle.color(p)) : UsageStyle.mark(p, size: 12)
                 let name = UsageStyle.label(p.label, 12, color: Themed.color(\.mutedForeground))
                 let v = UsageStyle.label("", 12, tabular: true)
                 v.alignment = .right
@@ -455,7 +592,7 @@ final class UsageChartTooltipView: DSView {
         title.frame = NSRect(x: x, y: y, width: w, height: 16)
         y += 20
         for (icon, name, value) in rows {
-            icon.frame = NSRect(x: x, y: y + 2, width: 12, height: 12)
+            icon.frame = icon is UsageChartSwatchView ? NSRect(x: x + 2, y: y + 4, width: 8, height: 8) : NSRect(x: x, y: y + 2, width: 12, height: 12)
             name.frame = NSRect(x: x + 18, y: y, width: ceil(name.textWidth) + 1, height: 16)
             value.frame = NSRect(x: x, y: y, width: w, height: 16)
             y += 16
@@ -468,6 +605,17 @@ final class UsageChartTooltipView: DSView {
     }
 
     override func updateLayer() { rule.layer?.backgroundColor = Themed.color(\.border).cgColor(in: self) }
+}
+
+/// A series' color as a square cell, like the cells of Redesign's dithered fill.
+final class UsageChartSwatchView: DSView {
+    private let color: NSColor
+    init(color: NSColor) {
+        self.color = color
+        super.init(frame: .zero)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func updateLayer() { layer?.backgroundColor = color.cgColor(in: self) }
 }
 
 /// One part-to-whole bar with its legend (`UsageShareBar`): segments `h-2 gap-0.5`, `min-w-1`, the ends
