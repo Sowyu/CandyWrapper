@@ -178,10 +178,15 @@ public final class UsageChartView: DSView {
     private let plot = UsageChartPlotView()
     private var yLabels: [LabelView] = []
     private let xLabels = (0..<3).map { _ in UsageStyle.label("", 10, color: Themed.color(\.mutedForeground), lineHeight: 14) }
+    /// Redesign's legend. The page puts it at the right of the chart's title row; it hides in T3's look.
+    let legend = UsageChartLegendView()
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(plot)
+        legend.onSpotlight = { [weak self] id in
+            self?.plot.spotlight = id
+        }
         xLabels.forEach(addSubview)
         xLabels[1].alignment = .center
         xLabels[2].alignment = .right
@@ -241,6 +246,7 @@ public final class UsageChartView: DSView {
         xLabels[0].text = ps.first.map(formatPeriod)?.uppercased() ?? ""
         xLabels[1].text = ps.isEmpty ? "" : formatPeriod(ps[ps.count / 2]).uppercased()
         xLabels[2].text = ps.last.map(formatPeriod)?.uppercased() ?? ""
+        legend.set(m.providers.map { (id: $0.rawValue, label: $0.label, color: UsageStyle.color($0)) })
         setAccessibilityLabel(accessibilityCaption)
         setAccessibilityValue(Self.accessibilitySummary(m, columns: columns, period: formatTooltipPeriod, format: format))
         yLabels.forEach { $0.setAccessibilityElement(false) }
@@ -256,8 +262,18 @@ public final class UsageChartView: DSView {
         needsLayout = true
     }
 
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+    }
+
     public override func layout() {
         super.layout()
+        // Redesign sets the axes in the monospace font, like dither-kit; T3 uses the UI font with tabular figures.
+        let redesign = plot.redesign
+        legend.isHidden = !redesign
+        for l in yLabels { l.font = redesign ? DSFont.mono(10) : UsageStyle.tabular(10) }
+        for l in xLabels { l.font = redesign ? DSFont.mono(10) : DSFont.ui(10) }
         let h = Self.plotHeight
         plot.frame = NSRect(x: 56 + 8, y: 0, width: max(0, bounds.width - 64), height: h)
         for (i, l) in yLabels.enumerated() where i < plot.ticks.count {
@@ -299,6 +315,8 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
     var redesign: Bool { Self.redesignOverride ?? ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// Tests draw Redesign's colors through T3's chart, for before and after pictures.
     nonisolated(unsafe) static var redesignOverride: Bool?
+    /// The series the legend spotlights.
+    var spotlight: String? { didSet { if spotlight != oldValue { needsLayout = true } } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -413,7 +431,9 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
         guard let i = hoverIndex, let n = owner?.model.periods.count else { crosshair.isHidden = true; return }
         let stepX = n < 2 ? 0 : bounds.width / CGFloat(n - 1)
         // The stroke centred on the column, on the half point the old drawn line used.
-        let x = ((CGFloat(i) * stepX) * 2).rounded() / 2
+        // Redesign centres the hairline on the day's cell column, so it sits on the grid.
+        let x = redesign ? (floor(CGFloat(i) * stepX / UsageDitherPlotView.cell) + 0.5) * UsageDitherPlotView.cell
+                         : ((CGFloat(i) * stepX) * 2).rounded() / 2
         let top = UsageChartLogic.plotTop * bounds.height / UsageChartLogic.viewHeight
         let frame = NSRect(x: x - 0.5, y: top, width: 1, height: max(0, bounds.height - top))
         Self.glide(crosshair, to: frame, animated: redesign && !crosshair.isHidden && crosshair.frame.height == frame.height)
@@ -443,7 +463,7 @@ final class UsageChartPlotView: DSView, HoverSyncPointerClient {
             UsageDitherPlotView.Series(id: p.rawValue, color: UsageStyle.color(p), values: columns.map { $0.value(p) },
                                        dim: m.loading.contains(p) ? 0.4 : 1)
         }
-        return .init(series: series, scaleMax: scaleMax, ticks: ticks)
+        return .init(series: series, scaleMax: scaleMax, ticks: ticks, spotlight: spotlight)
     }
 
     private func syncDither() {
