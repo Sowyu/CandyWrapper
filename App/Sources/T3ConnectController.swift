@@ -75,7 +75,7 @@ final class T3ConnectController {
         let email = profile?.identifier ?? signedIn.identifier ?? ""
         let name = [profile?.firstName, profile?.lastName].compactMap { $0 }.joined(separator: " ")
         accountIdentity.set(name: name.isEmpty ? nil : name, email: email, image: avatar,
-                            initials: profile?.initials ?? email.first.map { String($0).uppercased() } ?? "")
+                            initials: profile?.initials ?? email.first.map { String($0).uppercased() } ?? "", seed: signedIn.userId ?? "")
     }
 
     // MARK: Account

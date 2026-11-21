@@ -68,6 +68,7 @@ public struct ClientSettings: Equatable, Sendable {
         "ignoreReduceTransparency": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign and Glass ignore macOS's Reduce Transparency
         "ditherAccent": SettingSpec(.string(maxLength: 32), .string("teal")),  // CandyWrapper only: Redesign's accent, a DitherAccent id
         "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, or accent dots with no picture
+        "redesignProjectAvatars": SettingSpec(.literals(["sprites", "letters"]), .string("sprites")),  // CandyWrapper only: Redesign's generated project and account avatars, pixel sprites or T3's letters
         "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient background moves on the new-thread page
         "redesignTintFromPicture": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's surfaces lean toward the picture's color
         "redesignInk": SettingSpec(.literals(["auto", "accent", "custom"]), .string("auto")),  // CandyWrapper only: where Redesign's Picture takes its two inks

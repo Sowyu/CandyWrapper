@@ -90,6 +90,8 @@ public final class ProjectMonogramView: DSView {
         }
     }
     var dimmed = false { didSet { if dimmed != oldValue { needsDisplay = true } } }
+    /// Off keeps the letters under Redesign's sprites, for the scratch project's "No project".
+    public var allowsSprite = true { didSet { if allowsSprite != oldValue { needsDisplay = true } } }
     /// Draws the 16px favicon at another size (`size-3` in the hover card is 0.75).
     public var scale: CGFloat = 1 { didSet { if scale != oldValue { needsDisplay = true } } }
     private var identity = (monogram: "PR", color: "blue")
@@ -142,12 +144,15 @@ public final class ProjectMonogramView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         if scale != 1 { ctx.scaleBy(x: scale, y: scale) }
-        Self.draw(source, identity: identity, dimmed: dimmed, ctx: ctx)
+        Self.draw(source, title: projectTitle, identity: identity, dimmed: dimmed, points: 16 * scale, allowsSprite: allowsSprite, ctx: ctx)
     }
 
     /// The 16px favicon in a flipped context at the origin, in the current drawing appearance. The
-    /// monogram shows until `ProjectIconStore` has the icon file, which posts `didChange` once it does.
-    static func draw(_ source: ProjectIconSource?, identity: (monogram: String, color: String), dimmed: Bool = false, ctx: CGContext) {
+    /// monogram shows until `ProjectIconStore` has the icon file, which posts `didChange` once it does. Under Redesign
+    /// a project with no chosen icon shows its `PixelSprites` avatar in place of the generated monogram, seeded by
+    /// `title`. `points` is the size on screen, for the sprite's ground.
+    static func draw(_ source: ProjectIconSource?, title: String? = nil, identity: (monogram: String, color: String), dimmed: Bool = false,
+                     points: CGFloat = 16, allowsSprite: Bool = true, ctx: CGContext) {
         let tileRect = CGRect(x: 0, y: 0, width: 16, height: 16)
         switch source?.override {
         case .emoji(let emoji)?:
@@ -178,6 +183,11 @@ public final class ProjectMonogramView: DSView {
             ctx.scaleBy(x: 1, y: -1)
             ctx.draw(image, in: tileRect)
             ctx.restoreGState()
+            return
+        }
+        if allowsSprite, source?.override == nil, ThemeRuntime.drawsSprites(dark: NSAppearance.currentDrawing().isDark) {
+            PixelSprites.draw(seed: PixelSprites.seed(title: source?.title ?? title ?? ""), in: tileRect, points: points,
+                              dark: NSAppearance.currentDrawing().isDark, grey: dimmed, ctx: ctx)
             return
         }
         var color = SB.base("\(identity.color)-600", "\(identity.color)-400").cgColor

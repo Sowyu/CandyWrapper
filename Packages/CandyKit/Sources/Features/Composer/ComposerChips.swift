@@ -354,7 +354,7 @@ final class ComposerChipAttachment: NSTextAttachment {
             ctx.saveGState()
             ctx.translateBy(x: iconRect.minX, y: iconRect.minY)
             ctx.scaleBy(x: iconSize / 16, y: iconSize / 16)
-            ProjectMonogramView.draw(project, identity: ProjectMonogramView.identity(project), ctx: ctx)
+            ProjectMonogramView.draw(project, identity: ProjectMonogramView.identity(project), points: iconSize, ctx: ctx)
             ctx.restoreGState()
         } else {
             MarkdownView.drawIcon(icon, in: iconRect, color: (iconColor ?? look.foreground).cgColor, ctx: ctx)
@@ -389,7 +389,7 @@ final class ComposerChipAttachment: NSTextAttachment {
             ctx.draw(thumbnail, in: CGRect(x: 0, y: 0, width: w, height: h)); ctx.restoreGState()
         } else if case .thread = look.kind, let project = look.project {
             ctx.saveGState(); ctx.translateBy(x: x, y: iconRect.minY); ctx.scaleBy(x: size / 16, y: size / 16)
-            ProjectMonogramView.draw(project, identity: ProjectMonogramView.identity(project), ctx: ctx); ctx.restoreGState()
+            ProjectMonogramView.draw(project, identity: ProjectMonogramView.identity(project), points: size, ctx: ctx); ctx.restoreGState()
         } else {
             // A file's pierre icon keeps its file-type color (`PierreEntryIcon`, contextChipParts.tsx:338 at 4928); lucide
             // glyphs take the chip's ink.

@@ -446,6 +446,10 @@ final class SidebarAccountAvatarView: ControlView {
     static let ringGap: CGFloat = 2
     let image = CALayer()
     let initials = LabelView("", font: SB.font(11, .semibold), color: SB.c(\.sidebarForeground))
+    /// The account's picture; without one Redesign draws the `PixelSprites` avatar for `seed`, else the initials.
+    var picture: CGImage? { didSet { needsDisplay = true } }
+    /// The account's stable id, for its sprite.
+    var seed = "" { didSet { if seed != oldValue { needsDisplay = true } } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -488,6 +492,13 @@ final class SidebarAccountAvatarView: ControlView {
         layer?.borderWidth = 1
         layer?.borderColor = SB.c(\.sidebarForeground, state.hoverOrPressed ? 0.35 : 0).cgColor(in: self)
         image.backgroundColor = SB.c(\.sidebarForeground, state.hoverOrPressed ? 0.18 : 0.12).cgColor(in: self)
+        let dark = effectiveAppearance.isDark
+        let sprite = picture == nil && ThemeRuntime.drawsSprites(dark: dark)
+        let scale = window?.backingScaleFactor ?? 2
+        image.contentsScale = scale
+        image.magnificationFilter = sprite ? .nearest : .linear
+        image.contents = picture ?? (sprite ? PixelSprites.image(seed: seed, points: Self.size, px: Int(Self.size * scale), dark: dark) : nil)
+        initials.isHidden = image.contents != nil
     }
 }
 
@@ -573,11 +584,13 @@ public final class SidebarAccountRowView: ControlView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    public func set(name: String, image: CGImage?, initials: String?) {
+    /// `seed` is the account's stable id, which picks its sprite under Redesign; nil uses the name.
+    public func set(name: String, image: CGImage?, initials: String?, seed: String? = nil) {
         self.name.text = name
-        avatar.image.contents = image
+        avatar.picture = image
+        avatar.seed = seed ?? name
         avatar.initials.text = initials ?? name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased()
-        avatar.initials.isHidden = image != nil
+        avatar.setAccessibilityLabel("\(name), Machines and connections")
         setAccessibilityLabel("\(name), account menu")
         needsLayout = true
         needsDisplay = true

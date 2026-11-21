@@ -63,12 +63,13 @@ public final class AccountIdentityView: DSView {
         for v in [avatar, name, email] as [NSView] { addSubview(v) }
     }
 
-    public func set(name text: String?, email address: String, image: CGImage?, initials: String) {
+    public func set(name text: String?, email address: String, image: CGImage?, initials: String, seed: String = "") {
         name.text = text ?? address
         email.text = text == nil ? "" : address
         email.isHidden = text == nil
         avatar.image = image
         avatar.initials = initials
+        avatar.seed = seed
         needsLayout = true
     }
 

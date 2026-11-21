@@ -228,9 +228,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Sign-out keeps the account client, so only a signed-in Clerk session counts.
             if t3Connect.signedIn != nil {
                 sidebar.accountRow.set(name: name.isEmpty ? (email.isEmpty ? "T3 Connect" : email) : name,
-                                       image: t3Connect.avatar, initials: p?.initials)
+                                       image: t3Connect.avatar, initials: p?.initials, seed: t3Connect.signedIn?.userId)
             } else {
-                sidebar.accountRow.set(name: NSFullUserName(), image: nil, initials: nil)
+                sidebar.accountRow.set(name: NSFullUserName(), image: nil, initials: nil, seed: NSUserName())
             }
         }
         _ = t3Connect.observe(showAccount)

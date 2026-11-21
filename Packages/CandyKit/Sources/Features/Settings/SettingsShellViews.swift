@@ -668,6 +668,7 @@ public final class T3ConnectAvatarButton: ControlView {
     /// The account image, decoded at display size, or nil for the initials.
     public var image: CGImage? { get { avatar.image } set { avatar.image = newValue } }
     public var initials: String { get { avatar.initials } set { avatar.initials = newValue } }
+    public var seed: String { get { avatar.seed } set { avatar.seed = newValue } }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -698,6 +699,8 @@ public final class ClerkAvatarView: DSView {
     private let size: CGFloat
     public var image: CGImage? { didSet { circle.contents = image; initialsLabel.isHidden = image != nil; needsDisplay = true } }
     public var initials = "" { didSet { initialsLabel.text = initials } }
+    /// The account's stable id. Without an image Redesign draws its `PixelSprites` avatar in place of the initials.
+    public var seed = "" { didSet { if seed != oldValue { needsDisplay = true } } }
 
     public init(size: CGFloat) {
         self.size = size
@@ -715,7 +718,14 @@ public final class ClerkAvatarView: DSView {
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     public override func updateLayer() {
-        circle.backgroundColor = image == nil ? Themed.color(\.primary, 0.18).cgColor(in: self) : nil
+        let dark = effectiveAppearance.isDark
+        let sprite = image == nil && !seed.isEmpty && ThemeRuntime.drawsSprites(dark: dark)
+        let scale = window?.backingScaleFactor ?? 2
+        circle.contentsScale = scale
+        circle.magnificationFilter = sprite ? .nearest : .linear
+        circle.contents = image ?? (sprite ? PixelSprites.image(seed: seed, points: size, px: Int(size * scale), dark: dark) : nil)
+        initialsLabel.isHidden = circle.contents != nil
+        circle.backgroundColor = circle.contents == nil ? Themed.color(\.primary, 0.18).cgColor(in: self) : nil
         circle.cornerRadius = cornerRadius
     }
 

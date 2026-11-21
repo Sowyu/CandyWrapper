@@ -227,6 +227,7 @@ final class SettingsProjectListView: DSView, SettingsGroupRow, RouteModalEscapeH
             didSet {
                 guard let entry, entry != oldValue else { return }
                 icon.source = entry.icon ?? ProjectIconSource(title: entry.isScratch ? "No project" : entry.name, workspaceRoot: entry.path)
+                icon.allowsSprite = !entry.isScratch
                 title.text = entry.name
                 detail.text = entry.detail
                 count.text = entry.threadLabel
