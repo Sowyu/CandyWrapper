@@ -1552,6 +1552,8 @@ public final class ThreadPanelView: DSView {
     /// The new-thread page: header "{project} / New thread", the hero and the centered composer.
     /// Pass nil to leave it.
     public func setDraft(projectTitle: String?, isScratch: Bool = false) {
+        // The new-thread page appearing, or showing another project, opens it: Redesign's Flower blooms.
+        let opening = projectTitle != nil && (!isDraft || hero.projectTitle != projectTitle)
         isDraft = projectTitle != nil
         hero.isHidden = !isDraft
         DitherArtView.setEmphasis(isDraft ? .hero : .thread, from: self)
@@ -1566,6 +1568,7 @@ public final class ThreadPanelView: DSView {
             header.cancelTitleRename()
         }
         updateComposerShown()
+        if opening { DitherArtView.flowerOpened(from: self) }
     }
 
     /// The header icon for a draft, which only names its project by title.
@@ -1584,6 +1587,9 @@ public final class ThreadPanelView: DSView {
     /// Without `keepRows` the timeline empties: T3's loading state (header and composer, no
     /// placeholder, ChatView.tsx:11474).
     public func beginThreadSwitch(projectTitle: String, threadTitle: String, keepRows: Bool) {
+        // A draft's first send left the draft page with its message showing and no thread yet: that thread arriving
+        // is the same conversation, not an opening.
+        let fromSend = !isDraft && model.projection == nil && !model.optimisticMessages.isEmpty
         if isDraft { setDraft(projectTitle: nil) }
         if !keepRows { setProjection(nil, projectTitle: projectTitle, workspaceRoot: nil) }
         switchingThread = true
@@ -1593,6 +1599,7 @@ public final class ThreadPanelView: DSView {
         header.setThreadVisible(true)
         header.cancelTitleRename()
         updateComposerShown()
+        if !fromSend { DitherArtView.flowerOpened(from: self) }
     }
 
     /// Shows a thread. Pass nil to clear.
@@ -1909,6 +1916,23 @@ public final class ThreadPanelView: DSView {
         guard !threadTitle.isHidden else { return }
         threadTitle.frame = NSRect(x: x, y: (-above + DitherChrome.band / 2 - DitherThreadTitleView.height / 2).rounded(),
                                    width: max(0, right - x), height: DitherThreadTitleView.height)
+    }
+
+    /// Redesign's Flower background: the content area left of the right panel, and what the lotus keeps clear of, the
+    /// composer with its pills and cards, the reading column, the header pill and a right panel sheet.
+    private func reportFlowerStage(chat: CGFloat, chatHeight: CGFloat) {
+        guard ThemeRuntime.isDither(dark: effectiveAppearance.isDark), !isEmbedded, chat > 0 else {
+            DitherArtView.clearFlowerStage(from: self)
+            return
+        }
+        var keepOut = ([composer] + ditherShown).filter { !$0.isHidden }.map(\.frame)
+        if isDraft, !hero.isHidden, hero.chipsWidth > 0 { keepOut.append(hero.frame) }
+        if !isDraft, readingLane.width > 0 { keepOut.append(readingLane) }
+        let pill = header.pill
+        if !pill.isHidden, pill.window != nil, let host = pill.superview { keepOut.append(convert(pill.frame, from: host)) }
+        if rightPanelSheetOpen { keepOut.append(rightPanel.frame) }
+        DitherArtView.setFlowerStage(kind: isDraft ? .hero : .thread, content: NSRect(x: 0, y: chatTop, width: chat, height: max(0, chatHeight - chatTop)),
+                                     keepOut: keepOut, from: self)
     }
 
     private var ditherDockViews: [ComposerBannerView?] {
@@ -2406,6 +2430,7 @@ public final class ThreadPanelView: DSView {
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
         layoutThreadTitle(chat: chat, above: above)
+        reportFlowerStage(chat: chat, chatHeight: chatHeight)
         if let findBar = lazyFindBar.loaded {
             // `top-3 right-3 w-[min(var(--thread-details-panel-width),calc(100%-1.5rem))]`: as wide as the
             // details card and lined up with it (ThreadFindBar.tsx:62-66 in 2994, f92afe79c).

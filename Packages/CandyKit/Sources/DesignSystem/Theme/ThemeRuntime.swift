@@ -56,7 +56,9 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherBlur = false
     /// Redesign's "Background" is Gradient: no picture, a halftone in the accent at the top left of a new thread.
     public var ditherGradient = false
-    /// Gradient's dots move on the new-thread page (the "Animate" setting).
+    /// Redesign's "Background" is Flower: no picture, a dithered lotus on a new thread and beside a thread's column.
+    public var ditherFlower = false
+    /// Gradient's dots and Flower's lotus move (the "Animate background" setting, stored as `redesignGradientAnimate`).
     public var ditherGradientAnimates = true
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
@@ -97,7 +99,9 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var ditherBlur = false
     /// Redesign's "Background" is Gradient: accent dots on a new thread, plain ground everywhere else (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherGradient = false
-    /// Gradient's "Animate" setting.
+    /// Redesign's "Background" is Flower: a dithered lotus on a new thread and beside a thread's column (`DitherArtView`).
+    nonisolated(unsafe) public private(set) static var ditherFlower = false
+    /// The "Animate background" setting, for Gradient and Flower.
     nonisolated(unsafe) public private(set) static var ditherGradientAnimates = true
     /// Picture's "Ink" setting.
     nonisolated(unsafe) public private(set) static var ditherInk = DitherInk.auto
@@ -140,7 +144,7 @@ public enum ThemeRuntime {
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
             || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark))
             || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
-            || ((next.ditherBlur != old.ditherBlur || next.ditherGradient != old.ditherGradient
+            || ((next.ditherBlur != old.ditherBlur || next.ditherGradient != old.ditherGradient || next.ditherFlower != old.ditherFlower
                  || next.ditherTintFromPicture != old.ditherTintFromPicture || next.pictureTint != old.pictureTint)
                 && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
@@ -161,8 +165,10 @@ public enum ThemeRuntime {
             ditherBlur = next.ditherBlur
             changed = true
         }
-        if next.ditherGradient != old.ditherGradient || next.ditherGradientAnimates != old.ditherGradientAnimates {
+        if next.ditherGradient != old.ditherGradient || next.ditherGradientAnimates != old.ditherGradientAnimates
+            || next.ditherFlower != old.ditherFlower {
             ditherGradient = next.ditherGradient
+            ditherFlower = next.ditherFlower
             ditherGradientAnimates = next.ditherGradientAnimates
             changed = true
         }
@@ -298,6 +304,7 @@ public enum ThemeRuntime {
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
                 // Picture lays no dim, so its muted text keeps the colors of the default 35%; "Background dim"
                 // changes nothing there. Its render holds the text's floor behind the column (`PictureInk.textBound`).
+                // Flower counts as Picture here: it never sits behind text (`LotusArt.spot`).
                 let picture = !input.ditherBlur && !input.ditherGradient
                 let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
                                                                          dim: picture ? DitherArt.defaultDim : Double(min(max(input.ditherDim, 0), 90)) / 100))
@@ -315,9 +322,9 @@ public enum ThemeRuntime {
             let readable = WindowGlass.frostReadable(palette, dark: dark, sidebar: sidebar, opacity: opacity)
             return WindowGlass.frosted(readable, dark: dark, sidebar: sidebar, opacity: opacity)
         }
-        // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Gradient has no picture.
+        // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Gradient and Flower have no picture.
         func tinted(_ palette: Palette, dark: Bool) -> Palette {
-            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherGradient,
+            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherGradient, !input.ditherFlower,
                   dark ? input.ditherDark : input.ditherLight else { return palette }
             return PictureTint.apply(tint, to: palette)
         }

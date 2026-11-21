@@ -22,7 +22,8 @@ enum RedesignPickerSettings {
 public final class RedesignSettingsView: SettingsPageBase {
     static let offReason = "Turn on Redesign to change this."
     static let gradientReason = "Gradient uses no picture. Choose Picture or Blur to change this."
-    static let animateReason = "Only Gradient moves. Choose Gradient to change this."
+    static let flowerReason = "Flower uses no picture. Choose Picture or Blur to change this."
+    static let animateReason = "Only Gradient and Flower move. Choose one of them to change this."
     static let inkReason = "Only Picture draws in inks. Choose Picture to change this."
     static let dimReason = "Picture thins its dots behind text instead of dimming. Choose Blur to change this."
     private let library: ThemeLibrary
@@ -57,8 +58,8 @@ public final class RedesignSettingsView: SettingsPageBase {
 
         let picture = pictureRow(), dim = dimRow()
         // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").
-        let animate = clientSwitch("redesign-gradient-animate", "Let Gradient's dots drift on the new-thread page. They stop while the window is in the background and under Reduce Motion.",
-                                   key: "redesignGradientAnimate", reset: "animate gradient", title: "Animate gradient")
+        let animate = clientSwitch("redesign-gradient-animate", "Let Gradient's dots drift on the new-thread page, and Flower's lotus bloom when a thread opens and turn slowly. Both stop while the window is in the background and under Reduce Motion.",
+                                   key: "redesignGradientAnimate", reset: "animate background", title: "Animate background")
         let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
         let ink = inkRow()
@@ -79,14 +80,14 @@ public final class RedesignSettingsView: SettingsPageBase {
             for r in self.gated where r.inertReason != off { r.inertReason = off }
             // Gradient shows no picture, so the picture's own settings do nothing.
             let background = self.client.string("redesignBackground")
-            let pictureOff = off ?? (background == "gradient" ? Self.gradientReason : nil)
+            let pictureOff = off ?? (background == "gradient" ? Self.gradientReason : background == "flower" ? Self.flowerReason : nil)
             for r in [picture, tint] where r.inertReason != pictureOff { r.inertReason = pictureOff }
             // The dim only darkens Blur; Picture's inks only draw Picture.
             let dimOff = pictureOff ?? (background == "blur" ? nil : Self.dimReason)
             if dim.inertReason != dimOff { dim.inertReason = dimOff }
             let inkOff = off ?? (background == "dither" ? nil : Self.inkReason)
             if ink.inertReason != inkOff { ink.inertReason = inkOff }
-            let animateOff = off ?? (self.client.string("redesignBackground") == "gradient" ? nil : Self.animateReason)
+            let animateOff = off ?? (background == "gradient" || background == "flower" ? nil : Self.animateReason)
             if animate.inertReason != animateOff { animate.inertReason = animateOff }
         }
         items = [
@@ -123,11 +124,11 @@ public final class RedesignSettingsView: SettingsPageBase {
     /// the whole window (the user, 2026-11-21: "either full blur or full dither"), or accent dots with no picture at the
     /// top of a new thread, like Capy ("add a dither option without an image").
     private func backgroundRow() -> SettingsRowView {
-        let key = "redesignBackground", values = ["dither", "blur", "gradient"]
-        let toggle = ToggleGroupView(variant: .segmented, items: [("Picture", nil), ("Blur", nil), ("Gradient", nil)], selected: 0)
+        let key = "redesignBackground", values = ["dither", "blur", "gradient", "flower"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Picture", nil), ("Blur", nil), ("Gradient", nil), ("Flower", nil)], selected: 0)
         toggle.setAccessibilityLabel("Background")
         let r = row("redesign-background", title: "Background",
-                    detail: "Picture draws your picture in dots behind the chat. Blur softens it behind the whole window. Gradient uses no picture: accent-colored dots fade in at the top of a new thread.",
+                    detail: "Picture draws your picture in dots behind the chat. Blur softens it behind the whole window. Gradient and Flower use no picture: accent-colored dots fade in at the top of a new thread, or a dotted lotus blooms above the composer and beside a thread.",
                     control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }

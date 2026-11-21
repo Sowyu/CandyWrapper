@@ -23,7 +23,8 @@ struct LotusArtTests {
         #expect(a.positions == b.positions)
         #expect(a.normals == b.normals)
         #expect(a.indices == b.indices)
-        let petals = LotusArt.rings.reduce(0) { $0 + $1.count } + 1
+        // The petals, the seed pod and the receptacle under them.
+        let petals = LotusArt.rings.reduce(0) { $0 + $1.count } + 2
         #expect(a.triangles == petals * LotusArt.trianglesPerPetal)
         #expect(a.layer.count == petals)
         // Every ring repeats each quarter, which the seamless idle turn relies on.
@@ -100,5 +101,130 @@ struct LotusArtTests {
         let shot = LotusArt.render(LotusArt.Pose(bloom: 1), placement: p, samples: 1)
         let b = box(shot)
         #expect(b.x0 > 0 && b.y0 > 0 && b.x1 < p.width - 1 && b.y1 < p.height - 1)
+    }
+}
+
+/// Stage 2: where the flower sits, measured from real page geometry, for a table of windows.
+struct LotusPlacementTests {
+    /// A Redesign window as the thread panel reports it to the art, in the art's top-left space: the band at the top,
+    /// the content area left of the right panel card, the 736pt lane centred in it, the composer and its pills.
+    struct Window: CustomStringConvertible {
+        var name: String
+        var width: CGFloat, height: CGFloat
+        var sidebar: CGFloat = 240
+        var rightPanel: CGFloat = 0
+        var description: String { name }
+
+        var main: CGSize { CGSize(width: width - sidebar, height: height) }
+        var content: CGRect {
+            CGRect(x: 0, y: 52, width: main.width - (rightPanel > 0 ? rightPanel + 8 : 0), height: height - 52)
+        }
+        var lane: CGRect {
+            let pad: CGFloat = width < 640 ? 12 : 48
+            let w = min(736, content.width - 2 * pad)
+            return CGRect(x: ((content.width - w) / 2).rounded(), y: content.minY, width: w, height: content.height)
+        }
+        /// The header pill, in the band at the right.
+        var pill: CGRect { CGRect(x: main.width - 12 - 150, y: 12, width: 150, height: 28) }
+        /// The new thread: the composer centred down the content area, the project chips 8pt above it.
+        var heroKeepOut: [CGRect] {
+            let composer = CGRect(x: lane.minX, y: (content.minY + (content.height - 132 - 20) / 2).rounded(), width: lane.width, height: 132)
+            let chips = CGRect(x: lane.minX + 6, y: composer.minY - 8 - 26, width: 220, height: 26)
+            return [composer, chips, pill]
+        }
+        /// A thread: the reading column down the whole content area, the composer docked at its foot.
+        var threadKeepOut: [CGRect] {
+            [lane, CGRect(x: lane.minX, y: content.maxY - 20 - 34 - 110, width: lane.width, height: 110), pill]
+        }
+    }
+
+    static let windows: [Window] = [
+        Window(name: "default", width: 1400, height: 900),
+        Window(name: "sidebar collapsed", width: 1400, height: 900, sidebar: 0),
+        Window(name: "sidebar wide", width: 1400, height: 900, sidebar: 380),
+        Window(name: "right panel", width: 1600, height: 900, rightPanel: 420),
+        Window(name: "small", width: 900, height: 640),
+        Window(name: "cramped", width: 820, height: 560),
+        Window(name: "wide", width: 2200, height: 1000),
+        Window(name: "tall", width: 1100, height: 1300),
+        Window(name: "short", width: 1400, height: 520),
+        Window(name: "tiny", width: 560, height: 420),
+    ]
+
+    private func clear(_ spot: LotusArt.Spot, of keepOut: [CGRect], in content: CGRect) -> Bool {
+        let box = spot.box
+        let gap = LotusArt.clearance - 0.01
+        return content.insetBy(dx: gap, dy: gap).contains(box) && keepOut.allSatisfy { !$0.insetBy(dx: -gap, dy: -gap).intersects(box) }
+    }
+
+    @Test(arguments: windows) func newThreadFlowerIsCentredAndClear(_ w: Window) {
+        let stage = LotusArt.Stage(kind: .hero, content: w.content, keepOut: w.heroKeepOut)
+        guard let spot = LotusArt.spot(for: stage) else {
+            // Only a window too small for a flower at the minimum radius hides it.
+            #expect(["tiny", "short", "cramped"].contains(w.name), "\(w)")
+            return
+        }
+        #expect(clear(spot, of: w.heroKeepOut, in: w.content), "\(w): \(spot.box)")
+        // Centred across the content area, not the window.
+        #expect(abs(spot.box.midX - w.content.midX) < 0.5, "\(w)")
+        // Centred down the free space between the band and the pills above the composer.
+        let above = w.heroKeepOut[1].minY - LotusArt.clearance, below = w.content.minY + LotusArt.clearance
+        #expect(abs(spot.box.midY - (above + below) / 2) < 1 || spot.radius == LotusArt.heroMaxRadius, "\(w)")
+        #expect(spot.radius >= LotusArt.minRadius && spot.radius <= LotusArt.heroMaxRadius)
+    }
+
+    @Test(arguments: windows) func threadFlowerSitsInTheMarginOrHides(_ w: Window) {
+        let stage = LotusArt.Stage(kind: .thread, content: w.content, keepOut: w.threadKeepOut)
+        let margin = w.content.maxX - w.lane.maxX - 2 * LotusArt.clearance
+        let needed = LotusArt.minRadius * (LotusArt.extent.left + LotusArt.extent.right)
+        guard let spot = LotusArt.spot(for: stage) else {
+            #expect(margin < needed, "\(w) hid with a \(margin)pt margin")
+            return
+        }
+        #expect(margin >= needed - 1, "\(w)")
+        #expect(clear(spot, of: w.threadKeepOut, in: w.content), "\(w): \(spot.box)")
+        // Never behind the column, and at the top of the content area.
+        #expect(spot.box.minX >= w.lane.maxX + LotusArt.clearance - 0.01)
+        #expect(abs(spot.box.minY - (w.content.minY + LotusArt.clearance)) < 0.01)
+        #expect(spot.radius <= LotusArt.threadMaxRadius)
+    }
+
+    @Test func expectedWindowsShowAFlower() {
+        let shown = Self.windows.filter { LotusArt.spot(for: .init(kind: .hero, content: $0.content, keepOut: $0.heroKeepOut)) != nil }.map(\.name)
+        #expect(Set(shown).isSuperset(of: ["default", "sidebar collapsed", "sidebar wide", "right panel", "small", "wide", "tall"]))
+        let thread = Self.windows.filter { LotusArt.spot(for: .init(kind: .thread, content: $0.content, keepOut: $0.threadKeepOut)) != nil }.map(\.name)
+        #expect(Set(thread).isSuperset(of: ["sidebar collapsed", "wide"]))
+        #expect(!thread.contains("small") && !thread.contains("tiny") && !thread.contains("cramped"))
+    }
+
+    /// A drag across every width lands on a couple of dozen radii at most, each at or under the spot's radius and
+    /// within 8% of it.
+    @Test func radiiAreBucketed() {
+        var buckets = Set<Int>()
+        for r in stride(from: LotusArt.minRadius, through: LotusArt.heroMaxRadius, by: 0.5) {
+            let b = LotusArt.bucket(r)
+            buckets.insert(b)
+            #expect(CGFloat(b) * 3 <= r + 0.001)
+            #expect(CGFloat(b) * 3 >= r / 1.08 - 3)
+        }
+        #expect(buckets.count <= 24)
+        // The largest set stays near the 6 MB ceiling.
+        let p = LotusArt.canvas(radius: LotusArt.bucket(LotusArt.heroMaxRadius))
+        let frames = LotusArt.bloomPoses().count + LotusArt.idlePoses().count + 1
+        #expect(frames * p.width * p.height < 6 * 1_048_576)
+    }
+
+    /// One canvas serves any position: the open flower's coverage stays inside it, centred on its centre cell.
+    @Test func canvasHoldsTheFlowerAndThinsTowardTheComposer() {
+        let p = LotusArt.canvas(radius: 24)
+        let shot = LotusArt.render(LotusArt.openPose, placement: p, samples: 1)
+        var x0 = Int.max, x1 = 0, y0 = Int.max, y1 = 0
+        for y in 0..<p.height { for x in 0..<p.width where shot.cover[y * p.width + x] > 0 {
+            x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
+        } }
+        #expect(x0 > 0 && y0 > 0 && x1 < p.width - 1 && y1 < p.height - 1)
+        let d = LotusArt.heroDensity(p)
+        #expect(d[Int(p.centreY) * p.width] == 1)
+        #expect(d[(p.height - 1) * p.width] < 0.45)
     }
 }

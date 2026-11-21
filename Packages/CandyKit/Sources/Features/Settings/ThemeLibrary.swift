@@ -473,6 +473,7 @@ public final class ThemeLibrary {
         input.ditherDim = client.int("ditherBackgroundDim")
         input.ditherBlur = client.string("redesignBackground") == "blur"
         input.ditherGradient = client.string("redesignBackground") == "gradient"
+        input.ditherFlower = client.string("redesignBackground") == "flower"
         input.ditherGradientAnimates = client.bool("redesignGradientAnimate")
         input.ditherInk = DitherInk(mode: client.string("redesignInk"), color: client.string("redesignInkColor"))
         input.ignoreReduceTransparency = client.bool("ignoreReduceTransparency")

@@ -252,8 +252,22 @@ struct RedesignBaselineTests {
             gradientThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
             gradientThread.layoutSubtreeIfNeeded(); gradientThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-gradient", gradientThread, panelSize)
+            // Background set to Flower: the lotus above the new thread's composer and beside a wide thread's column,
+            // held at the open flower (Animate off renders that one frame).
+            input.ditherGradient = false; input.ditherFlower = true; input.ditherGradientAnimates = false
+            ThemeRuntime.apply(input)
+            defer { input.ditherFlower = false; input.ditherGradientAnimates = true; ThemeRuntime.apply(input) }
+            let flowerDraft = ComposerFidelityTests.panel(width: 1100, dark: dark)
+            flowerDraft.setDraft(projectTitle: "demo-repo")
+            flowerDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
+            try capture("composer-empty-flower", flowerDraft, NSSize(width: 1100, height: 780))
+            let flowerThread = ComposerFidelityTests.panel(width: 1300, dark: dark)
+            flowerThread.timeline.context.now = { Self.now }
+            flowerThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
+            try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 120)
+        #expect(count == 124)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -332,7 +346,12 @@ struct RedesignBaselineTests {
                 image.set(key: "baseline-" + (image.key ?? "image"), fallbackText: "", loader: nil, preview: thumbnail)
             }
             v.displayIfNeeded()
-            if let art = v as? DitherArtView, let layer = art.layer?.sublayers?.first {
+            if let art = v as? DitherArtView, ThemeRuntime.ditherFlower {
+                // The open flower, rendered now on this thread.
+                art.rendersInlineForTesting = true
+                art.dropFlower()
+                art.refresh()
+            } else if let art = v as? DitherArtView, let layer = art.layer?.sublayers?.first {
                 let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false), bg = palette.background.srgb
                 let blur = ThemeRuntime.ditherBlur, unit = blur ? DitherArt.blurPixel : PictureInk.cell
                 layer.magnificationFilter = blur ? .linear : .nearest
