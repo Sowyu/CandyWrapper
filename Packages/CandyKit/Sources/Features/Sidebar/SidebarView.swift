@@ -268,7 +268,6 @@ public final class SidebarContentView: DSView {
         }
         addSubview(scrollArea)
         addSubview(brand)
-        newThreadButton.isHeaderAction = true
         addSubview(trigger)
         undoNotice.isHidden = true
         undoNotice.shortcut = undoShortcut
@@ -1127,16 +1126,14 @@ public final class SidebarContentView: DSView {
         let rowY: CGFloat = capyBrand ? 52 + brandRow : 52 + 8
         let searchHeight: CGFloat = capyBrand ? SidebarNavRowView.height : 32
         var right = w - 8
-        let polished = WindowGlass.isActive(for: self)
         // Without projects there is nothing to scope, so scope and add project stay out (SidebarThreadHeader.tsx:127-135).
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
         let capyHeader = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         for b in [newThreadButton, addProjectButton, filterButton] {
             b.isHidden = b !== newThreadButton && !hasProjects || capyHeader && b === newThreadButton
             if b.isHidden || capyHeader { continue }
-            let size: CGFloat = polished && b === newThreadButton ? 32 : 28
-            b.frame = NSRect(x: right - size, y: rowY + (32 - size) / 2, width: size, height: size)
-            right -= size + (polished ? 2 : 0)
+            b.frame = NSRect(x: right - 28, y: rowY + 2, width: 28, height: 28)
+            right -= 28
         }
         filterMonogram.frame = NSRect(x: 6, y: 6, width: 16, height: 16)
         search.frame = NSRect(x: 8, y: rowY, width: max(0, right - 4 - 8), height: searchHeight)

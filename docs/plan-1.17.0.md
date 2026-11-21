@@ -58,7 +58,7 @@ Also wanted here:
 - A setting for the image cache size. It is fixed at 500 MB.
 - Check that the progress bar shows on a slow link. Launch with `CANDY_SLOW_LINK=<rtt ms>:<Mbit/s>` in a Debug build. The release walk could not see it because images loaded too fast.
 
-### 2. Remove the Glass theme
+### 2. Remove the Glass theme (done 2026-11-21, branch `remove-glass`)
 
 The user: "delete this glass theme too". Glass is CandyWrapper's own theme. About 109 source files mention it.
 

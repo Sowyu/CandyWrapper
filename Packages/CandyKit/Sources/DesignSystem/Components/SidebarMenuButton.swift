@@ -31,8 +31,6 @@ public final class SidebarMenuButtonView: ControlView {
     public var variant: Variant = .default { didSet { restyle() } }
     /// SettingsSidebarNav lives outside T3's data-app-sidebar palette scope.
     public var sidebarContext = true { didSet { if sidebarContext != oldValue { restyle() } } }
-    /// A clear compose glyph in CandyWrapper's Glass sidebar header.
-    public var isHeaderAction = false { didSet { restyle() } }
     public let kind: Kind
     /// `data-active=true`: the selected row.
     public var isActive = false { didSet { restyle(); setAccessibilitySelected(isActive) } } // `data-active`, read as selected
@@ -133,13 +131,8 @@ public final class SidebarMenuButtonView: ControlView {
     }
 
     private func restyle() {
-        var look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state,
+        let look = SidebarRowStyles.look(kind: kind, size: size, variant: variant, active: isActive, state: state,
                                         classic: DesignGeometry.usesClassic(self), sidebar: sidebarContext)
-        if isHeaderAction, WindowGlass.isActive(for: self) {
-            look.box.radius = 10
-            look.box.border = nil
-            look.icon = Themed.color(\.sidebarForeground, sidebar: true)
-        }
         decoration.boxStyle = look.box
         label.color = look.text
         label.font = look.font

@@ -344,8 +344,6 @@ public final class ComposerView: DSView {
     let previousCompact = ButtonView(nil, icon: .chevronLeft, variant: .outline, size: .iconSm)
     /// The backdrop blur under the glass fill.
     private let blur = BackdropBlurView()
-    /// Classic Glass's top highlight on the composer's pane.
-    private var glassEdge: GlassEdgeLayer?
     private var separators: [SeparatorView] = []
     private var alternateHeld = false
     private var editorHeight = ComposerView.editorMin
@@ -973,8 +971,6 @@ public final class ComposerView: DSView {
             : (dark ? Themed.white(0.05) : Themed.black(0.08)).cgColor
         dropHighlight.backgroundColor = Themed.color(\.accent, 0.45).cgColor(in: self)
         dropHighlight.borderColor = Themed.color(\.primary, 0.7).cgColor(in: self)
-        // Classic Glass: depth from the pane's density and its highlight, not a soft drop shadow.
-        let frost = WindowGlass.isActive(for: self)
         if capy {
             // Redesign: the resting shadow every surface on the picture shares.
             let shadow = RedesignTokens.Shadow.resting
@@ -982,11 +978,10 @@ public final class ComposerView: DSView {
             shadowLayer.shadowRadius = shadow.radius
             shadowLayer.shadowOffset = CGSize(width: 0, height: shadow.y)
         } else {
-            shadowLayer.shadowOpacity = dark || frost ? 0 : (modern ? 0.05 : 0.4)
-            shadowLayer.shadowRadius = modern ? 1 : 14
-            shadowLayer.shadowOffset = CGSize(width: 0, height: modern ? 1 : 12)
+            shadowLayer.shadowOpacity = dark ? 0 : 0.05
+            shadowLayer.shadowRadius = 1
+            shadowLayer.shadowOffset = CGSize(width: 0, height: 1)
         }
-        glassEdge = WindowGlass.syncEdge(glassEdge, on: glass.layer, in: self, radius: cardRadius, edge: false)
         CATransaction.commit()
     }
 

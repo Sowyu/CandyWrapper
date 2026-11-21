@@ -1309,7 +1309,7 @@ final class ModelRowView: DSView {
             return
         }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
-        // 4928 ModelListRow.tsx:47 drops the selected fill (`selectedFill={false}`); Glass retains its previous fill.
+        // 4928 ModelListRow.tsx:47 drops the selected fill (`selectedFill={false}`); Redesign retains its previous fill.
         let color: NSColor? = highlighted ? Themed.color(\.accent) : (isSelected && !modern ? Themed.color(\.contrastForeground, 0.08) : nil)
         fill.backgroundColor = color?.cgColor(in: self)
         name.color = highlighted ? Themed.color(\.contrastAccentForeground) : (isSelected ? Themed.color(\.contrastForeground) : Themed.color(\.contrastPopoverForeground))

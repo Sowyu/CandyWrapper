@@ -121,7 +121,6 @@ struct UnrestrictedAccessTests {
         p.unrestrictedAccess = { _ in .init(on: false) }
         p.update()
         #expect(Self.titles(p.accessEntries()) == base + ["Unrestricted"])
-        #expect(Self.titles(p.overflowEntries()).suffix(1) == ["Unrestricted"])
         #expect(ComposerPermissionsView(modes: p.current.runtimeModeOptions, selected: .fullAccess, unrestricted: p.unrestricted).extraHeight == 0)
 
         // A Codex draft never shows it, whatever the app reports.

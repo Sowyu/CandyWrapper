@@ -101,7 +101,7 @@ public final class CodexSetupView: DSView, SettingsGroupRow {
             var s = BoxStyle()
             s.radius = 8
             s.border = Themed.color(\.border)
-            s.fill = WindowGlass.paneFill
+            s.fill = Themed.color(\.background)
             cardBox.boxStyle = s
             layer?.addSublayer(cardBox)
             cardTitle.lineHeight = 20

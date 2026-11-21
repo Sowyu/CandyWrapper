@@ -187,25 +187,6 @@ public final class ComposerControlView: ControlView {
     }
 }
 
-/// The 1x16 footer separator with 2px margins (`ComposerControlSeparator`, `mx-0.5 h-4`).
-public final class ComposerControlSeparatorView: DSView {
-    public override var intrinsicContentSize: NSSize { NSSize(width: 5, height: 16) }
-    private let line = CALayer()
-
-    public override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        line.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        layer?.addSublayer(line)
-    }
-
-    public override func layout() {
-        super.layout()
-        line.frame = CGRect(x: 2, y: (bounds.height - 16) / 2, width: 1, height: 16)
-    }
-
-    public override func updateLayer() { line.backgroundColor = Themed.color(\.contrastBorder).cgColor(in: self) }
-}
-
 /// A provider's glyph (`ProviderInstanceIcon`): Claude's asterisk in #d97757; other glyphs take
 /// `currentColor`, which is `foreground` in the rail and `muted-foreground` in rows and triggers
 /// (`[&_svg:not([class*='text-'])]:text-muted-foreground`). Otherwise the instance's initials.

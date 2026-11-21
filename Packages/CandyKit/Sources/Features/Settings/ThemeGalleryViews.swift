@@ -28,8 +28,6 @@ public struct ThemeCardDefinition: Equatable, Sendable {
     public init(_ theme: ThemeDefinition) {
         id = theme.id
         label = theme.label
-        // Glass wears the stock colors, so its circles are the T3 Code card's.
-        if theme.isWindowGlass { previews = Self.standard.previews; return }
         previews = theme.modes.map { mode in
             var c = theme.colors(for: mode) ?? theme.colors
             // Redesign's circles show the accent the user picked, as its rings and send button do, not the palette's teal.

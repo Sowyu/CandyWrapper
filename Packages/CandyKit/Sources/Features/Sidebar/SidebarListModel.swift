@@ -319,7 +319,7 @@ public enum SidebarItem: Equatable, Sendable {
     var height: CGFloat {
         switch self {
         // Dither (after Capy): a two-line card, title then a small meta line.
-        case .row(let r): r.variant == .card ? (r.dither ? 48 : (!r.hasMetaLine && !ThemeRuntime.isGlass(dark: false) && !ThemeRuntime.isGlass(dark: true) ? 64 : 82))
+        case .row(let r): r.variant == .card ? (r.dither ? 48 : (!r.hasMetaLine ? 64 : 82))
             : r.folderMultiline && r.hasMetaLine ? 54 : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
         case .showMore: 36

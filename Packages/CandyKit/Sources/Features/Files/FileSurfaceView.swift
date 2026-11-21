@@ -499,7 +499,7 @@ public final class FileSurfaceView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         noticeBar.backgroundColor = Themed.color(\.warningSurface).cgColor(in: self)
         noticeBar.borderColor = Themed.color(\.warning, 0.2).cgColor(in: self)
         notice.color = Themed.color(\.warningForeground)

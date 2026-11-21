@@ -191,7 +191,7 @@ public final class FilesPanelView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         status.color = Themed.color(\.mutedForeground)
         errorButton.color = Themed.color(\.destructive)

@@ -415,6 +415,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         if !Self.isPreview && !CommandLine.arguments.contains("--welcome") { welcome.beginFirstRun() }
+        if ThemeLibrary.shared.takeGlassRemovedNotice() {
+            threads.panel.toasts.show(ToastView(title: "The Glass theme was removed",
+                                                message: "CandyWrapper switched you to the T3 Code theme. Pick another in Settings > Appearance.",
+                                                kind: .info))
+        }
         startSession(environments, window: window)
         if !Self.isPreview { t3Connect.start() }
         scheduleSelfSnapshot(window)

@@ -381,17 +381,8 @@ public final class CommandPaletteView: DSView {
     // MARK: Style
 
 
-    /// Classic Glass's blur under the frosted pane (`WindowGlass.syncPaneBlur`).
-    private var paneBlur: BackdropBlurView?
-    private func syncPaneBlur() { paneBlur = WindowGlass.syncPaneBlur(paneBlur, in: self, radius: 18) }
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        syncPaneBlur()
-    }
-
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        syncPaneBlur()
         if items.contains(where: { $0.makeDescription != nil }) {
             rebuild()
             invalidateIntrinsicContentSize()

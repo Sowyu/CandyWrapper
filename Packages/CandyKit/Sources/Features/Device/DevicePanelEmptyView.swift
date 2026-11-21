@@ -23,5 +23,5 @@ public final class DevicePanelEmptyView: DSView {
         message.frame = NSRect(x: (bounds.width - width) / 2, y: y + 48, width: width, height: textHeight)
         refresh.frame = NSRect(x: (bounds.width - button.width) / 2, y: y + 72 + textHeight, width: button.width, height: button.height)
     }
-    public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
 }

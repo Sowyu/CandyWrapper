@@ -23,7 +23,7 @@ public final class MarkdownView: DSView {
     public var messageID: String? {
         didSet {
             guard messageID != oldValue else { return }
-            expandedTables = []; unwrappedCode = []; diagramCode = []; codeOffsets = [:]
+            unwrappedCode = []; diagramCode = []; codeOffsets = [:]
             for reset in copiedResets.values { reset.cancel() }
             copiedResets = [:]
             scrollLatch = nil; thumbDrag = nil
@@ -36,12 +36,10 @@ public final class MarkdownView: DSView {
         }
     }
     public var onHeightChange: (() -> Void)?
-    private(set) var expandedTables: Set<Int> = []
 
     /// The reader's per-message layout choices, which change the message's height. A recycled view drops them with
     /// `messageID`, so an owner that caches heights keeps them by message and hands them back after setting `messageID`.
     public struct LayoutChoices: Equatable, Sendable {
-        public var expandedTables: Set<Int> = []
         public var unwrappedCode: Set<Int> = []
         public var diagramCode: Set<Int> = []
         public init() {}
@@ -49,12 +47,12 @@ public final class MarkdownView: DSView {
     public var layoutChoices: LayoutChoices {
         get {
             var choices = LayoutChoices()
-            choices.expandedTables = expandedTables; choices.unwrappedCode = unwrappedCode; choices.diagramCode = diagramCode
+            choices.unwrappedCode = unwrappedCode; choices.diagramCode = diagramCode
             return choices
         }
         set {
             guard newValue != layoutChoices else { return }
-            expandedTables = newValue.expandedTables; unwrappedCode = newValue.unwrappedCode; diagramCode = newValue.diagramCode
+            unwrappedCode = newValue.unwrappedCode; diagramCode = newValue.diagramCode
             invalidate()
         }
     }
@@ -72,7 +70,7 @@ public final class MarkdownView: DSView {
             }
             clearAssistantSelection()
             if messageID == nil && !fadesNewBlocks {
-                unwrappedCode = []; diagramCode = []; expandedTables = []; codeOffsets = [:]
+                unwrappedCode = []; diagramCode = []; codeOffsets = [:]
             }
             let previous = wraps == wrapsCode ? cache[bounds.width] : nil
             wrapsCode = wraps
@@ -121,12 +119,6 @@ public final class MarkdownView: DSView {
     /// The body text's size and line height; `.xs` for a question option's preview (#34784).
     public var body = MarkdownBody.chat {
         didSet { if body != oldValue { invalidate() } }
-    }
-
-    /// How much wider the timeline lane is than this markdown (`@container/chat-lane`, MessagesTimeline.tsx:1428-1431).
-    /// From a 36rem lane up an expanded table fits the lane (index.css:2164-2178). Nil outside the timeline.
-    public var chatLaneInset: CGFloat? {
-        didSet { if chatLaneInset != oldValue { invalidate() } }
     }
 
     /// The directory relative file paths resolve against: T3's `markdownCwd`, the thread's worktree
@@ -426,12 +418,11 @@ public final class MarkdownView: DSView {
             nonisolated(unsafe) let bodyColor = bodyColor
             let body = body
             let document = document, skills = inlineSkills, wrapsCode = wrapsCode, unwrappedCode = unwrappedCode, cwd = cwd,
-                expandedTables = expandedTables, runsShell = onRunShellCommand != nil, streaming = streaming,
-                fits = chatLaneInset.map { width + $0 >= 576 } ?? false
+                runsShell = onRunShellCommand != nil, streaming = streaming
             layoutInBackground(width) {
                 MarkdownLayout(document: MarkdownContextChips.modelDocument(MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: skills), hiddenContextIds: contexts?.inlineAudioContextIds ?? []), models: contexts?.models ?? [:]), width: width,
-                               wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables,
-                               diagrams: diagrams, contexts: contexts, runsShell: runsShell, fitsExpandedTables: fits, streaming: streaming,
+                               wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd,
+                               diagrams: diagrams, contexts: contexts, runsShell: runsShell, streaming: streaming,
                                reusing: reuse, parallel: true, body: body)
             }
             return standIn(width)
@@ -439,8 +430,8 @@ public final class MarkdownView: DSView {
         let diagrams = hasDiagrams ? MarkdownLayout.Diagrams(enabled: diagramsEnabled, palette: .current(dark: effectiveAppearance.isDark), showingCode: diagramCode,
                                                              openIndex: streamsInOpenFence ? MarkdownLayout.codeBlockCount(document.blocks) - 1 : nil) : nil
         let made = MarkdownLayout(document: MarkdownContextChips.document(MarkdownInlineSkills.document(document, skills: inlineSkills), hiddenContextIds: contextChips?.inlineAudioContextIds ?? []), width: width,
-                                  wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, expandedTables: expandedTables, diagrams: diagrams, contexts: contextChips,
-                                  runsShell: onRunShellCommand != nil, fitsExpandedTables: chatLaneInset.map { width + $0 >= 576 } ?? false,
+                                  wrapsCode: wrapsCode, unwrappedCode: unwrappedCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contextChips,
+                                  runsShell: onRunShellCommand != nil,
                                   streaming: streaming, reusing: reuse, body: body)
         if reuse != nil { reusable = nil }
         store(made, width)
@@ -609,11 +600,6 @@ public final class MarkdownView: DSView {
                     guard let self else { return }
                     MermaidDiagrams.shared.retry(code, palette: .current(dark: self.effectiveAppearance.isDark))
                 }
-            case .toggleTable(let index):
-                let label = expandedTables.contains(index) ? "Collapse table cells" : "Expand table cells"
-                button.setAccessibilityLabel(label)
-                button.setTooltip(label)
-                button.action = { [weak self] in self?.toggleTable(index) }
             }
         }
     }
@@ -1039,15 +1025,6 @@ public final class MarkdownView: DSView {
             MenuItem("Copy as Markdown") { [weak self] in self?.copy(MarkdownLayout.tableMarkdown(table), button: index) },
             MenuItem("Copy as CSV") { [weak self] in self?.copy(MarkdownLayout.tableCSV(table), button: index) }
         ], from: button(forControl: index) ?? self, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
-    }
-
-    func toggleTable(_ index: Int) {
-        let previous = cache[bounds.width]
-        if expandedTables.contains(index) { expandedTables.remove(index) } else { expandedTables.insert(index) }
-        invalidate()
-        reusable = previous
-        onLayoutChoicesChange?(layoutChoices)
-        onHeightChange?()
     }
 
     private func copy(_ text: String, button index: Int) {
@@ -1583,15 +1560,6 @@ public final class MarkdownView: DSView {
             ctx.addPath(path(rect, radius))
             ctx.addPath(path(inner, max(0, radius - 1)))
             ctx.fillPath(using: .evenOdd)
-        }
-        // Classic Glass: a pane (code block, table) catches light along its top edge.
-        if radius >= 8, rect.height >= 24, let fill, fill.cgColor(in: self).alpha > 0, WindowGlass.isActive(for: self) {
-            ctx.saveGState()
-            ctx.addPath(path(inner, max(0, radius - 1)))
-            ctx.clip()
-            ctx.setFillColor(WindowGlass.highlight.cgColor(in: self))
-            ctx.fill(CGRect(x: inner.minX, y: isFlipped ? inner.minY : inner.maxY - 1, width: inner.width, height: 1))
-            ctx.restoreGState()
         }
     }
 

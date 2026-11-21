@@ -11,7 +11,6 @@ public final class TooltipView: DSView, PopupContent {
     private let label = LabelView()
     /// The shortcut as a group of small key caps at the right, one per modifier and one for the key.
     private var caps: [KbdView] = []
-    public var frostRadius: CGFloat { DesignGeometry.radius(8, in: self) }
 
     public init(_ text: String, variant: Variant = .default, shortcut: String? = nil) {
         self.variant = variant

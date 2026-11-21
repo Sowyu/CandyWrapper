@@ -1294,7 +1294,7 @@ public final class PullRequestDetailView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         condensedRule.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
         pendingBadge.layer?.backgroundColor = Themed.color(\.info).cgColor(in: self)
         pendingBadge.color = .white

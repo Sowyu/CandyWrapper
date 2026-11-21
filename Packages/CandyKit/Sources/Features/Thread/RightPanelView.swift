@@ -523,12 +523,12 @@ final class RightPanelView: DSView {
     private let stripFade = CAGradientLayer()
     private var lastStripWidth: CGFloat = -1
 
-    /// Over the thread in a narrow window, where the Glass theme's clear fill would show the thread through.
+    /// Over the thread in a narrow window.
     var isSheet = false { didSet { if isSheet != oldValue { needsDisplay = true } } }
     var isMaximized = false { didSet { if isMaximized != oldValue { needsLayout = true } } }
 
     override func updateLayer() {
-        layer?.backgroundColor = (isSheet ? Themed.color(\.background) : WindowGlass.inset).cgColor(in: self)
+        layer?.backgroundColor = (isSheet ? Themed.color(\.background) : Themed.color(\.background)).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border).cgColor(in: self)
         layer?.borderColor = isCard ? RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor : nil
     }

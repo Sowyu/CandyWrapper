@@ -1090,7 +1090,7 @@ public final class DiffPanelView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         headerBorder.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self)
         // `bg-muted/40` with the 1px `border-border/70` along its bottom.
         truncatedBar.backgroundColor = Themed.color(\.muted, 0.4).cgColor(in: self)

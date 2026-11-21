@@ -68,11 +68,11 @@ extension GlobalThemeSuites {
         @Test func parallelLayoutMatchesSerial() async throws {
             let document = MarkdownDocument(parsing: String(repeating: Self.unit, count: 40), math: true)
             #expect(document.blocks.count >= MarkdownLayout.parallelBlocksForTests)
-            let serial = MarkdownLayout(document: document, width: 680, unwrappedCode: [3, 7], cwd: "/tmp", expandedTables: [2], runsShell: true)
+            let serial = MarkdownLayout(document: document, width: 680, unwrappedCode: [3, 7], cwd: "/tmp", runsShell: true)
             let design = ThreadDesign.uses3814
             let parallel = await Task.detached {
                 ThreadDesign.$layoutUses3814.withValue(design) {
-                    MarkdownLayout(document: document, width: 680, unwrappedCode: [3, 7], cwd: "/tmp", expandedTables: [2], runsShell: true, parallel: true)
+                    MarkdownLayout(document: document, width: 680, unwrappedCode: [3, 7], cwd: "/tmp", runsShell: true, parallel: true)
                 }
             }.value
             let a = Self.signature(serial), b = Self.signature(parallel)

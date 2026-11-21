@@ -1,6 +1,6 @@
 import AppKit
 
-/// Marks painted straight on Redesign's picture or Glass's frost, where no single background sits behind them. T3's
+/// Marks painted straight on Redesign's picture, where no single background sits behind them. T3's
 /// translucent marks would vanish over a bright dot, and the full-strength muted text rule (`ThemedColorCache`) would
 /// make every state as bright as the readable text. So each state becomes one opaque color that keeps the contrast
 /// ratio to the resting state that T3's marks have on T3's own panel, with the resting state as far from the worst
@@ -22,9 +22,6 @@ public enum BackdropMarks {
             // Picture lays no dim, so its marks keep the default dim's strength whatever the slider says.
             let picture = !ThemeRuntime.ditherBlur && !ThemeRuntime.ditherGradient
             return DitherArt.worstBackground(background, dark: dark, dim: picture ? DitherArt.defaultDim : Double(ThemeRuntime.ditherDim), veiled: false)
-        }
-        if ThemeRuntime.isGlass(dark: dark) {
-            return WindowGlass.frostWorstBackground(background, dark: dark, opacity: Double(ThemeRuntime.glassOpacity))
         }
         return nil
     }

@@ -269,7 +269,7 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         // mark straight into the context, in the same order, so overlapping marks blend as before.
         // T3's strip (TimelineMinimap.tsx:194-214 at 4928): `bg-muted-foreground/25`, `/60` on the hovered strip, and
         // `after:bg-foreground/55` over it while its turn is on screen. 4928 has no guide line under the strips (#35577).
-        // Over Redesign's picture or Glass's frost each state is one opaque color with T3's contrast ratios instead.
+        // Over Redesign's picture each state is one opaque color with T3's contrast ratios instead.
         let backdrop = Self.backdropColors(dark: effectiveAppearance.isDark)
         let current = (backdrop?[2] ?? Themed.color(\.foreground, 0.55)).cgColor
         let near = (backdrop?[1] ?? Themed.color(\.mutedForeground, 0.6)).cgColor

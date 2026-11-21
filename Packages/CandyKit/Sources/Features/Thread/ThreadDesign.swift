@@ -1,15 +1,12 @@
 import AppKit
 import DesignSystem
 
-/// The default themes follow Nightly 3814. Glass and Redesign retain their existing geometry.
+/// The default themes follow Nightly 3814. Redesign retains its existing geometry.
 enum ThreadDesign {
     /// A scoped layout choice lets callers render either design without changing the app's theme.
     @TaskLocal static var layoutUses3814: Bool?
-    static func uses3814(dark: Bool) -> Bool { layoutUses3814 ?? !ThemeRuntime.framesPanes(dark: dark) }
+    static func uses3814(dark: Bool) -> Bool { layoutUses3814 ?? !ThemeRuntime.isDither(dark: dark) }
     static var uses3814: Bool { uses3814(dark: NSAppearance.current.isDark) }
-    /// Nightly 3824's chat tables (#26449) also draw in Redesign; Glass keeps the older table.
-    static func newTables(dark: Bool) -> Bool { uses3814(dark: dark) || ThemeRuntime.isDither(dark: dark) }
-    static var newTables: Bool { newTables(dark: NSAppearance.current.isDark) }
     /// Redesign lays out code blocks and tables on `RedesignTokens.Card`.
     static var redesign: Bool { layoutUses3814 == nil && ThemeRuntime.isDither(dark: NSAppearance.current.isDark) }
 

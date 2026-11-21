@@ -179,7 +179,7 @@ public final class TerminalDrawerView: DSView {
 
     public override func updateLayer() {
         // The split container is `bg-(--terminal-background)`, the app's background.
-        layer?.backgroundColor = WindowGlass.pick(stock: Themed.color(\.background), frost: WindowGlass.denseFill).cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border, 0.8).cgColor(in: self)
         if let layer {
             layer.cornerRadius = isCard ? RedesignTokens.Radius.panel : 0
@@ -336,10 +336,10 @@ public final class TerminalActionCluster: DSView {
         if isCard {
             // The card's own fill behind the buttons, so terminal text under the row never shows through them.
             style.radius = RedesignTokens.Radius.control
-            style.fill = WindowGlass.pick(stock: Themed.color(\.background), frost: WindowGlass.denseFill)
+            style.fill = Themed.color(\.background)
         } else {
             style.radius = DesignGeometry.radius(8, in: self)
-            style.fill = WindowGlass.paneFill
+            style.fill = Themed.color(\.background)
             style.border = Themed.color(\.border, 0.8)
             // `shadow-xs`: 0 1px 2px rgb(0 0 0 / 5%).
             style.shadows = [BoxShadow(y: 1, blur: 2, color: Themed.black(0.05))]

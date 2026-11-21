@@ -43,7 +43,6 @@ struct MarkdownFidelityTests {
                 // become callouts and keep their line breaks (shared/src/markdownPipeline.ts:754-835).
                 let markdown = native["markdown"]!
                 view.setMarkdown(MarkdownDocument.rewritingInsights(markdown), preservesLineBreaks: TL.preservesAssistantLineBreaks(markdown))
-                if name == "table" { view.toggleTable(0) }
                 let height = view.height(forWidth: width)
                 let canvas = Canvas(frame: .zero)
                 canvas.addSubview(view)
@@ -82,7 +81,6 @@ struct MarkdownFidelityTests {
                 let ref = try #require(NSBitmapImageRep(data: Data(contentsOf: refDir.appendingPathComponent("\(name).rest.\(theme).png"))))
                 let view = MarkdownView(frame: .zero)
                 view.setMarkdown(native["markdown"]!)
-                if native["expanded"] == "true" { view.toggleTable(0) }
                 let height = view.height(forWidth: 480)
                 let canvas = Canvas(frame: .zero)
                 canvas.addSubview(view)

@@ -59,7 +59,7 @@ enum MarkdownStyle {
     /// `.chat-markdown pre::-webkit-scrollbar { height: var(--app-scrollbar-width) }`, 6px (index.css:90, 2072-2074,
     /// T3 b5a0696a98): the lane an overflowing block adds below its padding.
     static let codeScrollbar: CGFloat = 6
-    static var tableFontSize: CGFloat { ThreadDesign.newTables ? 14 : 12 }
+    static let tableFontSize: CGFloat = 14
     static var tableLineHeight: CGFloat { tableFontSize * 1.625 }
     static let imageMaxWidth: CGFloat = 480
 
@@ -370,7 +370,7 @@ public final class MarkdownLayout: @unchecked Sendable {
     static func tableCSV(_ table: MarkdownTable) -> String { Builder.csv(table) }
 
     struct Control {
-        enum Action { case copy(String), copyTable(MarkdownTable), toggleWrap(Int), toggleTable(Int), toggleDiagram(Int), retryDiagram(String), runShell(String) }
+        enum Action { case copy(String), copyTable(MarkdownTable), toggleWrap(Int), toggleDiagram(Int), retryDiagram(String), runShell(String) }
         var frame: CGRect
         var icon: IconName?
         var variant: ButtonView.Variant
@@ -489,7 +489,6 @@ public final class MarkdownLayout: @unchecked Sendable {
     fileprivate private(set) var rootBlocks: [MarkdownBlock] = []
     fileprivate private(set) var rootEnds: [RootEnd] = []
     private var reuseKey: ReuseKey?
-    fileprivate var expandedTables: Set<Int> = []
     /// The root block drawn without syntax colors: the code block a streaming answer ends with.
     fileprivate var plainRoot: Int?
     fileprivate var rootBoxes: [Box] = []
@@ -505,7 +504,6 @@ public final class MarkdownLayout: @unchecked Sendable {
     private struct ReuseKey: Equatable {
         var unwrapped: Set<Int>, wrapsCode: Bool, bodyColor: NSColor?, cwd: String?, diagrams: Diagrams?, contexts: MarkdownContextChips?, fileLabels: [String: String]
         var runsShell: Bool
-        var fitsExpandedTables: Bool
         var body: MarkdownBody
     }
     /// How many top-level blocks came from `reusing` instead of being laid out (tests).
@@ -516,7 +514,6 @@ public final class MarkdownLayout: @unchecked Sendable {
     /// 80% foreground of body text (user bubbles and plan cards draw at 100%). `cwd` anchors relative file
     /// paths (T3's `markdownCwd`: the thread's worktree or the project root); without it only absolute paths chip.
     /// `runsShell`: shell code blocks get "Run in terminal" (an assistant answer that finished, with a project).
-    /// `fitsExpandedTables`: the markdown sits in a chat lane at least 36rem wide, where expanded tables fit the lane.
     /// `reusing`: the layout of an earlier version of this message at the same width. Its leading
     /// top-level blocks that did not change keep their layout, so a streaming answer lays out only
     /// its last blocks per update.
@@ -533,25 +530,22 @@ public final class MarkdownLayout: @unchecked Sendable {
     }
 
     public init(document: MarkdownDocument, width: CGFloat, wrapsCode: Bool = true, unwrappedCode: Set<Int> = [], bodyColor: NSColor? = nil, cwd: String? = nil,
-                expandedTables: Set<Int> = [], diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
-                fitsExpandedTables: Bool = false, streaming: Bool = false, reusing previous: MarkdownLayout? = nil, parallel: Bool = false,
+                diagrams: Diagrams? = nil, contexts: MarkdownContextChips? = nil, runsShell: Bool = false,
+                streaming: Bool = false, reusing previous: MarkdownLayout? = nil, parallel: Bool = false,
                 body: MarkdownBody = .chat) {
         self.width = width
-        self.expandedTables = expandedTables
         if streaming, case .code = document.blocks.last { plainRoot = document.blocks.count - 1 }
         let files = FileChipResolver(document: document, cwd: cwd)
         var builder = Builder(unwrapped: unwrappedCode, wrapsCode: wrapsCode, files: files.isEmpty ? nil : files,
                               boxes: TextBoxCache(previous: previous?.width == width ? previous?.textBoxes : nil, records: previous != nil))
-        builder.expandedTables = expandedTables
         builder.contexts = contexts
         builder.diagrams = diagrams
         builder.cwd = cwd
         builder.runsShell = runsShell
-        builder.fitsExpandedTables = fitsExpandedTables
         builder.plainRoot = plainRoot
         builder.body = body
         let key = ReuseKey(unwrapped: unwrappedCode, wrapsCode: wrapsCode, bodyColor: bodyColor, cwd: cwd, diagrams: diagrams, contexts: contexts, fileLabels: files.labelSuffixes,
-                           runsShell: runsShell, fitsExpandedTables: fitsExpandedTables, body: body)
+                           runsShell: runsShell, body: body)
         if let previous, previous.width == width, previous.reuseKey == key { builder.previous = previous }
         let color = bodyColor ?? MarkdownStyle.body
         if parallel, builder.previous == nil, !Thread.isMainThread, document.blocks.count >= Builder.parallelBlocks {
@@ -656,7 +650,6 @@ private struct Builder {
     var tableIndex = 0
     /// Display formulas so far; each scrolls as `MarkdownMathStyle.scrollID(index)`.
     var mathIndex = 0
-    var expandedTables: Set<Int> = []
     var previous: MarkdownLayout?
     var rootBoxes: [Box] = []
     var reusedBlocks = 0
@@ -664,7 +657,6 @@ private struct Builder {
     var contexts: MarkdownContextChips?
     var cwd: String?
     var runsShell = false
-    var fitsExpandedTables = false
     var plainRoot: Int?
     /// The code block being laid out is `plainRoot`.
     var drawsPlain = false
@@ -685,7 +677,7 @@ private struct Builder {
     /// Block children in normal flow. Margins between siblings collapse to the larger one; the first
     /// child's top and last child's bottom margin pass through to the parent (no border or padding
     /// stops them), except at the root, where T3 zeroes them (`.chat-markdown > :first-child`).
-    /// Unchanged root blocks reuse their boxes, including blocks following a toggled table.
+    /// Unchanged root blocks reuse their boxes.
     mutating func flow(_ blocks: [MarkdownBlock], width: CGFloat, context: Context, root: Bool = false, tight: Bool = false) -> Box {
         var out = Box()
         var y: CGFloat = 0
@@ -697,9 +689,7 @@ private struct Builder {
             let oldMath = index == 0 ? 0 : previous.rootEnds[index - 1].mathIndex
             guard code == oldCode, table == oldTable, mathIndex == oldMath, blocks[index] == previous.rootBlocks[index] else { return false }
             // A code block laid out plain while it was open gets its colors once text follows it.
-            if index == previous.plainRoot, index != plainRoot { return false }
-            let tables = table..<previous.rootEnds[index].tableIndex
-            return expandedTables.intersection(tables) == previous.expandedTables.intersection(tables)
+            return !(index == previous.plainRoot && index != plainRoot)
         }
         var first = 0
         if root, let previous {
@@ -1402,13 +1392,11 @@ private struct Builder {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height)
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
         // Light: 1px border at 70% on --secondary. Dark: a transparent border on --input at 32%.
-        // Classic Glass: a dense pane, so code reads as on a solid card.
         if ThreadDesign.redesign {
             box.items.append(.box(frame, fill: RedesignTokens.Card.fill, border: RedesignTokens.Card.border, radius: RedesignTokens.Card.radius))
         } else {
-            box.items.append(.box(frame, fill: WindowGlass.pick(stock: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
-                                                                frost: WindowGlass.denseFill),
-                                  border: WindowGlass.pick(stock: Themed.color(light: \.border, 0.7, dark: \.border, 0), frost: WindowGlass.edge),
+            box.items.append(.box(frame, fill: Themed.color(light: \.secondary, 1, dark: \.input, 0.32),
+                                  border: Themed.color(light: \.border, 0.7, dark: \.border, 0),
                                   radius: ThreadDesign.uses3814 ? 8 : 10))
         }
         // Header: `pt-1.5 pr-1.5 pl-3`, the 24px buttons set its height; title 11px mono at 72% foreground.
@@ -1526,12 +1514,10 @@ private struct Builder {
 
     /// `MarkdownTable`: 12px cells with `0.45rem 0.75rem` padding (header `0.55rem` block padding, weight 600),
     /// none before the first column or after the last since 3669 (index.css:2138-2152, 2d620f5dcc), a 1px
-    /// bottom rule at 60% border under every row, then the expand and copy buttons 2px below.
+    /// bottom rule at 60% border under every row, then the copy button 2px below.
     mutating func table(_ table: MarkdownTable, width: CGFloat, context: Context) -> Box {
         let index = tableIndex
         tableIndex += 1
-        let modern = ThreadDesign.newTables
-        let expanded = modern || expandedTables.contains(index)
         let columns = table.alignments.count
         let size = MarkdownStyle.tableFontSize, line = MarkdownStyle.tableLineHeight
         func cellString(_ runs: [InlineRun], header: Bool, column: Int) -> MarkdownStyle.Inline {
@@ -1545,22 +1531,9 @@ private struct Builder {
         func natural(_ s: NSAttributedString) -> CGFloat {
             boxes.natural(s, lineHeight: line, strut: MarkdownStyle.font(size))
         }
-        var widths = [CGFloat](repeating: 0, count: columns)
-        for row in [table.header] + table.rows {
-            for (c, runs) in row.enumerated() where c < columns {
-                let n = natural(cellString(runs, header: row == table.header, column: c).string)
-                widths[c] = max(widths[c], min(384, n + MarkdownLayout.tableCellPadding(c, of: columns).total))
-            }
-        }
-        let total = widths.reduce(0, +)
-        if total < width, total > 0 { widths = widths.map { $0 + (width - total) * $0 / total } }
-        var tableWidth = max(width, total)
-        let wraps = modern || expanded && fitsExpandedTables
-        if expanded {
-            (widths, tableWidth) = MarkdownLayout.expandedTableWidths(([table.header] + table.rows).enumerated().map { r, row in
-                row.prefix(columns).enumerated().map { c, runs in cellString(runs, header: r == 0, column: c).string }
-            }, columns: columns, width: width, fitsLane: wraps, natural: natural)
-        }
+        let (widths, tableWidth) = MarkdownLayout.tableWidths(([table.header] + table.rows).enumerated().map { r, row in
+            row.prefix(columns).enumerated().map { c, runs in cellString(runs, header: r == 0, column: c).string }
+        }, columns: columns, width: width, natural: natural)
 
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
         var y: CGFloat = 0
@@ -1574,12 +1547,7 @@ private struct Builder {
                 let runs = c < row.count ? row[c] : []
                 let inline = cellString(runs, header: r == 0, column: c)
                 let s = inline.string, chips = inline.code
-                let displayed = NSMutableAttributedString(attributedString: s)
-                if !expanded || (r == 0 && !wraps), displayed.length > 0 {
-                    let paragraph = (displayed.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
-                    paragraph.lineBreakMode = .byTruncatingTail
-                    displayed.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: displayed.length))
-                }
+                let displayed = s
                 let padding = MarkdownLayout.tableCellPadding(c, of: columns)
                 let cellFont = MarkdownStyle.font(size, weight: r == 0 ? .semibold : .regular)
                 let textBox = boxes.make(displayed, width: widths[c] - padding.total, lineHeight: line, strut: MarkdownStyle.font(size),
@@ -1607,20 +1575,11 @@ private struct Builder {
         let viewport = CGRect(x: 0, y: 0, width: width, height: y + (tableWidth > width ? MarkdownStyle.codeScrollbar : 0))
         box.items.insert(.scroll(codeIndex: -index - 1, viewport: viewport, contentWidth: tableWidth), at: 0)
         box.items.append(.endClip)
-        // Classic Glass sets the table on a dense pane, below the faded content.
         if ThreadDesign.redesign {
             box.items.insert(.box(viewport, fill: RedesignTokens.Card.fill, border: RedesignTokens.Card.border, radius: RedesignTokens.Card.radius), at: 0)
-        } else {
-            box.items.insert(.box(viewport, fill: WindowGlass.pick(stock: .clear, frost: WindowGlass.denseFill),
-                                  border: WindowGlass.pick(stock: .clear, frost: WindowGlass.edge), radius: 8), at: 0)
         }
         y = viewport.maxY
         // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449), Redesign too.
-        // Glass retains its table controls.
-        if !modern {
-            box.controls.append(.init(frame: CGRect(x: 0, y: y + 2, width: 24, height: 24), icon: expanded ? .minimize2 : .maximize2,
-                                      variant: expanded ? .secondary : .ghostMuted, action: .toggleTable(index)))
-        }
         box.controls.append(.init(frame: CGRect(x: width - 24, y: y + 2, width: 24, height: 24), icon: .copy, variant: .ghostMuted,
                                   action: .copyTable(table)))
         box.height = y + 2 + 24
@@ -1685,30 +1644,27 @@ extension MarkdownLayout {
         return (lead, lead + trail)
     }
 
-    static func expandedTableWidths(_ rows: [[NSAttributedString]], columns: Int, width: CGFloat, fitsLane: Bool,
-                                    natural: (NSAttributedString) -> CGFloat) -> (widths: [CGFloat], tableWidth: CGFloat) {
+    static func tableWidths(_ rows: [[NSAttributedString]], columns: Int, width: CGFloat,
+                            natural: (NSAttributedString) -> CGFloat) -> (widths: [CGFloat], tableWidth: CGFloat) {
         var mins = [CGFloat](repeating: 0, count: columns), maxs = mins
-        for (r, row) in rows.enumerated() {
+        for row in rows {
             for (c, cell) in row.enumerated() where c < columns {
                 var hasFormula = false
                 var formulaWidth: CGFloat = 0
-                if ThreadDesign.newTables {
-                    cell.enumerateAttribute(.markdownMath, in: NSRange(location: 0, length: cell.length)) { value, range, _ in
-                        if value != nil {
-                            hasFormula = true
-                            formulaWidth = max(formulaWidth, natural(cell.attributedSubstring(from: range)))
-                        }
+                cell.enumerateAttribute(.markdownMath, in: NSRange(location: 0, length: cell.length)) { value, range, _ in
+                    if value != nil {
+                        hasFormula = true
+                        formulaWidth = max(formulaWidth, natural(cell.attributedSubstring(from: range)))
                     }
                 }
-                let cap: CGFloat = hasFormula ? .infinity : ThreadDesign.newTables ? 384 : r == 0 ? .infinity : 384
+                let cap: CGFloat = hasFormula ? .infinity : 384
                 let padding = tableCellPadding(c, of: columns).total
                 maxs[c] = max(maxs[c], min(cap, natural(cell) + padding))
-                guard fitsLane else { continue }
                 // ponytail: breaks only at spaces, not after hyphens, add UAX 14 opportunities if a column comes out wide
                 let longest = Self.unbroken.matches(in: cell.string, range: NSRange(location: 0, length: cell.length))
                     .map { match -> CGFloat in
                         let word = cell.attributedSubstring(from: match.range)
-                        if ThreadDesign.newTables, word.length > 16, word.attribute(.markdownExternalLink, at: 0, effectiveRange: nil) != nil {
+                        if word.length > 16, word.attribute(.markdownExternalLink, at: 0, effectiveRange: nil) != nil {
                             return word.string.indices.map { index in
                                 let end = word.string.index(after: index)
                                 return natural(word.attributedSubstring(from: NSRange(index..<end, in: word.string)))
@@ -1723,7 +1679,7 @@ extension MarkdownLayout {
         var widths = maxs
         if maxSum < width, maxSum > 0 {
             widths = maxs.map { $0 + (width - maxSum) * $0 / maxSum }
-        } else if fitsLane, maxSum > width {
+        } else if maxSum > width {
             let room = max(0, width - minSum), spread = maxSum - minSum
             widths = zip(mins, maxs).map { lo, hi in spread > 0 ? lo + room * (hi - lo) / spread : lo }
         }

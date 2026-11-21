@@ -156,7 +156,7 @@ final class StageBackdropView: DSView {
     }
 
     private func drawFadeMask(_ ctx: CGContext) {
-        // One smooth alpha fade keeps the candy's color as it dissolves into Glass. A dark
+        // One smooth alpha fade keeps the candy's color as it dissolves into the sidebar. A dark
         // overlay followed by an alpha mask made a black stripe across the old header.
         let stops = (0...16).map { CGFloat($0) / 16 }
         let colors = stops.map { position -> CGColor in
@@ -305,7 +305,6 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     private let icon = IconView(name: .search, size: 16)
     private let surface = CALayer()
     private var hovered = false { didSet { restyle() } }
-    private var editing = false { didSet { restyle() } }
     private var fieldHeight: CGFloat = 0
     /// "Clear thread search" (SidebarThreadHeader.tsx:110-123): `icon-micro ghost-muted`, a `size-3` x, while searching.
     let clearButton = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconMicro)
@@ -359,24 +358,15 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
     func controlTextDidChange(_ obj: Notification) { syncClear(); onChange?(field.stringValue) }
-    func controlTextDidBeginEditing(_ obj: Notification) { editing = true }
-    func controlTextDidEndEditing(_ obj: Notification) { editing = false }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     private func restyle() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if WindowGlass.isActive(for: self) {
-            surface.backgroundColor = hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
-            surface.borderWidth = editing ? 1 : 0
-            surface.borderColor = editing ? SB.c(\.ring).withAlphaComponent(0.65).cgColor(in: self) : nil
-            surface.cornerRadius = 10
-        } else {
-            surface.backgroundColor = hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
-            surface.borderWidth = 0
-            surface.cornerRadius = 8
-        }
+        surface.backgroundColor = hovered ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        surface.borderWidth = 0
+        surface.cornerRadius = 8
         CATransaction.commit()
         icon.strokeColor = SB.c(\.sidebarIconColor)
         field.textColor = SB.c(\.sidebarForeground)

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>appearance.mode</key>
+	<string>system</string>
+	<key>clientSettings.v1</key>
+	<data>
+	eyJhcHBlYXJhbmNlQ29udHJhc3QiOjEwMCwiZGlmZkNvbG9yU2NoZW1lIjoicmVkLWdy
+	ZWVuIiwiZ2xhc3NPcGFjaXR5Ijo0MCwiaWdub3JlUmVkdWNlVHJhbnNwYXJlbmN5Ijp0
+	cnVlLCJyZWRlc2lnbkJhY2tncm91bmQiOiJncmFkaWVudCJ9
+	</data>
+	<key>theme.halves.v1</key>
+	<data>
+	eyJkYXJrIjoiY2FuZHl3cmFwcGVyLWRpdGhlciJ9
+	</data>
+	<key>theme.preRedesign</key>
+	<data>
+	eyJwcmVmZXJlbmNlIjoiY2FuZHl3cmFwcGVyLWdsYXNzIn0=
+	</data>
+	<key>theme.preference</key>
+	<string>candywrapper-glass</string>
+	<key>theme.redesignUseIn</key>
+	<string>dark</string>
+</dict>
+</plist>

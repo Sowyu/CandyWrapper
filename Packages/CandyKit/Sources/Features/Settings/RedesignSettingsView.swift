@@ -23,7 +23,7 @@ enum RedesignPickerSettings {
 
 /// The Redesign tab, CandyWrapper's own: the switch that turns Redesign on, then every setting only Redesign uses.
 /// The switch is the theme picker's own setting, so the two always agree. While Redesign is off the rows under it
-/// stay visible and inert, except Ignore Reduce Transparency, which the Glass theme reads too.
+/// stay visible and inert, except Ignore Reduce Transparency.
 public final class RedesignSettingsView: SettingsPageBase {
     static let offReason = "Turn on Redesign to change this."
     static let gradientReason = "Gradient uses no picture. Choose Picture or Blur to change this."
@@ -69,7 +69,7 @@ public final class RedesignSettingsView: SettingsPageBase {
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
         let ink = inkRow()
         let look: [SettingsRowView] = [picture, backgroundRow(), ink, tint, animate, dim, accentRow(), avatarsRow()]
-        let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture, Glass and blur as if Reduce Transparency were off in macOS.",
+        let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
                                     "Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again.",

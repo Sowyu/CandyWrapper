@@ -475,7 +475,7 @@ public final class DetailsSplitPart: ControlView {
 }
 
 /// The Changes row totals use `font-mono tabular-nums gap-2` at the row's 13px (#31858) and foreground diff roles.
-/// Glass and Redesign retain their previous type, spacing and colors.
+/// Redesign retains its previous type, spacing and colors.
 public final class DiffTotalsView: DSView {
     private let plus = LabelView()
     private let minus = LabelView()

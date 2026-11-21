@@ -269,17 +269,8 @@ open class DialogView: DSView {
     public override func updateLayer() { restyle() }
 
 
-    /// Classic Glass's blur under the frosted pane (`WindowGlass.syncPaneBlur`).
-    private var paneBlur: BackdropBlurView?
-    private func syncPaneBlur() { paneBlur = WindowGlass.syncPaneBlur(paneBlur, in: self, radius: !isSheet || isInset ? 18 : 0) }
-    open override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        syncPaneBlur()
-    }
-
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        syncPaneBlur()
         decoration.setNeedsDisplay()
         footerLayer.setNeedsDisplay()
         wizardTint.setNeedsDisplay()
