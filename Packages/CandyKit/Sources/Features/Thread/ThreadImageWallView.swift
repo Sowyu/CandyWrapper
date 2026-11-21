@@ -366,6 +366,7 @@ final class GalleryViewerView: DSView {
     let openInThread = ButtonView("Open in thread", icon: .arrowUpRight, variant: .ghost, size: .xs)
     private(set) lazy var zoom = ZoomableImageView(picture: picture)
     static let bar = ThreadImageWallView.header
+    let hint = ThreadImageWallView.hintLabel("Pinch or ⌘+ and ⌘− to zoom, ⌘0 to fit, double-click for 100%")
     /// Horizontal two-finger travel at fit in the current gesture, and whether it already changed the picture.
     private var swipe: (dx: CGFloat, dy: CGFloat, done: Bool, at: TimeInterval) = (0, 0, false, 0)
 
@@ -380,11 +381,11 @@ final class GalleryViewerView: DSView {
         zoom.fit = { natural, area, backing in GalleryLayout.fit(natural, in: area, scale: backing) }
         zoom.onBackgroundClick = { [weak self] in self?.onClose?() }
         zoom.onFitScroll = { [weak self] event in self?.swipe(event) }
-        for view in [zoom, back, count, detail, close, previous, next, openInThread] as [NSView] { addSubview(view) }
-        back.toolTip = "Back to all images (Esc)"; back.setAccessibilityLabel("Back to all images")
-        close.toolTip = "Close (Esc)"; close.setAccessibilityLabel("Close")
-        previous.toolTip = "Previous image"; previous.setAccessibilityLabel("Previous image")
-        next.toolTip = "Next image"; next.setAccessibilityLabel("Next image")
+        for view in [zoom, back, count, hint, detail, close, previous, next, openInThread] as [NSView] { addSubview(view) }
+        back.setTooltip("Back to all images", shortcut: "Esc"); back.setAccessibilityLabel("Back to all images")
+        close.setTooltip("Close", shortcut: "Esc"); close.setAccessibilityLabel("Close")
+        previous.setTooltip("Previous image"); previous.setAccessibilityLabel("Previous image")
+        next.setTooltip("Next image"); next.setAccessibilityLabel("Next image")
         back.action = { [weak self] in self?.onClose?() }
         close.action = { [weak self] in self?.onCloseGallery?() }
         previous.action = { [weak self] in self?.step(-1) }
@@ -441,7 +442,7 @@ final class GalleryViewerView: DSView {
     override func layout() {
         super.layout()
         let pad = Tokens.Space.xl, w = bounds.width, h = bounds.height
-        ThreadImageWallView.placeBar(back: back, labels: [count], close: close, width: w)
+        ThreadImageWallView.placeBar(back: back, labels: [count], hint: hint, close: close, width: w)
         let middle = (h / 2 - 16).rounded()
         previous.frame = NSRect(x: pad, y: middle, width: 32, height: 32)
         next.frame = NSRect(x: w - pad - 32, y: middle, width: 32, height: 32)
@@ -468,7 +469,7 @@ final class GalleryViewerView: DSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         // The labels are not controls: their clicks land on the veil's own handler.
-        if hit === count || hit === detail { return self }
+        if hit === count || hit === detail || hit === hint { return self }
         return hit
     }
 
@@ -505,6 +506,8 @@ public final class ThreadImageWallView: DSView {
     let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
     let title = LabelView("Agent images", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
     let count = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.mutedForeground))
+    /// How to change the picture size, as quiet text in the bar instead of a tooltip over the pictures.
+    let hint = ThreadImageWallView.hintLabel("Pinch or ⌘+ and ⌘− to resize, ⌘0 to fit")
     private let rule = DSView()
     let masonry = GalleryMasonryView(metrics: .init(inset: NSEdgeInsets(top: Tokens.Space.s, left: Tokens.Space.xl, bottom: Tokens.Space.xl, right: Tokens.Space.xl),
                                                     gap: Tokens.Space.l, minColumn: 160, radius: Tokens.Radius.card))
@@ -513,9 +516,9 @@ public final class ThreadImageWallView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        for view in [title, count, close, rule, scroll] as [NSView] { addSubview(view) }
+        for view in [title, count, hint, close, rule, scroll] as [NSView] { addSubview(view) }
         scroll.scrollsHorizontally = false
-        close.toolTip = "Close (Esc)"
+        close.setTooltip("Close", shortcut: "Esc")
         close.setAccessibilityLabel("Close")
         close.action = { [weak self] in self?.onClose?() }
         masonry.sharedCache = false
@@ -525,7 +528,6 @@ public final class ThreadImageWallView: DSView {
         masonry.onSelect = { [weak self] index in self?.openViewer(at: index) }
         masonry.fixedColumns = Self.sessionColumns
         masonry.onMagnify = { [weak self] event in self?.magnify(with: event) }
-        scroll.toolTip = "Pinch or ⌘+ and ⌘- for larger or smaller pictures, ⌘0 to fit the width."
         setAccessibilityRole(.group)
         setAccessibilityLabel("Agent images")
         restyle()
@@ -539,7 +541,7 @@ public final class ThreadImageWallView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width
-        Self.placeBar(back: nil, labels: [title, count], close: close, width: w)
+        Self.placeBar(back: nil, labels: [title, count], hint: hint, close: close, width: w)
         rule.frame = NSRect(x: 0, y: Self.header - 1, width: w, height: 1)
         let top = Self.header
         scroll.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top))
@@ -560,7 +562,7 @@ public final class ThreadImageWallView: DSView {
 
     /// Settings' route-modal bar (`SettingsHeaderView.layout`): the title 20pt in, the close a 28pt square 8pt from the
     /// right edge, both centred in `header`. A back button takes the title's inset and the title follows it.
-    static func placeBar(back: NSView?, labels: [LabelView], close: NSView, width: CGFloat) {
+    static func placeBar(back: NSView?, labels: [LabelView], hint: LabelView? = nil, close: NSView, width: CGFloat) {
         let mid = header / 2
         var x: CGFloat = 20
         if let back {
@@ -574,6 +576,20 @@ public final class ThreadImageWallView: DSView {
             x += w + 8
         }
         close.frame = NSRect(x: width - 8 - 28, y: mid - 14, width: 28, height: 28)
+        // The hint sits right of the labels and ends 12pt before the close; it hides where it would crowd them.
+        if let hint {
+            let w = ceil(hint.textWidth) + 1
+            let left = close.frame.minX - 12 - w
+            hint.isHidden = left < x + 16
+            hint.frame = NSRect(x: left, y: mid - 8, width: w, height: 16)
+        }
+    }
+
+    static func hintLabel(_ text: String) -> LabelView {
+        let label = LabelView(text, font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+        label.lineHeight = 16
+        label.setAccessibilityElement(false)
+        return label
     }
 
     /// One picture large, over the wall.

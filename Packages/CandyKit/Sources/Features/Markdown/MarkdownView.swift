@@ -565,7 +565,7 @@ public final class MarkdownView: DSView {
             let icon = copiedResets[i] == nil ? control.icon : .check
             if button.icon != icon { button.icon = icon }
             if button.variant != control.variant { button.variant = control.variant }
-            button.toolTip = nil
+            button.setTooltip(nil)
             switch control.action {
             case .copy(let text):
                 button.setAccessibilityLabel("Copy")
@@ -573,11 +573,11 @@ public final class MarkdownView: DSView {
             case .copyTable(let table):
                 let label = copiedResets[i] == nil ? "Copy table" : "Copied"
                 button.setAccessibilityLabel(label)
-                button.toolTip = label
+                button.setTooltip(label)
                 button.action = { [weak self] in self?.showTableCopy(table, button: i) }
             case .runShell(let command):
                 button.setAccessibilityLabel("Run in terminal")
-                button.toolTip = "Run in terminal"
+                button.setTooltip("Run in terminal")
                 button.action = { [weak self] in self?.onRunShellCommand?(command) }
             case .toggleWrap(let index):
                 button.setAccessibilityLabel(wrapsCode != unwrappedCode.contains(index) ? "Disable line wrap" : "Wrap lines")
@@ -585,7 +585,7 @@ public final class MarkdownView: DSView {
             case .toggleDiagram(let index):
                 let label = diagramCode.contains(index) ? "Show diagram" : "Show code"
                 button.setAccessibilityLabel(label)
-                button.toolTip = label
+                button.setTooltip(label)
                 button.action = { [weak self] in self?.toggleDiagram(index) }
             case .retryDiagram(let code):
                 button.setAccessibilityLabel("Retry")
@@ -596,7 +596,7 @@ public final class MarkdownView: DSView {
             case .toggleTable(let index):
                 let label = expandedTables.contains(index) ? "Collapse table cells" : "Expand table cells"
                 button.setAccessibilityLabel(label)
-                button.toolTip = label
+                button.setTooltip(label)
                 button.action = { [weak self] in self?.toggleTable(index) }
             }
         }

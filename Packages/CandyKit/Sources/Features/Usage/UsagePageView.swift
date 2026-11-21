@@ -81,7 +81,8 @@ public final class UsagePageView: DSView {
         public var cursorRows: [(id: String, label: String)] = []
         public var cursorShowsEnvironment = false
         public var breakdown = "model"
-        public var shortcutTitles: [String: String] = [:]
+        /// The shortcut for each metric and window command, drawn as key caps in its tooltip.
+        public var shortcuts: [String: String] = [:]
         public init() {}
 
         func providerLoading(_ p: UsageProviderKind) -> Bool { everyProviderLoading || loadingProviders.contains(p) }
@@ -291,7 +292,7 @@ public final class UsageHeaderView: TopbarDragView {
         for s in [metricSelect, periodSelect] { s.fitsContent = true; s.alignItemWithTrigger = false; s.popupAlign = .end }
         close.isHidden = true
         close.setAccessibilityLabel("Close")
-        close.toolTip = "Close (Esc)"
+        close.setTooltip("Close", shortcut: "Esc")
         addSubview(close)
         setAccessibilityLabel("Usage breadcrumb")
     }
@@ -323,8 +324,8 @@ public final class UsageHeaderView: TopbarDragView {
         let limits = m.metric == "limits"
         period.items.forEach { $0.isEnabled = !limits }
         periodSelect.isEnabled = !limits
-        for (i, o) in UsagePageOptions.metrics.enumerated() { metric.items[i].toolTip = m.shortcutTitles[o.command] ?? o.label }
-        for (i, o) in UsagePageOptions.windows.enumerated() { period.items[i].toolTip = m.shortcutTitles[o.command] ?? o.label }
+        for (i, o) in UsagePageOptions.metrics.enumerated() { let s = m.shortcuts[o.command]; metric.items[i].setTooltip(s == nil ? nil : o.label, shortcut: s) }
+        for (i, o) in UsagePageOptions.windows.enumerated() { let s = m.shortcuts[o.command]; period.items[i].setTooltip(s == nil ? nil : o.label, shortcut: s) }
         for b in [refresh, compactRefresh] {
             b.isEnabled = m.refreshEnabled && !m.refreshing
             b.setAccessibilityLabel(limits ? "Refresh limits" : "Refresh usage")

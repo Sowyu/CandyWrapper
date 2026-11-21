@@ -24,6 +24,9 @@ public final class KbdView: DSView {
         set { label.smoothsFont = newValue }
     }
 
+    /// A 16pt cap in 11pt type, for a tooltip's shortcut.
+    public var compact = false { didSet { label.font = DSFont.ui(compact ? 11 : 12, weight: .medium); label.lineHeight = compact ? 14 : 16; invalidateIntrinsicContentSize(); needsLayout = true } }
+
     private let label = LabelView()
     private var iconView: IconView?
 
@@ -44,6 +47,7 @@ public final class KbdView: DSView {
         // `min-w-5 px-1`; content is the text advance or a 12px icon (`gap-1` between them).
         var content = keys.isEmpty ? 0 : label.textWidth
         if iconView != nil { content += 12 + (keys.isEmpty ? 0 : 4) }
+        if compact { return NSSize(width: max(16, content + 8), height: 16) }
         return NSSize(width: max(20, content + (outline ? 14 : 8)), height: 20)
     }
 
@@ -56,7 +60,8 @@ public final class KbdView: DSView {
             iconView.frame = NSRect(x: x, y: (bounds.height - 12) / 2, width: 12, height: 12)
             x += 16
         }
-        label.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: textWidth, height: 16)
+        let line = label.lineHeight ?? 16
+        label.frame = NSRect(x: x, y: (bounds.height - line) / 2, width: textWidth, height: line)
         if outline {
             // The border box: 1px on three sides, 2px at the bottom, so the text centers 0.5px high (`items-center`).
             label.frame.origin.y -= 0.5

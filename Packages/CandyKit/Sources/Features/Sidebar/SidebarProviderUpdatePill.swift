@@ -147,7 +147,7 @@ public final class SidebarProviderUpdatePillView: DSView {
             self.dismissed.insert(key)
             self.show(nil)
         }
-        close.toolTip = "Dismiss until provider status changes"
+        close.setTooltip("Dismiss until provider status changes")
         close.setAccessibilityLabel("Dismiss provider update notice")
         isHidden = true
     }
@@ -226,7 +226,7 @@ public final class SidebarProviderUpdatePillView: DSView {
         if let model {
             main.model = model
             close.isHidden = !model.dismissible
-            main.toolTip = model.description
+            main.setTooltip(model.description)
             main.setAccessibilityLabel(model.description)
             restyle()
             if wasHidden, !Motion.reduced { enterAnimation() }

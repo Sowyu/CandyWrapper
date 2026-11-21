@@ -302,7 +302,7 @@ final class UsageController {
         m.environmentLabel = UsagePageOptions.environmentFilterLabel(allSelected: selectedIds == nil, selectedLabels: chosen.map(\.label))
         m.providerLabel = UsagePageOptions.providerFilterLabel(hidden: hidden)
         m.refreshing = refreshing
-        m.shortcutTitles = shortcutTitles()
+        m.shortcuts = shortcuts()
         let limits = preferences.metric == "limits"
         if all.isEmpty || chosen.isEmpty {
             m.body = .message(all.isEmpty ? "Connect an environment to see \(limits ? "limits" : "usage")."
@@ -400,12 +400,10 @@ final class UsageController {
         return lm
     }
 
-    private func shortcutTitles() -> [String: String] {
+    private func shortcuts() -> [String: String] {
         var out: [String: String] = [:]
-        let options: [(String, String)] = UsagePageOptions.metrics.map { ($0.command, $0.label) } + UsagePageOptions.windows.map { ($0.command, $0.label) }
-        for (command, label) in options {
-            let shortcut = ActiveKeymap.label(for: command, context: KeybindingContext(["usagePageOpen": true]))
-            out[command] = shortcut.map { "\(label) (\($0))" } ?? label
+        for command in UsagePageOptions.metrics.map(\.command) + UsagePageOptions.windows.map(\.command) {
+            out[command] = ActiveKeymap.label(for: command, context: KeybindingContext(["usagePageOpen": true]))
         }
         return out
     }

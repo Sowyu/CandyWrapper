@@ -233,8 +233,8 @@ public final class FileListPane: DSView {
         let right = expansion.isHidden ? w - 9 : w - 9 - 24 - 4
         expansion.frame = NSRect(x: w - 9 - 24, y: 8, width: 24, height: 24)
         expansion.icon = tree.model.allExpanded ? .chevronsDownUp : .chevronsUpDown
-        expansion.toolTip = tree.model.allExpanded ? "Collapse all folders" : "Expand all folders"
-        expansion.setAccessibilityLabel(expansion.toolTip)
+        expansion.setTooltip(tree.model.allExpanded ? "Collapse all folders" : "Expand all folders")
+        expansion.setAccessibilityLabel(expansion.currentTooltip)
         count.text = String(tree.model.directories.values.flatMap { $0 }.filter { !$0.isDirectory }.count)
         count.frame = NSRect(x: right - 40, y: 12, width: 40, height: 16)
         scroll.frame = NSRect(x: 1, y: 40, width: max(0, w - 1), height: max(0, bounds.height - 40 - footerH))

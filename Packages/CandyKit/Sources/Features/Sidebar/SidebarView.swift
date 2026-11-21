@@ -377,7 +377,7 @@ public final class SidebarContentView: DSView {
     static func headerButton(_ icon: IconName, _ label: String) -> SidebarMenuButtonView {
         let b = SidebarMenuButtonView("", icon: icon, size: .icon)
         b.setAccessibilityLabel(label)
-        b.toolTip = label
+        b.setTooltip(label)
         return b
     }
 
@@ -909,7 +909,7 @@ public final class SidebarContentView: DSView {
         filterButton.isActive = !selected.isEmpty
         let label = selected.isEmpty ? "Filter threads by project" : "Filter threads by project: " + selected.map(\.label).joined(separator: ", ")
         filterButton.setAccessibilityLabel(label)
-        filterButton.toolTip = label
+        filterButton.setTooltip(label)
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
         if filterButton.isHidden == hasProjects { needsLayout = true }
     }

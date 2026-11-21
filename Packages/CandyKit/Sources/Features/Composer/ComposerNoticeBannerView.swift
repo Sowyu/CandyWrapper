@@ -177,7 +177,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         buttons = content.actions.enumerated().map { index, label in
             let b = ButtonView(label, variant: .ghost, size: .xs)
             b.smoothsFont = false
-            b.toolTip = content.actionTooltip
+            b.setTooltip(content.actionTooltip)
             b.action = { [weak self] in self?.onAction?(index) }
             addSubview(b)
             return b

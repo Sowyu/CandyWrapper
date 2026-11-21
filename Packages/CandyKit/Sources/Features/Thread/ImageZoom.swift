@@ -80,7 +80,6 @@ final class ZoomableImageView: DSView {
         super.init(frame: .zero)
         layer?.masksToBounds = true
         addSubview(picture)
-        toolTip = "Pinch or ⌘+ and ⌘- to zoom, ⌘0 to fit. Double-click toggles 100%."
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }

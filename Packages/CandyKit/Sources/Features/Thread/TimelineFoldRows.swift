@@ -413,7 +413,7 @@ final class EventRowView: TimelineRowView {
         rightRule.isHidden = !divider
         pill.isHidden = !divider || target == nil
         pill.setAccessibilityLabel(opens?.1)
-        pill.toolTip = divider ? opens?.1 : nil
+        pill.setTooltip(divider ? opens?.1 : nil)
         card.isHidden = divider || look == .line
         iconBox.isHidden = look != .createdCard
         openInline.isHidden = look != .line || target == nil

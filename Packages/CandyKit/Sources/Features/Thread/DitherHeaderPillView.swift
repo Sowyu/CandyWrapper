@@ -60,9 +60,9 @@ public final class DitherHeaderPillView: DSView {
         changes.accessory = totals
         totals.glyphOffset = 1
         changes.setAccessibilityLabel("Show changes")
-        changes.toolTip = "Show changes"
+        changes.setTooltip("Show changes")
         addSubview(changes)
-        gallery.toolTip = "Agent images (⇧⌘I)"
+        gallery.setTooltip("Agent images", shortcut: "⇧⌘I")
         gallery.setAccessibilityLabel("Agent images")
         galleryDot.isHidden = true
         galleryDot.cornerRadius = RedesignTokens.Radius.capsule(6)
@@ -70,7 +70,7 @@ public final class DitherHeaderPillView: DSView {
         addSubview(gallery)
         guest.iconDefinition = GuestShareIndicatorView.userIcon
         guest.setAccessibilityLabel("Guest link")
-        guest.toolTip = "Guest link"
+        guest.setTooltip("Guest link")
         guest.action = { [weak self] in self?.showGuestMenu() }
         addSubview(guest)
         setAccessibilityRole(.group)

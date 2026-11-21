@@ -77,7 +77,7 @@ struct SubagentStripPanelTests {
         #expect(row.title.text == "Task a")
         #expect(row.time.text == "3m")
         #expect(!row.time.isHidden)
-        #expect(row.toolTip == "Claude Opus 5.5")
+        #expect(row.currentTooltip == "Claude Opus 5.5")
         #expect(row.frame.height == SubagentStripPanelView.row)
         row.setHovered(true)
         row.layoutSubtreeIfNeeded()

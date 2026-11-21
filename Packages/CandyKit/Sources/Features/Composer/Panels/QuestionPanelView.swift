@@ -235,7 +235,7 @@ public final class QuestionPanelView: ComposerBannerView {
         // `rotate-180` when collapsed: the up chevron.
         chevronDown.isHidden = collapsed
         chevronUp.isHidden = !collapsed
-        header.toolTip = collapsed ? "Show the question and its options" : "Hide the question and its options"
+        header.setTooltip(collapsed ? "Show the question and its options" : "Hide the question and its options")
         dismiss.isHidden = !session.request.dismissible
         dismiss.isEnabled = !isResponding
         scroll.isHidden = collapsed

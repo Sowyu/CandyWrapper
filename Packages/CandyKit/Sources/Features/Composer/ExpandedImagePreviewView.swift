@@ -77,9 +77,9 @@ public final class ExpandedImagePreviewView: DSView {
         previous.setAccessibilityLabel("Previous media")
         next.setAccessibilityLabel("Next media")
         close.setAccessibilityLabel("Close image preview")
-        TooltipController.redesign(previous, "Previous image (←)")
-        TooltipController.redesign(next, "Next image (→)")
-        TooltipController.redesign(close, "Close image preview (Esc)")
+        TooltipController.redesign(previous, "Previous image") { "←" }
+        TooltipController.redesign(next, "Next image") { "→" }
+        TooltipController.redesign(close, "Close image preview") { "Esc" }
         addSubview(close)
         close.action = { [weak self] in self?.dismiss() }
         previous.action = { [weak self] in self?.move(-1) }
@@ -164,7 +164,7 @@ public final class ExpandedImagePreviewView: DSView {
         let label = showingDetails ? "Show screenshot"
             : source["accessibility"]?["format"]?.stringValue == "element-tree" ? "Show accessibility JSON" : "Show extracted text"
         contents.icon = showingDetails ? .image : .text
-        contents.toolTip = label
+        contents.setTooltip(label)
         contents.setAccessibilityLabel(label)
         contents.setAccessibilityValue(showingDetails ? "on" : "off")
     }

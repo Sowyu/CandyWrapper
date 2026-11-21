@@ -166,7 +166,6 @@ extension EmptyView {
         p.detailsLabel.color = Themed.color(\.mutedForeground)
         p.detailsLabel.alignment = .center
         p.detailsButton.title = p.detailsOpen ? "Hide details" : "Details"
-        toolTip = raw
         needsLayout = true
     }
 

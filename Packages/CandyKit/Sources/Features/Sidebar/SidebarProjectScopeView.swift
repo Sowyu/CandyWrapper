@@ -281,7 +281,7 @@ final class ScopeRowView: ControlView {
         addSubview(label)
         if let badge, let info = item.badge {
             badge.kind = info.machine
-            badge.toolTip = info.description
+            badge.setTooltip(info.description)
             badge.setAccessibilityElement(true)
             badge.setAccessibilityRole(.image)
             badge.setAccessibilityLabel(info.description)
@@ -289,7 +289,7 @@ final class ScopeRowView: ControlView {
         }
         if let settings, let key = item.key {
             settings.iconSize = 14
-            settings.toolTip = "Project settings for \(item.label)"
+            settings.setTooltip("Project settings for \(item.label)")
             settings.setAccessibilityElement(false)
             settings.action = { [weak self] in self?.onSettings?(key) }
             addSubview(settings)
@@ -398,7 +398,7 @@ final class ProjectPinSlot: DSView {
         button.iconSize = 14
         // `{action} ({shortcut})` with the thread pin shortcut, which pins the highlighted row (ProjectPinButton.tsx:36-55).
         let action = pinned ? "Unpin \(name)" : "Pin \(name)"
-        button.toolTip = ActiveKeymap.label(for: "thread.pin", context: KeybindingContext(["editableFocus": true])).map { "\(action) (\($0))" } ?? action
+        button.setTooltip(action, shortcut: ActiveKeymap.label(for: "thread.pin", context: KeybindingContext(["editableFocus": true])))
         button.setAccessibilityElement(false)
         button.action = { [weak self] in self?.onToggle?() }
         addSubview(button)

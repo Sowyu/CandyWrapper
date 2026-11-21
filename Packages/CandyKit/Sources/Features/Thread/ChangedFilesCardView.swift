@@ -44,7 +44,7 @@ final class ChangedFilesCardView: DSView {
         title.lineHeight = 16
         foldAll.iconSize = 12
         openDiff.iconSize = 12
-        openDiff.toolTip = "Open the full diff"
+        openDiff.setTooltip("Open the full diff")
         openDiff.setAccessibilityLabel("Open diff")
         moreFiles.isHidden = true
         [title, total, foldAll, openDiff, moreFiles].forEach(addSubview)
@@ -105,7 +105,7 @@ final class ChangedFilesCardView: DSView {
         foldAll.iconSize = 12
         let label = allExpanded ? "Collapse all folders" : "Expand all folders"
         foldAll.setAccessibilityLabel(label)
-        foldAll.toolTip = label
+        foldAll.setTooltip(label)
         rows = Self.rows(files, allExpanded: allExpanded, overrides: overrides)
         anyDirectory = rows.contains { if case .directory = $0.node { true } else { false } }
         var y = Self.headerHeight + 8

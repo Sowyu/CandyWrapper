@@ -27,7 +27,7 @@ final class ThreadMediaAttachmentView: DSView {
         self.id = id; self.name = name; self.audio = audio; self.loader = loader; self.playback = playback; self.onOpen = onOpen
         super.init(frame: .zero)
         addSubview(open); addSubview(save)
-        open.title = name; open.toolTip = "Play \(name)"
+        open.title = name
         open.action = { [weak self] in self?.begin() }
         save.action = { [weak self] in
             guard let self else { return }
@@ -78,7 +78,7 @@ final class ThreadMediaAttachmentView: DSView {
                 guard let self, let current = player?.player?.currentItem, ObjectIdentifier(current) == identity else { return }
                 releasePlayer()
                 open.title = "Retry"
-                open.toolTip = "Unable to load audio. Retry playback."
+                open.setTooltip("Unable to load audio. Retry playback.")
             }
         }
         view.setAccessibilityLabel(name)
@@ -121,7 +121,7 @@ final class ThreadMediaAttachmentView: DSView {
                     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return }
                     if FileManager.default.fileExists(atPath: target.path) { _ = try FileManager.default.replaceItemAt(target, withItemAt: temp) }
                     else { try FileManager.default.moveItem(at: temp, to: target) }
-                } catch { save.title = "Retry save"; save.toolTip = error.localizedDescription }
+                } catch { save.title = "Retry save"; save.setTooltip(error.localizedDescription) }
 
             }
         }

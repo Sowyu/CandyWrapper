@@ -226,7 +226,7 @@ public final class AppUsageReadoutView: DSView {
         memoryMeter.setLit(AppUsageLogic.lit(Double(footprint) / AppUsageLogic.memoryScale), animated: animated)
         memoryLabel.text = AppUsageLogic.memoryText(footprint)
         let tip = AppUsageLogic.tooltip(cpu: cpu, footprint: footprint)
-        if toolTip != tip { toolTip = tip; setAccessibilityValue(tip) }
+        if currentTooltip != tip { setTooltip(tip); setAccessibilityValue(tip) }
         needsLayout = true
     }
 }

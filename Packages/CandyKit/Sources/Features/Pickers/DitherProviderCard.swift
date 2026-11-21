@@ -74,7 +74,7 @@ final class DitherProviderCardView: DSView {
         name.smoothsFont = false
         addSubview(name)
         dot.layer?.cornerRadius = RedesignTokens.Radius.capsule(7)
-        dot.toolTip = info.statusText
+        dot.setTooltip(info.statusText)
         addSubview(dot)
         if let onManage {
             let b = ButtonView("Manage", variant: .ghostMuted, size: .xs)
@@ -108,7 +108,7 @@ final class DitherProviderCardView: DSView {
             l.alignment = .right
             addSubview(l)
             usedLabel = l
-            toolTip = "\(used.label): \(used.percent)% used"
+            setTooltip("\(used.label): \(used.percent)% used")
         }
         setAccessibilityElement(true)
         setAccessibilityRole(.group)

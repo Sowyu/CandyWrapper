@@ -45,7 +45,7 @@ final class ComposerPermissionsView: DSView {
         }
         if self.unrestricted?.on == true {
             let button = ButtonView("Turn off Unrestricted", variant: .outline, size: .xs)
-            button.toolTip = "Turns it off for every Claude thread on this machine."
+            button.setTooltip("Turns it off for every Claude thread on this machine.")
             button.action = { [weak self] in self?.onUnrestricted?(false) }
             addSubview(button); turnOff = button
         }

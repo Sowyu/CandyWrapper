@@ -307,7 +307,7 @@ public final class SubagentStripPanelView: ComposerBannerView {
     private func syncHeader() {
         let model = sharedModel
         headerLabel.text = headerText
-        headerLabel.toolTip = model
+        headerLabel.setTooltip(model)
         headerCount.text = countText
         let driver = model == nil ? nil : items.first?.row.driver
         guard driver != headerDriver || (headerProvider == nil) != (driver == nil) else { return }
@@ -393,7 +393,7 @@ final class SubagentStripRowView: DSView {
             mark = SubagentStripGlyph.make(r.status, size: Self.icon)
             addSubview(mark)
         }
-        toolTip = item.modelName.isEmpty ? nil : item.modelName
+        setTooltip(item.modelName.isEmpty ? nil : item.modelName)
         title.text = r.title
         title.color = r.finished ? Themed.color(\.mutedForeground) : Themed.color(\.foreground)
         time.color = r.finished ? Themed.color(\.mutedForeground, 0.7) : Themed.color(\.mutedForeground)

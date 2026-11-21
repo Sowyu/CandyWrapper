@@ -114,7 +114,7 @@ public final class BrowserChromeRowView: DSView {
             pictureInPicture.variant = pictureInPictureActive ? .secondary : .ghost
             pictureInPicture.iconColor = pictureInPictureActive ? Themed.color(\.primary) : nil
             let tip = pictureInPictureActive ? "Close floating preview" : "Float preview over chat"
-            pictureInPicture.toolTip = tip
+            pictureInPicture.setTooltip(tip)
             pictureInPicture.setAccessibilityLabel(tip)
         }
     }
@@ -128,7 +128,7 @@ public final class BrowserChromeRowView: DSView {
         super.init(frame: frameRect)
         for (button, label) in [(back, "Back"), (forward, "Forward"), (refresh, "Refresh"), (openExternal, "Open in system browser"), (more, "More")] {
             button.iconSize = 14
-            button.toolTip = label
+            button.setTooltip(label)
             button.setAccessibilityLabel(label == "More" ? "Preview menu" : label)
         }
         pictureInPicture.iconSize = 14
@@ -157,7 +157,7 @@ public final class BrowserChromeRowView: DSView {
             default: return false
             }
         }
-        pictureInPicture.toolTip = "Float preview over chat"
+        pictureInPicture.setTooltip("Float preview over chat")
         pictureInPicture.setAccessibilityLabel("Float preview over chat")
         pictureInPicture.isHidden = true
         more.isHidden = true
@@ -200,7 +200,7 @@ public final class BrowserChromeRowView: DSView {
     /// `RefreshIcon refreshing`: the glyph spins while the page loads, and the bar grows from 4% to
     /// 90% over 5.3 s, then fades 220 ms after loading stops.
     private func loadingChanged() {
-        refresh.toolTip = loading ? "Stop" : "Refresh"
+        refresh.setTooltip(loading ? "Stop" : "Refresh")
         refresh.setAccessibilityLabel(loading ? "Stop" : "Refresh")
         guard !Motion.reduced else {
             progress.opacity = loading ? 1 : 0

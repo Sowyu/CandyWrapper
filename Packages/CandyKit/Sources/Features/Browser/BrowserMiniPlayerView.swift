@@ -158,10 +158,10 @@ public final class BrowserMiniPlayerView: DSView {
             pill.layer?.cornerRadius = 10
             pill.layer?.borderWidth = 1
             pill.alphaValue = 0
-            open.toolTip = "Open in right panel"
+            open.setTooltip("Open in right panel")
             open.setAccessibilityLabel("Open preview in right panel")
             open.action = { [weak self] in self?.onOpen?() }
-            close.toolTip = "Close floating preview"
+            close.setTooltip("Close floating preview")
             close.setAccessibilityLabel("Close floating preview")
             close.action = { [weak self] in self?.onClose?() }
             [open, close].forEach(pill.addSubview)

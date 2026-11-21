@@ -324,7 +324,7 @@ final class ComposerEffortColumnView: DSView {
         heading.text = controls.effort?.label ?? (controls.others.isEmpty ? "Effort" : "Options")
         modelLabel.text = model
         // Inline, the model's name moves to the heading's tooltip and VoiceOver label.
-        heading.toolTip = inlineHeading ? "\(heading.text) for \(model)" : nil
+        heading.setTooltip(inlineHeading ? "\(heading.text) for \(model)" : nil)
         heading.setAccessibilityLabel("\(heading.text) for \(model)")
         note.text = locked ? "Your prompt contains \"ultrathink\" in the text. Remove it to change this option." : ""
         let previousFocus = focusIndex
@@ -340,7 +340,7 @@ final class ComposerEffortColumnView: DSView {
                 let current = ultrathink && effort.id == primary ? "ultrathink" : ModelTraits.currentValue(effort)?.string
                 for choice in ComposerEffortControls.choices(effort) {
                     let row = ComposerEffortRowView(.level(label: choice.label, selected: choice.id == current, isDefault: choice.isDefault == true))
-                    row.toolTip = choice.description
+                    row.setTooltip(choice.description)
                     row.isEnabled = !locked
                     rows.append(row); rowDescriptors.append((effort, .string(choice.id)))
                 }
@@ -401,7 +401,7 @@ final class ComposerEffortColumnView: DSView {
             let label = capy ? Self.sentenceCase(serverLabel) : serverLabel
             let s = ComposerFooterSegmentView(title: label, checked: selected)
             // The column's "Default" caption has no room in a segment; it moves to the tooltip and the label.
-            s.toolTip = isDefault ? [row.toolTip, "Default"].compactMap { $0 }.joined(separator: "\n") : row.toolTip
+            s.setTooltip(isDefault ? [row.currentTooltip, "Default"].compactMap { $0 }.joined(separator: "\n") : row.currentTooltip)
             if isDefault { s.setAccessibilityLabel("\(label), Default") }
             s.isEnabled = row.isEnabled
             s.action = { [weak row] in row?.action?() }
@@ -843,7 +843,7 @@ final class ComposerPickerFooterView: DSView {
             speed = ComposerFooterGroupView(ComposerEffortControls.choices(tier).map { choice in
                 let s = ComposerFooterSegmentView(title: choice.label, checked: choice.id == value,
                                                   glyph: choice.label == "Fast" || choice.label == "Ultrafast" ? ComposerFastGlyphView(ultra: choice.label == "Ultrafast") : nil)
-                s.toolTip = choice.description
+                s.setTooltip(choice.description)
                 s.action = { [weak self] in self?.onSelect?(tier, choice.id) }
                 return s
             })

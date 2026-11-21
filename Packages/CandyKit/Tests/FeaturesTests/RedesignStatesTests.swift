@@ -90,7 +90,8 @@ struct RedesignStatesTests {
             #expect(v.accessibilityRole() == .group)
             #expect(v.accessibilityLabel() == "Git could not start")
             #expect(v.accessibilityHelp() == "Check that git is installed.")
-            #expect(v.toolTip == "VcsProcessSpawnError")
+            // The raw details open under Details; the empty state carries no tooltip over its whole area.
+            #expect(v.currentTooltip == nil && v.toolTip == nil)
             let buttons = v.subviews.compactMap { $0 as? ButtonView }.filter { !$0.isHidden }
             let retry = buttons.first { $0.title == "Retry" }
             #expect(retry != nil)

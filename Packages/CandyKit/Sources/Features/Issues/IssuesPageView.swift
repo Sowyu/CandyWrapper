@@ -120,7 +120,7 @@ public final class IssuesPageView: DSView {
         sortButton.setAccessibilityLabel("Sort issues")
         trackerButton.setAccessibilityLabel("Filter by tracker")
         refreshButton.setAccessibilityLabel("Refresh issues")
-        refreshButton.toolTip = "Refresh issues"
+        refreshButton.setTooltip("Refresh issues")
         panelToggle.iconSize = 16
         banner.suffix = " Showing the issues that loaded."
         for v in [search, sortButton, filtersButton, views.button, trackerButton, refreshButton, banner] as [NSView] { document.addSubview(v) }
@@ -152,8 +152,8 @@ public final class IssuesPageView: DSView {
         trackerButton.isHidden = m.hostOptions.count <= 1
         refreshButton.isEnabled = !m.refreshing
         panelToggle.isEnabled = m.panelAvailable
-        panelToggle.toolTip = m.panelAvailable ? (m.panelOpen ? "Close right panel" : "Open right panel") : "Select an issue first"
-        panelToggle.setAccessibilityLabel(panelToggle.toolTip)
+        panelToggle.setTooltip(m.panelAvailable ? (m.panelOpen ? "Close right panel" : "Open right panel") : "Select an issue first")
+        panelToggle.setAccessibilityLabel(panelToggle.currentTooltip)
         views.preferences = preferences
         rebuildBody(old: old)
         needsLayout = true
@@ -598,7 +598,7 @@ final class IssueRowView: DSView {
         let e = r.entry
         glyph.removeFromSuperview()
         glyph = IconView(name: IssueListLogic.icon(e.state), size: 16, strokeColor: IssueListLogic.color(e.state))
-        glyph.toolTip = e.state.name
+        glyph.setTooltip(e.state.name)
         glyph.setAccessibilityLabel(e.state.name)
         addSubview(glyph)
         number.text = e.displayKey
@@ -608,7 +608,7 @@ final class IssueRowView: DSView {
             let v = PullRequestAvatarView()
             v.actor = a
             v.ring = Themed.color(\.background)
-            v.toolTip = a.login
+            v.setTooltip(a.login)
             addSubview(v)
             return v
         }

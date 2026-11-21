@@ -141,7 +141,7 @@ final class ProjectScriptsController {
             item.accessory = { [weak self] in
                 let button = ButtonView(nil, icon: .settings, variant: .ghost, size: .iconXs)
                 button.action = { [weak self] in self?.openEditor(script) }
-                button.toolTip = "Edit action"
+                button.setTooltip("Edit action")
                 return button
             }
             return item

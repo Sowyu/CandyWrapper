@@ -114,7 +114,7 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         super.init(frame: frame)
         addSubview(previous); addSubview(next)
         previous.iconColor = Themed.color(\.foreground, 0.9); next.iconColor = Themed.color(\.foreground, 0.9)
-        previous.toolTip = "Previous turn"; next.toolTip = "Next turn"
+        previous.setTooltip("Previous turn"); next.setTooltip("Next turn")
         previous.setAccessibilityLabel("Previous turn"); next.setAccessibilityLabel("Next turn")
         previous.action = { [weak self] in self?.navigate(-1) }
         next.action = { [weak self] in self?.navigate(1) }
@@ -173,7 +173,7 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     private var hovered: Int? { didSet {
         guard hovered != oldValue else { return }
         if hovered != nil { Haptics.tap(.alignment) } // a detent per turn, like a dial
-        toolTip = nil; needsDisplay = true; updateGutter(); showPreview()
+        setTooltip(nil); needsDisplay = true; updateGutter(); showPreview()
     } }
     public override var wantsUpdateLayer: Bool { false }
     public override var acceptsFirstResponder: Bool { true }

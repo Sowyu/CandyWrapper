@@ -182,13 +182,13 @@ public final class PullRequestsPageView: DSView {
             providerButton.title = nil
             providerButton.size = .icon
             providerButton.icon = hostOption.kind.map(PullRequestStyle.providerIcon) ?? .plug2
-            providerButton.toolTip = "Filter by provider: \(hostOption.label)"
+            providerButton.setTooltip("Filter by provider: \(hostOption.label)")
             _ = host
         } else {
             providerButton.size = .default
             providerButton.title = "All"
             providerButton.icon = .plug2
-            providerButton.toolTip = nil
+            providerButton.setTooltip(nil)
         }
         refreshButton.isEnabled = !m.refreshing
         refreshButton.setAccessibilityLabel(m.refreshing ? "Refreshing pull requests" : "Refresh pull requests")
@@ -707,7 +707,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
         time.text = snap?.updatedAt.map { TimestampFormat.formatRelativeTimeLabel($0.raw, nowMs: nowMs) } ?? ""
         let sources: [String: String] = ["manual": "Linked by you", "created": "Created from this thread", "agent": "Linked by the agent",
                                          "stack": "Found in the stack", "stack-dismissed": "Dismissed"]
-        number.toolTip = "\(sources[link.source.rawValue] ?? link.source.rawValue) · \(TimestampFormat.formatRelativeTimeLabel(link.linkedAt.raw, nowMs: nowMs))"
+        number.setTooltip("\(sources[link.source.rawValue] ?? link.source.rawValue) · \(TimestampFormat.formatRelativeTimeLabel(link.linkedAt.raw, nowMs: nowMs))")
         needsLayout = true
     }
 
@@ -730,12 +730,12 @@ final class PullRequestRowView: DSView, NSDraggingSource {
             let p = PullRequestStyle.checksState(s)
             checks.set(icon: p.icon, color: p.color)
             checks.isHidden = false
-            checks.toolTip = PullRequestDetailLogic.checksStateLabel(s)
+            checks.setTooltip(PullRequestDetailLogic.checksStateLabel(s))
         } else { checks.isHidden = true }
         if let d = e.reviewDecision, let p = PullRequestStyle.reviewDecision(d) {
             review.set(icon: p.icon, color: p.color)
             review.isHidden = false
-            review.toolTip = p.label
+            review.setTooltip(p.label)
         } else { review.isHidden = true }
         stack.isHidden = e.stack == nil
         stackIcon.isHidden = e.stack == nil
@@ -746,7 +746,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
         provider.isHidden = !showProvider
         avatar.actor = e.author
         login.text = e.author?.login ?? "ghost"
-        avatar.toolTip = e.author.map { a in a.name.map { n in n != a.login ? "\(n) (@\(a.login))" : a.login } ?? a.login } ?? "ghost"
+        avatar.setTooltip(e.author.map { a in a.name.map { n in n != a.login ? "\(n) (@\(a.login))" : a.login } ?? a.login } ?? "ghost")
         repository.text = e.repository
         labelChips.forEach { $0.removeFromSuperview() }
         // Three slots, each shown once the meta line is wide enough; the last visible one carries "+N".
@@ -764,7 +764,7 @@ final class PullRequestRowView: DSView, NSDraggingSource {
                 let b = ButtonView(label, icon: icon, variant: action == "close" ? .destructiveOutline : .outline, size: .xs)
                 b.iconSize = 12
                 b.isEnabled = !(action == "merge" && e.stack != nil)
-                b.toolTip = action == "merge" && e.stack != nil ? "Open this \(ChangeRequestTerminology.of(kind: e.provider).singular) to merge its stack" : "\(label) immediately"
+                b.setTooltip(action == "merge" && e.stack != nil ? "Open this \(ChangeRequestTerminology.of(kind: e.provider).singular) to merge its stack" : "\(label) immediately")
                 b.setAccessibilityLabel("\(label) #\(e.number)")
                 b.action = { [weak self] in if let entry = self?.entry { self?.onSpeedAction?(entry, action) } }
                 b.isHidden = !speedMode
@@ -954,7 +954,7 @@ final class MatchedElsewhereView: DSView {
         layer?.borderWidth = 1
         label.lineHeight = 14
         addSubview(icon); addSubview(label)
-        toolTip = "Matched in the description"
+        setTooltip("Matched in the description")
     }
     func preferredWidth(metaWidth: CGFloat) -> CGFloat { metaWidth >= 320 ? 4 + 12 + 4 + ceil(label.textWidth) + 4 + 2 : 24 }
     override func layout() {

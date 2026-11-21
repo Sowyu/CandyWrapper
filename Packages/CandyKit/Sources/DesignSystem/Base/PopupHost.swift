@@ -235,6 +235,8 @@ public struct PopupMotion: Sendable, Equatable {
     public var glides = false
     /// Opens and closes with Redesign's popover motion under Redesign, at once in the other themes.
     public var movesInRedesign = false
+    /// Redesign's tooltip: fades in over `fast` with no scale and goes at once.
+    public var fadesInRedesign = false
 
     /// At once in every theme: a tooltip that follows another one (`data-instant`).
     public static let none = PopupMotion(enterScale: nil, exitScale: nil)
@@ -243,7 +245,7 @@ public struct PopupMotion: Sendable, Equatable {
     /// Popover: scale .98 + opacity 0 both ways. T3 3105 f570294df (ui/popover.tsx:92) added the ending style.
     public static let popover = PopupMotion(enterScale: 0.98, exitScale: 0.98)
     /// Tooltip: scale .98 + opacity 0 both ways.
-    public static let tooltip = PopupMotion(enterScale: 0.98, exitScale: 0.98, glides: true)
+    public static let tooltip = PopupMotion(enterScale: 0.98, exitScale: 0.98, glides: true, fadesInRedesign: true)
     /// PreviewCard: the same, but its positioner has no transition (preview-card.tsx:26), so it moves at once.
     public static let previewCard = PopupMotion(enterScale: 0.98, exitScale: 0.98)
 }
@@ -536,6 +538,7 @@ public final class PopupHost: DSView {
     private func animate(_ popup: OpenPopup, entering: Bool) {
         let container = popup.container
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if dither, popup.motion.fadesInRedesign { return fadeTooltip(popup, entering: entering) }
         var scale = entering ? popup.motion.enterScale : popup.motion.exitScale
         if dither, scale != nil || popup.motion.movesInRedesign { scale = RedesignTokens.Motion.scale }
         guard let scale, !Motion.reduced, window != nil, let layer = container.layer else {
@@ -573,6 +576,20 @@ public final class PopupHost: DSView {
         layer.add(transform, forKey: "popup.transform")
         layer.add(fade, forKey: "popup.opacity")
         CATransaction.commit()
+    }
+
+    /// Redesign's tooltip: opacity in over `fast` on the ease-out, out at once. Reduce Motion shows it at once.
+    private func fadeTooltip(_ popup: OpenPopup, entering: Bool) {
+        let container = popup.container
+        guard entering else { container.layer?.removeAllAnimations(); container.removeFromSuperview(); return }
+        guard !Motion.reduced, window != nil, let layer = container.layer else { return }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        fade.duration = RedesignTokens.Motion.fast
+        fade.timingFunction = RedesignTokens.Motion.curve
+        fade.fillMode = .both
+        layer.add(fade, forKey: "popup.opacity")
     }
 }
 

@@ -192,7 +192,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             }.max() ?? 36
         }
         // ponytail: AppKit tooltips instead of T3's TooltipPopup (left side, 8pt offset, no delay); swap for TooltipView when tooltips get a shared host
-        for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.toolTip = r.tooltip }
+        for (b, r) in zip(railButtons, sections.rail) { b.isDisabled = r.isDisabled; b.setTooltip(r.tooltip) }
         // Reuse unchanged rows while filtering (T3 74ca17b43, ModelListRow.tsx:18-43).
         var previous = Dictionary(rowViews.map { (Self.rowKey($0.row), $0) }, uniquingKeysWith: { first, _ in first })
         var modelIndex = 0
@@ -912,7 +912,7 @@ final class ModelRowView: DSView {
                 kbd = k
             }
             let s = StarButtonView(favorite: item.isFavorite)
-            s.toolTip = item.isFavorite ? "Remove from favorites" : "Add to favorites"
+            s.setTooltip(item.isFavorite ? "Remove from favorites" : "Add to favorites")
             s.action = { [weak picker] in picker?.toggleFavorite(item) }
             addSubview(s)
             star = s

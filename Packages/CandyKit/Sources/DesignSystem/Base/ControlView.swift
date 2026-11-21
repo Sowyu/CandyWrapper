@@ -249,7 +249,13 @@ open class ControlView: DSView {
         if let tip = TooltipController.redesignText(for: self) { return tip }
         if let explicit = super.accessibilityLabel(), !explicit.isEmpty { return explicit }
         guard accessibilityTitle()?.isEmpty ?? true else { return nil }
-        return TooltipController.text(for: self) ?? toolTip
+        return TooltipController.text(for: self)
+    }
+
+    /// An icon button already speaks its tooltip as its label; the help repeats it only when the words differ.
+    open override func accessibilityHelp() -> String? {
+        let help = super.accessibilityHelp()
+        return help == accessibilityLabel() ? nil : help
     }
 
     open override func isAccessibilityEnabled() -> Bool { state.enabled }

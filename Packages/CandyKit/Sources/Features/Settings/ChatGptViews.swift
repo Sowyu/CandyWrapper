@@ -250,11 +250,9 @@ public final class CodexManagedRuntimeFields {
         let paths = provider?.runtimePaths
         home.text = paths?["homePath"]?.stringValue ?? ""
         home.placeholder = "Unavailable"
-        home.toolTip = paths?["homePath"]?.stringValue
         let shadowPath = paths?["shadowHomePath"]?.stringValue
         shadow.text = shadowPath ?? ""
         shadow.placeholder = paths != nil ? "Not used" : "Unavailable"
-        shadow.toolTip = shadowPath
         shadowRow.detail = shadowPath != nil ? "Account-specific home sharing the Codex state above." : "This instance uses the shared Codex home directly."
     }
 
@@ -284,7 +282,6 @@ public final class CodexManagedRuntimeFields {
             subscription = context.subscribe?(environment, "provider.install.subscribe", .object(["instanceId": .string(instance)])) { [weak self] state in
                 let path = state["executablePath"]?.stringValue ?? ""
                 self?.input.text = path
-                self?.input.toolTip = path.isEmpty ? nil : path
             }
         }
     }

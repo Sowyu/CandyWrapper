@@ -514,7 +514,7 @@ final class GitController {
         split.primary.text = q.label
         split.primary.isEnabled = true
         split.primary.looksDisabled = q.disabled
-        split.primary.toolTip = q.disabled ? q.hint ?? "This action is currently unavailable." : nil
+        split.primary.setTooltip(q.disabled ? q.hint ?? "This action is currently unavailable." : nil)
         // #31972 (GitActionsControl.tsx:1517-1536, 1652-1653, 1764 at 4928): an empty menu stays shut, and the
         // pointer coming onto the group asks for fresh status, since terminal edits and commits publish none.
         let status = self.status

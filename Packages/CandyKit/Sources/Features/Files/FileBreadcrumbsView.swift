@@ -26,7 +26,7 @@ final class FileBreadcrumbsView: DSView {
         let host = path.hasPrefix("/")
         labels = crumbs.map { crumb in
             let b = CrumbButton(crumb.label, current: crumb.path == self.path, interactive: crumb.path != self.path)
-            b.toolTip = crumb.path.isEmpty ? projectName : crumb.path
+            b.setTooltip(crumb.path.isEmpty || crumb.path == crumb.label ? nil : crumb.path)
             b.onClick = { [weak self] in
                 guard let self else { return }
                 self.onOpenFile?(crumb.path.isEmpty ? "." : crumb.path)

@@ -662,7 +662,7 @@ public final class T3ConnectAvatarButton: ControlView {
     public var email = "" {
         didSet {
             setAccessibilityLabel("Open user button")
-            toolTip = email
+            setTooltip(email)
         }
     }
     /// The account image, decoded at display size, or nil for the initials.
@@ -891,7 +891,7 @@ public final class SettingsHeaderView: TopbarDragView {
         restore.isHidden = true
         addSubview(restore)
         close.isHidden = true
-        close.toolTip = "Close (Esc)"
+        close.setTooltip("Close", shortcut: "Esc")
         close.setAccessibilityLabel("Close")
         addSubview(close)
     }

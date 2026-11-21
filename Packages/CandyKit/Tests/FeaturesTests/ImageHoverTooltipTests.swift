@@ -15,7 +15,7 @@ import T3Store
     static func expectNoTooltip(_ views: [NSView], _ where_: String) {
         #expect(!views.isEmpty, "\(where_): no image views")
         for view in views {
-            #expect(view.toolTip == nil, "\(where_): toolTip \(view.toolTip ?? "")")
+            #expect(view.toolTip == nil && view.currentTooltip == nil, "\(where_): tooltip \(view.currentTooltip ?? view.toolTip ?? "")")
             #expect(!view.trackingAreas.contains { $0.owner is TooltipController }, "\(where_): tooltip controller")
         }
     }
@@ -74,9 +74,22 @@ import T3Store
         func walk(_ v: NSView) { all.append(v); v.subviews.forEach(walk) }
         walk(view)
         #expect(all.contains { $0.accessibilityLabel()?.hasPrefix("kept.png") == true }, "gallery tile")
-        #expect(!all.contains { $0.toolTip == "/tmp/kept.png" }, "gallery grid")
+        #expect(!all.contains { ($0.currentTooltip ?? $0.toolTip) == "/tmp/kept.png" }, "gallery grid")
         view.large = 0
         all = []; walk(view)
-        #expect(!all.contains { $0.toolTip == "/tmp/kept.png" }, "gallery large picture")
+        #expect(!all.contains { ($0.currentTooltip ?? $0.toolTip) == "/tmp/kept.png" }, "gallery large picture")
+    }
+}
+
+/// Settings > General > Tooltips: a client setting, on by default, found by search.
+@MainActor @Suite struct TooltipSettingTests {
+    @Test func defaultsOnAndIsSearchable() {
+        #expect(ClientSettings.defaults.string("tooltips") == "on")
+        #expect(ClientSettings.fields["tooltips"] != nil)
+        let ids = SettingsSearch.catalogEntries.compactMap { entry -> String? in
+            if case .item(let item) = entry { return item.id } else { return nil }
+        }
+        #expect(ids.contains("tooltips"))
+        #expect(TooltipMode(rawValue: "delayed") == .delayed && TooltipMode(rawValue: "off") == .off)
     }
 }

@@ -263,7 +263,7 @@ final class AccentSwatchButton: ControlView {
         scalesWhenPressed = false
         setAccessibilityRole(.radioButton)
         setAccessibilityLabel(accent.label)
-        toolTip = accent.label
+        setTooltip(accent.label)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }

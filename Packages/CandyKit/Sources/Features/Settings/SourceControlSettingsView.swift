@@ -851,7 +851,7 @@ final class IntervalDetailView: DSView, SettingsGroupRow {
     let reset = ResetSlot(label: "fetch interval")
     let field: NumberFieldView
     private let unit = LabelView("seconds", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
-    var inertReason: String? { didSet { field.isEnabled = inertReason == nil; field.toolTip = inertReason } }
+    var inertReason: String? { didSet { field.isEnabled = inertReason == nil; field.setTooltip(inertReason) } }
 
     init(title text: String, detail description: String, policy: String, step: Double) {
         field = NumberFieldView(value: 0, size: .sm)

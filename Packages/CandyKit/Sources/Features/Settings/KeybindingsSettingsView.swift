@@ -497,7 +497,7 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
         super.init(frame: .zero)
         settingsRow.detailView = when
         settingsRow.accessories = badge.map { [$0] } ?? []
-        settingsRow.toolTip = row.command
+        settingsRow.setTooltip(row.command)
         addSubview(settingsRow)
         warning.iconColor = Themed.color(\.warning)
         warning.iconSize = 14

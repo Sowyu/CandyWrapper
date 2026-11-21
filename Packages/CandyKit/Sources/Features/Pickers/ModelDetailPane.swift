@@ -119,25 +119,24 @@ final class ModelDetailPaneView: DSView {
         addSubview(glyph); icon = glyph
         name.text = content.name
         provider.text = content.provider
-        name.toolTip = "\(content.provider) · \(content.slug)\nReturn picks, Right picks and goes to Reasoning, ⌘1 to ⌘9 jump"
         about.text = content.description ?? ""
         about.isHidden = content.description == nil
         let credit = ModelNotes.source.map { "From \($0.name) (\($0.licence) licence), fetched \($0.fetched)." }
         // Two lines show; the tooltip and VoiceOver get the whole description.
-        about.toolTip = [content.description, credit].compactMap { $0 }.joined(separator: "\n\n")
+        about.setTooltip([content.description, credit].compactMap { $0 }.joined(separator: "\n\n"))
         about.setAccessibilityLabel(content.description)
         priceRows = content.prices.isEmpty ? [row("No price known", "", credit: nil)] : content.prices.map { row($0.label, $0.value, credit: nil) }
         factRows = content.facts.map { row($0.label, $0.value, credit: credit) }
         let inputs = content.inputs.compactMap(Self.input)
         if !inputs.isEmpty {
             let l = LabelView("Reads", font: DSFont.ui(12))
-            l.lineHeight = 20; l.smoothsFont = false; l.toolTip = credit
+            l.lineHeight = 20; l.smoothsFont = false
             addSubview(l)
             readsLabel = l
             l.setAccessibilityLabel("Reads: " + inputs.map(\.1).joined(separator: ", "))
             inputIcons = inputs.map { name, spoken in
                 let v = IconView(name: name, size: Self.inputIcon)
-                v.toolTip = spoken
+                v.setTooltip(spoken)
                 v.setAccessibilityElement(true)
                 v.setAccessibilityRole(.image)
                 v.setAccessibilityLabel(spoken)
@@ -152,7 +151,7 @@ final class ModelDetailPaneView: DSView {
     /// A label at the left and its value at the right in tabular figures.
     private func row(_ label: String, _ value: String, credit: String?) -> (LabelView, LabelView) {
         let l = LabelView(label, font: DSFont.ui(12)), v = LabelView(value, font: DSFont.ui(13).monospacedDigits)
-        for x in [l, v] { x.lineHeight = 20; x.smoothsFont = false; x.toolTip = credit; addSubview(x) }
+        for x in [l, v] { x.lineHeight = 20; x.smoothsFont = false; addSubview(x) }
         v.alignment = .right
         if !value.isEmpty { l.setAccessibilityLabel("\(label): \(value)") }
         return (l, v)
