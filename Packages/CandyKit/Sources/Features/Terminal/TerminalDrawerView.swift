@@ -8,6 +8,9 @@ import T3Store
 /// two or more terminals the list aside sits at the right (`gap-1.5`) and carries the actions
 /// instead. Without terminals it shows T3's empty state. In a right panel tab (`mode="panel"`) it
 /// has no top border and no handle.
+///
+/// Redesign draws it as a card (`isCard`) inset from the thread and the window like the right panel: rounded, clipped,
+/// with a rim and no top border. Its height handle then lives in the gap above it, in the thread panel.
 @MainActor
 public final class TerminalDrawerView: DSView {
     /// The drag handle (`h-1.5`).
@@ -25,7 +28,28 @@ public final class TerminalDrawerView: DSView {
 
     /// A right panel tab's terminal: no top border, no height handle.
     public var isPanel = false {
-        didSet { handle.isHidden = isPanel; border.isHidden = isPanel; needsLayout = true }
+        didSet { syncChrome() }
+    }
+
+    /// Redesign's inset card: rounded corners that clip the terminals, the rim, no top border and no handle of its own.
+    /// The actions sit in a compact row at the card's top right, over the list when it shows.
+    public var isCard = false {
+        didSet { guard isCard != oldValue else { return }; syncChrome(); needsDisplay = true }
+    }
+
+    /// The keyboard is in one of the drawer's terminals; the card's rim takes the accent.
+    public private(set) var hasKeyFocus = false {
+        didSet { if hasKeyFocus != oldValue { needsDisplay = true } }
+    }
+    private var responderObservation: NSKeyValueObservation?
+
+    private func syncChrome() {
+        handle.isHidden = isPanel || isCard
+        border.isHidden = isPanel || isCard
+        actions.isCard = isCard
+        list.isCard = isCard
+        actions.isHidden = panes.isEmpty || (listShown && !isCard)
+        needsLayout = true
     }
 
     /// The panes on screen; empty shows the empty state.
@@ -49,7 +73,7 @@ public final class TerminalDrawerView: DSView {
         listShown = !empty && model != nil
         if let model { list.apply(model) }
         list.isHidden = !listShown
-        actions.isHidden = empty || listShown
+        actions.isHidden = empty || (listShown && !isCard)
         needsLayout = true
     }
 
@@ -87,20 +111,27 @@ public final class TerminalDrawerView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        let top: CGFloat = isPanel ? 0 : 1
+        let top: CGFloat = isPanel || isCard ? 0 : 1
         border.frame = CGRect(x: 0, y: 0, width: w, height: 1)
         handle.frame = NSRect(x: 0, y: 0, width: w, height: Self.handleHeight)
         let content = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
         if listShown {
             let listWidth = TerminalListAsideView.width
             list.frame = NSRect(x: content.maxX - listWidth, y: content.minY, width: listWidth, height: content.height)
-            grid.frame = NSRect(x: 0, y: content.minY, width: max(0, content.width - listWidth - 6), height: content.height)
+            // The card keeps one surface: the list meets the terminals on a hairline, with no gap.
+            grid.frame = NSRect(x: 0, y: content.minY, width: max(0, content.width - listWidth - (isCard ? 0 : 6)), height: content.height)
         } else {
             grid.frame = content
         }
         let size = actions.intrinsicContentSize
-        // `absolute right-2 top-2`, from the aside's border box.
-        actions.frame = NSRect(x: w - 8 - size.width, y: 8, width: size.width, height: size.height)
+        if isCard {
+            // The card's top row, like the right panel's: 24pt controls 4pt in from the top and right.
+            let row = CardTopRow(width: w, pill: .zero, trailing: [size])
+            actions.frame = row.trailing[0]
+        } else {
+            // `absolute right-2 top-2`, from the aside's border box.
+            actions.frame = NSRect(x: w - 8 - size.width, y: 8, width: size.width, height: size.height)
+        }
         // Empty state: `flex-col items-center justify-center gap-3 px-4 py-6 text-sm`.
         let labelHeight: CGFloat = 20, buttonHeight = emptyButton.intrinsicContentSize.height
         let block = labelHeight + 12 + buttonHeight
@@ -130,12 +161,33 @@ public final class TerminalDrawerView: DSView {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         syncEmpty()
+        // The first responder lives deep in SwiftTerm, whose focus methods this module cannot override; the window
+        // reports every change instead. Only the card shows focus.
+        responderObservation = window.map { window in
+            window.observe(\.firstResponder, options: [.new]) { [weak self] _, _ in
+                MainActor.assumeIsolated { self?.syncKeyFocus() }
+            }
+        }
+        syncKeyFocus()
+    }
+
+    func syncKeyFocus() {
+        hasKeyFocus = isCard && !panes.isEmpty && (window?.firstResponder as? NSView)?.isDescendant(of: self) == true
     }
 
     public override func updateLayer() {
         // The split container is `bg-(--terminal-background)`, the app's background.
         layer?.backgroundColor = WindowGlass.pick(stock: Themed.color(\.background), frost: WindowGlass.denseFill).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border, 0.8).cgColor(in: self)
+        if let layer {
+            layer.cornerRadius = isCard ? RedesignTokens.Radius.panel : 0
+            layer.cornerCurve = .continuous
+            layer.borderWidth = isCard ? 1 : 0
+            let dark = effectiveAppearance.isDark
+            // Focus shows quietly: the rim takes the accent at low strength instead of the text color.
+            layer.borderColor = !isCard ? nil : hasKeyFocus ? Themed.color(\.primary, RedesignTokens.Surface.focusRim).cgColor(in: self)
+                : RedesignTokens.Surface.rim(dark: dark).cgColor
+        }
         emptyLabel.color = Themed.color(\.mutedForeground)
     }
 
@@ -180,6 +232,27 @@ public final class TerminalActionCluster: DSView {
     private var tooltips: [Action: TooltipController] = [:]
     private let rules = (0..<3).map { _ in CALayer() }
     public var onAction: ((Action) -> Void)?
+    /// Redesign's card row: 24pt buttons at the control corner, 2pt apart, with no border, rules or shadow.
+    var isCard = false {
+        didSet {
+            guard isCard != oldValue else { return }
+            for (action, button) in buttons {
+                button.isCard = isCard
+                let end = action == .split || action == .close
+                button.layer?.cornerRadius = isCard ? RedesignTokens.Radius.control : end ? 7 : 0
+                button.layer?.cornerCurve = .continuous
+                button.layer?.maskedCorners = isCard ? [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+                    : action == .split ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+                    : action == .close ? [.layerMaxXMinYCorner, .layerMaxXMaxYCorner] : button.layer?.maskedCorners ?? []
+            }
+            for rule in rules { rule.isHidden = isCard }
+            invalidateIntrinsicContentSize()
+            needsLayout = true
+            needsDisplay = true
+        }
+    }
+    static let cardButton: CGFloat = 24
+    static let cardSpacing: CGFloat = 2
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -209,7 +282,13 @@ public final class TerminalActionCluster: DSView {
     }
 
     /// `p-1` around `size-3.25`: 21pt square buttons, three 1pt rules, a 1pt border all round.
-    public override var intrinsicContentSize: NSSize { NSSize(width: 2 + 4 * 21 + 3, height: 2 + 21) }
+    public override var intrinsicContentSize: NSSize {
+        if isCard {
+            let n = CGFloat(Action.allCases.count)
+            return NSSize(width: n * Self.cardButton + (n - 1) * Self.cardSpacing, height: Self.cardButton)
+        }
+        return NSSize(width: 2 + 4 * 21 + 3, height: 2 + 21)
+    }
 
     /// The tooltip texts (`splitTerminalActionLabel` and friends, with shortcut labels).
     public func setLabels(split: String, splitVertical: String, new: String, close: String) {
@@ -230,6 +309,14 @@ public final class TerminalActionCluster: DSView {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         box.frame = bounds.insetBy(dx: -box.outset, dy: -box.outset)
+        if isCard {
+            for (i, action) in Action.allCases.enumerated() {
+                let x = CGFloat(i) * (Self.cardButton + Self.cardSpacing)
+                buttons[action]?.frame = NSRect(x: x, y: 0, width: Self.cardButton, height: Self.cardButton)
+            }
+            CATransaction.commit()
+            return
+        }
         var x: CGFloat = 1
         for (i, action) in Action.allCases.enumerated() {
             buttons[action]?.frame = NSRect(x: x, y: 1, width: 21, height: 21)
@@ -244,11 +331,17 @@ public final class TerminalActionCluster: DSView {
 
     public override func updateLayer() {
         var style = BoxStyle()
-        style.radius = DesignGeometry.radius(8, in: self)
-        style.fill = WindowGlass.paneFill
-        style.border = Themed.color(\.border, 0.8)
-        // `shadow-xs`: 0 1px 2px rgb(0 0 0 / 5%).
-        style.shadows = [BoxShadow(y: 1, blur: 2, color: Themed.black(0.05))]
+        if isCard {
+            // The card's own fill behind the buttons, so terminal text under the row never shows through them.
+            style.radius = RedesignTokens.Radius.control
+            style.fill = WindowGlass.pick(stock: Themed.color(\.background), frost: WindowGlass.denseFill)
+        } else {
+            style.radius = DesignGeometry.radius(8, in: self)
+            style.fill = WindowGlass.paneFill
+            style.border = Themed.color(\.border, 0.8)
+            // `shadow-xs`: 0 1px 2px rgb(0 0 0 / 5%).
+            style.shadows = [BoxShadow(y: 1, blur: 2, color: Themed.black(0.05))]
+        }
         box.boxStyle = style
         box.setNeedsDisplay()
         for rule in rules { rule.backgroundColor = Themed.color(\.border, 0.8).cgColor(in: self) }
@@ -258,6 +351,7 @@ public final class TerminalActionCluster: DSView {
     final class Button: ControlView {
         private let icon: IconView
         var limited = false { didSet { alphaValue = limited ? 0.64 : 1; needsDisplay = true } }
+        var isCard = false { didSet { needsLayout = true } }
 
         init(icon name: IconName) {
             icon = IconView(name: name, size: 13)
@@ -269,7 +363,8 @@ public final class TerminalActionCluster: DSView {
 
         override func layout() {
             super.layout()
-            icon.frame = NSRect(x: 4, y: 4, width: 13, height: 13)
+            let inset = ((bounds.width - 13) / 2).rounded(.down)
+            icon.frame = NSRect(x: isCard ? inset : 4, y: isCard ? inset : 4, width: 13, height: 13)
         }
 
         override func updateLayer() {

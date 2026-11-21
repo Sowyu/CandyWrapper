@@ -117,6 +117,21 @@ struct RedesignBaselineTests {
             cardThread.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
             try capture("thread-right-panel-diff", cardHost, NSSize(width: 1200, height: 780))
             #expect(cardThread.rightPanel.cardRow?.tabs.minY == 0)
+            // The terminal drawer card split in two beside the right panel card. SwiftTerm's cells paint white offscreen, so
+            // the panes show only their padding box and background, as in TerminalDrawerFidelityTests.
+            let panes = ["term-1", "term-2"].map { id -> (id: String, surface: TerminalSurfaceView) in
+                let surface = TerminalSurfaceView()
+                surface.terminal.isHidden = true
+                return (id, surface)
+            }
+            var terminals = TerminalDrawerState()
+            terminals.newTerminal("term-1")
+            terminals.split("term-2", direction: .horizontal)
+            cardThread.terminalDrawer.show(panes, direction: .horizontal, activeId: "term-2",
+                                           list: TerminalListModel.make(terminals, label: { TerminalLabels.label($0) }, closeShortcut: nil))
+            cardThread.setTerminal(open: true, height: 260)
+            try capture("thread-terminal-drawer", cardHost, NSSize(width: 1200, height: 780))
+            cardThread.setTerminal(open: false, height: 260)
             let sidebar = SidebarContentView()
             sidebar.windowedMac = false; sidebar.stage = .nightly
             sidebar.now = { SidebarPreview.referenceNow }
@@ -280,7 +295,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 126)
+        #expect(count == 128)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

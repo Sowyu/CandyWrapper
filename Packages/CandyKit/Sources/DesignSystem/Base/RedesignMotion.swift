@@ -86,7 +86,9 @@ public enum RedesignMotion {
 
     /// The right panel: slides `panelShift` in from its edge and fades in as one flattened layer over `large`, so no
     /// text shows through other text, or leaves the same way over `fast`. `edge` is +1 for a panel on the right.
-    public static func panel(_ layer: CALayer, entering: Bool, edge: CGFloat = 1, completion: (@MainActor () -> Void)? = nil) {
+    /// `vertical` moves it along y instead, +1 for a card at the bottom such as the terminal drawer.
+    public static func panel(_ layer: CALayer, entering: Bool, edge: CGFloat = 1, vertical: Bool = false,
+                             completion: (@MainActor () -> Void)? = nil) {
         // Reduce Motion: a plain fade, no travel.
         guard !Motion.reduced else {
             if entering { fade(layer) }
@@ -95,7 +97,7 @@ public enum RedesignMotion {
         }
         // One flattened image fades, never the panel's text over what lies behind it.
         layer.allowsGroupOpacity = true
-        run(layer, key: "redesign.panel", axis: "x", offset: edge * Tokens.panelShift, entering: entering,
+        run(layer, key: "redesign.panel", axis: vertical ? "y" : "x", offset: edge * Tokens.panelShift, entering: entering,
             duration: entering ? Tokens.large : Tokens.fast, completion: completion)
     }
 }
