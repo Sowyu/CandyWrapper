@@ -73,6 +73,7 @@ final class RightPanelView: DSView {
     private func syncLauncherSideChat() { lazyLauncher.set(\.sideChat, sideChatOffered ? sideChatDisabledReason == nil : nil) }
     let add = ButtonView(nil, icon: .plus, variant: .ghostMuted, size: .iconXs).menuTrigger()
     private var tabs: [PanelTabView] = []
+    var tabViews: [PanelTabView] { tabs }
     /// The tab list (`ScrollArea` with hidden scrollbars): clips at `pr-28`, the room the window's
     /// panel controls take, and keeps the active tab in view.
     private let strip = RightPanelTabStripView()
@@ -426,15 +427,25 @@ final class RightPanelView: DSView {
         let edge: CGFloat = isMaximized || isCard ? 0 : 1
         border.isHidden = isMaximized || isCard
         border.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
-        let top = barTop
-        strip.frame = NSRect(x: edge + 8, y: top, width: max(0, bounds.width - edge - 8 - 112), height: Self.tabBarHeight)
+        // Redesign's card shares its top row with the header pill (`CardTopRow`); elsewhere the bar is 52 tall.
+        let row = isCard ? cardRow : nil
+        let barHeight = row?.tabs.height ?? Self.tabBarHeight
+        let contentTop = row?.height ?? Self.tabBarHeight
+        if let row {
+            strip.frame = NSRect(x: edge + row.tabs.minX, y: row.tabs.minY, width: row.tabs.width, height: row.tabs.height)
+        } else {
+            strip.frame = NSRect(x: edge + 8, y: 0, width: max(0, bounds.width - edge - 8 - 112), height: Self.tabBarHeight)
+        }
         let widths = tabs.map(\.preferredWidth)
         let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24
         let overflow = total > strip.bounds.width
-        scrollLeft.isHidden = !overflow; scrollRight.isHidden = !overflow
-        if overflow { strip.frame.size.width = max(0, strip.frame.width - 48) }
-        scrollLeft.frame = NSRect(x: strip.frame.maxX, y: top + 14, width: 24, height: 24)
-        scrollRight.frame = NSRect(x: strip.frame.maxX + 24, y: top + 14, width: 24, height: 24)
+        // In the card the arrows go when they would leave less than one tab and the +; the fade and the wheel remain.
+        let arrows = overflow && (row == nil || strip.frame.width - 48 >= CardTopRow.minTabRoom)
+        scrollLeft.isHidden = !arrows; scrollRight.isHidden = !arrows
+        if arrows { strip.frame.size.width = max(0, strip.frame.width - 48) }
+        let arrowY = strip.frame.midY - 12
+        scrollLeft.frame = NSRect(x: strip.frame.maxX, y: arrowY, width: 24, height: 24)
+        scrollRight.frame = NSRect(x: strip.frame.maxX + 24, y: arrowY, width: 24, height: 24)
         if revealActiveTab, let i = tabs.firstIndex(where: \.isActive) {
             let start = widths[..<i].reduce(0, +) + CGFloat(i) * 4
             let end = start + widths[i] + (i == tabs.count - 1 ? 4 + 24 : 0)
@@ -445,14 +456,16 @@ final class RightPanelView: DSView {
         revealActiveTab = false
         scrollLeft.isEnabled = stripOffset > 1
         scrollRight.isEnabled = stripOffset + strip.bounds.width < total - 1
+        syncStripFade(left: row != nil && scrollLeft.isEnabled, right: row != nil && scrollRight.isEnabled)
+        let tabY = (barHeight - 24) / 2
         var x: CGFloat = -stripOffset
         for (tab, w) in zip(tabs, widths) {
-            tab.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: w, height: 24)
+            tab.frame = NSRect(x: x, y: tabY, width: w, height: 24)
             x += w + 4
         }
         layoutDrag()
-        add.frame = NSRect(x: x, y: (Self.tabBarHeight - 24) / 2, width: 24, height: 24)
-        let content = NSRect(x: edge, y: top + Self.tabBarHeight, width: max(0, bounds.width - edge), height: max(0, bounds.height - top - Self.tabBarHeight))
+        add.frame = NSRect(x: x, y: tabY, width: 24, height: 24)
+        let content = NSRect(x: edge, y: contentTop, width: max(0, bounds.width - edge), height: max(0, bounds.height - contentTop))
         lazyDiff.loaded?.frame = content
         if let files = lazyFiles.loaded, files.superview === self { files.frame = content }
         lazyFile.loaded?.frame = content
@@ -464,7 +477,7 @@ final class RightPanelView: DSView {
         device.frame = content
         sideChatHost.frame = content
         // The launcher centers against the whole panel (`pb-(--workspace-topbar-height)`).
-        lazyLauncher.loaded?.frame = NSRect(x: edge, y: content.minY, width: content.width, height: max(0, content.height - Self.tabBarHeight))
+        lazyLauncher.loaded?.frame = NSRect(x: edge, y: content.minY, width: content.width, height: max(0, content.height - contentTop))
         // The card clips every surface to its corners, the WKWebView and the terminal included.
         if let layer {
             layer.cornerRadius = isCard ? RedesignTokens.Radius.panel : 0
@@ -477,9 +490,25 @@ final class RightPanelView: DSView {
     /// Redesign draws the panel as a card inset from the window (the user, 2026-11-21: "do the curve out at the corners
     /// and also extend it upwards"): rounded, clipped, with a rim and no left border.
     var isCard = false { didSet { if isCard != oldValue { needsLayout = true; needsDisplay = true } } }
-    /// How far the tab bar sits below the panel's top. Redesign's card reaches up into the window's tab band, so its tab
-    /// bar starts under the header pill, which floats over the card's top.
-    var barTop: CGFloat = 0 { didSet { if barTop != oldValue { needsLayout = true } } }
+    /// Redesign's card's top row: its tabs share it with the header pill, which floats in the card's top right corner,
+    /// and the maximize button left of the pill. The panel's owner sets it from the card's width and the pill's.
+    var cardRow: CardTopRow? { didSet { if cardRow != oldValue { needsLayout = true } } }
+
+    /// Fades the tab strip's edges where more tabs sit past them.
+    private func syncStripFade(left: Bool, right: Bool) {
+        guard let layer = strip.layer else { return }
+        guard left || right, strip.bounds.width > 0 else { layer.mask = nil; return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        stripFade.frame = layer.bounds
+        stripFade.startPoint = CGPoint(x: 0, y: 0.5); stripFade.endPoint = CGPoint(x: 1, y: 0.5)
+        let f = NSNumber(value: Double(min(0.4, RedesignTokens.Space.l / strip.bounds.width)))
+        let clear = NSColor.clear.cgColor, opaque = NSColor.black.cgColor
+        stripFade.colors = [left ? clear : opaque, opaque, opaque, right ? clear : opaque]
+        stripFade.locations = [0, f, NSNumber(value: 1 - f.doubleValue), 1]
+        layer.mask = stripFade
+        CATransaction.commit()
+    }
+    private let stripFade = CAGradientLayer()
 
     /// Over the thread in a narrow window, where the Glass theme's clear fill would show the thread through.
     var isSheet = false { didSet { if isSheet != oldValue { needsDisplay = true } } }

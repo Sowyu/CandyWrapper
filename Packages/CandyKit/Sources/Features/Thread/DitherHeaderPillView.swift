@@ -81,6 +81,16 @@ public final class DitherHeaderPillView: DSView {
         invalidateIntrinsicContentSize()
         needsLayout = true
         superview?.needsLayout = true
+        reportWidth()
+    }
+    /// The pill's width changed: the right panel's card row gives the pill room in its top row.
+    var onResize: (() -> Void)?
+    private var reportedWidth: CGFloat = -1
+    private func reportWidth() {
+        let width = intrinsicContentSize.width
+        guard width != reportedWidth else { return }
+        reportedWidth = width
+        onResize?()
     }
 
     /// The views in order, each with its visibility now.
@@ -110,7 +120,7 @@ public final class DitherHeaderPillView: DSView {
             x += size.width
         }
         // The cost appearing or a toggle hiding changes the width the tab strip gives the pill.
-        if abs(intrinsicContentSize.width - bounds.width) > 0.5 { superview?.needsLayout = true }
+        if abs(intrinsicContentSize.width - bounds.width) > 0.5 { superview?.needsLayout = true; reportWidth() }
         frost.frame = bounds
         CATransaction.begin(); CATransaction.setDisableActions(true)
         galleryDot.frame = NSRect(x: gallery.bounds.width - 8, y: 3, width: 6, height: 6)

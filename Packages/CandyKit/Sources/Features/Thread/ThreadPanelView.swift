@@ -909,6 +909,7 @@ public final class ThreadPanelView: DSView {
         maximize.setAccessibilityLabel("Maximize panel")
         maximize.isHidden = true
         maximize.onPressedChange = { [weak self] _ in self?.toggleMaximized() }
+        header.pill.onResize = { [weak self] in self?.needsLayout = true }
         addSubview(maximize)
         for slide in [panelSlide, terminalSlide] {
             slide.onFrame = { [weak self] _ in self?.layoutNow() }
@@ -1294,14 +1295,44 @@ public final class ThreadPanelView: DSView {
         }
         needsLayout = true
         header.needsLayout = true
+        let pillBefore = redesignMotion ? header.pill.frame : nil
         if open != wasOpen || panelSlide.isRunning {
             panelSlide.run(to: open ? 1 : 0, duration: slides ? SettingsPanelMotion.duration : 0, in: self)
             layoutNow()
         }
+        if let pillBefore { glidePill(from: pillBefore, entering: open) }
         if redesignMotion, open {
             if let layer = rightPanel.layer { RedesignMotion.panel(layer, entering: true) }
             if !rightPanelBackdrop.isHidden, let layer = rightPanelBackdrop.layer { RedesignMotion.fade(layer) }
         }
+    }
+
+    /// The view under `point` (window coordinates) in Redesign's card row, which sits in the window's tab band above
+    /// this view's bounds, where AppKit's hit testing does not reach.
+    private func cardRowHit(_ point: NSPoint) -> NSView? {
+        guard rightPanelOpen, !rightPanel.isHidden, window != nil, let row = rightPanel.cardRow else { return nil }
+        let p = convert(point, from: nil)
+        guard NSRect(x: rightPanel.frame.minX, y: rightPanel.frame.minY, width: rightPanel.frame.width, height: row.height).contains(p) else { return nil }
+        if !maximize.isHidden, maximize.superview === self, let hit = maximize.hitTest(p) { return hit }
+        return rightPanel.hitTest(p)
+    }
+
+    /// Redesign: the header pill moves between its place in the band and the card's corner with the panel's own timing,
+    /// so it never jumps as the card comes or goes.
+    private func glidePill(from before: NSRect, entering: Bool) {
+        guard let strip = header.pill.superview as? DitherTabStripView, !header.pill.isHidden, !Motion.reduced,
+              let layer = header.pill.layer else { return }
+        strip.layoutSubtreeIfNeeded()
+        let dx = before.minX - header.pill.frame.minX, dy = before.minY - header.pill.frame.minY
+        guard dx != 0 || dy != 0 else { return }
+        let a = CABasicAnimation(keyPath: "transform.translation")
+        // The strip is flipped, so its layers' y runs down like the views' (as `slide`).
+        a.fromValue = NSValue(size: CGSize(width: dx, height: dy))
+        a.toValue = NSValue(size: .zero)
+        a.isAdditive = true
+        a.duration = entering ? RedesignTokens.Motion.large : RedesignTokens.Motion.fast
+        a.timingFunction = entering ? RedesignTokens.Motion.curve : RedesignTokens.Motion.exitCurve
+        layer.add(a, forKey: "redesign.pillGlide")
     }
 
     /// Redesign: a still image of `view` leaves over it the way `RedesignMotion.panel` closes, then goes.
@@ -2292,14 +2323,12 @@ public final class ThreadPanelView: DSView {
         // window's edge and its rows slide on under the band (the user: "my stuff is still getting covered").
         let above = ditherOverhang
         // Redesign's right panel is a card `Space.s` in from the thread, the window's right and bottom edges and the
-        // window's top, so the band's header pill floats over its clear top
-        // (the user, 2026-11-21: "do the curve out at the corners and also extend it upwards").
+        // window's top (the user, 2026-11-21: "do the curve out at the corners and also extend it upwards"). Its tabs
+        // and the band's header pill share its top row (`CardTopRow`), with no empty strip under the pill.
         let card = ditherHeader && !isEmbedded
         let margin = card ? RedesignTokens.Space.s : 0
         let panelTop: CGFloat = card ? margin - above : 0
         rightPanel.isCard = card
-        // The tab bar starts `Space.s` above the band's bottom: under the header pill and clear of it.
-        rightPanel.barTop = card ? max(0, above - 2 * margin) : 0
         rightPanelBackdrop.layer?.zPosition = sheet ? 20 : 0
         rightPanel.layer?.zPosition = sheet ? 21 : 0
         rightPanel.isSheet = sheet
@@ -2374,23 +2403,36 @@ public final class ThreadPanelView: DSView {
         for control in [header.toggles[2], header.toggles[1], maximize] {
             control.layer?.zPosition = controlsAboveSheet ? 22 : 0
         }
-        // `left-0 w-1`: the handle starts at the panel's edge, off the chat's scrollbar (RightPanelResizeHandle.tsx:22 at 4928, #35043).
-        // While the card is open the header pill sits concentric in its top right corner, `Radius.panel - Radius.control`
-        // in from both edges, and rides there with the panel's slide.
+        // Redesign's card row: tabs at the left, maximize, then the header pill concentric in the card's top right
+        // corner. The pill rides there with the panel's slide, from its place in the band to the resting card's corner.
+        let pillShown = card && !header.pill.isHidden && header.pill.superview is DitherTabStripView
+        let cardRow = card ? CardTopRow(width: rightPanel.frame.width, pill: pillShown ? header.pill.intrinsicContentSize : .zero,
+                                        trailing: maximize.isHidden ? [] : [maximize.intrinsicContentSize]) : nil
+        rightPanel.cardRow = cardRow
         if let strip = header.pill.superview as? DitherTabStripView {
-            let open: CGFloat = !card ? 0 : panelSlide.isRunning && !sheet ? CGFloat(panelSlide.value) : rightPanelOpen ? 1 : 0
-            let inset = margin + RedesignTokens.Radius.panel - RedesignTokens.Radius.control
-            let rest = CGSize(width: DitherTabStripView.accessoryRight, height: ((DitherChrome.band - DitherTabStripView.tabHeight) / 2).rounded())
-            strip.accessoryShift = CGSize(width: (max(0, inset - rest.width) * open).rounded(), height: (max(0, inset - rest.height) * open).rounded())
+            var shift = CGSize.zero
+            if let cardRow, pillShown, strip.window != nil, strip.window === window {
+                let open: CGFloat = panelSlide.isRunning && !sheet ? CGFloat(panelSlide.value) : rightPanelOpen ? 1 : 0
+                let size = header.pill.intrinsicContentSize
+                let rest = CGPoint(x: strip.bounds.width - DitherTabStripView.accessoryRight, y: ((strip.bounds.height - size.height) / 2).rounded())
+                // The resting card's top right corner: the window's right edge less the margin, wherever the slide is.
+                let corner = strip.convert(NSPoint(x: bounds.width - margin, y: panelTop), from: self)
+                let target = CGPoint(x: corner.x - (rightPanel.frame.width - cardRow.pill.maxX), y: corner.y + cardRow.pill.minY)
+                shift = CGSize(width: ((rest.x - target.x) * open).rounded(), height: ((target.y - rest.y) * open).rounded())
+            }
+            strip.accessoryShift = shift
+            if strip.passThrough == nil { strip.passThrough = { [weak self] point in self?.cardRowHit(point) } }
         }
+        // `left-0 w-1`: the handle starts at the panel's edge, off the chat's scrollbar (RightPanelResizeHandle.tsx:22 at 4928, #35043).
         // Redesign's handle fills the gap between the thread and the card.
         panelResize.centersLine = card
         panelResize.frame = NSRect(x: chat, y: panelTop, width: card ? margin : 4, height: max(0, rightPanel.frame.maxY - panelTop))
-        if rightPanelOpen || panelGhost != nil {
+        if let cardRow, let frame = cardRow.trailing.first, rightPanelOpen || panelGhost != nil {
+            maximize.frame = frame.offsetBy(dx: rightPanel.frame.minX, dy: rightPanel.frame.minY)
+        } else if rightPanelOpen || panelGhost != nil {
             // The window's panel controls: `mr-px` and 12px from the right, `gap-1`.
-            // On Redesign's card they sit on its tab bar, inside its right edge.
-            var x = card ? rightPanel.frame.maxX - 12 : bounds.width - 12 - 1
-            let barMid = card ? panelTop + rightPanel.barTop + RightPanelView.tabBarHeight / 2 : ThreadHeaderView.height / 2
+            var x = bounds.width - 12 - 1
+            let barMid = ThreadHeaderView.height / 2
             for control in [header.toggles[2], header.toggles[1], maximize] where control.superview === self {
                 let size = control.intrinsicContentSize
                 x -= size.width

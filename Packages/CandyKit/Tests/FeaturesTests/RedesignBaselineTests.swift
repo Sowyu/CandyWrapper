@@ -104,6 +104,19 @@ struct RedesignBaselineTests {
                 panel.layoutSubtreeIfNeeded(); panel.timeline.scroll(toFraction: fraction)
                 try capture("thread-" + name, panel, panelSize)
             }
+            // The right panel card with its tab row beside the header pill, both under the window's tab band, as the app
+            // lays them out: the pill in the band's strip, the thread below the band.
+            let cardThread = ComposerFidelityTests.panel(width: 1200, dark: dark)
+            cardThread.referenceViewportWidth = 1200
+            cardThread.timeline.context.now = { Self.now }
+            cardThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            let cardBand = DitherTabStripView()
+            let cardHost = BandHost(band: cardBand, content: cardThread)
+            cardBand.trailingAccessory = cardThread.header.pill
+            cardThread.header.setThreadVisible(true)
+            cardThread.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
+            try capture("thread-right-panel-diff", cardHost, NSSize(width: 1200, height: 780))
+            #expect(cardThread.rightPanel.cardRow?.tabs.minY == 0)
             let sidebar = SidebarContentView()
             sidebar.windowedMac = false; sidebar.stage = .nightly
             sidebar.now = { SidebarPreview.referenceNow }
@@ -253,7 +266,7 @@ struct RedesignBaselineTests {
             gradientThread.layoutSubtreeIfNeeded(); gradientThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-gradient", gradientThread, panelSize)
         }
-        #expect(count == 120)
+        #expect(count == 122)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -406,4 +419,20 @@ struct RedesignBaselineTests {
         return v
     }
 
+}
+
+/// A window's tab band over a page below it, as `SidebarLayoutView` lays them out under Redesign.
+final class BandHost: DSView {
+    let band: NSView, content: NSView
+    init(band: NSView, content: NSView) {
+        self.band = band; self.content = content
+        super.init(frame: .zero)
+        addSubview(content); addSubview(band)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func layout() {
+        super.layout()
+        band.frame = NSRect(x: 0, y: 0, width: bounds.width, height: DitherChrome.band)
+        content.frame = NSRect(x: 0, y: DitherChrome.band, width: bounds.width, height: max(0, bounds.height - DitherChrome.band))
+    }
 }
