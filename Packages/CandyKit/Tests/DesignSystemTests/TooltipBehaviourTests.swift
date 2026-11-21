@@ -215,6 +215,26 @@ import Testing
         #expect(popup.result?.side == .bottom)
     }
 
+    /// A T3-style "Name (⌥⌘B)" draws as the name and key caps under Redesign, also when the text changes while the
+    /// tooltip shows (a rebound shortcut); the default themes keep T3's text (07-slide-press-redesign.png).
+    @Test func redesignDrawsTrailingShortcutsAsKeyCapsAlways() throws {
+        let (_, c, clock, restore) = fixture()
+        defer { restore() }
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var theme = ThemeRuntimeInput()
+        theme.ditherLight = true; theme.ditherDark = true
+        ThemeRuntime.apply(theme)
+        c[0].text = "Toggle right panel (⌥⌘B)"
+        c[0].pointerEntered()
+        clock.fire()
+        let tip = try #require(c[0].popup?.content as? TooltipView)
+        #expect(tip.text == "Toggle right panel" && tip.shortcut == "⌥⌘B")
+        c[0].text = "Toggle right panel (⌃⌘B)"
+        #expect(tip.text == "Toggle right panel" && tip.shortcut == "⌃⌘B")
+        #expect(c[0].shownParts(dither: false) == ("Toggle right panel (⌃⌘B)", nil))
+    }
+
     @Test func truncatedLabelsShowTheirTextOnlyWhenCut() {
         let (window, _, _, restore) = fixture()
         defer { restore() }

@@ -259,11 +259,15 @@ final class SidebarBrandView: ControlView {
         ring.setNeedsDisplay()
     }
 
+    /// `items-baseline` in a 28px box with the 20px line centred: baseline as for the text line.
+    static var baseline: CGFloat { TextLine(NSAttributedString(string: word, attributes: [.font: font])).baseline(top: 4, lineHeight: 20) }
+    /// The candy's vertical centre in this view; the mark centres on the word's cap height.
+    var markCentreY: CGFloat { Self.baseline - Self.font.capHeight / 2 }
+
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let cap = Self.font.capHeight
-        // `items-baseline` in a 28px box with the 20px line centred: baseline as for the text line.
-        let baseline = TextLine(NSAttributedString(string: Self.word, attributes: [.font: Self.font])).baseline(top: 4, lineHeight: 20)
+        let baseline = Self.baseline
         let fg = onBackdrop ? StageBackdropView.ink() : SB.c(\.foreground)
         let muted = onBackdrop ? StageBackdropView.ink(0.9) : SB.c(\.mutedForeground)
         if onBackdrop {

@@ -104,9 +104,12 @@ struct TerminalDrawerCardTests {
         // One surface: the list meets the grid with no gap, and the actions row stays inside the card over the list.
         #expect(drawer.grid.frame.maxX == drawer.list.frame.minX)
         #expect(!drawer.actions.isHidden && drawer.bounds.contains(drawer.actions.frame))
-        #expect(drawer.list.frame.contains(drawer.actions.frame))
+        // The action row is reserved: each pane's first line and the list start under the buttons, never beneath them.
+        #expect(drawer.actions.frame.maxY <= drawer.grid.frame.minY && drawer.actions.frame.maxY <= drawer.list.frame.minY)
+        #expect(drawer.grid.frame.minY == CardTopRow(width: drawer.bounds.width, pill: .zero, trailing: [drawer.actions.intrinsicContentSize]).height)
         let first = a.superview!.frame, second = b.superview!.frame
         #expect(first.maxX == second.minX, "panes \(first) \(second)")
+        for pane in [a, b] { #expect(pane.convert(pane.bounds, to: drawer).minY >= drawer.actions.frame.maxY) }
     }
 
     @Test func handleTapsOnceAtEachLimit() {

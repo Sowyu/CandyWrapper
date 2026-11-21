@@ -260,6 +260,7 @@ struct ThreadImageWallTests {
             masonry = card.grid
         }
         masonry.relayout()
+        GalleryTileView.stillPointer = nil // the pointer has moved since the gallery opened
         let tile = try #require(masonry.tiles[0])
         let event = try #require(NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
                                                         windowNumber: window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
@@ -284,5 +285,31 @@ struct ThreadImageWallTests {
         tile.mouseEntered(with: event)
         masonry.images = []
         #expect(tile.superview == nil && masonry.tiles.isEmpty)
+    }
+
+    /// The gallery opening under a still pointer shows no caption on the tile beneath it (gallery-dark-1100x780.png),
+    /// and the first move over that tile shows it.
+    @Test func aTileUnderAStillPointerKeepsItsCaptionAtRest() throws {
+        let window = Self.window()
+        let previous = GalleryTileView.pointer
+        var at = NSPoint(x: 200, y: 300)
+        GalleryTileView.pointer = { at }
+        defer { GalleryTileView.pointer = previous; window.contentView = nil; window.close() }
+        let wall = ThreadImageWallView(frame: window.contentView!.bounds)
+        window.contentView!.addSubview(wall)
+        #expect(GalleryTileView.stillPointer == at)
+        wall.images = Self.measuredImages()
+        wall.layoutSubtreeIfNeeded()
+        wall.masonry.relayout()
+        let tile = try #require(wall.masonry.tiles[0])
+        let event = try #require(NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
+                                                        windowNumber: window.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        tile.mouseEntered(with: event)
+        #expect(tile.state.hovered && !tile.showsCaption && tile.shade.opacity == 0)
+        at.x += 3
+        tile.mouseMoved(with: event)
+        #expect(tile.showsCaption && GalleryTileView.stillPointer == nil)
+        wall.removeFromSuperview()
+        #expect(GalleryTileView.stillPointer == nil)
     }
 }

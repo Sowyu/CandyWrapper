@@ -72,6 +72,9 @@ public final class ConcernSettingsView: SettingsPageBase {
         }
     }
 
+    /// Rows only CandyWrapper has, shown in About's CandyWrapper group in the default themes.
+    public static let candyWrapperRows = ["tooltips", "trackpad-haptics"]
+
     private static func slices(_ page: SettingsSection) -> [DitherSettingsSlice] {
         typealias G = DitherSettingsSlice.Group
         switch page {
@@ -79,7 +82,7 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, [G("behavior", "Notifications", rows: ["thread-notifications", "in-app-notifications"])]),
             .init(.general, [G("organization", "Sidebar", rows: ["project-grouping", "project-order", "working-shelf"])]),
             .init(.general, [G("confirmations", nil)]),
-            .init(.general, [G("behavior", "Display", rows: ["language", "time-format", "tooltips"])])
+            .init(.general, [G("behavior", "Display", rows: ["language", "time-format"])])
         ]
         case .chat: return [
             .init(.general, [G("behavior", "Composer", rows: ["composer-rich-text", "send-shortcut", "skills-in-slash-menu"])]),
@@ -124,7 +127,10 @@ public final class ConcernSettingsView: SettingsPageBase {
         ]
         case .about: return [
             .init(.general, [G("about", "App", rows: ["app-version", "update-track"])]),
-            .init(.general, [G("about", "Legal", rows: ["privacy-policy", "open-source-licenses"])])
+            .init(.general, [G("about", "Legal", rows: ["privacy-policy", "open-source-licenses"])]),
+            // CandyWrapper's own rows stay off the pages T3 defines (General is pinned to T3's references), in one
+            // group at the end of About. Redesign shows them under General > Input.
+            .init(.general, [G("behavior", "CandyWrapper", rows: ConcernSettingsView.candyWrapperRows)])
         ]
         case .providers:
             if ThemeRuntime.framesPanes(dark: false) || ThemeRuntime.framesPanes(dark: true) {

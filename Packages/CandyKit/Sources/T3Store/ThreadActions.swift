@@ -609,6 +609,8 @@ public enum ThreadActionMenu {
         public var isSnoozed = false
         public var canSnoozeNow = true
         public var isRegeneratingTitle = false
+        /// The model Deeper rename would run on, shown in its item; nil hides it (no side chats on this server).
+        public var deeperRenameModel: String?
         public var isRunning = false
         public var supportsSettlement = true
         public var supportsAutoSettleOptOut = true
@@ -646,6 +648,9 @@ public enum ThreadActionMenu {
         items.append(.init("rename", "Rename thread", separatorBefore: true))
         if s.supportsTitleRegeneration {
             items.append(.init("regenerate-title", s.isRegeneratingTitle ? "Regenerating…" : "Regenerate title", disabled: s.isRegeneratingTitle))
+            if let model = s.deeperRenameModel {
+                items.append(.init("deeper-rename", "Deeper rename with \(model)", disabled: s.isRegeneratingTitle))
+            }
         }
         items.append(.init("mark-unread", "Mark unread"))
         if s.canShareWithGuest { items.append(.init("share-guest", "Share with guest")) }

@@ -22,6 +22,8 @@ extension WebFrameSuites {
             #expect(html.contains("default-src 'none'; style-src 'unsafe-inline'; frame-src http://127.0.0.1:47391 http: https:\""))
             #expect(html.contains("background:#fff"))
             let agent = F.hostPage(.init(src: src, title: "r", dark: true))
+            // The title names the frame for VoiceOver only; a `title` attribute would float over the page as a tooltip.
+            #expect(agent.contains(#"aria-label="r""#) && !agent.contains("title="))
             #expect(agent.contains(#"sandbox="allow-scripts allow-forms""#))
             #expect(agent.contains("frame-src http://127.0.0.1:47391\""))
         }

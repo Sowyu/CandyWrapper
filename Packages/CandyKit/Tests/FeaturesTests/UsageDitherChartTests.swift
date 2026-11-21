@@ -92,7 +92,15 @@ struct UsageDitherChartTests {
                     // A cell of series k sits on or under k's own edge.
                     if let k = Self.series(a[x, y]) { #expect(y >= tops[k][x], "series \(k) above its edge at \(x), \(y)") }
                 }
-                if highest < a.height { #expect(a[x, highest] >= 3 && a[x, highest] % 2 == 1, "top cell is not an edge at \(x)") }
+                // The column's top drawn cell is an edge; a rear edge one cell over a front series is its dark margin.
+                if let first = (0..<a.height).first(where: { a[x, $0] >= 2 }) {
+                    #expect(a[x, first] >= 3 && a[x, first] % 2 == 1, "top cell is not an edge at \(x)")
+                }
+                // A rear series' edge never shows inside a front series or its margin (r5-chart-overlap-weird.png).
+                for y in 0..<a.height where a[x, y] >= 3 && a[x, y] % 2 == 1 && Int(a[x, y]) < 2 + 2 * tops.count {
+                    let k = (Int(a[x, y]) - 3) / 2
+                    #expect(!tops[(k + 1)...].contains { a.covers($0, x, y) }, "series \(k) edge over a front series at \(x), \(y)")
+                }
             }
         }
         // Linear tops never pass the higher of their two days, nor drop under the lower (one cell of rounding).

@@ -763,6 +763,9 @@ public final class SettingsPageView: DSView {
     public var ditherHeading: (title: String, subtitle: String)? { didSet { needsLayout = true } }
     /// Escape goes back (`useEscapeToGoBack`).
     public var onEscape: (() -> Void)?
+    /// Redesign's route modal holds the page in a rounded card (`AppRouteModalView.pageCard`): no header bar, the close
+    /// and Restore buttons float at the card's top right over the page.
+    public var inCard = false { didSet { if inCard != oldValue { header.floating = inCard; needsLayout = true } } }
     /// `WorkspacePageContainer` width: `max-w-4xl` (readable), `max-w-5xl` (wide), `max-w-6xl` (expanded).
     public var containerWidth: CGFloat = 896 { didSet { needsLayout = true } }
 
@@ -834,8 +837,9 @@ public final class SettingsPageView: DSView {
     public override func layout() {
         super.layout()
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: header.barHeight)
-        scroll.frame = NSRect(x: 0, y: header.barHeight, width: bounds.width, height: max(0, bounds.height - header.barHeight))
+        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: inCard ? SettingsHeaderView.floatingHeight : header.barHeight)
+        let bar = inCard ? 0 : header.barHeight
+        scroll.frame = NSRect(x: 0, y: bar, width: bounds.width, height: max(0, bounds.height - bar))
         let gutter: CGFloat = 6
         let inner = max(0, bounds.width - 2 * gutter)
         // Dither: Capy's centred column, about 800pt of content; the two-pane pages keep their width.
@@ -849,9 +853,20 @@ public final class SettingsPageView: DSView {
         ditherSubtitle.isHidden = ditherTitle.isHidden || ditherHeading == nil
         // Capy's title (`text-xl font-medium`) and its description, then 28pt to the first section.
         let subtitleHeight: CGFloat = ditherSubtitle.isHidden ? 0 : 2 + 20
-        let top: CGFloat = dither ? 8 + 28 + subtitleHeight + 28 : 24
-        ditherTitle.frame = NSRect(x: (x + 16).rounded(), y: 8, width: max(0, contentWidth - 32), height: 28)
-        ditherSubtitle.frame = NSRect(x: (x + 16).rounded(), y: 8 + 28 + 2, width: max(0, contentWidth - 32), height: 20)
+        // In the card the title keeps clear of the floating close and Restore: beside them while it fits, else a
+        // 32pt row above it holds them.
+        let titleX = (x + 16).rounded()
+        var titleWidth = max(0, contentWidth - 32)
+        var titleTop: CGFloat = 8
+        if inCard {
+            header.layoutSubtreeIfNeeded()
+            let room = header.controlsMinX - 8 - titleX
+            if ceil(ditherTitle.textWidth) + 1 > room { titleTop += SettingsHeaderView.floatingHeight - 8 } else { titleWidth = min(titleWidth, room) }
+            titleTop = max(titleTop, 16)
+        }
+        let top: CGFloat = dither ? titleTop + 28 + subtitleHeight + 28 : 24
+        ditherTitle.frame = NSRect(x: titleX, y: titleTop, width: titleWidth, height: 28)
+        ditherSubtitle.frame = NSRect(x: titleX, y: titleTop + 28 + 2, width: max(0, contentWidth - 32), height: 20)
         document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width, height: max(scroll.bounds.height, top + pageHeight + 48))
         page?.frame = NSRect(x: x.rounded(), y: top, width: contentWidth, height: pageHeight)
         toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
@@ -867,6 +882,12 @@ public final class SettingsHeaderView: TopbarDragView {
     public var isRouteModal = false { didSet { close.isHidden = !isRouteModal; needsLayout = true; needsDisplay = true } }
     public var barHeight: CGFloat { isRouteModal ? 48 : Self.height }
     public let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
+    /// Redesign's page card: no bar or hairline, only the close and Restore buttons at the card's top right.
+    public var floating = false { didSet { if floating != oldValue { needsLayout = true; needsDisplay = true } } }
+    /// The floating row: 8pt in from the card's top and right, a 24pt close button.
+    static let floatingHeight: CGFloat = 40
+    /// The left edge of the floating buttons, for the page title to keep clear of.
+    var controlsMinX: CGFloat { restore.isHidden ? close.frame.minX : restore.frame.minX }
     private let root = LabelView("Settings", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.mutedForeground))
     private let slash = LabelView("/", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.iconMuted))
     private let current = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
@@ -898,6 +919,11 @@ public final class SettingsHeaderView: TopbarDragView {
 
     public override var mouseDownCanMoveWindow: Bool { !isRouteModal }
     public override func mouseDown(with event: NSEvent) { if !isRouteModal { super.mouseDown(with: event) } }
+    /// Floating over the page, only the buttons take the pointer; the page scrolls and clicks under the rest.
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return floating && hit === self ? nil : hit
+    }
     public override func mouseUp(with event: NSEvent) { if !isRouteModal { super.mouseUp(with: event) } }
     public override func updateLayer() {
         super.updateLayer()
@@ -906,7 +932,7 @@ public final class SettingsHeaderView: TopbarDragView {
     public override var wantsUpdateLayer: Bool { false }
     public override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        if isRouteModal {
+        if isRouteModal, !floating {
             Themed.color(\.border).setFill()
             NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
         }
@@ -930,6 +956,12 @@ public final class SettingsHeaderView: TopbarDragView {
         }
         current.frame = NSRect(x: x, y: y, width: max(0, min(ceil(current.textWidth) + 1, bounds.width - 20 - x)), height: 20)
         let rw = restore.intrinsicContentSize.width + 8
+        if floating {
+            for l in [root, slash, current] { l.isHidden = true }
+            close.frame = NSRect(x: bounds.width - 8 - 24, y: 8, width: 24, height: 24)
+            restore.frame = NSRect(x: close.frame.minX - 4 - rw, y: 8, width: rw, height: 24)
+            return
+        }
         close.frame = NSRect(x: bounds.width - 8 - 28, y: (barHeight - 28) / 2, width: 28, height: 28)
         restore.frame = NSRect(x: bounds.width - (isRouteModal ? 40 : 20) - rw, y: (barHeight - 24) / 2, width: rw, height: 24)
     }

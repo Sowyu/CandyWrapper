@@ -170,8 +170,12 @@ final class UsageDitherPlotView: DSView {
         for (i, top) in tops.enumerated() where !top.isEmpty {
             grid.fill(tops: top, layer: UInt8(2 + 2 * i), texture: textures(i), gap: i > 0, holes: holeLayer(i, of: tops.count))
         }
-        // Every outline after every fill, so a series behind keeps its edge where a lighter one covers its area.
-        for (i, top) in tops.enumerated() where !top.isEmpty { grid.edge(tops: top, layer: UInt8(3 + 2 * i)) }
+        // Every outline after every fill. A series in front covers the outline of those behind it, with its one-cell
+        // margin: the rear edge used to run through the front's hatch (the user, r5-chart-overlap-weird.png).
+        for (i, top) in tops.enumerated() where !top.isEmpty {
+            let front = tops[(i + 1)...].filter { !$0.isEmpty }
+            grid.edge(tops: top, layer: UInt8(3 + 2 * i), hidden: front.isEmpty ? nil : { [grid] x, y in front.contains { grid.covers($0, x, y) } })
+        }
         return grid
     }
 

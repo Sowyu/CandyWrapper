@@ -85,6 +85,7 @@ final class SidebarCommands {
         self.environments = environments
         self.threads = threads
         sidebar.actions.settle = { [weak self] in self?.settle($0) }
+        environments.observeShell { [weak self] in self?.deleteLeftoverHelpers() }
         sidebar.actions.unsettle = { [weak self] in self?.unsettle($0) }
         sidebar.actions.snooze = { [weak self] id, anchor in self?.showSnoozeMenu(id, anchor: anchor) }
         sidebar.actions.unsnooze = { [weak self] in self?.unsnooze($0) }
@@ -584,9 +585,119 @@ final class SidebarCommands {
             let requests = ids.map { id in Task { await self.regenerateTitle(id) } }
             var results: [TitleRegenerationOutcome] = []
             for request in requests { results.append(await request.value) }
-            if let toast = TitleRegenerationOutcome.toast(results) { self.toast(toast.title, toast.message, toast.kind) }
+            guard let toast = TitleRegenerationOutcome.toast(results) else { return }
+            // A kept title can go one step further, on purpose only: a side chat proposes a short title.
+            if ids.count == 1, case .reported("unchanged", _) = results[0], let id = ids.first, let model = self.deeperRenameModel(id) {
+                self.threads.panel.toasts.show(ToastView(
+                    title: toast.title, message: toast.message + " A deeper rename runs one small turn on \(DeeperRename.modelLabel(model.model)).",
+                    kind: toast.kind, actionTitle: "Try a deeper rename", action: { [weak self] in self?.deeperRename(id) }))
+                return
+            }
+            self.toast(toast.title, toast.message, toast.kind)
         }
     }
+
+    // MARK: Deeper rename
+
+    /// Threads renaming through a helper side chat now, and the helpers, so the launch cleanup leaves them alone.
+    private var deeperRenames: [ThreadId: ThreadId] = [:]
+
+    /// The model Deeper rename would use for this thread, or nil where it can't run: no side chats on the server, a
+    /// read-only connection, or a thread that is itself a side chat or a subagent.
+    private func deeperRenameModel(_ id: ThreadId) -> ModelSelection? {
+        guard let thread = shell(id), let env = id.environmentId, environments.canOperate(env),
+              threads.composer.config(env)?.capabilities.contains(SideChats.capability) == true,
+              thread.lineage.sideChat != true, thread.lineage.relationshipToParent != .subagent else { return nil }
+        return DeeperRename.model(for: thread.modelSelection)
+    }
+
+    private func setLocalTitleRegeneration(_ id: ThreadId, _ on: Bool) {
+        guard let sidebar else { return }
+        if on { sidebar.state.localTitleRegenerations.insert(id) } else { sidebar.state.localTitleRegenerations.remove(id) }
+    }
+
+    /// Forks the thread as a side chat titled "Title helper" (as /btw does, without opening its tab), asks it for a
+    /// short title with no tools, renames the thread with the normal rename command and deletes the helper. Gives up
+    /// after 30 s. Explicit only: the "Title kept" toast and the thread menu.
+    func deeperRename(_ id: ThreadId) {
+        guard deeperRenames[id] == nil, let env = id.environmentId, let parent = shell(id), let model = deeperRenameModel(id) else { return }
+        let helper = ThreadId(UUID().uuidString.lowercased())
+        let scoped = helper.scoped(to: env)
+        deeperRenames[id] = scoped
+        setLocalTitleRegeneration(id, true)
+        Task { [weak self] in
+            guard let self else { return }
+            let outcome = await self.runDeeperRename(parent: parent, helper: helper, scoped: scoped, model: model)
+            self.deeperRenames[id] = nil
+            self.setLocalTitleRegeneration(id, false)
+            // Deleted whatever happened; a quit before this line leaves it to the next launch's cleanup.
+            _ = try? await self.environments.dispatch(scoped, ThreadCommands.delete(helper))
+            switch outcome {
+            case .success: break // the new title is the result
+            case .failure(let message): self.toast("Deeper rename failed", message, .error)
+            }
+        }
+    }
+
+    private enum DeeperOutcome { case success, failure(String) }
+
+    private func runDeeperRename(parent: ThreadShell, helper: ThreadId, scoped: ThreadId, model: ModelSelection) async -> DeeperOutcome {
+        let id = parent.id
+        let start = Date()
+        func timedOut() -> Bool { Date().timeIntervalSince(start) > DeeperRename.timeout }
+        do {
+            _ = try await environments.dispatch(id, SideChats.fork(source: id.localId, target: helper, title: DeeperRename.helperTitle))
+        } catch {
+            return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not start the title helper.")
+        }
+        while shell(scoped) == nil {
+            if timedOut() { return .failure("The title helper did not reach this client within 30 seconds.") }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let message = OrchestrationCommands.message(threadId: helper.rawValue, messageId: UUID().uuidString.lowercased(), text: DeeperRename.prompt,
+                                                    selection: model, queue: false)
+        do { _ = try await environments.dispatch(scoped, message) } catch {
+            return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not ask the title helper.")
+        }
+        // Its run starts, then ends; the shell stream carries both.
+        var sawRun = false
+        while true {
+            if timedOut() { return .failure("The title helper took longer than 30 seconds. The title is unchanged.") }
+            if let helperShell = shell(scoped) {
+                if helperShell.activeRunId != nil { sawRun = true }
+                if sawRun, helperShell.activeRunId == nil {
+                    if helperShell.status == .failed || helperShell.lastError != nil {
+                        return .failure(helperShell.lastError ?? "The title helper's turn failed.")
+                    }
+                    break
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        guard let session = environments.session(id.environmentId),
+              let snapshot = try? await session.http.get(ThreadHistoryRequest.boundedSnapshotPath(helper), token: session.token,
+                                                         as: ThreadDetailSnapshot.self),
+              let reply = DeeperRename.reply(in: snapshot.projection), let title = DeeperRename.title(fromReply: reply) else {
+            return .failure("The title helper gave no title. The title is unchanged.")
+        }
+        guard title != shell(id)?.title else { return .success }
+        do { _ = try await environments.dispatch(id, ThreadCommands.rename(id.localId, title: title)) } catch {
+            return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not rename the thread.")
+        }
+        return .success
+    }
+
+    /// Helpers a quit left behind: side chats titled "Title helper" with no run, never one running now. A /btw side
+    /// chat is titled "Side chat", so the user's own are never touched.
+    private func deleteLeftoverHelpers() {
+        guard let threads = snapshot?.threads else { return }
+        let running = Set(deeperRenames.values)
+        for thread in threads where DeeperRename.isLeftover(thread) && !running.contains(thread.id) && !cleaningHelpers.contains(thread.id) {
+            cleaningHelpers.insert(thread.id)
+            Task { [environments] in _ = try? await environments.dispatch(thread.id, ThreadCommands.delete(thread.id.localId)) }
+        }
+    }
+    private var cleaningHelpers: Set<ThreadId> = []
 
     private func regenerateTitle(_ id: ThreadId) async -> TitleRegenerationOutcome {
         let commandId = ThreadCommands.newCommandId()
@@ -698,7 +809,8 @@ final class SidebarCommands {
         state.isSnoozed = SidebarModel.effectiveSnoozed(presented, nowMs: nowMs)
         state.autoSettleEnabled = thread.autoSettleDisabledAt == nil
         state.canSnoozeNow = SidebarModel.canSnooze(presented, nowMs: nowMs)
-        state.isRegeneratingTitle = thread.titleRegeneration != nil
+        state.isRegeneratingTitle = thread.titleRegeneration != nil || deeperRenames[thread.id] != nil
+        state.deeperRenameModel = deeperRenameModel(thread.id).map { DeeperRename.modelLabel($0.model) }
         state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
         state.snoozePresets = presets
         state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
@@ -752,6 +864,9 @@ final class SidebarCommands {
         case "regenerate-title":
             guard thread.titleRegeneration == nil else { return }
             regenerateTitles([id])
+        case "deeper-rename":
+            guard thread.titleRegeneration == nil else { return }
+            deeperRename(id)
         case "turn-into-project":
             // Sidebar.tsx and useThreadActionMenu.ts at 4928 (#26767): a toast either way; the shell stream moves the row.
             guard let env = id.environmentId else { return }

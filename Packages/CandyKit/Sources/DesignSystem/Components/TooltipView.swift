@@ -403,8 +403,9 @@ public final class TooltipController: NSResponder, HoverSyncClient {
     private func refresh() {
         guard let tip = popup?.content as? TooltipView else { return }
         if text.isEmpty { return hide() }
-        tip.text = text
-        tip.shortcut = shortcut
+        let (words, keys) = shownParts(dither: view.map { ThemeRuntime.isDither(dark: $0.effectiveAppearance.isDark) } ?? false)
+        tip.text = words
+        tip.shortcut = keys
         if let host = popup?.container.superview as? PopupHost, let popup { host.reposition(popup) }
     }
 
@@ -462,9 +463,7 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         if let shortcutProvider { shortcut = shortcutProvider() } else if let textProvider { text = textProvider() }
         guard !text.isEmpty || content != nil, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
         if dither, host.popups.contains(where: { $0.trigger === view && !$0.isPassive }) { return }
-        // Redesign draws a T3-style "Action (⌘J)" as the action and key caps; the default themes keep T3's text.
-        var words = text, keys = shortcut
-        if dither, keys == nil, let split = Self.splitShortcut(text) { (words, keys) = split }
+        let (words, keys) = shownParts(dither: dither)
         let tip = content?() ?? TooltipView(words, variant: variant, shortcut: keys)
         // Redesign puts tooltips under their control, flipping above when the window has no room.
         var place = placement
@@ -482,6 +481,13 @@ public final class TooltipController: NSResponder, HoverSyncClient {
             card.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                                 owner: self, userInfo: ["popup": true]))
         }
+    }
+
+    /// Redesign draws a T3-style "Action (⌘J)" as the action and key caps, both as it opens and when the text changes
+    /// while it shows; the default themes keep T3's text.
+    func shownParts(dither: Bool) -> (String, String?) {
+        if dither, shortcut == nil, let split = Self.splitShortcut(text) { return split }
+        return (text, shortcut)
     }
 
     /// "Toggle terminal (⌘J)" is ("Toggle terminal", "⌘J"): a trailing shortcut in parentheses, nil for other text.

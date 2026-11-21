@@ -9,7 +9,7 @@ import T3Store
 public enum DitherThreadMenu {
     /// The leading group, the middle group in this order, and the closing group. Ids not listed (none today) join the middle.
     static let leading: [String] = ["settle", "unsettle", "snooze", "unsnooze"]
-    static let middle: [String] = ["open-new-tab", "pin", "unpin", "rename", "regenerate-title", "copy", "new-thread-on-branch",
+    static let middle: [String] = ["open-new-tab", "pin", "unpin", "rename", "regenerate-title", "deeper-rename", "copy", "new-thread-on-branch",
                                    "share-guest", "filter-by-project", "turn-into-project", "auto-settle", "project-settings", "hands-off"]
     static let closing: [String] = ["mark-unread", "archive", "delete"]
 
@@ -17,7 +17,7 @@ public enum DitherThreadMenu {
                                          "mark-unread": "U", "archive": "A", "delete": "D"]
     static let icons: [String: IconName] = [
         "settle": .check, "unsettle": .undo2, "snooze": .clock, "unsnooze": .alarmClockOff, "open-new-tab": .arrowUpRight,
-        "pin": .pin, "unpin": .pinOff, "rename": .squarePen, "regenerate-title": .rotateCw, "copy": .copy,
+        "pin": .pin, "unpin": .pinOff, "rename": .squarePen, "regenerate-title": .rotateCw, "deeper-rename": .sparkles, "copy": .copy,
         "new-thread-on-branch": .gitBranchPlus, "filter-by-project": .listFilter, "turn-into-project": .folderPlus, "auto-settle": .circleCheck,
         "project-settings": .settings, "share-guest": .userPlus, "mark-unread": .mail, "archive": .archive, "delete": .trash2,
     ]
