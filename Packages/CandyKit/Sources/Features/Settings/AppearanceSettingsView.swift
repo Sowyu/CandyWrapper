@@ -91,7 +91,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             // description changes order between equal instances, so a string key rebuilt them on every refresh.
             let custom = lib.customThemes + lib.environmentThemes.filter { theme in !lib.customThemes.contains { $0.id == theme.id } }
             let next = ThemeGridContent(picked: [lib.pickedModes(nil)] + (ThemeDefinition.pickerBuiltIns + custom).map { lib.pickedModes($0.id) },
-                                        custom: custom.map(ThemeCardDefinition.init))
+                                        custom: custom.map(ThemeCardDefinition.init), accent: ThemeRuntime.ditherAccent.id)
             guard next != shown, let grid else { return }
             shown = next
             grid.cards = self.themeCards(custom)
@@ -110,6 +110,8 @@ public final class AppearanceSettingsView: SettingsPageBase {
     struct ThemeGridContent: Equatable {
         var picked: [[ThemeAppearance]]
         var custom: [ThemeCardDefinition]
+        /// Redesign's card draws the accent, so a new accent rebuilds the cards.
+        var accent = ""
     }
 
     private func themeCards(_ custom: [ThemeDefinition]) -> [ThemeLibraryCardView] {

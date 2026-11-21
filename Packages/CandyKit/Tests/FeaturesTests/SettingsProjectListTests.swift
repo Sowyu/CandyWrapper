@@ -70,6 +70,16 @@ struct SettingsProjectListTests {
         #expect(quill?.accessibilityLabel == "Quill, Studio Mac, 1 thread")
     }
 
+    /// The Projects notes from the polish audit: an empty project shows no "0 threads", and a pinned row says it is
+    /// pinned, since it sorts first.
+    @Test func emptyCountIsBlankAndPinnedRowSaysSo() {
+        let rows = SettingsProjectList.entries(Self.scope())
+        var lantern = try! #require(rows.first { $0.name == "Lantern" })
+        #expect(lantern.pinned && lantern.accessibilityLabel.hasPrefix("Lantern, pinned, "))
+        lantern.threadCount = 0
+        #expect(lantern.threadLabel.isEmpty && !lantern.accessibilityLabel.contains("0 threads"))
+    }
+
     @Test func searchMatchesNameMachineAndPath() {
         let rows = SettingsProjectList.entries(Self.scope())
         #expect(SettingsProjectList.filter(rows, query: "").count == 19)

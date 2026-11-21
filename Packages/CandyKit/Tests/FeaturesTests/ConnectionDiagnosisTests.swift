@@ -28,7 +28,7 @@ struct ConnectionDiagnosisTests {
         #expect(d?.facts.map(\.label) == ["Cause", "HTTP status", "Attempts", "Next retry", "Route", "Error", "Trace ID"])
         #expect(d?.facts.first { $0.label == "Next retry" }?.value == "2026-10-19T12:00:30.000Z")
         let text = d!.text(hostLabel: "Mac mini")
-        #expect(text.hasPrefix("T3 Code connection to Mac mini: Tunnel works, but T3 Code on Mac mini did not answer\n\nThis device: ok\n"))
+        #expect(text.hasPrefix("CandyWrapper connection to Mac mini: Tunnel works, but T3 Code on Mac mini did not answer\n\nThis device: ok\n"))
         #expect(text.contains("T3 Code on Mac mini: FAILED") && text.contains("\nTrace ID: trace-1\n\nMore info: https://"))
     }
 

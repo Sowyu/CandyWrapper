@@ -29,6 +29,13 @@ public enum Themed {
             return color
         }
     }
+    /// `redesign` under Redesign and `stock` in every other theme, per appearance: for emphasis that T3 draws in a status
+    /// color, like links in info blue, and Redesign draws in its one accent.
+    public static func color(redesign: KeyPath<Palette, TokenColor>, stock: KeyPath<Palette, TokenColor>) -> NSColor {
+        let r = ThemedColorCache(light: redesign, lightAlpha: 1, dark: redesign, darkAlpha: 1, sidebar: false)
+        let s = ThemedColorCache(light: stock, lightAlpha: 1, dark: stock, darkAlpha: 1, sidebar: false)
+        return NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? r.color(dark: $0.isDark) : s.color(dark: $0.isDark) }
+    }
     nonisolated(unsafe) private static var instances: [ThemedColorKey: NSColor] = [:]
     private static let instancesLock = NSLock()
 

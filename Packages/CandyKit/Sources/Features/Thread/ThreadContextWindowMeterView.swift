@@ -97,6 +97,34 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
         String(format: "%.1f", value).replacingOccurrences(of: ".0", with: "")
     }
     public var percentageLabel: String? { percentage.map { $0 < 10 ? Self.decimal($0) + "%" : "\(Int($0.rounded()))%" } }
+
+    /// How full the window is, in the fixed status colors (Redesign's ring, never the accent).
+    public enum Level: Equatable, Sendable { case neutral, warning, danger }
+
+    /// Danger at or past "Compact at" or from 95%; warning in the 10 points before "Compact at", or from 80% when the
+    /// provider reports no threshold.
+    public static func level(percentage p: Double, compactAt: Double?) -> Level {
+        if p >= 95 || compactAt.map({ p >= $0 }) == true { return .danger }
+        return p >= (compactAt.map { $0 - 10 } ?? 80) ? .warning : .neutral
+    }
+
+    /// "Compact at" as a share of the window, when the provider reported both.
+    public var compactAtPercentage: Double? {
+        guard let t = autoCompactThreshold, t > 0, t < 9e15, let m = maximum, m > 0 else { return nil }
+        return t / m * 100
+    }
+
+    /// Judged on the figure the pill shows, so "95%" is never drawn in the color of 94%.
+    public var level: Level {
+        percentage.map { Self.level(percentage: $0 < 10 ? $0 : $0.rounded(), compactAt: compactAtPercentage) } ?? .neutral
+    }
+
+    /// The pill's tooltip and accessibility value: "Context: 949K of 1M used (95%)".
+    public var redesignSummary: String {
+        let used = Self.tokens(used).uppercased()
+        guard let maximum, let label = percentageLabel else { return "Context: \(used) used" }
+        return "Context: \(used) of \(Self.tokens(maximum).uppercased()) used (\(label))"
+    }
 }
 
 /// ContextWindowMeter.tsx:42-211. No timer or idle animation; the stream changes the ring.
@@ -106,8 +134,9 @@ public final class ThreadContextWindowMeterView: ControlView {
         needsDisplay = true
         updateArc(animated: oldValue != nil)
         setAccessibilityLabel(summary)
-        setAccessibilityValue(usage?.percentage.map { NSNumber(value: $0) })
+        setAccessibilityValue(capy ? usage?.redesignSummary : usage?.percentage.map { NSNumber(value: $0) })
         setAccessibilityElement(usage != nil)
+        syncFigure()
         if usage == nil, !(capy && reserved) { closeDetails() } else { refreshDetails() }
         // Under Dither the panel places the ring, so it lays out again when the ring comes or goes.
         if (usage == nil) != (oldValue == nil) { superview?.needsLayout = true }
@@ -133,10 +162,41 @@ public final class ThreadContextWindowMeterView: ControlView {
     /// Dither: Capy's ring (measured in Capy 2026-10-22), a 13pt circle with a 1.5pt stroke in a 28pt pill under the
     /// composer, opened by a click into Capy's Context popover.
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    private var ringRadius: CGFloat { capy ? 5.75 : 9.75 * 20 / 24 }
-    private var ringWidth: CGFloat { capy ? 1.5 : 2.5 }
+    /// Redesign: a 12pt ring with a 2pt stroke where the Stash pill has its icon, then the share used as text (the user,
+    /// 2026-11-21: "this is borderline unreadable", about the bare 13pt ring at 1.5pt).
+    private var ringRadius: CGFloat { capy ? 5 : 9.75 * 20 / 24 }
+    private var ringWidth: CGFloat { capy ? 2 : 2.5 }
+    private var ringCenter: CGPoint { capy ? CGPoint(x: Self.figureX / 2, y: bounds.midY) : CGPoint(x: bounds.midX, y: bounds.midY) }
+    /// Where the figure starts in Redesign's pill, and the pill's right padding: the Stash pill's icon column and title.
+    static let figureX: CGFloat = 32, figureTrail: CGFloat = 8
+    let figure = LabelView("", font: TL.tabular(12))
+    private lazy var tip = TooltipController.attach(to: self, text: "")
+    /// Redesign's pill width: the ring and the figure, or the square when there is no figure.
+    public var redesignWidth: CGFloat {
+        figure.text.isEmpty ? DitherPill.height : Self.figureX + ceil(figure.textWidth) + Self.figureTrail
+    }
     public override var wantsUpdateLayer: Bool { false }
     public override var intrinsicContentSize: NSSize { NSSize(width: 28, height: 28) }
+
+    private func syncFigure() {
+        let text = capy ? (usage?.percentageLabel ?? usage.map { ThreadContextWindowUsage.tokens($0.used).uppercased() } ?? "") : ""
+        figure.isHidden = text.isEmpty
+        figure.color = Themed.color(figureColor)
+        tip.text = capy ? usage?.redesignSummary ?? "" : ""
+        guard figure.text != text else { return }
+        let widthChanged = figure.text.count != text.count || figure.text.isEmpty != text.isEmpty
+        figure.text = text
+        needsLayout = true
+        if widthChanged { superview?.needsLayout = true }
+    }
+
+    private var figureColor: KeyPath<Palette, TokenColor> {
+        switch usage?.level ?? .neutral {
+        case .neutral: \.foreground
+        case .warning: \.warningForeground
+        case .danger: \.destructiveForeground
+        }
+    }
     public var summary: String {
         guard let usage else { return "Context Window" }
         return usage.percentageLabel.map { "Context window \($0) used" } ?? "Context window \(ThreadContextWindowUsage.tokens(usage.used)) tokens used"
@@ -156,6 +216,9 @@ public final class ThreadContextWindowMeterView: ControlView {
         arc.lineCap = .round
         arc.isHidden = true
         layer?.addSublayer(arc)
+        figure.lineHeight = 16
+        figure.isHidden = true
+        addSubview(figure)
     }
 
     /// The usage arc as a layer, so its `stroke-dashoffset` and `stroke` changes run 500ms `ease-out`
@@ -165,12 +228,21 @@ public final class ThreadContextWindowMeterView: ControlView {
 
     private func updateArc(animated: Bool) {
         let fraction = min(1, max(0, (usage?.percentage ?? 0) / 100))
-        let color = (fraction > 0.9 ? Themed.color(\.destructive) : Themed.color(capy ? \.foreground : \.mutedForeground, capy ? 0.8 : 0.72)).cgColor(in: self)
+        let color: CGColor
+        if capy {
+            // Redesign: the fill at full strength over a hairline track, in the status colors as the window fills.
+            let level = usage?.level ?? .neutral
+            color = Themed.color(level == .danger ? \.destructive : level == .warning ? \.warning : \.foreground).cgColor(in: self)
+        } else {
+            color = (fraction > 0.9 ? Themed.color(\.destructive) : Themed.color(\.mutedForeground, 0.72)).cgColor(in: self)
+        }
+        // Redesign eases the change briefly on its own curve; T3 takes 500ms `ease-out`.
+        let duration = capy ? RedesignTokens.Motion.appear : 0.5, timing = capy ? RedesignTokens.Motion.curve : Self.easeOut
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if animated, !arc.isHidden, fraction > 0, window != nil, !Motion.reduced {
-            Motion.animate(arc, keyPath: "strokeEnd", to: fraction, duration: 0.5, timing: Self.easeOut)
-            Motion.animate(arc, keyPath: "strokeColor", to: color, duration: 0.5, timing: Self.easeOut)
+            Motion.animate(arc, keyPath: "strokeEnd", to: fraction, duration: duration, timing: timing)
+            Motion.animate(arc, keyPath: "strokeColor", to: color, duration: duration, timing: timing)
         }
         arc.isHidden = fraction <= 0
         arc.lineWidth = ringWidth
@@ -182,6 +254,7 @@ public final class ThreadContextWindowMeterView: ControlView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updateArc(animated: false)
+        syncFigure()
         needsLayout = true
         needsDisplay = true
     }
@@ -192,24 +265,26 @@ public final class ThreadContextWindowMeterView: ControlView {
     }
 
     public override func draw(_ dirtyRect: NSRect) {
-        // Redesign's pill always holds a ring, so a reserved slot shows the empty track while the usage loads.
-        guard let ctx = NSGraphicsContext.current?.cgContext, usage != nil || (capy && reserved) else { return }
+        // Redesign shows nothing until the provider reports usage: an empty ring said nothing.
+        guard let ctx = NSGraphicsContext.current?.cgContext, usage != nil else { return }
         if capy, state.hoverOrPressed || detailsPopup != nil {
             ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: DitherPill.radius, cornerHeight: DitherPill.radius, transform: nil))
             ctx.setFillColor(Themed.color(\.foreground, 0.07).cgColor(in: self))
             ctx.fillPath()
         }
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let center = ringCenter
         let radius = ringRadius
         ctx.setLineWidth(ringWidth)
-        ctx.setStrokeColor(Themed.color(\.mutedForeground, capy ? 0.35 : 0.24).cgColor(in: self))
+        ctx.setStrokeColor(capy ? RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
+                                : Themed.color(\.mutedForeground, 0.24).cgColor(in: self))
         ctx.strokeEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
     }
 
     public override func layout() {
         super.layout()
         // A full turn from the top, clockwise on screen (y grows downward here); `strokeEnd` is the share used.
-        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let center = ringCenter
+        figure.frame = NSRect(x: Self.figureX, y: ((bounds.height - 16) / 2).rounded(), width: ceil(figure.textWidth) + 1, height: 16)
         let path = CGMutablePath()
         path.addArc(center: center, radius: ringRadius, startAngle: -.pi / 2, endAngle: 3 * .pi / 2, clockwise: false)
         CATransaction.begin()
@@ -330,9 +405,9 @@ final class ThreadContextWindowDetailsView: DSView {
     private var capy = false
     private var segments: [(view: FillView, share: CGFloat)] = []
     private var dots: [FillView] = []
-    /// Capy's legend colors, sampled from its popover, in `ThreadContextWindowUsage.breakdown` order: gray, blue, teal.
-    static let partColors: [NSColor] = [NSColor(srgbRed: 0.53, green: 0.53, blue: 0.55, alpha: 1), NSColor(srgbRed: 0.18, green: 0.51, blue: 0.96, alpha: 1),
-                                        NSColor(srgbRed: 0.29, green: 0.62, blue: 0.56, alpha: 1)]
+    /// The legend colors in `ThreadContextWindowUsage.breakdown` order: three steps of the text color. Capy's popover
+    /// used gray, blue and teal; Redesign keeps hue for its one accent and the status colors.
+    static let partColors: [NSColor] = [Themed.color(\.foreground, 0.85), Themed.color(\.foreground, 0.55), Themed.color(\.foreground, 0.3)]
     /// The legend rows: reported counts only, empty when the provider gave no split.
     static func legend(_ usage: ThreadContextWindowUsage?) -> [(name: String, value: Double, color: NSColor)] {
         zip(usage?.breakdown ?? [], partColors).map { ($0.name, $0.value, $1) }.filter { $0.value > 0 }

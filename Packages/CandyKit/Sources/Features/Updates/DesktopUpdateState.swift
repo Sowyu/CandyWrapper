@@ -228,7 +228,8 @@ public enum DesktopUpdateLogic {
     }
 
     /// The Settings Version row (SettingsPanels.tsx:399-426): button label, description, disabled.
-    public static func settingsButton(_ s: DesktopUpdateState?) -> (label: String, description: String, disabled: Bool) {
+    /// `sentenceCase` is Redesign's: CandyWrapper's own look writes "Up to date" where T3 writes "Up to Date".
+    public static func settingsButton(_ s: DesktopUpdateState?, sentenceCase: Bool = false) -> (label: String, description: String, disabled: Bool) {
         if s?.isRestarting == true { return ("Restarting…", "Restarting…", true) }
         let action = s.map(buttonAction) ?? .none
         let label: String = switch action {
@@ -238,8 +239,8 @@ public enum DesktopUpdateLogic {
             switch s?.status {
             case .checking: "Checking…"
             case .downloading: "Downloading…"
-            case .upToDate: "Up to Date"
-            default: "Check for Updates"
+            case .upToDate: sentenceCase ? "Up to date" : "Up to Date"
+            default: sentenceCase ? "Check for updates" : "Check for Updates"
             }
         }
         let description = action == .none ? "Current version of the application." : "Update available."

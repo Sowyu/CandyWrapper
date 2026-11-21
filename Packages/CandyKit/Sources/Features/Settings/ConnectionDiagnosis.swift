@@ -121,14 +121,14 @@ public struct ConnectionDiagnosis: Sendable, Equatable {
     private static func steps(_ host: String, _ located: Located, _ failure: ConnectionFailureInfo?) -> [String] {
         let checkHost = "On \(host), check Settings > Connections or run `t3 connect status`."
         switch located.cause {
-        case "offline": return ["Connect this device to the internet. T3 Code reconnects on its own."]
+        case "offline": return ["Connect this device to the internet. CandyWrapper reconnects on its own."]
         case "outdated": return ["Update T3 Code on \(host)."]
         case "clock_skew": return ["Turn on automatic date and time on this device and on \(host), then retry."]
         case "not_linked":
             return ["Check that this device is signed in to the same T3 Connect account as the host.",
                     "On \(host), open Settings > Connections and turn T3 Connect on."]
-        case "tunnel_pending": return ["Wait a minute. T3 Code retries on its own.", checkHost]
-        case "relay_error": return ["Wait a few minutes. T3 Code retries on its own.", "If it keeps failing, copy the diagnostics and report it."]
+        case "tunnel_pending": return ["Wait a minute. CandyWrapper retries on its own.", checkHost]
+        case "relay_error": return ["Wait a few minutes. CandyWrapper retries on its own.", "If it keeps failing, copy the diagnostics and report it."]
         case "tunnel_not_enabled": return ["On \(host), open Settings > Connections and turn T3 Connect on."]
         case "released", "tunnel_down":
             return ["Make sure \(host) is awake and T3 Code is running on it.", checkHost,
@@ -139,7 +139,7 @@ public struct ConnectionDiagnosis: Sendable, Equatable {
         default: break
         }
         switch located.hop {
-        case .device: return ["Restart T3 Code on this device.", "If it keeps failing, remove \(host) from this device and add it again."]
+        case .device: return ["Restart CandyWrapper.", "If it keeps failing, remove \(host) from this device and add it again."]
         case .relay:
             return failure?.reason == "authentication" ? ["Sign out of T3 Connect and sign in again."]
                 : ["Check this device's internet connection.", "A VPN, firewall, or ad blocker on this device can block T3 Connect."]
@@ -235,7 +235,7 @@ public struct ConnectionDiagnosis: Sendable, Equatable {
     /// `connectionDiagnosisText` (diagnosis.ts:337-348): one plain-text block for bug reports.
     public func text(hostLabel: String) -> String {
         let marks: [HopResult: String] = [.ok: "ok", .failed: "FAILED", .unchecked: "not checked"]
-        return ([ "T3 Code connection to \(hostLabel): \(headline)", "" ]
+        return ([ "CandyWrapper connection to \(hostLabel): \(headline)", "" ]
             + hops.map { "\($0.label): \(marks[$0.result]!)" } + [""]
             + facts.map { "\($0.label): \($0.value)" }
             + (moreInfoURL.map { ["", "More info: \($0)"] } ?? [])).joined(separator: "\n")

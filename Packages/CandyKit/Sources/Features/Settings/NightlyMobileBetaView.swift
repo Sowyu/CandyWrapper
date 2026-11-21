@@ -15,11 +15,15 @@ public final class NightlyMobileBetaView: DSView {
         iphone.action = { [weak self] in self?.show(android: false) }
         android.action = { [weak self] in self?.show(android: true) }
     }
-    public override var intrinsicContentSize: NSSize { NSSize(width: iphone.intrinsicContentSize.width + android.intrinsicContentSize.width + 8, height: 32) }
+    /// Redesign keeps the small buttons' own height, as View policy and View licenses in the same card have; T3 draws 32.
+    private var buttonHeight: CGFloat {
+        ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? iphone.intrinsicContentSize.height : 32
+    }
+    public override var intrinsicContentSize: NSSize { NSSize(width: iphone.intrinsicContentSize.width + android.intrinsicContentSize.width + 8, height: buttonHeight) }
     public override func layout() {
         super.layout()
-        iphone.frame = NSRect(x: 0, y: 0, width: iphone.intrinsicContentSize.width, height: 32)
-        android.frame = NSRect(x: iphone.frame.maxX + 8, y: 0, width: android.intrinsicContentSize.width, height: 32)
+        iphone.frame = NSRect(x: 0, y: 0, width: iphone.intrinsicContentSize.width, height: buttonHeight)
+        android.frame = NSRect(x: iphone.frame.maxX + 8, y: 0, width: android.intrinsicContentSize.width, height: buttonHeight)
     }
     private func show(android isAndroid: Bool) {
         let content = NightlyMobileBetaPopup(android: isAndroid)

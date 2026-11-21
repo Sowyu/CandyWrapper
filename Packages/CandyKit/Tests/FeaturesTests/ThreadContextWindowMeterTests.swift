@@ -46,6 +46,8 @@ struct ThreadContextWindowMeterTests {
             meter.layoutSubtreeIfNeeded()
             #expect(meter.capy)
             let inked = try inkedPixels(meter)
+            // Before the provider reports usage Redesign draws nothing: an empty ring said nothing (polish audit 2026-11-21).
+            if state == .loading { #expect(inked == 0, "a reserved slot draws nothing"); return }
             #expect(inked > 40, "\(state) draws no track")
             let fraction: Double = switch state { case .partial: 0.518; case .nearFull: 0.95; default: 0 }
             #expect(meter.arc.isHidden == (fraction == 0))
