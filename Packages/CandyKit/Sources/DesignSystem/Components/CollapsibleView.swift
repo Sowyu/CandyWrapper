@@ -88,7 +88,13 @@ public final class CollapsibleSectionHeaderView: ControlView {
     public var tone: Tone = .muted { didSet { restyle() } }
     public var title: String { didSet { label.text = title; needsLayout = true } }
     public var isExpanded = false {
-        didSet { if isExpanded != oldValue { rotateChevron(animated: true); setAccessibilityExpanded(isExpanded) } }
+        didSet {
+            guard isExpanded != oldValue else { return }
+            rotateChevron(animated: true)
+            setAccessibilityExpanded(isExpanded)
+            // Opening stretches the thinning end out to rest; closing reaches past rest and gathers back.
+            if window != nil { stripMotion.stretchStart = (DitherStrip.Motion.now(), isExpanded ? DitherStrip.openFrom : DitherStrip.closeFrom); startStripMotion() }
+        }
     }
     public var accessory: NSView? {
         didSet { oldValue?.removeFromSuperview(); accessory.map(addSubview); needsLayout = true }
@@ -188,13 +194,79 @@ public final class CollapsibleSectionHeaderView: ControlView {
         let span = DitherStrip.span(labelEnd: labelEnd, limit: limit)
         let height = CGFloat(DitherStrip.rows) * DitherStrip.cell
         let top = ((midY + 1 - height / 2) / DitherStrip.cell).rounded() * DitherStrip.cell
-        strip.frame = CGRect(x: span.minX, y: top, width: span.maxX - span.minX, height: height)
-        stripMask.frame = strip.bounds
+        stripRest = CGRect(x: span.minX, y: top, width: span.maxX - span.minX, height: height)
         // Rendered only when the columns change: a width change that moves the label or the chevron.
         if span != stripSpan {
             stripSpan = span
-            stripMask.contents = DitherStrip.mask(span)
+            if stripLink == nil { stripMask.contents = DitherStrip.mask(span) }
         }
+        placeStrip()
+    }
+
+    // MARK: Strip motion
+
+    /// The strip's frame at rest; an animation adds 1pt of headroom above it for the wave's lift.
+    private var stripRest: CGRect = .zero
+    private var stripMotion = DitherStrip.Motion()
+    private var stripLink: CADisplayLink?
+
+    private func placeStrip() {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        // Moving, the strip gains 1pt on top (the view is flipped) for the wave's lift; the frame mask is that tall.
+        strip.frame = stripLink == nil ? stripRest
+            : CGRect(x: stripRest.minX, y: stripRest.minY - 1, width: stripRest.width, height: stripRest.height + 1)
+        stripMask.frame = strip.bounds
+        CATransaction.commit()
+    }
+
+    /// One wave along the line: the pointer came onto the row, or the section's count changed. A wave already
+    /// running carries on rather than restarting.
+    public func playStripWave() {
+        guard stripMotion.waveStart == nil else { return }
+        stripMotion.waveStart = DitherStrip.Motion.now()
+        startStripMotion()
+    }
+
+    /// Runs the display link while a wave or a stretch is under way; Redesign's strip only, never with Reduce Motion
+    /// or off screen.
+    private func startStripMotion() {
+        guard showsStrip, !Motion.reduced, window?.isVisible == true, !isHiddenOrHasHiddenAncestor, stripSpan != nil else {
+            stripMotion = DitherStrip.Motion()
+            return
+        }
+        if stripLink == nil {
+            let link = displayLink(target: self, selector: #selector(stripFrame))
+            link.add(to: .main, forMode: .common)
+            stripLink = link
+            placeStrip()
+            restyle()
+        }
+        stripFrame()
+    }
+
+    @objc private func stripFrame() {
+        guard let span = stripSpan, window?.isVisible == true,
+              let f = stripMotion.frame(now: DitherStrip.Motion.now(), stretchDuration: RedesignTokens.Motion.large) else { endStripMotion(); return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        stripMask.contents = DitherStrip.frameMask(span, stretch: f.stretch, wave: f.wave)
+        CATransaction.commit()
+    }
+
+    /// Back to the resting strip, pixel for pixel: its own mask, frame and fill.
+    private func endStripMotion() {
+        stripLink?.invalidate()
+        stripLink = nil
+        stripMotion = DitherStrip.Motion()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if let span = stripSpan { stripMask.contents = DitherStrip.mask(span) }
+        CATransaction.commit()
+        placeStrip()
+        restyle()
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil, stripLink != nil { endStripMotion() }
     }
 
     private func rotateChevron(animated: Bool) {
@@ -216,6 +288,8 @@ public final class CollapsibleSectionHeaderView: ControlView {
     public override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
         restyle()
+        // The pointer came onto the row: one wave. Not again until it has left and come back.
+        if state.hovered, !old.hovered { playStripWave() }
     }
 
     public override func updateLayer() { restyle() }
@@ -259,7 +333,9 @@ public final class CollapsibleSectionHeaderView: ControlView {
         chevron.strokeColor = text.cgColor(in: self)
         // The mock's 0.7 over the label's color.
         let ink = text.cgColor(in: self)
-        strip.backgroundColor = showsStrip ? ink.copy(alpha: ink.alpha * 0.7) : nil
+        // At rest the fill is the ink at 0.7; while the strip moves the fill is full and each dot carries the 0.7 itself,
+        // so the wave can brighten it.
+        strip.backgroundColor = showsStrip ? ink.copy(alpha: ink.alpha * (stripLink == nil ? DitherStrip.restAlpha : 1)) : nil
         chevron.lineWidth = showsStrip ? IconView.ditherStroke : 1
         CATransaction.commit()
     }

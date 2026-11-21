@@ -1412,7 +1412,9 @@ final class SidebarShelfRowView: SidebarRowBase {
     override func prepareForReuse() {
         super.prepareForReuse()
         dragTone = nil
+        shownCount = nil
     }
+    private var shownCount: (shelf: SidebarShelf, count: Int)?
 
     private let countLabel = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground))
 
@@ -1438,6 +1440,9 @@ final class SidebarShelfRowView: SidebarRowBase {
         let snoozedTone: CollapsibleSectionHeaderView.Tone = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .accent : .info
         header.tone = dragTone ?? (shelf == .snoozed ? snoozedTone : .muted)
         if header.isExpanded != expanded { header.isExpanded = expanded }
+        // A thread snoozed, woken or settled: one wave along the line.
+        if let shown = shownCount, shown.shelf == shelf, shown.count != count { header.playStripWave() }
+        shownCount = (shelf, count)
         var st = header.state; st.focusVisible = isKeyboardFocused; header.previewState(st)
         header.dropStaleHover()
     }
@@ -1447,6 +1452,14 @@ final class SidebarShelfRowView: SidebarRowBase {
         super.viewDidMoveToWindow()
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver); self.resignObserver = nil }
         guard let window else { header.dropStaleHover(); return }
+        #if DEBUG
+        // `CANDY_DEBUG_STRIP_WAVE=1` plays the hover wave twice after the row appears, to record it without a pointer.
+        if ProcessInfo.processInfo.environment["CANDY_DEBUG_STRIP_WAVE"] != nil {
+            for delay in [4.0, 7.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in MainActor.assumeIsolated { self?.header.playStripWave() } }
+            }
+        }
+        #endif
         resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.header.dropStaleHover() }
         }
