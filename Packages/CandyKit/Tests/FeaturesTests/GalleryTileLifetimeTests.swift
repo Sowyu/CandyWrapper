@@ -17,11 +17,20 @@ import T3Protocol
     private func loadedWall(_ window: NSWindow, prefilled: Bool = true) async throws -> (ThreadImageWallView, [GalleryImage]) {
         let wall = ThreadImageWallView(frame: window.contentView!.bounds)
         window.contentView!.addSubview(wall)
-        wall.masonry.makeLoader = { _ in { @Sendable _ in Self.pixels() } }
+        // A main-actor loader: a nonisolated one waits for the cooperative pool, which other suites in a full parallel
+        // run keep busy for minutes.
+        wall.masonry.makeLoader = { _ in { @MainActor _ in Self.pixels() } }
         #expect(wall.masonry.cache === ImageDecodeCache.gallery)
         // A cache of its own: AsyncImageCacheTests empties the shared ones in parallel.
         wall.masonry.cache = NSCache()
-        let images = ThreadImageWallTests.measuredImages()
+        // Keys of its own: `ImageDecodeCache` shares one in-flight decode per key across every cache, and other suites
+        // build the same `fakeImages()`, whose keys differ only by the second they were made in. A tile that joined
+        // their decode waited on their loader.
+        let images = ThreadImageWallTests.measuredImages().map { image in
+            var image = image
+            image.at = T3Timestamp(image.at.raw.replacingOccurrences(of: "Z", with: ".517Z"))
+            return image
+        }
         if prefilled, let pixels = Self.pixels() {
             for image in images { wall.masonry.cache.setObject(ImageDecodeCache.Cached(pixels, side: 4096), forKey: "\(image.pixelKey)|cover" as NSString) }
         }
@@ -127,10 +136,10 @@ extension GalleryTileLifetimeTests {
         defer { window.contentView = nil; window.close() }
         let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 64, height: 44))
         window.contentView!.addSubview(view)
-        view.set(key: "stale-" + UUID().uuidString, fallbackText: "x", loader: { @Sendable _ in Self.pixels() })
+        view.set(key: "stale-" + UUID().uuidString, fallbackText: "x", loader: { @MainActor _ in Self.pixels() })
         await ThreadImageGalleryTests.pump { view.image != nil }
         let old = try #require(view.image)
-        view.reload(loader: { @Sendable _ in
+        view.reload(loader: { @MainActor _ in
             try? await Task.sleep(for: .milliseconds(200))
             return Self.pixels()
         })
