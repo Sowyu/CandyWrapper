@@ -143,7 +143,7 @@ Each row gives the place, what happened on main before this change and what happ
 | Thread loading skeleton to content, ThreadPanelView.swift:639 | skeleton pulses on a 1.2 s loop and hides at once | the loop reads `loop`; the swap stays instant so text is readable on its first frame |
 | Image viewer, Features/Composer/ExpandedImagePreviewView.swift:181 | fades in 140 ms ease-out | unchanged, left: image-speed owns this file |
 | Image zoom, Features/Thread/ImageZoom.swift:130 | `quick` on `curve` | unchanged (same values) |
-| Gallery wall, Features/Thread/ThreadImageWallView.swift:686 | `appear` and `quick` on `curve` | unchanged (same values) |
+| Gallery wall, Features/Thread/ThreadImageGallery.swift `openWall` | `appear` and `quick` on `curve` | the wall is an `AppRouteModalView` like Settings: modal pattern, backdrop `large`, card `standard`, both out on `fast`; the large view inside fades on `quick` |
 | Dithered usage chart entrance, Features/Usage/UsageChartView.swift:450 | `quick` on `curve` | unchanged, listed only |
 | Gradient background, DesignSystem/Components/DitherArtView.swift | discrete keyframe loop over 12 s, only while seen | unchanged, listed only |
 | Picture resolve-in, DitherArtView.swift:172 | 750 ms | unchanged, exempt from the guard |

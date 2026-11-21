@@ -20,6 +20,9 @@ public final class AppRouteModalView: DSView {
     private var keyMonitor: Any?
     private var backdropPressed = false
     public private(set) var isClosing = false
+    /// Where focus goes back on close. Settings sets none, so the opener's focus ring stays off; the image gallery
+    /// returns it to the view that had it.
+    public weak var finalFocus: NSResponder?
 
     /// Static construction also serves offscreen fidelity renders. Presenting adds the blur and focus guard.
     public init(label: String, content: NSView, navigation: NSView? = nil) {
@@ -54,6 +57,8 @@ public final class AppRouteModalView: DSView {
     public static func present(label: String, content: NSView, navigation: NSView? = nil, in window: NSWindow) -> AppRouteModalView {
         let host = AppRouteModalView(label: label, content: content, navigation: navigation)
         guard let container = window.contentView else { return host }
+        // One route at a time: Settings opened over the image gallery replaces it, as Settings replaces Usage.
+        for open in container.subviews.compactMap({ $0 as? AppRouteModalView }) where !open.isClosing { open.close(animated: false) }
         host.blurred.contents = ModalHost.blurredSnapshot(of: container)
         host.frame = container.bounds
         host.autoresizingMask = [.width, .height]
@@ -182,6 +187,7 @@ public final class AppRouteModalView: DSView {
             window?.makeFirstResponder(self)
         }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
+        if let finalFocus, let window, (finalFocus as? NSView)?.window === window { window.makeFirstResponder(finalFocus) }
         let finish: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
             // No finalFocus: let the window receive keys without lighting the opener's focus ring.
