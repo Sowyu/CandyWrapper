@@ -56,7 +56,7 @@ import T3Protocol
 
     @Test func searchFindsTheTabAndEveryRow() {
         let ids = ["redesign", "redesign-picture", "background-dim", "accent-color", "ignore-reduce-transparency", "composer-collapse",
-                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate"]
+                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate", "redesign-tint"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
         for id in ids {
             let item = SettingsSearch.item(id)

@@ -62,6 +62,12 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherAccent = DitherAccent.teal.id
     /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
     public var ignoreReduceTransparency = false
+    /// Redesign's "Tint from picture": its neutral surfaces lean toward `pictureTint` (`PictureTint`) under Picture
+    /// and Blur. The setting defaults on; this input stays off unless `ThemeLibrary` passes the setting, so tests and
+    /// fixtures that build an input draw the untinted palette.
+    public var ditherTintFromPicture = false
+    /// The picture's tint as an OKLab a and b, computed once per picture (`PictureTint.sync`), or nil before then.
+    public var pictureTint: SIMD2<Double>?
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -125,7 +131,9 @@ public enum ThemeRuntime {
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
             || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark))
             || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
-            || (next.ditherBlur != old.ditherBlur && (next.ditherLight || next.ditherDark)) {
+            || ((next.ditherBlur != old.ditherBlur || next.ditherGradient != old.ditherGradient
+                 || next.ditherTintFromPicture != old.ditherTintFromPicture || next.pictureTint != old.pictureTint)
+                && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -171,6 +179,14 @@ public enum ThemeRuntime {
             if let view = window.contentView?.superview ?? window.contentView { refresh(view) }
         }
         NotificationCenter.default.post(name: didChange, object: nil)
+    }
+
+    /// The tint of the picture the art shows, from `PictureTint.sync`. Keeps every other input.
+    public static func setPictureTint(_ tint: SIMD2<Double>?) {
+        guard tint != input.pictureTint else { return }
+        var next = input
+        next.pictureTint = tint
+        apply(next)
     }
 
     /// Tells every view in the tree its colors changed, the same way AppKit tells them about light and dark.
@@ -275,10 +291,16 @@ public enum ThemeRuntime {
             let readable = WindowGlass.frostReadable(palette, dark: dark, sidebar: sidebar, opacity: opacity)
             return WindowGlass.frosted(readable, dark: dark, sidebar: sidebar, opacity: opacity)
         }
-        return ThemePalettes(light: glass(diff(light?.0 ?? Tokens.light, dark: false), dark: false, sidebar: false),
-                             dark: glass(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true, sidebar: false),
-                             sidebarLight: glass(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false, sidebar: true),
-                             sidebarDark: glass(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true, sidebar: true))
+        // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Gradient has no picture.
+        func tinted(_ palette: Palette, dark: Bool) -> Palette {
+            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherGradient,
+                  dark ? input.ditherDark : input.ditherLight else { return palette }
+            return PictureTint.apply(tint, to: palette)
+        }
+        return ThemePalettes(light: tinted(glass(diff(light?.0 ?? Tokens.light, dark: false), dark: false, sidebar: false), dark: false),
+                             dark: tinted(glass(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true, sidebar: false), dark: true),
+                             sidebarLight: tinted(glass(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false, sidebar: true), dark: false),
+                             sidebarDark: tinted(glass(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true, sidebar: true), dark: true))
     }
 
     private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }

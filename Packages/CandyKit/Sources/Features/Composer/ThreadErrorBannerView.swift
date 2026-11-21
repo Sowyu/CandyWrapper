@@ -253,7 +253,9 @@ public final class ThreadErrorBannerView: DSView {
         let warning = banner?.variant == .warning
         let color: KeyPath<Palette, TokenColor> = warning ? \.warning : \.error
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        surface.layer?.backgroundColor = Themed.color(\.background, 0.8).cgColor(in: self)
+        // Redesign draws no blur under it, so its 80% fill let the rows behind read through: the solid surface instead.
+        surface.layer?.backgroundColor = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? RedesignTokens.Surface.fill(in: self)
+            : Themed.color(\.background, 0.8).cgColor(in: self)
         tint.backgroundColor = Themed.color(color, 0.04).cgColor(in: self)
         surface.layer?.borderColor = Themed.color(color, 0.32).cgColor(in: self)
         CATransaction.commit()
