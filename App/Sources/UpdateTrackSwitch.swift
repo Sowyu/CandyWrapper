@@ -79,7 +79,7 @@ final class UpdateTrackSwitch {
                 self.presentPlan(L.Release(channel: channel.rawValue, version: found.version, databaseMigration: found.databaseMigration))
             } catch {
                 guard let self, let host, self.modal === host else { return }
-                checking.message = "Could not check \(label) releases: \(error.localizedDescription)"
+                checking.message = L.checkFailed(channel.rawValue, error: error)
             }
         }
     }

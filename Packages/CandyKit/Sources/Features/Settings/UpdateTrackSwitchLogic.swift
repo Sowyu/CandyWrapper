@@ -57,6 +57,14 @@ public enum UpdateTrackSwitchLogic {
 
     public static func label(_ channel: String) -> String { channel == "nightly" ? "Nightly" : "Stable" }
 
+    /// The Switch dialog's line when the release check fails: the error's own sentence when it has one (RPC errors
+    /// do), never a Swift type name, and what to try.
+    public static func checkFailed(_ channel: String, error: any Error) -> String {
+        let reason = (error as? LocalizedError)?.errorDescription.map { $0.hasSuffix(".") ? $0 : $0 + "." }
+            ?? "The server did not answer."
+        return "Could not check \(label(channel)) releases. \(reason) Check that the primary server is connected and try again."
+    }
+
     /// `desktopUpdateChannelOf` (shared/cliRelease.ts:102-104).
     public static func desktopChannel(_ version: String) -> String {
         UpdateEverythingLogic.channel(version) == "nightly" ? "nightly" : "latest"

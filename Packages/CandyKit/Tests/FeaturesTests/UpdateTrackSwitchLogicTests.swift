@@ -104,4 +104,15 @@ struct UpdateTrackSwitchLogicTests {
         #expect(L.compareSemver("0.0.46-nightly.20261119.10", "0.0.46-nightly.20261119.9") > 0)
         #expect(L.compareSemver("1.2.3", "v1.2.3") == 0)
     }
+
+    /// Release check 1.16.0, M2: the dialog said "(T3Transport.RPCClientError error 0.)".
+    @Test func checkFailedSaysWhatFailedWithoutTypeNames() {
+        struct Said: LocalizedError { var errorDescription: String? { "Registry lookup failed" } }
+        enum Mute: Error { case gone }
+        #expect(L.checkFailed("latest", error: Said())
+                == "Could not check Stable releases. Registry lookup failed. Check that the primary server is connected and try again.")
+        let generic = L.checkFailed("nightly", error: Mute.gone)
+        #expect(generic == "Could not check Nightly releases. The server did not answer. Check that the primary server is connected and try again.")
+        #expect(!generic.contains("Mute") && !generic.contains("error 0"))
+    }
 }

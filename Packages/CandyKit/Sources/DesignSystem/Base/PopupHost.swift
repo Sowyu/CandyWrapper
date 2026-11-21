@@ -452,6 +452,16 @@ public final class PopupHost: DSView {
         if popups.isEmpty { removeMonitors() }
     }
 
+    /// Ends every exit fade at once. A modal calls it before it snapshots the window for its blurred backdrop, so a
+    /// list that just closed is not frozen into the backdrop.
+    public func finishExits() {
+        for case let container as PopupContainer in subviews where !popups.contains(where: { $0.container === container }) {
+            container.layer?.removeAllAnimations()
+            container.removeFromSuperview()
+        }
+        exitingPassive.removeAll()
+    }
+
     public func closeAll() { for popup in popups.reversed() where popups.contains(where: { $0 === popup }) { close(popup, returnFocus: false) } }
 
     func closeChildren(of parent: OpenPopup) {

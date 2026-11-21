@@ -221,17 +221,18 @@ public final class SelectView: ControlView {
             item.glyph = optionGlyphs.indices.contains(i) ? optionGlyphs[i] : nil
             item.trailingDetail = optionTrailingDetails.indices.contains(i) ? optionTrailingDetails[i] : nil
             item.isDisabled = disabledOptions.contains(i)
+            // An item action runs after the list closes (`MenuPopupView.choose`), so a dialog that `onChange`
+            // opens, like the Update track switch, never has the list drawn under its backdrop.
+            item.action = { [weak self] in
+                self?.selectedIndex = i
+                self?.onChange?(i)
+            }
             optionAt[items.count] = i
             items.append(item)
         }
         let selectedRow = selectedIndex.flatMap { s in optionAt.first { $0.value == s }?.key }
         let list = MenuPopupView(items: items, style: .select)
         list.minimumWidth = bounds.width
-        list.onChoose = { [weak self] row in
-            guard let i = optionAt[row] else { return }
-            self?.selectedIndex = i
-            self?.onChange?(i)
-        }
         var placement = PopupPlacement.dropdown
         if !alignItemWithTrigger { placement.align = popupAlign; placement.side = popupSide }
         let popup = host.open(list, trigger: self, placement: placement, swallowsOutsideClick: true)
