@@ -2,6 +2,8 @@
 
 Written on 2026-11-21, right after v1.16.0 (build 85, commit `9522729b`). On the same day the user said "lets fix all these bugs run it", so the bug items are in progress: 7 and 9 (task `picture-fix`), 5 and the haptics and leftovers in 4 (task `sidebar-fixes`), and mockups for 6 (task `flower-mock`). Items 1, 2, 3, 8 and 10 are not started. The user said: "dont start 1.17.0 yet but write down everything that ought to come out in 1.17.0 so another agent with 0 context can easily pick it up and start building". Wait for the user to say go.
 
+Update, later on 2026-11-21: the user will stop working on CandyWrapper for a while after 1.17.0 and said "leave those out ship without those" about items 1, 2, 3, 8 and 10. So 1.17.0 ships the bug items (4, 5, 6, 7, 9) plus what the user asked for the same day: the model picker changes (merged, `7b8b809e`), the check mark for a chosen menu row (merged), the gallery reload fix (task `gallery-reload`), the Flower's 3D bloom-then-settle move and composer blur (task `flower-bg`), and "Rewrite title" with its typing effect, model setting, the moving dither line and sidebar spacing (task `sidebar-fixes`). Items 1, 2, 3, 8 and 10 wait for a later release. The user tried centring the palette on the composer column and rejected it ("offset looks dumb"), so it stays on the window centre.
+
 Read `AGENTS.md` first. It has the rules, the commands and how to check work on screen. This file only lists what to build and what was already decided.
 
 ## How the last two days worked
