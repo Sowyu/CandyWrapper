@@ -28,7 +28,7 @@ The rules that came out of it are in `docs/research/redesign-system.md`:
 - Tabler icons. One set of motion timings in `RedesignTokens.Motion`.
 - Dither is a deliberate texture: the whole image in one or two inks on a fixed grid, never dots sprinkled over a photo. The picture background does not move. The user called a drifting photo "horrid".
 - Floating controls always have a solid background. Two bugs shipped from forgetting this.
-- Nothing may sit behind text. The Flower background hides on a thread unless the window has a clear margin, and the user confirmed that.
+- Text must stay readable over any background: body text at 7:1 or better, muted at 4.5:1. In 1.16.0 the Flower background hides on a thread unless the window has a clear margin. The user first agreed to that, then asked for the flower to be a real background (item 6 below).
 
 ## How the user wants to be shown work
 
@@ -41,7 +41,7 @@ The rules that came out of it are in `docs/research/redesign-system.md`:
 
 ## Work for 1.17.0
 
-Suggested order. Items 1 to 6 need no answer from the user.
+Suggested order. Items 1 to 7 need no answer from the user.
 
 ### 1. Video and GIFs in replies
 
@@ -98,22 +98,36 @@ In 1.16.0 the sidebar's Settled section groups threads under project headers. Th
 - A flat list loses the project name. Show it on the row instead: the project's avatar at the row's left, or the project name in the second line ("portfolio · anikodev.org · settled 3h ago"). Mock both and let the user pick.
 - Redesign only. The default themes keep T3's Settled section.
 
-### 6. Thin scrollbars and one focus ring
+### 6. The Flower as a background, not a prop
+
+The user, after using 1.16.0: "the lotus flower needs to be a big peice of the background not just chilling on the corner it needs to be a background not a fancy prop".
+
+Today (`DitherArtView.swift`, `LotusArt.swift`, placement tested in `LotusPlacementTests`): on the new-thread page the flower is centred above the composer and capped at a 288pt radius. On a thread it is a small flower in the right margin, at most 150pt, and it hides when there is no margin, which is most window sizes. Pictures: `~/CandyWrapper-research/sandbox/lotus-wire-2026-11-21/00-placement-four-sizes-dark.png`.
+
+What to build:
+
+- The flower fills the content area like a picture would. It is large, it can run off the edges, and the composer, the pills and the conversation sit on top of it. It shows on a thread at every window size.
+- Text still has to read. Behind the reading column, thin and dim the dots the way Picture does (`PictureInk.textBound`, the column rule), or give the column a plain ground if item 8 is a yes. Measure the worst cell.
+- Keep the bloom on opening a thread and the slow idle turn, the stop conditions, the "Animate background" switch and Reduce Motion.
+- A larger flower means larger frames. The release walk already measured 126 MB on the Flower page (item 4). Render at a coarser cell size or fewer frames, and report the footprint. Idle cost with motion stopped must stay at zero.
+- Mock it first: three or four compositions (centred and oversized, low and cropped by the bottom edge, off to one side, a top-down view) on the new-thread page and on a thread, dark and light, as PNG sheets. The user picks before anything is wired in. The standalone renderer tools are in `~/CandyWrapper-research/sandbox/lotus-2026-11-21/tools/`.
+
+### 7. Thin scrollbars and one focus ring
 
 Approved by the user as part of "what else can make this app more premium". Thin overlay scrollbars everywhere in Redesign and one focus ring style. Small.
 
-### 7. Clean reading column in dark. Ask first.
+### 8. Clean reading column in dark. Ask first.
 
 In Redesign dark with a Picture background, conversation text sits on a thinned dither. It measures 10:1 but reads busy. Light mode already has a plain column with the picture only in the margins (`PictureInk`, `lightColumnIsClean`). The orchestrator recommended the same for dark. **The user has not answered.** Ask before building.
 
-### 8. Inset card layout for threads. Ask first.
+### 9. Inset card layout for threads. Ask first.
 
 The largest job. The thread becomes a bordered card with its tab row inside it, like Capy, behind a switch in Settings > Redesign.
 
 - The user saw the mock (`~/CandyWrapper-research/sandbox/redesign-user-notes/inset-card-mock.html`) and said "as yes thats what i was thinking about indeed" and "also make it a toggle".
 - **Two answers are still owed:** do Diff and Terminal become tabs inside the card or stay as the separate right and bottom cards built in 1.16.0, and is the switch on or off by default. The orchestrator suggested tabs inside and on by default.
 - Reuse `DesignSystem/Components/CardTopRow.swift`. It was built for the right panel's top row with this in mind.
-- If item 7 is a yes, it belongs in the same change.
+- If item 8 is a yes, it belongs in the same change.
 
 Do this last. It touches everything.
 
