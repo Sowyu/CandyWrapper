@@ -234,9 +234,10 @@ public enum PictureInk {
     /// black just more blacker near the middle subtly so its not super obvious"): right behind the text this share of
     /// the dots drops out and the rest lose this share of their light, easing to none by the margins.
     nonisolated static let readingCalm = 0.7
-    /// The darkening's shape: full to `calmInset` inside the column's edges, then gone over the margin beside it,
-    /// at least `calmReach.lowerBound` and at most `calmReach.upperBound` wide.
-    nonisolated static let calmInset: Double = 48, calmReach: ClosedRange<Double> = 96...240
+    /// The darkening's shape: full to `calmInset` inside the column's edges, then gone over the whole margin beside
+    /// it, at least `calmReachMin` wide. The user chose this over a 240pt fall-off on the Great Wave in a 1975pt window,
+    /// whose 430pt margins showed a darker middle with bright sides (picture-fix-2026-11-21/5-great-wave-1975x1235.png).
+    nonisolated static let calmInset: Double = 48, calmReachMin: Double = 96
     /// Light's share behind the column: none. Muted text needs a cell of luminance 0.94 or more there, so any dot left
     /// behind the column is a near-white smudge; light keeps a clean reading column and the ink on the margins.
     nonisolated static let lightColumnDensity = 0.0
@@ -256,10 +257,9 @@ public enum PictureInk {
         return DitherArt.smoothstep(0, columnReach(column: c, panelWidth: panelWidth), d)
     }
 
-    /// How far beside the column the darkening reaches: the narrower margin, held to `calmReach`.
+    /// How far beside the column the darkening reaches: the narrower margin, at least `calmReachMin`.
     nonisolated static func columnReach(column c: [Double], panelWidth: Double) -> Double {
-        let margin = max(min(c[0], panelWidth - c[0] - c[2]), 0)
-        return min(max(margin, calmReach.lowerBound), calmReach.upperBound)
+        max(min(c[0], panelWidth - c[0] - c[2]), calmReachMin)
     }
 
     /// The darkening's weight at `x` for a thread's reading column, before `readingCalm`: 1 behind the text, easing

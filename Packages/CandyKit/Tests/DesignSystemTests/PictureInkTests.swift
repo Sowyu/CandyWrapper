@@ -151,8 +151,9 @@ struct PictureInkTests {
         // Behind the text, edge to edge, it holds at 85% or more.
         #expect(PictureInk.columnCalm(column[0], column: column, panelWidth: panel) > 0.85)
         #expect(PictureInk.columnCalm(column[0] + column[2], column: column, panelWidth: panel) > 0.85)
-        // Gone a margin's width out, and 240pt out at most.
-        #expect(PictureInk.columnCalm(column[0] + column[2] + 240, column: column, panelWidth: panel) == 0)
+        // Gone by the panel's edge, the whole margin out.
+        #expect(PictureInk.columnCalm(panel, column: column, panelWidth: panel) == 0)
+        #expect(PictureInk.columnCalm(column[0] + column[2] + 120, column: column, panelWidth: panel) > 0)
     }
 
     /// Rendered over an even picture, the dots get fewer toward the column's centre band by band, and in light the
