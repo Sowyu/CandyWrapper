@@ -193,12 +193,10 @@ public final class ThreadHeaderView: TopbarDragView {
         toggles[0].setAccessibilityLabel("Toggle thread details panel")
         toggles[1].setAccessibilityLabel("Toggle terminal drawer")
         toggles[2].setAccessibilityLabel("Toggle right panel")
-        // Redesign moves them into the header pill, where they are icon-only.
-        TooltipController.redesign(toggles[0], "Thread actions")
-        TooltipController.redesign(toggles[1], "Toggle terminal") { ActiveKeymap.label(for: "terminal.toggle") }
-        TooltipController.redesign(toggles[2], "Toggle right panel") { ActiveKeymap.label(for: "rightPanel.toggle") }
         toggles.forEach(addSubview)
         addSubview(cost)
+        // One tooltip per toggle in every theme: T3's "Toggle terminal drawer (⌘J)", which Redesign's header pill draws as
+        // the words and key caps (`TooltipController.shownParts`). A second, Redesign-only attach here was replaced by this one.
         toggleTips = toggles.map { TooltipController.attach(to: $0, text: "", placement: PopupPlacement(side: .bottom, align: .center, sideOffset: 4)) }
         refreshToggleTooltips()
         // The header lives as long as the window: the observer is never removed.
