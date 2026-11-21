@@ -2,8 +2,15 @@
 # Runs the CandyKit tests after any Origin energy run ends. Arguments go to `swift test`,
 # for example `scripts/test --filter SidebarFidelityTests`.
 # `scripts/test --fast` leaves out the pixel, web view and stress suites and the few big-fixture
-# tests that hold the main thread for seconds each. Run it after each change and the full suite
-# before a PR or a release.
+# tests that hold the main thread for seconds each. The integrator runs it after every merge and the full
+# suite before a release.
+# `scripts/test --mine` runs only the suites near what this branch changed since main, committed or not:
+# - a test file you changed;
+# - for a file in Features/<Area>/, every test file named <Area>*, fidelity suites included;
+# - for any source file, test files whose name holds its name, or starts with it minus a View, Views,
+#   Controller, Store, Logic or Model ending;
+# - RedesignTokenGuardTests for any source change, RedesignBaselineTests for a changed view.
+# `--mine --list` prints the suites without running them. App/Sources has no tests here: run scripts/check-app-build.
 here="${0:A:h}"
 "$here/wait-origin"
 slow=(
@@ -18,6 +25,35 @@ if [[ "$1" == "--fast" ]]; then
   args=(--skip "${(j:|:)slow}" "${@:2}")
 fi
 cd "$here/../Packages/CandyKit" || exit 1
+if [[ "$1" == "--mine" ]]; then
+  base=$(git merge-base HEAD main) || exit 1
+  changed=(${(f)"$(cd ../.. && { git diff --name-only $base; git ls-files --others --exclude-standard; } | sort -u)"})
+  tests=(Tests/*/*.swift)
+  picked=()
+  for f in $changed; do
+    [[ -e ../../$f ]] || continue
+    case $f in
+      Packages/CandyKit/Tests/*.swift) picked+=(${f#Packages/CandyKit/}) ;;
+      Packages/CandyKit/Sources/*.swift)
+        rest=${f#Packages/CandyKit/Sources/}
+        stem=${${f:t}%.swift}
+        root=${stem%(View|Views|Controller|Store|Logic|Model)}
+        picked+=(Tests/*/RedesignTokenGuardTests.swift(N))
+        [[ $rest == Features/*/* || $rest == DesignSystem/* ]] && [[ $stem == *View* || $rest == DesignSystem/* ]] && picked+=(Tests/*/RedesignBaselineTests.swift(N))
+        [[ $rest == Features/*/* ]] && { area=${${rest#Features/}%%/*}; picked+=(${(M)tests:#*/${area}*}) }
+        (( ${#stem} >= 5 )) && picked+=(${(M)tests:#*${stem}*})
+        (( ${#root} >= 5 )) && picked+=(${(M)tests:#*/${root}*}) ;;
+    esac
+  done
+  # A suite is any top-level struct, class or enum the picked files declare.
+  suites=(${(u)${(f)"$(cat ${(u)picked} /dev/null 2>/dev/null | sed -nE 's/^(@[A-Za-z]+(\([^)]*\))? +)*(final +)?(struct|class|enum) +([A-Za-z0-9_]+).*/\5/p')"}})
+  if [[ "$2" == "--list" ]]; then print -l $suites; exit 0; fi
+  if (( ! ${#suites} )); then print "no CandyKit suites near this branch's changes"; exit 0; fi
+  files=(${(u)picked})
+  print -u2 "running ${#suites} suites from ${#files} test files"
+  # swift test's --filter takes a regular expression but no \b, so the names stand bare.
+  args=(--filter "(${(j:|:)suites})" "${@:2}")
+fi
 # On the Command Line Tools without Xcode, swift-build sometimes compiles a test target without the Swift Testing
 # macro plugin ("plugin for module 'TestingMacros' not found"). Naming the plugin library explicitly fixes that.
 plugin=/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib
