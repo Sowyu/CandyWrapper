@@ -57,6 +57,17 @@ struct DitherSettingsLayoutTests {
         #expect(view.height(forWidth: 800) < 330)
     }
 
+    /// Trackpad haptics sits in General under Input, a second card cut from T3's Behavior group, and search finds it there.
+    @Test func trackpadHapticsLandsInGeneral() {
+        #expect(DitherSettingsSection.home(of: .general, anchor: "trackpad-haptics") == .general)
+        let view = Self.build(.general, page: .general)
+        #expect(view.anchor("trackpad-haptics", page: .general) != nil)
+        #expect(Self.build(.notifications, page: .general).anchor("trackpad-haptics", page: .general) == nil)
+        for section in DitherSettingsSection.allCases {
+            for slice in section.slices { let keys = slice.groups?.map(\.key) ?? []; #expect(Set(keys).count == keys.count, "\(section)") }
+        }
+    }
+
     @Test func deepLinksLandInTheirSection() {
         #expect(DitherSettingsSection.home(of: .providers) == .models)
         #expect(DitherSettingsSection.home(of: .projects) == .project)

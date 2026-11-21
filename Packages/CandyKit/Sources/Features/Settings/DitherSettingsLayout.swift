@@ -85,8 +85,11 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
     /// The content column: the two-pane pages keep T3's wide container.
     public var width: CGFloat { self == .models || self == .machines ? 1024 : 896 }
 
-    /// What the section shows, top to bottom.
-    public var slices: [DitherSettingsSlice] {
+    /// What the section shows, top to bottom. A T3 group is one view, so it can show once per page instance: a
+    /// slice that names the same group twice (two cards cut from General's Behavior) splits into one slice per use.
+    public var slices: [DitherSettingsSlice] { layout.flatMap { $0.splitByRepeatedGroups() } }
+
+    private var layout: [DitherSettingsSlice] {
         typealias G = DitherSettingsSlice.Group
         switch self {
         case .project: return [.init(.projects)]
@@ -97,10 +100,11 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
             .init(.general, [G("behavior", "Diffs and panels", rows: ["hide-whitespace-changes", "default-diff-file-state", "diff-layout",
                                                                       "proactive-panels"]),
                              G("confirmations", nil, rows: ["unpin-confirmation", "archive-confirmation", "delete-confirmation",
-                                                            "terminal-close-confirmation", "quit-confirmation"])]),
+                                                            "terminal-close-confirmation", "quit-confirmation"]),
+                             G("behavior", "Input", rows: ["trackpad-haptics"])]),
         ]
         case .appearance: return [.init(.appearance)]
-        case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications", "menu-bar", "trackpad-haptics"])])]
+        case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications", "menu-bar"])])]
         case .keyboard: return [.init(.keybindings)]
         case .models: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["default-model", "fallback-model", "default-permissions"]),
@@ -204,6 +208,16 @@ public struct DitherSettingsSlice: Sendable {
 
     init(_ page: SettingsSection, scope: Bool = false, _ groups: [Group]? = nil) {
         self.page = page; self.groups = groups; self.showsScope = scope
+    }
+
+    /// This slice as slices whose groups each name a different T3 group, in order; only the first keeps the scope picker.
+    func splitByRepeatedGroups() -> [DitherSettingsSlice] {
+        guard let groups else { return [self] }
+        var parts: [[Group]] = []
+        for g in groups {
+            if let i = parts.firstIndex(where: { !$0.contains { $0.key == g.key } }) { parts[i].append(g) } else { parts.append([g]) }
+        }
+        return parts.enumerated().map { DitherSettingsSlice(page, scope: $0.offset == 0 && showsScope, $0.element) }
     }
 
     /// The pages a slice of a part of the page needs: its own instance, since a view has one parent.
