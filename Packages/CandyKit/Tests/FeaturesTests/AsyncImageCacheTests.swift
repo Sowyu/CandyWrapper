@@ -264,3 +264,27 @@ extension AsyncImageCacheTests {
         b.removeFromSuperview()
     }
 }
+
+extension AsyncImageCacheTests {
+    /// Force Reload or "Clear image cache" while a picture decodes cancels the shared request. The view still wants
+    /// its pixels, so it loads again instead of showing "Image unavailable" until it is rebuilt.
+    @Test func aCacheClearDuringADecodeLoadsAgain() async {
+        let window = window(), calls = Calls(), key = UUID().uuidString
+        let makePixels = Self.loader(Calls())
+        let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 40, height: 30))
+        view.cacheable = true
+        // Its own cache, so a parallel clear elsewhere cannot empty it between the decode and the check.
+        view.memoryCache = NSCache()
+        view.set(key: key, fallbackText: "", loader: { side in
+            calls.record(side)
+            if calls.all.count == 1 { try? await Task.sleep(for: .seconds(30)) }
+            return await makePixels(side)
+        })
+        window.contentView!.addSubview(view)
+        #expect(await eventually { calls.all.count == 1 })
+        AsyncImageView.clearMemory()
+        #expect(await eventually { view.image != nil })
+        #expect(calls.all.count == 2)
+        view.removeFromSuperview()
+    }
+}

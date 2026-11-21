@@ -29,16 +29,10 @@ import T3Protocol
         wall.layoutSubtreeIfNeeded()
         wall.masonry.relayout()
         // Up to 60 s: in a full parallel run other suites hold the main actor that long. A parallel
-        // `AsyncImageView.clearMemory()` cancels decodes in flight, so a tile that failed that way is built again.
+        // `AsyncImageView.clearMemory()` cancels decodes in flight, and the tiles load again on their own.
         let end = Date().addingTimeInterval(60)
         while !(!wall.masonry.tiles.isEmpty && wall.masonry.tiles.values.allSatisfy { $0.thumb.image != nil }), Date() < end {
             try? await Task.sleep(for: .milliseconds(50))
-            if wall.masonry.tiles.values.contains(where: { $0.thumb.failureState != nil }) {
-                wall.images = []
-                wall.images = images
-                wall.layoutSubtreeIfNeeded()
-                wall.masonry.relayout()
-            }
         }
         let tiles = wall.masonry.tiles.values
         try #require(tiles.count >= 4 && tiles.allSatisfy { $0.thumb.image != nil },
