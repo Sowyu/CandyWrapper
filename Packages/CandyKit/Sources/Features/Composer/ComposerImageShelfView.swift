@@ -78,10 +78,14 @@ public final class AsyncImageView: DSView {
         start()
     }
 
-    /// Loads again with a new loader under the same key, when the source's bytes changed.
+    /// Loads again with a new loader under the same key, when the source's bytes changed. The old picture stays until
+    /// the new one is decoded, and stays if the new one fails.
     public func reload(loader: Loader?) {
         self.loader = loader
-        reset(); start()
+        let shown = image
+        reset()
+        if let shown { show(shown) }
+        start()
     }
 
     private func reset() {

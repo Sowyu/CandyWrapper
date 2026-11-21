@@ -99,3 +99,23 @@ extension GalleryTileLifetimeTests {
         #expect(images.allSatisfy { ImageDecodeCache.gallery.object(forKey: "\($0.pixelKey)|cover" as NSString) == nil })
     }
 }
+
+extension GalleryTileLifetimeTests {
+    /// A kept reply picture found stale on the server stays on screen until its new bytes are decoded.
+    @Test func aStalePictureStaysUntilItsReplacementIsReady() async throws {
+        let window = ThreadImageWallTests.window()
+        defer { window.contentView = nil; window.close() }
+        let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 64, height: 44))
+        window.contentView!.addSubview(view)
+        view.set(key: "stale-" + UUID().uuidString, fallbackText: "x", loader: { @Sendable _ in Self.pixels() })
+        await ThreadImageGalleryTests.pump { view.image != nil }
+        let old = try #require(view.image)
+        view.reload(loader: { @Sendable _ in
+            try? await Task.sleep(for: .milliseconds(200))
+            return Self.pixels()
+        })
+        #expect(view.image === old, "the old picture stays while the new one loads")
+        await ThreadImageGalleryTests.pump { view.image !== old }
+        #expect(view.image != nil && view.image !== old)
+    }
+}
