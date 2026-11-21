@@ -93,6 +93,9 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     private let searchIcon = IconView(name: .search, size: 16)
     private let list = DSView()
     private let emptyLabel = LabelView("No models found", font: DSFont.ui(14))
+    /// Redesign's empty tab: why it is empty and, for a provider that isn't ready, Manage. Built on first use, at the
+    /// state view's compact size.
+    private var emptyNotice: EmptyView?
     private var card: DitherProviderCardView?
     private let cardLine = CALayer()
     private let sectionLabel = LabelView("Models", font: DSFont.ui(12, weight: .medium))
@@ -219,8 +222,21 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         previous.values.forEach { $0.removeFromSuperview() }
         syncCard()
         // Keep accessibility traversal in the same order as the filtered results.
-        list.subviews = [emptyLabel] + [card, card == nil ? nil : sectionLabel].compactMap { $0 } + rowViews
-        emptyLabel.isHidden = !sections.rows.isEmpty
+        let copy = capy && sections.rows.isEmpty ? Self.emptyCopy(rail: rail, catalog: catalog, searching: searching || workspaceModelsScanning) : nil
+        if let copy {
+            let notice = emptyNotice ?? {
+                // Compact stacks the title over its reason; inline cut the reason short on one line.
+                let n = EmptyView(title: "", size: .compact)
+                n.minimumHeight = 0
+                return n
+            }()
+            emptyNotice = notice
+            notice.redesign = copy.state
+            notice.action = copy.manage == nil ? nil : onManage.map { open in StateAction("Manage") { open(copy.manage!) } }
+        }
+        emptyNotice?.isHidden = copy == nil
+        list.subviews = [emptyLabel] + [emptyNotice].compactMap { $0 } + [card, card == nil ? nil : sectionLabel].compactMap { $0 } + rowViews
+        emptyLabel.isHidden = !sections.rows.isEmpty || copy != nil
         // The highlight stays on its row, not its index, as T3 keys it by the row (ModelPickerContent.tsx:989-990), so
         // Show less keeps it after the list above it shrinks, and a row that went away drops it.
         highlightedRow = highlightedKey.flatMap { key in sections.rows.firstIndex { Self.rowKey($0) == key } }
@@ -237,6 +253,30 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         guard let h = highlightedRow, sections.rows.indices.contains(h), case .model(let item) = sections.rows[h] else { return nil }
         return item
     }
+    /// What Redesign's empty tab says: Favorites with nothing starred, or a provider with nothing to pick and why,
+    /// with the instance its Manage opens. Nil while searching, where "No models found" says it.
+    static func emptyCopy(rail: ModelPickerRail, catalog: ProviderCatalog, searching: Bool) -> (state: StateCopy, manage: ProviderInstanceId?)? {
+        if searching { return nil }
+        switch rail {
+        case .favorites:
+            return (StateCopy(title: "No favorites yet", detail: "Star a model to keep it here.", icon: .star), nil)
+        case .instance(let id):
+            guard let e = catalog.entry(id) else { return nil }
+            let name = e.displayName, p = e.provider
+            let reason = [p.unavailableReason, p.message].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty }
+            if !p.enabled || p.status == .disabled {
+                return (StateCopy(title: "\(name) is turned off", detail: "Turn it on in Settings > Providers."), id)
+            }
+            if !p.installed || !e.isAvailable {
+                return (StateCopy(title: "\(name) isn't set up", detail: reason ?? "Install it or sign in from Settings > Providers."), id)
+            }
+            if !e.isReady {
+                return (StateCopy(title: "\(name) isn't ready", detail: reason ?? "Sign in or finish its setup in Settings > Providers."), id)
+            }
+            return (StateCopy(title: "No models from \(name)", detail: reason ?? "It reported no models it can run."), id)
+        }
+    }
+
     /// The listed model with `key` (`instance:slug`), if it is still listed.
     func listedItem(_ key: String) -> ModelPickerItem? {
         for row in sections.rows { if case .model(let item) = row, item.key == key { return item } }
@@ -258,7 +298,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     /// padding under them; more rows scroll.
     private func stackedListHeight(rows: Int, cardHeight: CGFloat?) -> CGFloat {
         let top = cardHeight.map { $0 + 1 + 6 } ?? 6
-        return rows == 0 ? top + 36 : top + CGFloat(min(rows, Self.stackedVisibleRows)) * 32 + listBottom
+        return rows == 0 ? top + emptyListHeight : top + CGFloat(min(rows, Self.stackedVisibleRows)) * 32 + listBottom
     }
 
     private static func rowKey(_ row: ModelPickerRow) -> String {
@@ -419,12 +459,12 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         if detailed {
             // The rows' own height; the dock sets the popup's height from this and the pane, within a floor and a ceiling.
             if let frozenHeight { return CGSize(width: Self.detailListWidth, height: frozenHeight) }
-            let list = sections.rows.isEmpty ? listTop + 36 : listContentHeight + listTop + listBottom
+            let list = sections.rows.isEmpty ? listTop + emptyListHeight : listContentHeight + listTop + listBottom
             return CGSize(width: Self.detailListWidth, height: searchH + list)
         }
         if docked { return CGSize(width: Self.width(capy), height: capy ? Self.capyHeight : Self.maxHeight) }
         if let frozenHeight { return CGSize(width: Self.width(capy), height: frozenHeight) }
-        let list = sections.rows.isEmpty ? 36 + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
+        let list = sections.rows.isEmpty ? emptyListHeight + (capy ? listTop - 6 : 0) : listContentHeight + listTop + listBottom
         // Redesign fits its content between a floor, so a short list (favorites, a search) isn't squashed, and Capy's
         // 440; the host trims it further when the space above the chip is shorter.
         if capy { return CGSize(width: Self.capyWidth, height: min(max(searchH + list, Self.capyMinHeight), Self.capyHeight) + footerHeight) }
@@ -547,6 +587,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             y += rowH + rowGap
         }
         emptyLabel.frame = NSRect(x: 8, y: listTop + 2, width: list.bounds.width - 16, height: 20)
+        layoutEmptyNotice()
     }
 
     /// Redesign docked: a row of tabs, the search with its icon over an inset hairline, then the card and the rows.
@@ -580,6 +621,19 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             y += rowH
         }
         emptyLabel.frame = NSRect(x: 8, y: listTop + 2, width: list.bounds.width - 16, height: 20)
+        layoutEmptyNotice()
+    }
+
+    private func layoutEmptyNotice() {
+        guard let n = emptyNotice, !n.isHidden else { return }
+        let w = list.bounds.width - 16
+        n.frame = NSRect(x: 8, y: listTop + 6, width: w, height: n.height(forWidth: w))
+    }
+    /// The empty list's height: the line of text, or Redesign's notice.
+    private var emptyListHeight: CGFloat {
+        guard let n = emptyNotice, !n.isHidden else { return 36 }
+        let w = (detailed ? Self.detailListWidth : stacked ? Self.stackedWidth : Self.capyWidth - railW) - 16
+        return n.height(forWidth: w) + 12
     }
 
     private var maxScroll: CGFloat { max(0, listContentHeight + listTop + listBottom - list.bounds.height) }
@@ -786,7 +840,8 @@ final class RailButtonView: ControlView {
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(fill)
         addSubview(glyph)
-        action = { [weak self] in if self?.isDisabled == false { self?.onPress?() } }
+        // Redesign opens a not-ready tab too, so its list can say why it is empty (T3 disables it).
+        action = { [weak self] in if self?.isDisabled == false || (self?.superview as? ModelPickerView)?.capy == true { self?.onPress?() } }
         // ModelPickerSidebar.tsx:130 "Favorites", :191 the instance's name (a tooltip replaces it when unavailable).
         switch kind {
         case .favorites: setAccessibilityLabel("Favorites")
