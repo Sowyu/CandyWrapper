@@ -1402,6 +1402,7 @@ final class SidebarShelfRowView: SidebarRowBase {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(header)
+        header.dithersRule = true
         header.onToggle = { [weak self] _ in
             if case .shelfHeader(let shelf, _, _, _)? = self?.item { self?.onToggle?(shelf) }
         }
@@ -1414,7 +1415,9 @@ final class SidebarShelfRowView: SidebarRowBase {
         countLabel.text = String(count)
         countLabel.lineHeight = 16
         header.accessory = classic ? nil : countLabel
-        header.tone = dragTone ?? (shelf == .snoozed ? .info : .muted)
+        // Redesign: Snoozed takes the accent where T3 has its info blue (the user, 2026-11-21: "this is good we def want these").
+        let snoozedTone: CollapsibleSectionHeaderView.Tone = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .accent : .info
+        header.tone = dragTone ?? (shelf == .snoozed ? snoozedTone : .muted)
         if header.isExpanded != expanded { header.isExpanded = expanded }
         var st = header.state; st.focusVisible = isKeyboardFocused; header.previewState(st)
     }
