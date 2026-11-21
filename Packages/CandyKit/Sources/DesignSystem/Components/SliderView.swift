@@ -117,7 +117,11 @@ public final class SliderView: DSView {
     }
 
     public override func mouseDown(with event: NSEvent) { pressed = true; set(from: event) }
-    public override func mouseDragged(with event: NSEvent) { set(from: event) }
+    public override func mouseDragged(with event: NSEvent) {
+        let old = value
+        set(from: event)
+        if value != old { Haptics.tap(.levelChange) } // a step; the press itself is the click's feedback
+    }
     public override func mouseUp(with event: NSEvent) { pressed = false }
     public override func mouseEntered(with event: NSEvent) { hovering = true }
     public override func mouseExited(with event: NSEvent) { hovering = false }

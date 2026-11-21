@@ -217,6 +217,7 @@ public final class SidebarLayoutView: DSView {
     func drag(to proposed: CGFloat, current: CGFloat) -> CGFloat {
         let next = widthRules.dragStep(current: current, proposed: proposed, viewport: bounds.width, wrapperWidth: bounds.width)
         if next != width { width = next; layoutNow() }
+        if Haptics.crosses(from: current, to: next, [widthRules.minimum, widthRules.maximum(viewport: bounds.width)]) { Haptics.tap(.alignment) }
         return next
     }
 
@@ -411,7 +412,7 @@ public final class SidebarRailView: DSView {
 
     public override func mouseDown(with event: NSEvent) {
         guard let layoutView else { return }
-        if event.clickCount == 2 { layoutView.resetWidth(); return }
+        if event.clickCount == 2 { layoutView.resetWidth(); Haptics.tap(.alignment); return }
         let width = layoutView.beginDrag()
         dragStart = (event.locationInWindow.x, width, width)
         moved = false

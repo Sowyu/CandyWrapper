@@ -336,6 +336,8 @@ public final class GeneralSettingsView: SettingsPageBase {
         // CandyWrapper's own: the menu bar item (Capy's "Show in menu bar", general-D4mfTeHV.js in its renderer).
         let menuBar = clientSwitch("menu-bar", "Keep the CandyWrapper icon and recent threads in the menu bar.", key: "menuBarItemEnabled",
                                    reset: "menu bar icon", title: "Show in menu bar")
+        let haptics = clientSwitch("trackpad-haptics", "Needs a Force Touch trackpad and follows Force Click and haptic feedback in System Settings.",
+                                   key: "trackpadHaptics", reset: "trackpad haptics", title: "Trackpad haptics")
         // `ToolCallVisibilityRow` (SettingsPanels.tsx:1417-1462 at 4928, #30000, #33131): the Chat page's Activity group.
         let toolCalls = clientSelect("tool-call-visibility",
                                      "Hide the commands, edits, and searches agents run. Hide successful keeps failures. Zen shows only final answers. Approvals, questions, and errors always show.",
@@ -348,7 +350,7 @@ public final class GeneralSettingsView: SettingsPageBase {
                                        key: "screenReaderWindowTitle", reset: "screen reader window title", label: "Screen reader window title",
                                        title: "Screen reader window title")
         return section("behavior", "Behavior", [notifications, inApp, language, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
-                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar])
+                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar, haptics])
     }
 
     /// A select over a boolean client key.

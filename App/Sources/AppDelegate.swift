@@ -679,6 +679,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The menu bar item (Capy's tray, docs/research/capy-menubar.md). Each action brings the window forward first.
     private func installMenuBar(window: NSWindow, palette: PaletteCommands, threads: ThreadController) {
         guard !Self.isPreview else { return }
+        Haptics.isEnabled = { ClientSettingsStore.shared.current.bool("trackpadHaptics") }
         let menuBar = MenuBarController(snapshot: { [weak palette] in palette?.snapshot })
         let show = { [weak window] in
             NSApp.activate()

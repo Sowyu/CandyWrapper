@@ -324,7 +324,7 @@ final class RightPanelView: DSView {
             }
             CATransaction.commit()
             needsLayout = true
-            if ended.over != index { onMove?(id, ended.over) }
+            if ended.over != index { onMove?(id, ended.over); Haptics.tap(.generic) }
         }
     }
 
@@ -338,6 +338,7 @@ final class RightPanelView: DSView {
         let x = min(max(drag.start + drag.offset, 0), max(0, strip.bounds.width - dragged.width))
         let center = x + stripOffset + dragged.width / 2
         let over = rest.indices.min { abs(rest[$0].midX - center) < abs(rest[$1].midX - center) } ?? drag.index
+        if over != drag.over { Haptics.tap(.alignment) } // a new drop slot
         self.drag?.over = over
         let shift = dragged.width + 4
         tabs[drag.index].setFrameOrigin(NSPoint(x: x, y: dragged.minY))

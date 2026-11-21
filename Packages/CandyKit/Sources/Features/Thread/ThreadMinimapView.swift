@@ -172,6 +172,7 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     /// closed from outside (a click anywhere, Escape, another hover card) clears it.
     private var hovered: Int? { didSet {
         guard hovered != oldValue else { return }
+        if hovered != nil { Haptics.tap(.alignment) } // a detent per turn, like a dial
         toolTip = nil; needsDisplay = true; updateGutter(); showPreview()
     } }
     public override var wantsUpdateLayer: Bool { false }
