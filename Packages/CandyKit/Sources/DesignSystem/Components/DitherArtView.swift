@@ -161,6 +161,23 @@ public final class DitherArtView: NSView {
         guard columns.object(forKey: source)?.rectValue != column else { return }
         if let column { columns.setObject(NSValue(rect: column), forKey: source) } else { columns.removeObject(forKey: source) }
         art(behind: source)?.refresh()
+        NotificationCenter.default.post(name: columnDidChange, object: source)
+    }
+
+    /// Posted by `setColumn` when a thread page's chat column changes, with the page as the object.
+    public static let columnDidChange = Notification.Name("DitherArtView.columnDidChange")
+
+    /// The chat column the composer centres on, from the frontmost thread page showing in `window`, and the content
+    /// area around it (the art's panel, the window minus the sidebar), both in window coordinates. Nil when no
+    /// thread page shows.
+    @MainActor
+    public static func frontColumn(in window: NSWindow) -> (column: NSRect, area: NSRect)? {
+        let showing = (columns.keyEnumerator().allObjects as? [NSView] ?? []).filter {
+            $0.window === window && !$0.isHiddenOrHasHiddenAncestor && !$0.visibleRect.isEmpty
+        }
+        guard let front = showing.max(by: { isInFront($1, of: $0) }), let column = columns.object(forKey: front)?.rectValue else { return nil }
+        let panel = art(behind: front)?.superview ?? front
+        return (front.convert(column, to: nil), panel.convert(panel.bounds, to: nil))
     }
 
     /// The new-thread page calls this from its layout with its composer's frame, in its own coordinates, so Picture's
