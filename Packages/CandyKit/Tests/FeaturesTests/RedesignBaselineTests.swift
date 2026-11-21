@@ -145,6 +145,16 @@ struct RedesignBaselineTests {
             let wall = ThreadImageWallView(frame: .zero)
             wall.images = Self.wallImages()
             try capture("image-gallery", wall, NSSize(width: 900, height: 640))
+            // Project avatars at the sizes they show: palette and chips, sidebar, account card, a large preview.
+            for size in [CGFloat(16), 20, 28, 64] {
+                let strip = DSView(frame: .zero)
+                for (i, title) in ["Atlas", "atlas-web", "orbit-api", "Juniper", "pixel-forge", "tidewater"].enumerated() {
+                    let v = ProjectMonogramView(ProjectIconSource(title: title, workspaceRoot: ""), size: size)
+                    v.frame.origin = NSPoint(x: 8 + CGFloat(i) * (size + 8), y: 8)
+                    strip.addSubview(v)
+                }
+                try capture("avatar-\(Int(size))", strip, NSSize(width: 16 + 6 * size + 40, height: size + 16))
+            }
             for name in ["root"] {
                 let view = Self.palette(name)
                 try capture("command-palette-" + name, view, NSSize(width: 576, height: view.intrinsicContentSize.height))
@@ -243,7 +253,7 @@ struct RedesignBaselineTests {
             gradientThread.layoutSubtreeIfNeeded(); gradientThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-gradient", gradientThread, panelSize)
         }
-        #expect(count == 112)
+        #expect(count == 120)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

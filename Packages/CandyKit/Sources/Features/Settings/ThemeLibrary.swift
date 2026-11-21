@@ -57,7 +57,7 @@ public final class ThemeLibrary {
     /// Applies the saved choice and follows the contrast and glass settings from then on.
     public func start() {
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInk") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInk") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -379,6 +379,7 @@ public final class ThemeLibrary {
         input.ditherGradientAnimates = client.bool("redesignGradientAnimate")
         input.ditherInk = DitherInk(mode: client.string("redesignInk"), color: client.string("redesignInkColor"))
         input.ignoreReduceTransparency = client.bool("ignoreReduceTransparency")
+        input.projectSprites = client.string("redesignProjectAvatars") != "letters"
         input.ditherTintFromPicture = client.bool("redesignTintFromPicture")
         // The art computes the picture's tint after it loads (`PictureTint.sync`); a settings change keeps it.
         input.pictureTint = ThemeRuntime.input.pictureTint

@@ -64,6 +64,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherInk = DitherInk.auto
     /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
     public var ignoreReduceTransparency = false
+    /// Redesign's "Project avatars": pixel sprites (on) or T3's letters.
+    public var projectSprites = true
     /// Redesign's "Tint from picture": its neutral surfaces lean toward `pictureTint` (`PictureTint`) under Picture
     /// and Blur. The setting defaults on; this input stays off unless `ThemeLibrary` passes the setting, so tests and
     /// fixtures that build an input draw the untinted palette.
@@ -121,6 +123,9 @@ public enum ThemeRuntime {
         isGlass(dark: dark) || (dark ? ditherFlags.dark : ditherFlags.light)
     }
     nonisolated(unsafe) private static var ditherFlags = (light: false, dark: false)
+    /// Whether project and account avatars without a picture draw `PixelSprites`: Redesign with "Project avatars" on Sprites.
+    public nonisolated static func drawsSprites(dark: Bool) -> Bool { isDither(dark: dark) && spritesOn }
+    nonisolated(unsafe) private static var spritesOn = true
 
     /// Posted after `apply` changed something, for views that cache theme-derived values outside drawing.
     public static let didChange = Notification.Name("CandyThemeRuntimeDidChange")
@@ -170,6 +175,7 @@ public enum ThemeRuntime {
             changed = true
         }
         if next.ignoreReduceTransparency != old.ignoreReduceTransparency { changed = true }
+        if next.projectSprites != old.projectSprites { spritesOn = next.projectSprites; changed = true }
         if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
             glass = (next.glassLight, next.glassDark)
             changed = true

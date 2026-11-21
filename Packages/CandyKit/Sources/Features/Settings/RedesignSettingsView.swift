@@ -52,7 +52,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
         let ink = inkRow()
-        let look: [SettingsRowView] = [picture, backgroundRow(), ink, tint, animate, dim, accentRow()]
+        let look: [SettingsRowView] = [picture, backgroundRow(), ink, tint, animate, dim, accentRow(), avatarsRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture, Glass and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
@@ -122,6 +122,25 @@ public final class RedesignSettingsView: SettingsPageBase {
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
             // Clicking the pressed segment unpresses it; the choice stays.
+            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
+            self.context.writeClient?([key: .string(values[i])])
+        }
+        binder.add { [weak self, weak toggle] in
+            guard let self else { return }
+            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0
+        }
+        return r
+    }
+
+    /// Generated project and account avatars: pixel sprites (the user, 2026-11-21: "i like c4"), or T3's letters.
+    private func avatarsRow() -> SettingsRowView {
+        let key = "redesignProjectAvatars", values = ["sprites", "letters"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Sprites", nil), ("Letters", nil)], selected: 0)
+        toggle.setAccessibilityLabel("Project avatars")
+        let r = row("redesign-project-avatars", title: "Project avatars",
+                    detail: "What a project or account without its own picture shows: a pixel sprite, or its initials.", control: toggle)
+        toggle.onChange = { [weak self, weak toggle] i in
+            guard let self else { return }
             guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
             self.context.writeClient?([key: .string(values[i])])
         }

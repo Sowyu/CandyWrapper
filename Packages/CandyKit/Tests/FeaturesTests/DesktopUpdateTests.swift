@@ -209,10 +209,14 @@ struct DesktopUpdateTests {
             let image = Snapshot.image(of: container, size: NSSize(width: 256, height: 780), dark: dark)
             #expect(!sidebar.updatePill.isHidden)
             #expect(!sidebar.accountRow.isHidden)
-            // The avatar must actually reach the bitmap, rather than sit behind the sidebar surface.
-            let avatar = try #require(image.colorAt(x: 36, y: 1500)?.usingColorSpace(.sRGB))
+            // The avatar must actually reach the bitmap, rather than sit behind the sidebar surface. Its sprite has
+            // pale ground cells, so look across the tile rather than at one pixel.
             let outside = try #require(image.colorAt(x: 4, y: 1500)?.usingColorSpace(.sRGB))
-            #expect(abs(avatar.redComponent - outside.redComponent) > 0.02)
+            let differs = try (28...76).contains { x in
+                let avatar = try #require(image.colorAt(x: x, y: 1500)?.usingColorSpace(.sRGB))
+                return abs(avatar.redComponent - outside.redComponent) > 0.02
+            }
+            #expect(differs)
         }
     }
 }

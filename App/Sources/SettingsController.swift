@@ -284,6 +284,7 @@ final class SettingsController {
         guard isOpen else { return }
         nav.t3Connect = !t3.loaded ? .unavailable : t3.signedIn.map { .signedIn($0.identifier ?? "") } ?? .signedOut
         nav.avatar.image = t3.avatar
+        nav.avatar.seed = t3.signedIn?.userId ?? ""
         nav.avatar.initials = t3.profile?.initials ?? t3.signedIn?.identifier?.first.map { String($0).uppercased() } ?? ""
         loadHosts()
         loadPeerLinks()
