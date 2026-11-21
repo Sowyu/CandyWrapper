@@ -34,6 +34,10 @@ struct FlowerArtTests {
         DitherArtView.setFlowerStage(kind: kind, content: content, floorTop: floorTop, from: page)
     }
 
+    /// A composer top so high on the small test window that the bloom above it would be too small: the new thread
+    /// blooms in place.
+    static let noOpening: CGFloat = 260
+
     @Test func bloomsOncePerOpeningAndHoldsTheOpenFlowerWhenStopped() throws {
         try DitherArtView.$flowerSamples.withValue(1) { try bloomsOncePerOpening() }
     }
@@ -50,7 +54,7 @@ struct FlowerArtTests {
         // No page yet: nothing renders.
         #expect(art.flowerSet == nil)
         DitherArtView.setEmphasis(.hero, from: page)
-        stage(page)
+        stage(page, floorTop: Self.noOpening)
         let set = try #require(art.flowerSet)
         #expect(set.bloom.count == LotusArt.bloomPoses().count && set.idle.count == LotusArt.idlePoses().count)
         // The first show is an opening: the bloom plays, the idle loop queued after it, and the art lays no scrim.
@@ -60,7 +64,7 @@ struct FlowerArtTests {
 
         // Re-renders, the same stage again and a stream update's layout are not openings.
         art.refresh()
-        stage(page)
+        stage(page, floorTop: Self.noOpening)
         art.syncMotion()
         #expect(art.bloomEnds == firstBloom)
 
@@ -248,5 +252,108 @@ struct FlowerArtTests {
         Motion.reducedOverride = true
         DitherArtView.flowerOpened(from: page)
         #expect(!art.openingPlaying && !art.flowerBloomingForTesting && art.flowerContentsForTesting === art.flowerSet?.open)
+    }
+
+    /// The frames render once a window: a return to the new thread, a replayed opening and a thread's second bloom
+    /// compose the kept codes and render nothing; a thread shows the new thread's resting frame.
+    @Test func returnsAndThreadsRenderNoFrames() throws {
+        try DitherArtView.$flowerSamples.withValue(1) { try rendersOnce() }
+    }
+
+    private func rendersOnce() throws {
+        let previous = ThemeRuntime.input, motion = Motion.reducedOverride, patience = DitherArtView.bloomPatience
+        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion; DitherArtView.bloomPatience = patience }
+        DitherArtView.bloomPatience = 600
+        Motion.reducedOverride = false
+        let (art, page, window, _) = try setUp()
+        defer { window.contentView = nil; DitherArtView.setEmphasis(nil, from: page); DitherArtView.clearFlowerStage(from: page) }
+        func land() {
+            art.openingFly?.cancel(); art.openingFly = nil
+            art.bloomEnds = -1000
+            art.fly()
+            art.openingLand?.cancel()
+            art.land()
+        }
+        DitherArtView.setEmphasis(.hero, from: page)
+        // The stage before the composer's top: the field alone, no bloom in place, so the opening isn't used up.
+        stage(page)
+        #expect(!art.flowerBloomingForTesting && !art.openingPlaying && art.flowerSet?.bloom.isEmpty == true)
+        stage(page, floorTop: 100)
+        #expect(art.openingPlaying)
+        land()
+        let rendered = art.flowerFramesRendered
+        let o = try #require(art.flowerOpening)
+        #expect(rendered == 1 + LotusArt.openingBloomPoses().count + LotusArt.flightFrames(o).count + LotusArt.idlePoses().count)
+        // What stays between visits, with the resting set, within the budget.
+        let held = try #require(art.flowerSet).bytes + art.flowerCodeSets.reduce(0) { $0 + $1.bytes }
+        #expect(held < 10 * 1_048_576)
+
+        // Away and back within the interval: the flower at rest and turning, nothing rendered.
+        DitherArtView.setEmphasis(.page, from: page)
+        #expect(art.flowerSet == nil)
+        DitherArtView.setEmphasis(.hero, from: page)
+        DitherArtView.flowerOpened(from: page)
+        #expect(!art.openingPlaying && art.flowerIdlingForTesting && art.flowerFramesRendered == rendered)
+
+        // Away for longer: the opening plays again from the kept codes.
+        DitherArtView.setEmphasis(.page, from: page)
+        art.heroLeftAt = CACurrentMediaTime() - LotusArt.replayInterval - 1
+        DitherArtView.setEmphasis(.hero, from: page)
+        DitherArtView.flowerOpened(from: page)
+        #expect(art.openingPlaying && art.flowerFramesRendered == rendered)
+        land()
+
+        // A thread on the same area: the new thread's resting frame, no new still; its bloom renders once.
+        let open = try #require(art.flowerSet?.open)
+        DitherArtView.setEmphasis(.thread, from: page)
+        stage(page, kind: .thread)
+        DitherArtView.flowerOpened(from: page)
+        #expect(art.flowerSet?.open === open && art.flowerBloomingForTesting)
+        #expect(art.flowerFramesRendered == rendered + LotusArt.bloomPoses().count)
+        art.endBloom()
+        #expect(art.flowerContentsForTesting === open)
+        // The next thread blooms from the kept codes.
+        DitherArtView.flowerOpened(from: page)
+        #expect(art.flowerBloomingForTesting && art.flowerFramesRendered == rendered + LotusArt.bloomPoses().count)
+
+        // Animate off keeps no motion frames; the window going keeps none at all.
+        var input = ThemeRuntime.input
+        input.ditherGradientAnimates = false
+        ThemeRuntime.apply(input)
+        #expect(art.flowerCodeSets.allSatisfy { $0[.idle] == nil && $0[.bloom] == nil })
+        input.ditherFlower = false
+        ThemeRuntime.apply(input)
+        #expect(art.flowerCodeSets.isEmpty)
+    }
+
+    /// The turn runs only while the art can be seen and the window is active: hiding the art or an ancestor, or the
+    /// window losing key, stops it and holds the frame; showing it again resumes.
+    @Test func turnStopsWhenHiddenOrInactive() throws {
+        try DitherArtView.$flowerSamples.withValue(1) { try stopsWhenHidden() }
+    }
+
+    private func stopsWhenHidden() throws {
+        let previous = ThemeRuntime.input, motion = Motion.reducedOverride, patience = DitherArtView.bloomPatience
+        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion; DitherArtView.bloomPatience = patience }
+        DitherArtView.bloomPatience = 600
+        Motion.reducedOverride = false
+        let (art, page, window, _) = try setUp()
+        defer { window.contentView = nil; DitherArtView.setEmphasis(nil, from: page); DitherArtView.clearFlowerStage(from: page) }
+        DitherArtView.setEmphasis(.hero, from: page)
+        stage(page, floorTop: Self.noOpening)
+        art.endBloom()
+        art.syncMotion()
+        #expect(art.flowerIdlingForTesting)
+        art.isHidden = true
+        #expect(!art.flowerIdlingForTesting)
+        art.isHidden = false
+        #expect(art.flowerIdlingForTesting)
+        let parent = try #require(art.superview)
+        parent.isHidden = true
+        #expect(!art.flowerIdlingForTesting)
+        parent.isHidden = false
+        #expect(art.flowerIdlingForTesting)
+        art.windowIsActiveOverride = false; art.syncMotion()
+        #expect(!art.flowerIdlingForTesting)
     }
 }

@@ -932,13 +932,14 @@ public enum LotusArt {
     /// full strength along the top edge (the user: "it should fully commit even at the top") and thinning toward the
     /// bottom, where the flower is, to `fieldFloor` of it. 1 where a dot shows, one byte a cell of `full`, on the same
     /// Bayer grid as the flower, at loop time `t` (0...1).
-    public static func field(_ full: Placement, t: Double) -> [UInt8] {
+    public static func field(_ full: Placement, t: Double, dark: Bool = true) -> [UInt8] {
         let w = full.width, h = full.height
         var out = [UInt8](repeating: 0, count: w * h)
         let row = (0..<w).map { DitherArt.gradientField((Double($0) + 0.5) / Double(w), t) * fieldDensity }
+        let least = fieldLeast(dark: dark)
         for y in 0..<h {
             let fall = 1 - (1 - fieldFloor) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
-            for x in 0..<w where row[x] * fall > (Double(DitherArt.bayer[b + ((x + full.originX) & 7)]) + 0.5) / 64 {
+            for x in 0..<w where Swift.max(row[x] * fall, least) > (Double(DitherArt.bayer[b + ((x + full.originX) & 7)]) + 0.5) / 64 {
                 out[y * w + x] = 1
             }
         }
@@ -949,6 +950,10 @@ public enum LotusArt {
     public static let fieldDensity = 0.5
     /// The field's strength at the bottom edge, as a share of the top's.
     static let fieldFloor = 0.35
+    /// The field's least density. Light's ground shows between the petals: the field thins to about 4% at the bottom
+    /// right, and there the bare off-white gaps beside the tinted petals looked cut out (the 1.17.0 walk). Dark's
+    /// thin field reads as the black ground, so it keeps none.
+    static func fieldLeast(dark: Bool) -> Double { dark ? 0 : 0.14 }
     /// The field's share of the ink: about Gradient's own cell color (36% of the accent over the ground in dark), and in
     /// light about its 32% under the flower's faintness.
     public static func fieldAlpha(dark: Bool) -> UInt8 { dark ? 92 : 150 }
@@ -1124,19 +1129,53 @@ public enum LotusArt {
         }
     }
 
-    /// Masks for frames that each have their own pose, canvas and thinning, all the same canvas size.
-    /// Frames that each have their own pose and canvas, rendered as codes and handed to `finish` (on the render's
-    /// thread) to compose into what shows.
-    public static func frames(_ frames: [(pose: Pose, placement: Placement)], dark: Bool, density: @escaping @Sendable (Int) -> [Float]?,
-                              samples: Int = 2, stop: (@Sendable () -> Bool)? = nil,
-                              finish: @escaping @Sendable ([UInt8], Placement) -> CGImage?) -> [CGImage]? {
+    /// Frames that each have their own pose and canvas, rendered from the model as packed codes (`pack`), or nil if
+    /// `stop` said so.
+    public static func packedFrames(_ frames: [(pose: Pose, placement: Placement)], dark: Bool, density: @escaping @Sendable (Int) -> [Float]?,
+                                    samples: Int = 2, stop: (@Sendable () -> Bool)? = nil) -> [[UInt8]]? {
         nonisolated(unsafe) let frames = frames
         return each(frames.count, parallel: true, stop: stop) { i in
             let (pose, p) = frames[i]
             let c = cells(pose, placement: p, samples: samples)
-            return finish(codes(light: UnsafeBufferPointer(c.light.buffer), cover: UnsafeBufferPointer(c.cover.buffer), placement: p,
-                                dark: dark, density: density(i)), p)
+            return pack(codes(light: UnsafeBufferPointer(c.light.buffer), cover: UnsafeBufferPointer(c.cover.buffer), placement: p,
+                              dark: dark, density: density(i)))
         }
+    }
+
+    /// Packed codes on `flower` (a canvas inside `full`) over the field at `t`, as the images that show, across the cores.
+    public static func images(_ packed: [[UInt8]], flower: Placement, full: Placement, t: Double, dark: Bool,
+                              stop: (@Sendable () -> Bool)? = nil) -> [CGImage]? {
+        each(packed.count, parallel: true, stop: stop) { i in frame(packed: packed[i], flower: flower, full: full, t: t, dark: dark) }
+    }
+
+    /// One shown frame from packed codes: `image(compose(codes: unpack(packed), …, field: field(full, t:, dark:)))` in
+    /// one pass, written straight into the image's buffer. The turn shows one ten times a second on the main thread.
+    public static func frame(packed: [UInt8], flower: Placement, full: Placement, t: Double, dark: Bool) -> CGImage? {
+        let w = full.width, h = full.height
+        guard w > 0, h > 0, packed.count * 4 >= flower.width * flower.height,
+              let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
+                                  bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
+              let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h) else { return nil }
+        let row = (0..<w).map { DitherArt.gradientField((Double($0) + 0.5) / Double(w), t) * fieldDensity }
+        let least = fieldLeast(dark: dark), ground = fieldAlpha(dark: dark), fw = flower.width
+        let dx = flower.originX - full.originX, dy = flower.originY - full.originY
+        let alphas = codeAlpha
+        packed.withUnsafeBufferPointer { pk in
+            for y in 0..<h {
+                let fall = 1 - (1 - fieldFloor) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
+                let fy = y - dy, inFlower = fy >= 0 && fy < flower.height
+                for x in 0..<w {
+                    let k = y * w + x, fx = x - dx
+                    if inFlower, fx >= 0, fx < fw {
+                        let i = fy * fw + fx, c = (pk[i >> 2] >> UInt8((i & 3) * 2)) & 3
+                        if c != 0 { data[k] = alphas[Int(c)]; continue }
+                    }
+                    let shows = Swift.max(row[x] * fall, least) > (Double(DitherArt.bayer[b + ((x + full.originX) & 7)]) + 0.5) / 64
+                    data[k] = shows ? ground : 0
+                }
+            }
+        }
+        return ctx.makeImage()
     }
 
     // MARK: Behind the reading column
