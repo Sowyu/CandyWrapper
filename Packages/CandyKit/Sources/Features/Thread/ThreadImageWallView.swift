@@ -282,13 +282,21 @@ final class GalleryTileView: ControlView {
         thumb.layer?.cornerCurve = .continuous
         addSubview(thumb)
         // The strip lives inside the picture's clip, so it takes the picture's corners.
-        shade.colors = [Themed.black(0).cgColor, Themed.black(Double(Tokens.Surface.shade)).cgColor]
+        // Clear at the top, full black halfway down, so the caption sits on the full scrim.
+        shade.colors = [Themed.black(0).cgColor, Themed.black(Double(Tokens.Surface.shade)).cgColor, Themed.black(Double(Tokens.Surface.shade)).cgColor]
+        shade.locations = [0, 0.5, 1]
         shade.opacity = 0
         thumb.layer?.addSublayer(shade)
         caption.alphaValue = 0
         caption.lineHeight = 16
         caption.truncation = .middle
         addSubview(caption)
+        // White on the scrim in both appearances, so it takes the dark shadow in both, following the glyphs.
+        caption.wantsLayer = true
+        caption.layer?.shadowColor = NSColor.black.cgColor
+        caption.layer?.shadowOpacity = Tokens.Shadow.resting.dark
+        caption.layer?.shadowRadius = Tokens.Shadow.resting.radius / 2
+        caption.layer?.shadowOffset = CGSize(width: 0, height: -1)
         ring.cornerRadius = radius + 2
         ring.cornerCurve = .continuous
         ring.borderWidth = 0
@@ -307,7 +315,7 @@ final class GalleryTileView: ControlView {
     override func layout() {
         super.layout()
         thumb.frame = bounds
-        let strip: CGFloat = min(bounds.height, 40)
+        let strip: CGFloat = min(bounds.height, 48)
         caption.frame = NSRect(x: Tokens.Space.s + 2, y: bounds.height - 16 - Tokens.Space.s, width: max(0, bounds.width - 2 * (Tokens.Space.s + 2)), height: 16)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shade.frame = CGRect(x: 0, y: bounds.height - strip, width: bounds.width, height: strip)

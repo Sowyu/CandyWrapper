@@ -82,8 +82,9 @@ public enum RedesignTokens {
         public static let rimContrast: CGFloat = 0.24
         /// A card's rim while the keyboard is inside it (the terminal drawer), in the accent.
         public static let focusRim: CGFloat = 0.4
-        /// The black at the foot of the gradient that keeps a caption readable over a picture (the agent gallery).
-        public static let shade: CGFloat = 0.62
+        /// The black under a caption over a picture (the agent gallery), reached halfway down a short gradient. 0.62
+        /// at the very foot let a light picture's own text show through (1.16.0 release walk).
+        public static let shade: CGFloat = 0.7
 
         /// The fill of a surface that rests on the ground: the composer, the pills, the header pill, Settings.
         @MainActor public static func fill(in view: NSView) -> CGColor {
