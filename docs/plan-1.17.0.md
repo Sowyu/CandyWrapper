@@ -1,6 +1,6 @@
 # Plan for 1.17.0
 
-Written on 2026-11-21, right after v1.16.0 (build 85, commit `9522729b`). Nothing here is started. The user said: "dont start 1.17.0 yet but write down everything that ought to come out in 1.17.0 so another agent with 0 context can easily pick it up and start building". Wait for the user to say go.
+Written on 2026-11-21, right after v1.16.0 (build 85, commit `9522729b`). On the same day the user said "lets fix all these bugs run it", so the bug items are in progress: 7 and 9 (task `picture-fix`), 5 and the haptics and leftovers in 4 (task `sidebar-fixes`), and mockups for 6 (task `flower-mock`). Items 1, 2, 3, 8 and 10 are not started. The user said: "dont start 1.17.0 yet but write down everything that ought to come out in 1.17.0 so another agent with 0 context can easily pick it up and start building". Wait for the user to say go.
 
 Read `AGENTS.md` first. It has the rules, the commands and how to check work on screen. This file only lists what to build and what was already decided.
 
@@ -146,8 +146,8 @@ Approved by the user as part of "what else can make this app more premium". Thin
 
 This is no longer a question of whether. The user reported it twice on 1.16.0: "also see this text hard to read", with `r7-text-hard-to-read-over-dither.png` in the notes folder, and the Tokyo Bay screenshot in item 7 shows the same thing. In Redesign dark with Background = Picture, conversation text runs over the dither. `PictureInk` thins and dims the dots behind the reading column until body text measures 7:1 and muted text 4.5:1 at the worst cell, and it still reads badly, because dots of changing brightness sit right behind the letters. The measured floor was the wrong test.
 
-- Recommended fix, not yet confirmed by the user: a plain near-black reading column, with the picture only in the margins and above the first message. Light mode already does this (`lightColumnIsClean` in `PictureInkTests`, built in the light-mode pass). Do the same in dark.
-- Mock two or three treatments on the user's own screenshots before building: a plain column with a soft fade at its edges, a plain column as wide as the composer, and a much stronger dim that keeps a trace of the picture. Show them and let the user pick. The user has not chosen between them.
+- Decided by the user on 2026-11-21: "no plain near black just more blacker near the middle subtly so its not super obvious". So no plain column and no visible edge. The picture gets gradually darker toward the middle of the content area, where the text is, and stays full strength toward the edges. It should not read as a column or a box.
+- Do it in the dither itself where possible (fewer and dimmer dots toward the middle, on a smooth falloff wider than the text column) rather than a flat overlay, and show two or three strengths on the user's own screenshots. Subtle and readable pull against each other: say plainly where the weakest strength still leaves text hard to read.
 - User bubbles, code blocks, tables and cards are already solid. The problem is body text and muted text on the bare background.
 - The same rule then applies to the Flower when it becomes a full background (item 6) and to Gradient.
 - If the inset card layout (item 10) is built, the card is the plain ground and this is solved there for that layout. It still has to be right with the card switched off.
