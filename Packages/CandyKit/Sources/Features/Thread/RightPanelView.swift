@@ -125,7 +125,7 @@ final class RightPanelView: DSView {
         scrollLeft.action = { [weak self] in guard let self else { return }; self.scrollTabs(-max(120, self.strip.bounds.width * 0.75)) }
         scrollRight.action = { [weak self] in guard let self else { return }; self.scrollTabs(max(120, self.strip.bounds.width * 0.75)) }
         scrollLeft.setAccessibilityLabel("Scroll tabs left"); scrollRight.setAccessibilityLabel("Scroll tabs right")
-        scrollLeft.toolTip = "Scroll tabs left"; scrollRight.toolTip = "Scroll tabs right"
+        scrollLeft.setTooltip("Scroll tabs left"); scrollRight.setTooltip("Scroll tabs right")
         scrollLeft.iconSize = 14; scrollRight.iconSize = 14
         strip.clipsToBounds = true
         strip.addSubview(add)
@@ -531,7 +531,7 @@ final class PanelTabView: DSView {
         title.lineHeight = 16
         addSubview(close)
         addSubview(title)
-        toolTip = text
+        setLiveTooltip { [weak self] in self.flatMap { $0.title.isTruncated ? $0.title.text : nil } }
         setAccessibilityRole(.radioButton)
         setAccessibilityLabel(text)
         restyle()

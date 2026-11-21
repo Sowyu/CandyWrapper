@@ -45,7 +45,7 @@ public final class DetailsRowControl: ControlView {
             guard detail != oldValue else { return }
             detailLabel.text = detail ?? ""
             detailLabel.isHidden = detail == nil
-            detailLabel.toolTip = detail
+            detailLabel.tooltipWhenTruncated()
             needsLayout = true
         }
     }
@@ -707,13 +707,13 @@ public final class ThreadDetailsCardView: DSView {
             scripts.primary.icon = icon.definition
             scripts.primary.text = name
             scripts.primary.setAccessibilityLabel("Run \(name)")
-            scripts.primary.toolTip = "Run \(name)"
+            scripts.primary.setTooltip("Run \(name)")
             scripts.secondary.setAccessibilityLabel("Script actions")
         case .actions:
             scripts.primary.icon = IconName.wrench.definition
             scripts.primary.text = "Actions"
             scripts.primary.setAccessibilityLabel("Project actions")
-            scripts.primary.toolTip = nil
+            scripts.primary.setTooltip(nil)
             scripts.secondary.setAccessibilityLabel("Choose project action")
         case .add, nil:
             break

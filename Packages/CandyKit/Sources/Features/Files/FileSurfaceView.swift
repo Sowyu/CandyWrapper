@@ -146,7 +146,7 @@ public final class FileSurfaceView: DSView {
             b.iconSize = 14
             b.isHidden = true
             b.setAccessibilityLabel(label)
-            b.toolTip = label
+            b.setTooltip(label)
             addSubview(b)
         }
         copyButton.action = { [weak self] in self?.copyContents() }
@@ -370,7 +370,7 @@ public final class FileSurfaceView: DSView {
             renderToggle.iconSize = 14
             let label = on ? labels.rendered : labels.source
             renderToggle.setAccessibilityLabel(label)
-            renderToggle.toolTip = label
+            renderToggle.setTooltip(label)
         } else {
             renderToggle.isHidden = true
         }
@@ -378,7 +378,7 @@ public final class FileSurfaceView: DSView {
         wrapToggle.isHidden = code == nil
         let wrapLabel = wrap ? "Disable word wrap" : "Enable word wrap"
         wrapToggle.setAccessibilityLabel(wrapLabel)
-        wrapToggle.toolTip = wrapLabel
+        wrapToggle.setTooltip(wrapLabel)
         explorerToggle.isHidden = attachmentMode || path.hasPrefix("/") || isDirectory
         // Copy once text loaded, Save once there is a file, Remove and Close when the owner offers them.
         if case .text = content, attachment != nil { copyButton.isHidden = false } else { copyButton.isHidden = true }
@@ -390,13 +390,13 @@ public final class FileSurfaceView: DSView {
             return "Copy contents"
         }()
         copyButton.setAccessibilityLabel(copyLabel)
-        copyButton.toolTip = copyLabel
+        copyButton.setTooltip(copyLabel)
         saveButton.isHidden = attachment?.onSave == nil
         removeButton.isHidden = attachment?.onRemove == nil
         closeButton.isHidden = attachment?.onClose == nil
         let explorerLabel = explorerOpen ? "Hide file explorer" : "Show file explorer"
         explorerToggle.setAccessibilityLabel(explorerLabel)
-        explorerToggle.toolTip = explorerLabel
+        explorerToggle.setTooltip(explorerLabel)
         needsLayout = true
     }
 

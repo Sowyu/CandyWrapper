@@ -139,7 +139,7 @@ public final class SettingsRowView: DSView {
     private func applyInert() {
         control?.alphaValue = inertReason == nil ? 1 : 0.5
         inertCover.isHidden = inertReason == nil
-        inertCover.toolTip = inertReason
+        inertCover.setTooltip(inertReason)
         if inertReason != nil { addSubview(inertCover, positioned: .above, relativeTo: nil) }
         needsLayout = true
     }

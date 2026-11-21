@@ -86,7 +86,7 @@ final class HandoffDividerView: DSView {
         l.lineHeight = 16
         box.addSubview(glyph)
         box.addSubview(l)
-        box.toolTip = "\(name) · \(text)"
+        box.setTooltip("\(name) · \(text)")
         parts.append((box, 12 + 4 + ceil(l.textWidth), gap, l))
     }
 

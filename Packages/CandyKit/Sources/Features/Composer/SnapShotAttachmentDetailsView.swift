@@ -60,7 +60,7 @@ public enum SnapShotContents {
         let included = includesAccessibility(source)
         let button = ButtonView(nil, icon: included ? .text : .image, variant: .overlay, size: .iconMicro)
         button.iconSize = 12
-        button.toolTip = included ? "Accessibility data" : "No accessibility data"
+        button.setTooltip(included ? "Accessibility data" : "No accessibility data")
         button.setAccessibilityLabel(included ? "View accessibility data" : "No accessibility data")
         button.action = { [weak button] in if let button { showPopover(source, from: button, onCopy: onCopy) } }
         return button
@@ -104,7 +104,7 @@ private final class SnapShotAccessibilityDetailsBody: DSView {
         addSubview(title); addSubview(scroll)
         if let copy, let onCopy {
             copy.iconSize = 12
-            copy.toolTip = "Copy snapshot"
+            copy.setTooltip("Copy snapshot")
             copy.setAccessibilityLabel("Copy snapshot")
             copy.action = { [weak copy] in
                 Task { @MainActor in

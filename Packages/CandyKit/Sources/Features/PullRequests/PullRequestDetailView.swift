@@ -446,37 +446,37 @@ public final class PullRequestDetailView: DSView {
             guard let d = detail else { break }
             let tone = PullRequestStateTone(state: d.state, isDraft: d.isDraft)
             repo.text = d.repository
-            repo.toolTip = "Open \(d.repository) repository"
+            repo.setTooltip("Open \(d.repository) repository")
             numberLink.text = "#\(d.number)"
-            numberLink.toolTip = PullRequestDetailLogic.openOnHostLabel(d.provider)
+            numberLink.setTooltip(PullRequestDetailLogic.openOnHostLabel(d.provider))
             numberLink.color = PullRequestStyle.color(tone)
             numberIcon.strokeColor = PullRequestStyle.color(tone)
             checkout.isHidden = context != .page
             condensedNumber.text = "#\(d.number)"
             condensedNumber.color = PullRequestStyle.color(tone)
-            condensedNumber.toolTip = PullRequestDetailLogic.openOnHostLabel(d.provider)
+            condensedNumber.setTooltip(PullRequestDetailLogic.openOnHostLabel(d.provider))
             condensedTitle.text = d.title
-            condensedTitle.toolTip = d.title
+            condensedTitle.tooltipWhenTruncated()
             condensedAvatar.actor = d.author
-            condensedAvatar.toolTip = d.author?.login ?? "ghost"
+            condensedAvatar.setTooltip(d.author?.login ?? "ghost")
             condensedTime.text = TimestampFormat.formatRelativeTimeLabel(d.updatedAt, nowMs: nowMs)
             condensedBase.text = d.baseBranch
-            condensedBase.toolTip = d.baseBranch
+            condensedBase.tooltipWhenTruncated()
             condensedHead.text = d.headBranch
-            condensedHead.toolTip = d.headBranch
+            condensedHead.tooltipWhenTruncated()
             condensedFiles.text = d.changedFiles.formatted()
             condensedStat.additions = d.additions
             condensedStat.deletions = d.deletions
             updateTitleEditor()
             titleLabel.text = d.title
-            titleLabel.toolTip = d.title
+            titleLabel.tooltipWhenTruncated()
             authorAvatar.actor = d.author
             authorLogin.text = d.author?.login ?? "ghost"
             updated.text = "updated " + TimestampFormat.formatRelativeTimeLabel(d.updatedAt, nowMs: nowMs)
             let command = PullRequestDetailLogic.checkoutCommand(provider: d.provider, number: d.number)
             checkoutCommand.text = command ?? ""
             checkoutCommand.isHidden = command == nil
-            checkoutCommand.toolTip = "Copy checkout command"
+            checkoutCommand.setTooltip("Copy checkout command")
             base.text = d.baseBranch
             head.text = d.headBranch
             files.text = "\(d.changedFiles.formatted()) \(d.changedFiles == 1 ? "file" : "files")"
@@ -576,7 +576,7 @@ public final class PullRequestDetailView: DSView {
             b.iconSize = 14
             // ponytail: the page's Resolve needs the new-thread checkout handoff (usePullRequestHandoffs); disabled there until it's ported
             b.isEnabled = onHandoff != nil
-            b.toolTip = "Resolve conflicts"
+            b.setTooltip("Resolve conflicts")
             b.setAccessibilityLabel("Resolve conflicts")
             b.action = { [weak self] in self?.onHandoff?("conflicts") }
             primary = b
@@ -592,7 +592,7 @@ public final class PullRequestDetailView: DSView {
         case "auto-merge-armed":
             let label = d.autoMergeMethod.map { "Auto-merge (\(PullRequestDetailLogic.mergeMethodLabel($0).lowercased()))" } ?? "Auto-merge"
             let badge = BadgeView(label, variant: .info, size: .control, icon: .gitMerge)
-            badge.toolTip = "\(label): the host will merge this on its own once its requirements are met"
+            badge.setTooltip("\(label): the host will merge this on its own once its requirements are met")
             primary = badge
         case "merge":
             primary = confirmButton("merge", method: method, normal: PullRequestDetailLogic.mergeMethodLabel(method), armed: "Confirm merge?", pending: "Merging...")
@@ -617,11 +617,11 @@ public final class PullRequestDetailView: DSView {
         stackButton.title = "\(plan.position)/\(stack.layers.count)"
         stackButton.trailingIcon = stackFailed ? .triangleAlert : nil
         stackButton.setAccessibilityLabel("Stack \(stack.number), layer \(plan.position) of \(stack.layers.count)")
-        stackButton.toolTip = "View stack #\(stack.number), layer \(plan.position) of \(stack.layers.count)" + (stackNotice.map { " · \($0)" } ?? "")
+        stackButton.setTooltip("View stack #\(stack.number), layer \(plan.position) of \(stack.layers.count)" + (stackNotice.map { " · \($0)" } ?? ""))
         stackMergeButton.isHidden = !(stackCanMerge && plan.selectedIsOpen)
         stackMergeButton.isEnabled = !plan.mergeDisabled
         let n = plan.mergeLayers.count
-        stackMergeButton.toolTip = "Merge stack through #\(d.number) into \(stack.base) (\(n) \(n == 1 ? "pull request" : "pull requests"))"
+        stackMergeButton.setTooltip("Merge stack through #\(d.number) into \(stack.base) (\(n) \(n == 1 ? "pull request" : "pull requests"))")
     }
 
     /// The header's merge or auto-merge button, confirmed in place (2994 PullRequestDetailPanel.tsx:2025-2141):
@@ -635,7 +635,6 @@ public final class PullRequestDetailView: DSView {
         // The method label holds the width; a longer label widens it (T3 3105 6a68bee34, 9c9ae43d8).
         b.reservedTitles = [normal]
         b.isEnabled = !actionPending
-        b.toolTip = label
         b.setAccessibilityLabel(label)
         b.action = { [weak self, weak b] in
             guard let self else { return }
@@ -648,7 +647,6 @@ public final class PullRequestDetailView: DSView {
             self.needsLayout = true
             b?.title = armed
             b?.icon = .check
-            b?.toolTip = armed
             b?.setAccessibilityLabel(armed)
         }
         return b
@@ -1110,7 +1108,7 @@ public final class PullRequestDetailView: DSView {
         threadsButton.title = count > 0 ? "\(count)" : "?"
         let label = count > 0 ? (count == 1 ? "Linked from 1 thread" : "Linked from \(count) threads") : "Linked threads"
         threadsButton.setAccessibilityLabel(label)
-        threadsButton.toolTip = "\(label). Search in the command palette."
+        threadsButton.setTooltip("\(label). Search in the command palette.")
         needsLayout = true
     }
 

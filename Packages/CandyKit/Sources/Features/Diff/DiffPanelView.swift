@@ -488,7 +488,7 @@ public final class DiffPanelView: DSView {
         baseRefButton.scalesWhenPressed = false
         baseRefButton.action = { [weak self] in self?.showBaseRefMenu() }
         refreshButton.setAccessibilityLabel("Refresh diff")
-        refreshButton.toolTip = "Refresh diff"
+        refreshButton.setTooltip("Refresh diff")
         truncatedBar.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(truncatedBar); truncatedBar.addSublayer(truncatedBottom)
         truncatedBottom.actions = truncatedBar.actions
@@ -692,7 +692,7 @@ public final class DiffPanelView: DSView {
         let whitespace = ignoreWhitespace
         // A refresh keeps what shows until the answer arrives.
         if !gitResultShown { showMessage(scope == .unstaged ? "Loading uncommitted changes..." : "Loading changes...") }
-        refreshButton.toolTip = "Refreshing diff…"
+        refreshButton.setTooltip("Refreshing diff…")
         refreshButton.setAccessibilityLabel("Refreshing diff")
         loadTask = Task { [weak self] in
             var parsed: UnifiedDiff?
@@ -716,7 +716,7 @@ public final class DiffPanelView: DSView {
             }
             guard !Task.isCancelled, let self, self.gitScope == scope else { return }
             self.loadTask = nil
-            self.refreshButton.toolTip = "Refresh diff"
+            self.refreshButton.setTooltip("Refresh diff")
             self.refreshButton.setAccessibilityLabel("Refresh diff")
             self.gitSource = source
             self.gitResultShown = true
@@ -852,7 +852,7 @@ public final class DiffPanelView: DSView {
         let canSelectBase = gitScope == .branch && gitResultShown && canReadFiles()
         let compare = canSelectBase ? (gitSource?.headRef ?? "HEAD", gitSource?.baseRef ?? baseRef ?? "Automatic") : nil
         compareHead.text = compare?.0 ?? ""
-        compareHead.toolTip = compare.map { "\($0.0) → \($0.1)" }
+        compareHead.setTooltip(compare.map { "\($0.0) → \($0.1)" })
         baseRefTitle = compare?.1 ?? ""
         baseRefButton.setAccessibilityLabel(compare.map { "Change comparison target. Currently \($0.1)" } ?? "")
         [compareHead, compareArrow, baseRefButton].forEach { $0.isHidden = compare == nil }

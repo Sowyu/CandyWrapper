@@ -30,8 +30,8 @@ public enum NativeItemContextMenu {
             native.isEnabled = !item.disabled
             if let checked = item.checked { native.state = checked ? .on : .off }
             if let detail = item.detail {
-                native.toolTip = detail
-                if #available(macOS 14.4, *) { native.subtitle = detail }
+                // The subtitle shows it; a native menu's own tooltip stands in only before macOS 14.4.
+                if #available(macOS 14.4, *) { native.subtitle = detail } else { native.toolTip = detail }
             }
             if item.children.isEmpty {
                 native.handler = { choose(item.id) }

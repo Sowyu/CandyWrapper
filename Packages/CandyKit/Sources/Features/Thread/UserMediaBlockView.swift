@@ -270,7 +270,7 @@ final class UserFileCardView: DSView {
         addSubview(download)
         preview.setAccessibilityLabel("Preview " + label)
         download.setAccessibilityLabel(sending ? "Sending attachment" : "Download " + label)
-        download.toolTip = sending ? nil : "Download " + label
+        download.setTooltip(sending ? nil : "Download " + label)
         preview.isEnabled = !sending
         download.isEnabled = !sending
         preview.action = { [weak self] in self?.onOpen?(false) }

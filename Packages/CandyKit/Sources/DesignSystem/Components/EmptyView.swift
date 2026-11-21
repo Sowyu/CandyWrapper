@@ -173,7 +173,6 @@ public final class EmptyView: DSView {
         if usesParts { restyleParts(); return }
         redesignParts?.hide()
         media?.isHidden = false
-        toolTip = nil
         descriptionLabel.isHidden = false
         titleLabel.alignment = .center
         descriptionLabel.alignment = .center

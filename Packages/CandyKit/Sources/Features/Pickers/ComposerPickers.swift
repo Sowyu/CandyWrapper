@@ -164,16 +164,15 @@ public final class ComposerPickers {
                               model: true, badge: ProviderBadge.make(e, in: context.catalog, size: .small, overhang: 2, ring: Themed.color(\.contrastInput)))
         }
         modelButton.icon = glyph
-        modelButton.toolTip = spoken ? nil : "\(current.triggerLabel) · ⇧⌘M"
+        modelButton.setTooltip(spoken ? nil : current.triggerLabel, shortcut: "⇧⌘M")
         traitsButton.icon = IconView(name: spoken ? .gauge : .brain, size: 16)
         traitsButton.title = label
-        traitsButton.toolTip = label
         controlsView.showsTraits = !current.descriptors.isEmpty
         let unrestrictedOn = isUnrestricted
         let mode = unrestrictedOn ? ComposerPermissionsView.info(nil, unrestricted: nil) : Self.modes[current.runtimeMode] ?? Self.modes[.fullAccess]!
         accessButton.title = mode.label
         accessButton.icon = IconView(name: mode.icon, size: 16)
-        accessButton.toolTip = mode.description
+        accessButton.setTooltip(mode.description)
         if spoken {
             // 4928 picks the model and its effort from one control (#28057): the effort follows the model's name
             // (ComposerControlsBar.tsx:167, 218-219) and the traits trigger leaves the footer.

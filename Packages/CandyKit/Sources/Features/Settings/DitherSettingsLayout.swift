@@ -98,7 +98,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
                                                                                "composer-rich-text", "send-shortcut",
                                                                                "follow-up-behavior"])]),
             .init(.general, [G("behavior", "Diffs and panels", rows: ["hide-whitespace-changes", "default-diff-file-state", "diff-layout",
-                                                                      "proactive-panels"]),
+                                                                      "proactive-panels", "tooltips"]),
                              G("confirmations", nil, rows: ["unpin-confirmation", "archive-confirmation", "delete-confirmation",
                                                             "terminal-close-confirmation", "quit-confirmation"]),
                              G("behavior", "Input", rows: ["trackpad-haptics"])]),

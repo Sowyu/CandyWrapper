@@ -322,11 +322,11 @@ public final class PullRequestStateGlyphView: DSView {
             let c = IconView(name: .triangleAlert, size: 12, strokeColor: Themed.color(\.destructive), fillColor: Themed.color(\.background))
             addSubview(c)
             conflict = c
-            toolTip = baseBranch.map { "Conflicts with \($0)" } ?? "Has conflicts"
+            setTooltip(baseBranch.map { "Conflicts with \($0)" } ?? "Has conflicts")
         } else {
-            toolTip = tone.label
+            setTooltip(tone.label)
         }
-        setAccessibilityLabel(toolTip)
+        setAccessibilityLabel(currentTooltip)
         needsLayout = true
     }
 
@@ -338,8 +338,8 @@ public final class PullRequestStateGlyphView: DSView {
         let v = IconView(name: .gitPullRequestArrow, size: size, strokeColor: Themed.color(\.mutedForeground))
         addSubview(v)
         icon = v
-        toolTip = "Waiting for host state"
-        setAccessibilityLabel(toolTip)
+        setTooltip("Waiting for host state")
+        setAccessibilityLabel(currentTooltip)
         needsLayout = true
     }
 
@@ -361,7 +361,7 @@ public enum PullRequestLabelChip {
         if let color { badge.labelColor = color }
         // PullRequestSummaryTab.tsx (#28732): the label's description on hover and for VoiceOver.
         if let d = label.description?.trimmingCharacters(in: .whitespacesAndNewlines), !d.isEmpty {
-            badge.toolTip = d
+            badge.setTooltip(d)
             badge.setAccessibilityLabel("\(title): \(d)")
         }
         return badge

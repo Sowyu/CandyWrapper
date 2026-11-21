@@ -9,7 +9,7 @@ func copyButton() -> ButtonView {
     let button = ButtonView(icon: .copy, variant: .ghostMuted, size: .xs)
     button.iconSize = 12
     button.setAccessibilityLabel("Copy message")
-    button.toolTip = "Copy message"
+    button.setTooltip("Copy message")
     return button
 }
 
@@ -68,7 +68,7 @@ final class UserIntentMarkerView: DSView {
     func configure(_ p: (label: String, icon: Bool, tooltip: String)) {
         label.text = p.label
         icon.isHidden = !p.icon
-        toolTip = p.tooltip
+        setTooltip(p.tooltip)
         needsLayout = true
     }
 
@@ -237,7 +237,7 @@ final class UserMessageRowView: TimelineRowView {
         addSubview(copyButton)
         addSubview(editButton)
         editButton.setAccessibilityLabel("Edit from here")
-        editButton.toolTip = "Edit from here"
+        editButton.setTooltip("Edit from here")
         editButton.action = { [weak self] in
             guard let self, let m = self.item?.row.message else { return }
             self.context.model?.onEditPrompt?(m)
@@ -354,7 +354,7 @@ final class UserMessageRowView: TimelineRowView {
         foldable = fold == nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         toggle.title = item.ui.messageExpanded ? "Show less" : "Show full message"
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
-        time.toolTip = nil
+        time.setTooltip(nil)
         // A burst of your messages shows its steer label once (TimelineUserMessageRow.tsx:888-895 at 4928).
         let pending: Bool = if case .message(_, let p, _, _, _, _) = item.row.kind { p?.item.status == .pending } else { false }
         let intent = item.row.continuesSteer ? nil : UserIntentMarkerView.presentation(m.inputIntent, unread: pending)

@@ -45,9 +45,9 @@ struct SideChatTests {
         #expect(pane.titleLabel.frame.minX == 12 && pane.titleLabel.text == "Side chat")
         pane.apply(.init(title: "Why is the sky blue", bringBackBlockedReason: "Available after a finished reply."))
         #expect(pane.titleLabel.text == "Why is the sky blue")
-        #expect(pane.bringBack.alphaValue == 0.64 && pane.bringBack.toolTip == "Available after a finished reply.")
+        #expect(pane.bringBack.alphaValue == 0.64 && pane.bringBack.currentTooltip == "Available after a finished reply.")
         pane.apply(.init(title: "x"))
-        #expect(pane.bringBack.alphaValue == 1 && pane.bringBack.toolTip == "Adds this side chat to the main thread's next message.")
+        #expect(pane.bringBack.alphaValue == 1 && pane.bringBack.currentTooltip == "Adds this side chat to the main thread's next message.")
         pane.apply(.init(deleted: true))
         #expect(!pane.delete.isEnabled)
     }

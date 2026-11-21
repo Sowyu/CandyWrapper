@@ -84,13 +84,13 @@ public final class ThreadImageGalleryView: DSView {
             Self.loader(image, onHash: { hash in self?.onHash?(image, hash) }) { self?.onFailed?(image) }
         }
         grid.onContentHeight = { [weak self] in self?.resizeToFit() }
-        back.toolTip = "Back to all images"
+        back.setTooltip("Back to all images")
         back.setAccessibilityLabel("Back to all images")
-        expand.toolTip = "Open gallery"
+        expand.setTooltip("Open gallery")
         expand.setAccessibilityLabel("Open gallery")
-        previous.toolTip = "Previous image"
+        previous.setTooltip("Previous image")
         previous.setAccessibilityLabel("Previous image")
-        next.toolTip = "Next image"
+        next.setTooltip("Next image")
         next.setAccessibilityLabel("Next image")
         back.action = { [weak self] in self?.large = nil }
         expand.action = { [weak self] in self?.onOpenGallery?(self?.shown) }

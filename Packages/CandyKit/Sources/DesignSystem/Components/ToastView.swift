@@ -84,8 +84,8 @@ public final class ToastView: DSView {
     var onHeightChange: (@MainActor () -> Void)?
 
     private func updateDetailsTooltip() {
-        messageText.toolTip = details.map { expanded ? $0.collapse : $0.expand }
-        setAccessibilityHelp(messageText.toolTip)
+        messageText.setTooltip(details.map { expanded ? $0.collapse : $0.expand })
+        setAccessibilityHelp(messageText.currentTooltip)
     }
 
     /// A method, so `details`' observer runs when init sets it.

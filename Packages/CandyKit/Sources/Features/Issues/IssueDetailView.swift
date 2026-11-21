@@ -227,7 +227,7 @@ final class IssueHeaderItem: DSView, StackItem, FocusWithinObserver {
         threadsButton.iconSize = 14
         stateButton.iconSize = 14
         refreshButton.setAccessibilityLabel("Refresh issue")
-        refreshButton.toolTip = "Refresh issue"
+        refreshButton.setTooltip("Refresh issue")
         refreshButton.action = { [weak self] in self?.onRefresh?() }
         keyButton.action = { [weak self] in if let url = self?.model?.detail.url { self?.onOpenURL?(url) } }
         stateButton.action = { [weak self] in self?.showStateMenu() }
@@ -283,13 +283,13 @@ final class IssueHeaderItem: DSView, StackItem, FocusWithinObserver {
         threadsButton.title = count > 0 ? "\(count)" : "?"
         let threadsLabel = count > 0 ? (count == 1 ? "Linked from 1 thread" : "Linked from \(count) threads") : "Linked threads"
         threadsButton.setAccessibilityLabel(threadsLabel)
-        threadsButton.toolTip = "\(threadsLabel). Search in the command palette."
+        threadsButton.setTooltip("\(threadsLabel). Search in the command palette.")
         linkButton.isHidden = !m.canLink
         linkButton.isEnabled = !m.linkPending
         let linked = m.linkedHere == true
         linkButton.icon = linked ? .link2Off : .link2
         linkButton.setAccessibilityLabel(linked ? "Unlink from thread" : "Link to thread")
-        linkButton.toolTip = linked ? "Unlink from this thread" : m.linkedHere == nil ? "Link to thread" : "Link to this thread"
+        linkButton.setTooltip(linked ? "Unlink from this thread" : m.linkedHere == nil ? "Link to thread" : "Link to this thread")
         refreshButton.isEnabled = !m.refreshing
         if let error = m.refreshError {
             if alert == nil { let a = AlertView("Could not refresh this issue", variant: .error); addSubview(a); alert = a }
@@ -489,7 +489,7 @@ final class IssueMetaRow: DSView {
         none.isHidden = !empty
         pick.isHidden = !picker
         pick.isEnabled = allowed
-        pick.toolTip = allowed ? pickLabel : reason
+        pick.setTooltip(allowed ? pickLabel : reason)
         needsLayout = true
     }
 
@@ -521,7 +521,7 @@ final class IssueActorLabel: DSView {
     private let avatar = PullRequestAvatarView()
     private let login = LabelView("", font: DSFont.ui(12))
     var actor: PullRequestActor? {
-        didSet { avatar.actor = actor; login.text = actor?.login ?? "ghost"; toolTip = actor?.name.map { "\($0) (@\(login.text))" } ?? login.text; needsLayout = true }
+        didSet { avatar.actor = actor; login.text = actor?.login ?? "ghost"; setTooltip(actor?.name.map { "\($0) (@\(login.text))" }); needsLayout = true }
     }
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

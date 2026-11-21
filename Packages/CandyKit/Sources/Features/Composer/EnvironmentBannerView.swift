@@ -16,7 +16,7 @@ public final class EnvironmentBannerView: ComposerBannerView {
     public var text: String { get { title.text } set { title.text = newValue; needsLayout = true } }
     public var detailText: String? {
         get { detail.text.isEmpty ? nil : detail.text }
-        set { detail.text = newValue ?? ""; toolTip = newValue; needsLayout = true }
+        set { detail.text = newValue ?? ""; needsLayout = true }
     }
     public var isError: Bool { get { variant == .error } set { variant = newValue ? .error : .warning } }
     public var showsReconnect = true { didSet { reconnect.isHidden = !showsReconnect; needsLayout = true } }
@@ -28,7 +28,7 @@ public final class EnvironmentBannerView: ComposerBannerView {
         super.init(variant: .warning)
         icon.strokeColor = Themed.color(\.mutedForeground)
         for b in [reconnect, disconnect] { b.smoothsFont = false }
-        disconnect.toolTip = "Hide this server's threads. Switch it on again in Connections."
+        disconnect.setTooltip("Hide this server's threads. Switch it on again in Connections.")
         disconnect.isHidden = true
         for v in [icon, title, detail, reconnect, disconnect] as [NSView] { addSubview(v) }
         setAccessibilityRole(.group)

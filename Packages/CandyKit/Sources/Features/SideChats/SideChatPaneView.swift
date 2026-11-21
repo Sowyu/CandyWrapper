@@ -97,7 +97,7 @@ public final class SideChatPaneView: DSView {
         // `aria-disabled`: still hoverable with its tooltip, at 64% (button.tsx:9).
         let blocked = state.bringBackBlockedReason != nil || state.bringingBack
         bringBack.alphaValue = blocked ? 0.64 : 1
-        bringBack.toolTip = state.bringBackBlockedReason ?? "Adds this side chat to the main thread's next message."
+        bringBack.setTooltip(state.bringBackBlockedReason ?? "Adds this side chat to the main thread's next message.")
         delete.isEnabled = state.canDelete && !state.deleting && !state.deleted
         deletedLabel.isHidden = !state.deleted
         content?.isHidden = state.deleted

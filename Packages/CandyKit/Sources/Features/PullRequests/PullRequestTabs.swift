@@ -258,7 +258,7 @@ final class MetaRowsItem: DSView, StackItem {
                 a.reviewOutcome = outcome
                 a.staleReview = stale
             }
-            a.toolTip = actor?.login ?? "ghost"
+            a.setTooltip(actor?.login ?? "ghost")
             addSubview(a)
             return a
         }
@@ -273,10 +273,10 @@ final class MetaRowsItem: DSView, StackItem {
         // (PullRequestSummaryTab.tsx:781-821, PullRequestCandidatePicker.tsx:75-88).
         reviewerButton.isHidden = !(d.capabilities.reviewers.request && d.capabilities.reviewers.listCandidates)
         reviewerButton.isEnabled = d.viewerPermissions.requestReviewers
-        reviewerButton.toolTip = d.viewerPermissions.requestReviewers ? "Request a review" : "Asking someone to review needs write access on this repository"
+        reviewerButton.setTooltip(d.viewerPermissions.requestReviewers ? "Request a review" : "Asking someone to review needs write access on this repository")
         labelButton.isHidden = d.capabilities.labels != true
         labelButton.isEnabled = d.viewerPermissions.labels != false
-        labelButton.toolTip = d.viewerPermissions.labels != false ? "Change labels" : "Changing labels needs triage access on this repository"
+        labelButton.setTooltip(d.viewerPermissions.labels != false ? "Change labels" : "Changing labels needs triage access on this repository")
         needsLayout = true
     }
 
@@ -428,7 +428,7 @@ final class ChecksListItem: DSView, StackItem {
             name.lineHeight = 20; status.lineHeight = 20
             [glyph, name, status].forEach(addSubview)
             layer?.cornerRadius = 8
-            toolTip = c.description ?? c.name
+            setTooltip(c.description)
         }
         override func layout() {
             super.layout()
@@ -746,7 +746,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
             // The Timeline's is icon-only, `size="icon-xs" variant="ghost-muted"` with a tooltip (PullRequestTimelineTab.tsx:191-217).
             let b = chatIconOnly ? ButtonView(nil, icon: .messageSquarePlus, variant: .ghostMuted, size: .iconXs)
                 : ButtonView("Add to chat", icon: .messageSquarePlus, variant: .ghost, size: .xs)
-            if chatIconOnly { b.toolTip = "Add to chat"; b.setAccessibilityLabel("Add to chat") }
+            if chatIconOnly { b.setTooltip("Add to chat"); b.setAccessibilityLabel("Add to chat") }
             b.iconSize = 12
             b.action = { [weak self] in self?.onAddToChat?() }
             addSubview(b)
@@ -802,7 +802,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
             location.text = collapsed.location ?? ""
             location.lineHeight = 16
             location.truncates = true
-            location.toolTip = collapsed.location
+            location.setTooltip(collapsed.location)
             outdated.lineHeight = 16
             outdated.isHidden = !collapsed.outdated
             [location, outdated].forEach(addSubview)

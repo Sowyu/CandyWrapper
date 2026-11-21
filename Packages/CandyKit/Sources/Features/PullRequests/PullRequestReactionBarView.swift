@@ -57,7 +57,7 @@ public final class PullRequestReactionBarView: DSView {
         pills = shown.map { r in
             let p = PullRequestReactionPill(reaction: r, enabled: canReact)
             p.action = { [weak self] in self?.toggle(r.content, !r.viewerHasReacted) }
-            p.toolTip = PullRequestReactions.tooltip(r)
+            p.setTooltip(PullRequestReactions.tooltip(r))
             addSubview(p)
             return p
         }

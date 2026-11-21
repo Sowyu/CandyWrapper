@@ -181,6 +181,9 @@ public final class LabelView: DSView {
         return width
     }
 
+    /// The text is wider than its box, so it draws cut short.
+    public var isTruncated: Bool { truncates && bounds.width > 0 && textWidth > bounds.width + 0.5 }
+
     public override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext, !text.isEmpty || emphasizedSuffix != nil else { return }
         // Core Text's smoothing (stem darkening) matches Chromium's glyph weight better than

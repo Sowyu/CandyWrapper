@@ -263,7 +263,7 @@ final class RowActionButton: ControlView {
         addSubview(icon)
         if let label { label.lineHeight = 16; addSubview(label) }
         setAccessibilityLabel(accessibility)
-        toolTip = accessibility
+        if label == nil { setTooltip(accessibility) }
         restyle()
     }
 
@@ -303,7 +303,7 @@ final class WokeDismissButton: ControlView {
         super.init(frame: frameRect)
         scalesWhenPressed = false
         setAccessibilityLabel("Dismiss Woke notification")
-        toolTip = "Dismiss Woke notification"
+        setTooltip("Dismiss Woke notification")
     }
 
     override func stateDidChange(from old: State) {
@@ -524,7 +524,7 @@ final class PinButton: ControlView {
         addSubview(pin)
         addSubview(pinOff)
         setAccessibilityLabel("Unpin thread")
-        toolTip = "Unpin thread"
+        setTooltip("Unpin thread")
         restyle()
     }
 
@@ -546,7 +546,7 @@ final class PinButton: ControlView {
         pinOff.strokeColor = color
         pin.isHidden = hot
         pinOff.isHidden = !hot
-        toolTip = isButton ? "Unpin thread" : nil
+        setTooltip(isButton ? "Unpin thread" : nil)
         setAccessibilityLabel(isButton ? "Unpin thread" : "Pinned")
     }
 }
@@ -1586,7 +1586,7 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         label.text = h.label
         // T3 4928 SidebarProjectFolderHeader.tsx (#26477): the button names its folder, in its tooltip too.
         let newThreadLabel = "New thread in \(h.label)"
-        if newThread.toolTip != newThreadLabel { newThread.toolTip = newThreadLabel; newThread.setAccessibilityLabel(newThreadLabel) }
+        if newThread.currentTooltip != newThreadLabel { newThread.setTooltip(newThreadLabel); newThread.setAccessibilityLabel(newThreadLabel) }
         let folderStyle = h.folder && !DesignGeometry.usesClassic(self)
         label.font = SB.font(folderStyle ? 14 : 12, .medium)
         label.lineHeight = folderStyle ? 20 : 16

@@ -116,7 +116,6 @@ public final class SavedViewsMenuController {
             onResize?()
         }
         button.setAccessibilityLabel(savedViewsLabel)
-        button.toolTip = selected?.name ?? savedViewsLabel
     }
 
     private func persist(_ next: [SavedView]) -> Bool {

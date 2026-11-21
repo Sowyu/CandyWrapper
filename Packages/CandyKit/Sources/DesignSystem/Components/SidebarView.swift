@@ -378,7 +378,6 @@ public final class SidebarRailView: DSView {
         layer?.addSublayer(line)
         setAccessibilityRole(.splitter)
         setAccessibilityLabel("Resize Sidebar")
-        toolTip = "Drag to resize sidebar"
     }
 
     /// For tests and the gallery.
@@ -459,7 +458,7 @@ public final class SidebarTriggerView: ControlView {
         icon.actions = ["path": NSNull(), "strokeColor": NSNull()]
         layer?.addSublayer(icon)
         setAccessibilityLabel("Toggle Sidebar")
-        toolTip = "Toggle main sidebar"
+        setTooltip("Toggle main sidebar")
         updateIcon()
     }
 

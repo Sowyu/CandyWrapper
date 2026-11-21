@@ -254,7 +254,7 @@ public final class ContentSearchView: DSView {
             for (i, (t, label)) in zip(toggles, ["Match case", "Match whole word", "Use regular expression"]).enumerated() {
                 t.monospaced = true
                 t.underlinesTitle = i == 1 // "Match whole word" (ProjectContentSearchDialog.tsx:191)
-                t.toolTip = label
+                t.setTooltip(label)
                 t.setAccessibilityLabel(label)
                 t.onPressedChange = { [weak self] on in
                     guard let self else { return }

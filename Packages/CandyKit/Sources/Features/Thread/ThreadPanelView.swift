@@ -484,7 +484,7 @@ public final class ThreadPanelView: DSView {
                 serverUpdateBanner.apply(notice.content)
                 serverUpdateBanner.disabledActions = notice.actionEnabled ? [] : [0]
                 // `ComposerServerUpdateStatus`'s tooltip; "available" has its own on the title.
-                if case .available = notice.status { serverUpdateBanner.toolTip = nil } else { serverUpdateBanner.toolTip = notice.title + ": " + notice.detail }
+                if case .available = notice.status { serverUpdateBanner.setTooltip(nil) } else { serverUpdateBanner.setTooltip(notice.title + ": " + notice.detail) }
                 serverUpdateBanner.onAction = { [weak self] index in self?.onServerUpdateAction?(index) }
             }
             needsLayout = true
@@ -1526,7 +1526,7 @@ public final class ThreadPanelView: DSView {
         maximize.icon = on ? .minimize2 : .maximize2
         let label = on ? "Restore panel size" : "Maximize panel"
         maximize.setAccessibilityLabel(label)
-        maximize.toolTip = label
+        maximize.setTooltip(label)
         needsLayout = true
     }
 

@@ -157,7 +157,7 @@ final class PullRequestChecksListView: DSView {
             glyph.set(icon: p.icon, color: p.color, spinning: c.status == "pending")
             let name = LabelView(c.name, font: DSFont.ui(12))
             name.lineHeight = 16
-            name.toolTip = c.description ?? c.name
+            if let d = c.description { name.setTooltip(d) } else { name.tooltipWhenTruncated() }
             let status = LabelView(PullRequestDetailLogic.checkStatusLabel(c), font: DSFont.ui(12))
             status.lineHeight = 16
             var details: LinkLabel?

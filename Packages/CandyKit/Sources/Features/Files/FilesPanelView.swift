@@ -51,7 +51,7 @@ public final class FilesPanelView: DSView {
         super.init(frame: frameRect)
         refresh.iconSize = 14
         refresh.setAccessibilityLabel("Refresh workspace files")
-        refresh.toolTip = "Refresh files"
+        refresh.setTooltip("Refresh files")
         refresh.action = { [weak self] in self?.onRefresh?() }
         expandAll.iconSize = 14
         expandAll.action = { [weak self] in self?.toggleAll() }
@@ -103,7 +103,7 @@ public final class FilesPanelView: DSView {
         expandAll.iconSize = 14
         let label = all ? "Collapse all folders" : "Expand all folders"
         expandAll.setAccessibilityLabel(label)
-        expandAll.toolTip = label
+        expandAll.setTooltip(label)
         expandAll.isHidden = treeView.model.directoryPaths.isEmpty
         let searching = !searchField.input.text.trimmingCharacters(in: .whitespaces).isEmpty
         if let errorText {

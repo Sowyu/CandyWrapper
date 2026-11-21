@@ -114,7 +114,7 @@ public final class DiffListView: DSView {
                 self.contextTasks[file] = nil
                 // Keep the control available for retry, as Pierre does on a failed load.
                 for case let row as DiffSeparatorView in self.visible.values where row.file == file {
-                    row.toolTip = error.localizedDescription
+                    row.setTooltip(error.localizedDescription)
                 }
             }
         }

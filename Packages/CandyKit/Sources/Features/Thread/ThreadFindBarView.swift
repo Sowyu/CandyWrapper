@@ -21,9 +21,9 @@ public final class ThreadFindBarView: DSView {
         previous.setAccessibilityLabel("Previous match")
         next.setAccessibilityLabel("Next match")
         close.setAccessibilityLabel("Close find")
-        TooltipController.redesign(previous, "Previous match (⇧Return)")
-        TooltipController.redesign(next, "Next match (Return)")
-        TooltipController.redesign(close, "Close find (Esc)")
+        TooltipController.redesign(previous, "Previous match") { "⇧Return" }
+        TooltipController.redesign(next, "Next match") { "Return" }
+        TooltipController.redesign(close, "Close find") { "Esc" }
         input.setAccessibilityLabel("Find in thread")
         previous.action = { [weak self] in self?.onStep?(-1) }
         next.action = { [weak self] in self?.onStep?(1) }

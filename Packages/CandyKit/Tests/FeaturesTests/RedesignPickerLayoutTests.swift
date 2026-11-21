@@ -310,7 +310,7 @@ import T3Store
             }
             // The provider's status stays on its tab as T3's tooltip.
             let tabs = picker.subviews.compactMap { $0 as? RailButtonView }.filter { $0.entryId != nil }
-            #expect(tabs.allSatisfy { $0.toolTip?.isEmpty == false })
+            #expect(tabs.allSatisfy { $0.currentTooltip?.isEmpty == false })
         }
     }
 

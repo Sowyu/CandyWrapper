@@ -10,8 +10,8 @@ public final class MiddleTruncateView: DSView {
     public var font: NSFont { didSet { head.font = font; tailLabel.font = font; invalidateIntrinsicContentSize() } }
     public var color: NSColor = Themed.color(\.contrastForeground) { didSet { head.color = color; tailLabel.color = color } }
     public var lineHeight: CGFloat = 20 { didSet { head.lineHeight = lineHeight; tailLabel.lineHeight = lineHeight } }
-    /// The full value as the hover tooltip (`title`), unless a tooltip already carries it.
-    public var showsTitle = true { didSet { toolTip = showsTitle ? value : nil } }
+    /// The full value as the tooltip while the text draws cut short (`title`), unless a tooltip already carries it.
+    public var showsTitle = true { didSet { syncTooltip() } }
 
     private let head = LabelView()
     private var fullHead = ""
@@ -60,10 +60,15 @@ public final class MiddleTruncateView: DSView {
         fullTail = parts?.tail ?? ""
         head.text = fullHead
         tailLabel.text = fullTail
-        toolTip = showsTitle ? value : nil
+        syncTooltip()
         setAccessibilityLabel(value)
         invalidateIntrinsicContentSize()
         needsLayout = true
+    }
+
+    /// The full value, only while the head draws cut short.
+    private func syncTooltip() {
+        if showsTitle { setLiveTooltip { [weak self] in self.flatMap { $0.head.isTruncated ? $0.value : nil } } } else { removeTooltip() }
     }
 
     public override var intrinsicContentSize: NSSize {

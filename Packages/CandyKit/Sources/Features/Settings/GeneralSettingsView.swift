@@ -338,6 +338,9 @@ public final class GeneralSettingsView: SettingsPageBase {
                                    reset: "menu bar icon", title: "Show in menu bar")
         let haptics = clientSwitch("trackpad-haptics", "Needs a Force Touch trackpad and follows Force Click and haptic feedback in System Settings.",
                                    key: "trackpadHaptics", reset: "trackpad haptics", title: "Trackpad haptics")
+        let tooltips = clientSelect("tooltips", "Delayed waits about a second before a tooltip opens. Off keeps them closed; VoiceOver still reads them.",
+                                    key: "tooltips", options: [("on", "On"), ("delayed", "Delayed"), ("off", "Off")],
+                                    width: 160, reset: "tooltips", hideIndicator: false, label: "Tooltips")
         // `ToolCallVisibilityRow` (SettingsPanels.tsx:1417-1462 at 4928, #30000, #33131): the Chat page's Activity group.
         let toolCalls = clientSelect("tool-call-visibility",
                                      "Hide the commands, edits, and searches agents run. Hide successful keeps failures. Zen shows only final answers. Approvals, questions, and errors always show.",
@@ -350,7 +353,7 @@ public final class GeneralSettingsView: SettingsPageBase {
                                        key: "screenReaderWindowTitle", reset: "screen reader window title", label: "Screen reader window title",
                                        title: "Screen reader window title")
         return section("behavior", "Behavior", [notifications, inApp, language, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
-                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar, haptics])
+                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar, haptics, tooltips])
     }
 
     /// A select over a boolean client key.

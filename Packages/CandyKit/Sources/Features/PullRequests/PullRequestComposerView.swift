@@ -115,7 +115,7 @@ public final class PullRequestComposerView: DSView {
             .compactMap { $0 }.forEach(addSubview)
         for b in [discard, close] { b.iconSize = 14 }
         discard.setAccessibilityLabel("Discard pending line comments")
-        discard.toolTip = "Discard pending line comments"
+        discard.setTooltip("Discard pending line comments")
         close.setAccessibilityLabel("Close composer")
         commentBox.setAccessibilityLabel("Comment on this \(terminology.singular)")
         reviewBox.setAccessibilityLabel("Review summary")

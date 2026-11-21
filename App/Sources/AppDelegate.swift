@@ -682,6 +682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func installMenuBar(window: NSWindow, palette: PaletteCommands, threads: ThreadController) {
         guard !Self.isPreview else { return }
         Haptics.isEnabled = { ClientSettingsStore.shared.current.bool("trackpadHaptics") }
+        Tooltips.mode = { TooltipMode(rawValue: ClientSettingsStore.shared.current.string("tooltips")) ?? .on }
         let menuBar = MenuBarController(snapshot: { [weak palette] in palette?.snapshot })
         let show = { [weak window] in
             NSApp.activate()

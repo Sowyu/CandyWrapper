@@ -375,7 +375,7 @@ final class DiffSeparatorView: DiffRowView {
         self.split = split
         self.file = file; self.gap = gap; self.last = last; self.first = gap == 0
         self.expandable = expandable
-        toolTip = nil
+        setTooltip(nil)
         label.text = hidden < 0 ? "More unchanged context may be available" : hidden == 1 ? "1 unmodified line" : "\(hidden) unmodified lines"
         label.removeFromSuperview()
         if expandable { content.addSubview(label) } else { addSubview(label) }
