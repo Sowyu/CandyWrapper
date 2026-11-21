@@ -13,7 +13,7 @@ public enum PictureInk {
     /// The most of a cell's level that ink may cover, so a bright sky keeps a visible pattern.
     nonisolated static let coverage = 0.85
     /// Dark pictures are lifted until the median tone reaches this, so they don't come out as an empty frame with
-    /// scattered dots (the mockup's dark coastline and hills).
+    /// scattered dots (the mockup's dark coastline and hills). A low-key picture (`lowKey`) is not lifted.
     nonisolated static let medianFloor = 0.34
     /// The deep and light inks' OKLCH lightness and chroma, and the light ink's hue turn (the approved mockup,
     /// dither-options-2026-11-21/ink/sheet-best-auto2.png).
@@ -85,40 +85,129 @@ public enum PictureInk {
 
     // MARK: Tone
 
-    /// The picture's tone on the canvas, one byte a cell, row 0 at the top: gamma-encoded luma, auto levels from the
-    /// 1st to the 99th percentile, half an S-curve and a gamma of 1.15 that keeps the ground dark. `hue` is Auto's.
+    /// The picture's tone on the canvas, one byte a cell, row 0 at the top: gamma-encoded luma, smoothed, auto levels,
+    /// half an S-curve and a gamma of 1.15 that keeps the ground dark. `hue` is Auto's.
     public struct Tone: Sendable {
         public let width: Int, height: Int
         public let values: [UInt8]
         public let hue: Double
-        /// The median of `values` and of their inverse (light appearance), 0...1, for the shadow lift.
+        /// The median of `values`, 0...1, for the shadow lift.
         let median: Double
+        /// How low-key the picture is for dark (`lowKey` of its histogram) and how high-key for light (the same rule on
+        /// the inverted histogram), 0...1. A low-key picture keeps its black: no shadow lift.
+        var lowKey = 0.0, highKey = 0.0
     }
 
-    nonisolated static func tone(_ picture: CGImage, width w: Int, height h: Int) -> Tone? {
-        guard w > 0, h > 0, let px = cover(picture, width: w, height: h) else { return nil }
-        var l = [Double](repeating: 0, count: w * h)
-        for i in 0..<(w * h) {
-            let y = 0.2126 * lin(Double(px[i * 4]) / 255) + 0.7152 * lin(Double(px[i * 4 + 1]) / 255) + 0.0722 * lin(Double(px[i * 4 + 2]) / 255)
-            l[i] = enc(y)
+    /// Below this tone (after levels, 0...1, from the ground's side) a cell draws no dot, so grain and faint haze
+    /// can't speckle the ground; tones above it ease in from no dots at all, so there is no contour.
+    nonisolated static let blackPoint = 0.06
+    /// The smoothing's tonal reach: neighbours closer than about this in tone blend, an edge brighter than it stays.
+    nonisolated static let smoothRange = 0.06
+    /// From this share of the levels' range up, a cell takes its brightest point instead of its mean, so a highlight
+    /// smaller than a cell (a lamp head) still lights it.
+    nonisolated static let highlightStart = 0.75
+    /// Samples per cell side: about 0.75pt each, so the cell's mean and peak see sub-cell detail.
+    nonisolated static func subsamples(cell: Double) -> Int { max(2, Int((cell / 0.75).rounded())) }
+
+    /// How low-key a picture is, from a 256-bin histogram of its gamma-encoded luma (any scale): 1 when most of the
+    /// frame is near black (under 0.1) and little sits in the mid-shadows (0.1 to 0.35), like a night photo of a few
+    /// lamps; 0 for a dark landscape whose shadows hold broad detail, which the lift should fill.
+    nonisolated static func lowKey(_ histogram: [Double]) -> Double {
+        let total = histogram.reduce(0, +)
+        guard histogram.count == 256, total > 0 else { return 0 }
+        let black = histogram[0..<26].reduce(0, +) / total, shadow = histogram[26..<90].reduce(0, +) / total
+        return DitherArt.smoothstep(0.55, 0.75, black) * (1 - DitherArt.smoothstep(0.15, 0.3, shadow))
+    }
+
+    nonisolated static func tone(_ picture: CGImage, width w: Int, height h: Int, cell: Double = 3) -> Tone? {
+        let s = subsamples(cell: cell), sw = w * s, sh = h * s
+        guard w > 0, h > 0, let px = cover(picture, width: sw, height: sh) else { return nil }
+        // Linear luma per sample; the cell's mean (the area's light) and its brightest sample.
+        let linear = (0..<256).map { Float(lin(Double($0) / 255)) }
+        var sum = [Float](repeating: 0, count: w * h), top = sum
+        px.withUnsafeBufferPointer { p in
+            linear.withUnsafeBufferPointer { l in
+                sum.withUnsafeMutableBufferPointer { m in
+                    top.withUnsafeMutableBufferPointer { t in
+                        for y in 0..<sh {
+                            let row = (y / s) * w, base = y * sw * 4
+                            for x in 0..<sw {
+                                let i = base + x * 4
+                                let v = 0.2126 * l[Int(p[i])] + 0.7152 * l[Int(p[i + 1])] + 0.0722 * l[Int(p[i + 2])]
+                                let c = row + x / s
+                                m[c] += v
+                                if v > t[c] { t[c] = v }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        let sorted = l.sorted()
-        var lo = sorted[sorted.count / 100], hi = sorted[min(sorted.count * 99 / 100, sorted.count - 1)]
+        var mean = [Double](repeating: 0, count: w * h), peak = mean
+        let n = Double(s * s)
+        for c in 0..<(w * h) { mean[c] = enc(Double(sum[c]) / n); peak[c] = enc(Double(top[c])) }
+        let smooth = smoothed(mean, width: w, height: h)
+        var histogram = [Double](repeating: 0, count: 256)
+        for v in smooth { histogram[min(Int(v * 255), 255)] += 1 }
+        let lowKey = lowKey(histogram), highKey = Self.lowKey(histogram.reversed())
+        let sorted = smooth.sorted()
+        func q(_ f: Double) -> Double { sorted[min(Int(Double(sorted.count) * f), sorted.count - 1)] }
+        // A low-key picture's 99th percentile is haze, not its lights: its range runs to the 99.9th instead, so the
+        // haze stays dim. A high-key one keeps its darks the same way in light.
+        var lo = q(0.01) + (q(0.001) - q(0.01)) * highKey, hi = q(0.99) + (q(0.999) - q(0.99)) * lowKey
         // A flat picture (a plain color desktop) has no range to stretch: its own lightness carries the tone.
         if hi - lo < 0.08 { lo = 0; hi = 1 }
-        let values = l.map { v -> UInt8 in
+        let start = lo + highlightStart * (hi - lo)
+        let values = (0..<(w * h)).map { c -> UInt8 in
+            let m = smooth[c], p = peak[c]
+            let v = p > m ? m + (p - m) * DitherArt.smoothstep(start, hi, p) : m
             let x = min(max((v - lo) / (hi - lo), 0), 1)
             let t = pow(0.5 * x + 0.5 * DitherArt.smoothstep(0, 1, x), 1.15)
             return UInt8((t * 255).rounded())
         }
         let mid = values.sorted()[values.count / 2]
-        return Tone(width: w, height: h, values: values, hue: autoHue(picture), median: Double(mid) / 255)
+        return Tone(width: w, height: h, values: values, hue: autoHue(picture), median: Double(mid) / 255,
+                    lowKey: lowKey, highKey: highKey)
+    }
+
+    /// A 3 x 3 edge-keeping blur (a tent in space, weighted by tonal closeness): grain under `smoothRange` blends with
+    /// its neighbours so it can't flip single cells, while the edge of a bright shape stays where it is.
+    nonisolated static func smoothed(_ v: [Double], width w: Int, height h: Int) -> [Double] {
+        let near = (0..<256).map { exp(-pow(Double($0) / 255 / smoothRange, 2) / 2) }
+        var out = v
+        v.withUnsafeBufferPointer { v in
+            near.withUnsafeBufferPointer { near in
+                out.withUnsafeMutableBufferPointer { out in
+                    for y in 0..<h {
+                        for x in 0..<w {
+                            let c = v[y * w + x]
+                            var sum = 0.0, weight = 0.0
+                            for dy in -1...1 {
+                                let yy = min(max(y + dy, 0), h - 1)
+                                for dx in -1...1 {
+                                    let xx = min(max(x + dx, 0), w - 1), n = v[yy * w + xx]
+                                    let k = Double((2 - abs(dx)) * (2 - abs(dy))) * near[min(Int(abs(n - c) * 255), 255)]
+                                    sum += n * k; weight += k
+                                }
+                            }
+                            out[y * w + x] = sum / weight
+                        }
+                    }
+                }
+            }
+        }
+        return out
     }
 
     /// The gamma that lifts a median `m` to `medianFloor`, never darkening and never past 0.5.
     nonisolated static func lift(median m: Double) -> Double {
         guard m > 0.001, m < medianFloor else { return m <= 0.001 ? 0.5 : 1 }
         return max(log(medianFloor) / log(m), 0.5)
+    }
+
+    /// The lift for a picture `key` low-key (0...1): the full lift for an underexposed picture, none for a low-key one.
+    nonisolated static func lift(median m: Double, lowKey key: Double) -> Double {
+        1 + (lift(median: m) - 1) * (1 - min(max(key, 0), 1))
     }
 
     // MARK: Fall-off
@@ -173,10 +262,10 @@ public enum PictureInk {
         let panel = CGSize(width: Double(w) * unit, height: Double(h) * unit)
         // Level 1 sits next to the ground, level 2 beyond it.
         let levels = dark ? [inks.deep, inks.light] : [inks.light, inks.deep]
-        let g = lift(median: dark ? tone.median : 1 - tone.median)
+        let g = lift(median: dark ? tone.median : 1 - tone.median, lowKey: dark ? tone.lowKey : tone.highKey)
         let lut = (0..<256).map { i -> Double in
             let t = Double(i) / 255
-            return pow(dark ? t : 1 - t, g)
+            return pow(max((dark ? t : 1 - t) - blackPoint, 0) / (1 - blackPoint), g)
         }
         let groundBytes = ground.byteTriple
         let levelBytes = levels.map(\.byteTriple)
@@ -255,12 +344,12 @@ public enum PictureInk {
         for url in urls {
             let key = CacheKey(url: url, width: width, height: height)
             if let hit = cache.withLock({ $0?.key == key ? $0?.tone : nil }) { return hit }
-            guard let picture = DitherArt.picture(url, maxPixels: max(width, height) * 2),
-                  let tone = tone(picture, width: width, height: height) else { continue }
+            guard let picture = DitherArt.picture(url, maxPixels: max(width, height) * subsamples(cell: Double(cell))),
+                  let tone = tone(picture, width: width, height: height, cell: Double(cell)) else { continue }
             cache.withLock { $0 = (key, tone) }
             return tone
         }
-        return DitherArt.builtInPicture().flatMap { tone($0, width: width, height: height) }
+        return DitherArt.builtInPicture().flatMap { tone($0, width: width, height: height, cell: Double(cell)) }
     }
 
     /// Drops the cached tone, for a hidden window.

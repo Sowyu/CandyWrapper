@@ -130,12 +130,122 @@ struct PictureInkTests {
         for y in 0..<8 { for x in 0..<8 { #expect(px[y * row + x * 4] == px[(y + 8) * row + (x + 8) * 4]) } }
     }
 
-    /// A dark picture is lifted until its median tone reaches the floor; a bright one is left as it is.
+    /// A dark picture is lifted until its median tone reaches the floor; a bright one is left as it is, and so is a
+    /// low-key one.
     @Test func darkPicturesAreLifted() {
         #expect(PictureInk.lift(median: 0.6) == 1)
         let g = PictureInk.lift(median: 0.1)
         #expect(g < 1 && g >= 0.5)
         #expect(abs(pow(0.1, g) - PictureInk.medianFloor) < 0.01 || g == 0.5)
+        #expect(PictureInk.lift(median: 0.1, lowKey: 0) == g)
+        #expect(PictureInk.lift(median: 0.1, lowKey: 1) == 1)
+    }
+
+    /// A 256-bin histogram with `share` of its pixels in each listed bin.
+    func histogram(_ bins: [(Int, Double)]) -> [Double] {
+        var h = [Double](repeating: 0, count: 256)
+        for (b, share) in bins { h[b] += share * 1000 }
+        return h
+    }
+
+    /// The low-key rule on synthetic histograms: a night photo of a few lamps (most of it near black, a small bright
+    /// tail) is low-key; a dark landscape with broad shadow detail, a mid-grey picture and a bright one are not.
+    @Test func lowKeyTellsANightPhotoFromADarkLandscape() {
+        // The user's street lamps measured 97% under 0.1, 1% from 0.1 to 0.35, the lamps above 0.5.
+        #expect(PictureInk.lowKey(histogram([(2, 0.6), (12, 0.37), (40, 0.02), (240, 0.01)])) > 0.99)
+        // Saturn backlit: 75% near black, 15% shadow, a bright rim.
+        #expect(PictureInk.lowKey(histogram([(5, 0.75), (40, 0.15), (200, 0.1)])) > 0.9)
+        // Big Sur Dark: 43% under 0.1 and broad shadows from 0.1 to 0.35.
+        #expect(PictureInk.lowKey(histogram([(15, 0.43), (40, 0.25), (70, 0.2), (110, 0.12)])) == 0)
+        // A dark painting whose shadows hold detail: 61% near black but a third in the shadows.
+        #expect(PictureInk.lowKey(histogram([(20, 0.61), (40, 0.34), (140, 0.05)])) < 0.05)
+        // Mid grey and a bright picture.
+        #expect(PictureInk.lowKey(histogram([(128, 1)])) == 0)
+        #expect(PictureInk.lowKey(histogram((0..<256).map { ($0, 1.0 / 256) })) == 0)
+        // Empty or malformed.
+        #expect(PictureInk.lowKey([]) == 0)
+    }
+
+    /// macOS's dark mockup pictures keep their shadow lift (the mockup's Big Sur Dark coastline and Sonoma's hills),
+    /// and none of the five is read as low-key.
+    @Test(arguments: [
+        "/System/Library/CoreServices/DefaultDesktop.heic",
+        "/System/Library/Desktop Pictures/Radial Sky Blue.heic",
+        "/System/Library/Desktop Pictures/.wallpapers/Sonoma Horizon/Sonoma Horizon.heic",
+        "/System/Library/Desktop Pictures/.thumbnails/Tree Light.heic",
+        "/System/Library/Desktop Pictures/.thumbnails/Big Sur Dark.heic",
+    ])
+    func mockupPicturesAreNotLowKey(_ path: String) throws {
+        try #require(FileManager.default.fileExists(atPath: path), "macOS picture missing: \(path)")
+        let picture = try #require(DitherArt.picture(URL(filePath: path), maxPixels: 1600))
+        let tone = try #require(PictureInk.tone(picture, width: 480, height: 300, cell: 3))
+        #expect(tone.lowKey < 0.05, "\(path): \(tone.lowKey)")
+        #expect(tone.highKey < 0.05, "\(path): \(tone.highKey)")
+        if path.contains("Big Sur Dark") || path.contains("Sonoma") {
+            #expect(PictureInk.lift(median: tone.median, lowKey: tone.lowKey) < 1)
+        }
+    }
+
+    /// Tones under the black point draw no dot at all; just above it they ease in.
+    @Test func theBlackPointDrawsNothing() throws {
+        let w = 64, h = 64, ground = SIMD3<Double>(repeating: 8.0 / 255)
+        let below = UInt8((PictureInk.blackPoint * 255).rounded(.down))
+        let dark = PictureInk.Tone(width: w, height: h, values: (0..<(w * h)).map { UInt8($0 % Int(below + 1)) }, hue: 0, median: 0.5)
+        let art = try #require(PictureInk.render(dark, inks: PictureInk.inks(hue: 250), ground: ground, dark: true, shape: .plain, text: []))
+        let b = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
+        for y in 0..<h { for x in 0..<w { #expect(b[y * row + x * 4] == 8 && b[y * row + x * 4 + 2] == 8, "\(x), \(y)") } }
+        let above = PictureInk.Tone(width: w, height: h, values: [UInt8](repeating: below + 20, count: w * h), hue: 0, median: 0.5)
+        let some = try #require(PictureInk.render(above, inks: PictureInk.inks(hue: 250), ground: ground, dark: true, shape: .plain, text: []))
+        let c = [UInt8](some.dataProvider!.data! as Data)
+        #expect((0..<(w * h)).contains { c[($0 / w) * row + ($0 % w) * 4 + 2] != 8 })
+    }
+
+    /// A night picture at the cell's sample grid: black with sensor grain, one lamp a single sample wide and a soft
+    /// glow. The lamp lights its cell, the grain draws nothing, and the glow's dots thin outward.
+    @Test(arguments: [1.5, 2.0, 3.0])
+    func aSmallHighlightLightsItsCellAndGrainDrawsNothing(cell: Double) throws {
+        let w = 80, h = 60, s = PictureInk.subsamples(cell: cell), pw = w * s, ph = h * s
+        var px = [UInt8](repeating: 0, count: pw * ph * 4)
+        var seed: UInt64 = 0x2545F4914F6CDD1D
+        func noise() -> UInt8 { seed = seed &* 6364136223846793005 &+ 1442695040888963407; return UInt8((seed >> 33) % 14) }
+        // The glow is centred on cell (60, 15); the lamp is one sample in cell (20, 40).
+        let glow = (x: Double(60 * s + s / 2), y: Double(15 * s + s / 2)), reach = Double(12 * s)
+        for y in 0..<ph {
+            for x in 0..<pw {
+                let d = ((Double(x) - glow.x) * (Double(x) - glow.x) + (Double(y) - glow.y) * (Double(y) - glow.y)).squareRoot()
+                let v = Double(noise()) + 200 * max(0, 1 - d / reach) * max(0, 1 - d / reach)
+                for c in 0..<3 { px[(y * pw + x) * 4 + c] = UInt8(min(v, 255)) }
+                px[(y * pw + x) * 4 + 3] = 255
+            }
+        }
+        for c in 0..<3 { px[((40 * s + 1) * pw + 20 * s + 1) * 4 + c] = 255 }
+        let picture = try #require(px.withUnsafeMutableBytes { raw in
+            CGContext(data: raw.baseAddress, width: pw, height: ph, bitsPerComponent: 8, bytesPerRow: pw * 4,
+                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)?.makeImage()
+        })
+        let tone = try #require(PictureInk.tone(picture, width: w, height: h, cell: cell))
+        #expect(tone.lowKey > 0.9, "\(tone.lowKey)")
+        #expect(tone.values[40 * w + 20] > 230, "lamp \(tone.values[40 * w + 20])")
+        let inks = PictureInk.inks(hue: 250), ground = SIMD3<Double>(repeating: 8.0 / 255)
+        let art = try #require(PictureInk.render(tone, inks: inks, ground: ground, dark: true, shape: .plain, text: []))
+        let b = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
+        func lit(_ x: Int, _ y: Int) -> Bool { b[y * row + x * 4 + 2] != 8 }
+        // Ink covers at most 85% of a level, so the brightest cell takes the light ink or, on some lattice spots, the deep.
+        #expect([inks.light.bytes, inks.deep.bytes].contains(Array(b[(40 * row + 20 * 4)..<(40 * row + 20 * 4 + 3)])))
+        // The grain: everything left of the glow and away from the lamp.
+        for y in 0..<h { for x in 0..<40 where abs(x - 20) > 1 || abs(y - 40) > 1 { #expect(!lit(x, y), "grain at \(x), \(y)") } }
+        // The glow thins outward: rings of cells around its centre, each no denser than the one inside it.
+        var density: [Double] = []
+        for r in stride(from: 0, through: 12, by: 3) {
+            var on = 0, all = 0
+            for y in 0..<h { for x in 40..<w {
+                let d = (Double((x - 60) * (x - 60) + (y - 15) * (y - 15))).squareRoot()
+                if d >= Double(r), d < Double(r + 3) { all += 1; if lit(x, y) { on += 1 } }
+            } }
+            density.append(Double(on) / Double(max(all, 1)))
+        }
+        #expect(zip(density, density.dropFirst()).allSatisfy { $0.0 >= $0.1 - 0.02 }, "\(density)")
+        #expect(density.first! > 0.5 && density.last! < 0.05, "\(density)")
     }
 
     /// Picture never moves: opening a new thread, a thread and back adds no animation to the art, no Gradient frames
