@@ -1264,7 +1264,7 @@ public final class ThreadPanelView: DSView {
         if open { dropGhost(&panelGhost) }
         // Redesign with Panel animations off (T3's default, 0 ms): the panel takes its room at once and its surface
         // slides in from the edge (`RedesignMotion.panel`); a closing one leaves as a still image.
-        let redesignMotion = animated && open != wasOpen && !slides && window != nil
+        let redesignMotion = animated && open != wasOpen && !(slides && SettingsPanelMotion.duration > 0) && window != nil
             && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         if redesignMotion, !open { leaveAsStill(rightPanel) }
         // 5088aff613 (PreviewPanelShell.tsx:110-138): an inline panel that closes with the keyboard inside
