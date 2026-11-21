@@ -39,7 +39,8 @@ enum ImageDecodeCache {
         cache.totalCostLimit = 64 << 20
         return cache
     }()
-    private static var galleryRelease: Task<Void, Never>?
+    /// The pending release; tests await it.
+    private(set) static var galleryRelease: Task<Void, Never>?
     private static var pressure: DispatchSourceMemoryPressure?
 
     /// The gallery opened: keep its decodes, and empty them when memory runs low.

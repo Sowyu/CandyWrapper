@@ -215,6 +215,15 @@ public final class AsyncImageView: DSView {
         CATransaction.commit()
     }
 
+    /// Tests: returns once no load is in flight, including the upgrade a finished load starts. Under a busy thread pool
+    /// it only returns later, so a test awaits the work instead of a deadline.
+    func waitUntilLoaded() async {
+        while let task {
+            await task.value
+            if self.task == task { return }
+        }
+    }
+
     private func start() {
         guard window != nil, !isHiddenOrHasHiddenAncestor, let loader, let key, let side = decodeSide,
               task == nil, side > max(attemptedSide, loadedSide) else { return }

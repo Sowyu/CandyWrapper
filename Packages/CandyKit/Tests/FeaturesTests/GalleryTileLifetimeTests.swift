@@ -11,21 +11,41 @@ import T3Protocol
                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage()
     }
 
-    /// A wall in a window whose tiles all show their pixels.
-    /// `prefilled` puts the pixels in the wall's cache first, so tiles show without a task: in a full parallel run the
-    /// cooperative pool can be busy for over a minute, longer than any wait here.
+    /// Awaits `work`. Other suites in a full parallel run keep the cooperative pool busy for minutes, which only makes
+    /// this return later; the limit is there for a real hang.
+    static func settle(limit: Duration = .seconds(300), _ work: @escaping @MainActor () async -> Void) async -> Bool {
+        let (finished, done) = AsyncStream.makeStream(of: Bool.self)
+        let loads = Task { @MainActor in
+            await work()
+            done.yield(true)
+        }
+        let watchdog = Task {
+            try? await Task.sleep(for: limit)
+            done.yield(false)
+        }
+        defer { watchdog.cancel(); loads.cancel(); done.finish() }
+        for await ok in finished { return ok }
+        return false
+    }
+
+    /// Awaits each view's load in flight.
+    static func settle(_ views: [AsyncImageView]) async -> Bool {
+        await settle { for view in views { await view.waitUntilLoaded() } }
+    }
+
+    static let starved = "did not finish in 5 minutes: the cooperative pool is starved or a load hung"
+
+    /// A wall in a window whose tiles all show their pixels. `prefilled` puts the pixels in the wall's cache first, so
+    /// tiles show without a load.
     private func loadedWall(_ window: NSWindow, prefilled: Bool = true) async throws -> (ThreadImageWallView, [GalleryImage]) {
         let wall = ThreadImageWallView(frame: window.contentView!.bounds)
         window.contentView!.addSubview(wall)
-        // A main-actor loader: a nonisolated one waits for the cooperative pool, which other suites in a full parallel
-        // run keep busy for minutes.
-        wall.masonry.makeLoader = { _ in { @MainActor _ in Self.pixels() } }
+        wall.masonry.makeLoader = { _ in { @Sendable _ in Self.pixels() } }
         #expect(wall.masonry.cache === ImageDecodeCache.gallery)
         // A cache of its own: AsyncImageCacheTests empties the shared ones in parallel.
         wall.masonry.cache = NSCache()
         // Keys of its own: `ImageDecodeCache` shares one in-flight decode per key across every cache, and other suites
-        // build the same `fakeImages()`, whose keys differ only by the second they were made in. A tile that joined
-        // their decode waited on their loader.
+        // build the same `fakeImages()`, whose keys differ only by the second they were made in.
         let images = ThreadImageWallTests.measuredImages().map { image in
             var image = image
             image.at = T3Timestamp(image.at.raw.replacingOccurrences(of: "Z", with: ".517Z"))
@@ -37,15 +57,21 @@ import T3Protocol
         wall.images = images
         wall.layoutSubtreeIfNeeded()
         wall.masonry.relayout()
-        // Up to 60 s: in a full parallel run other suites hold the main actor that long. A parallel
-        // `AsyncImageView.clearMemory()` cancels decodes in flight, and the tiles load again on their own.
-        let end = Date().addingTimeInterval(60)
-        while !(!wall.masonry.tiles.isEmpty && wall.masonry.tiles.values.allSatisfy { $0.thumb.image != nil }), Date() < end {
-            try? await Task.sleep(for: .milliseconds(50))
+        // Sizes the new tiles, which starts their loads.
+        wall.layoutSubtreeIfNeeded()
+        for _ in 0..<3 {
+            let settled = await Self.settle(wall.masonry.tiles.values.map(\.thumb))
+            try #require(settled, "the tiles' loads \(Self.starved)")
+            guard wall.masonry.tiles.values.contains(where: { $0.thumb.image == nil }) else { break }
+            // A tile whose load failed is built again.
+            wall.images = []
+            wall.images = images
+            wall.masonry.relayout()
+            wall.layoutSubtreeIfNeeded()
         }
         let tiles = wall.masonry.tiles.values
         try #require(tiles.count >= 4 && tiles.allSatisfy { $0.thumb.image != nil },
-                     "\(tiles.count) tiles, \(wall.masonry.frames.count) placed, \(tiles.filter { $0.thumb.image == nil }.count) without pixels, \(tiles.filter { $0.thumb.failureState != nil }.count) failed, sizes \(tiles.map { $0.thumb.bounds.size }.prefix(2)), window \(wall.window != nil)")
+                     "\(tiles.count) tiles, \(wall.masonry.frames.count) placed, \(tiles.filter { $0.thumb.image == nil }.count) without pixels, sizes \(tiles.map { $0.thumb.bounds.size }.prefix(2)), window \(wall.window != nil)")
         return (wall, images)
     }
 
@@ -123,8 +149,14 @@ extension GalleryTileLifetimeTests {
         ImageDecodeCache.gallery.setObject(ImageDecodeCache.Cached(try #require(Self.pixels()), side: 64), forKey: probe)
         ImageDecodeCache.releaseGallery(after: .milliseconds(300))
         #expect(ImageDecodeCache.gallery.object(forKey: probe) != nil)
-        let end = Date().addingTimeInterval(60)
-        while ImageDecodeCache.gallery.object(forKey: probe) != nil, Date() < end { try? await Task.sleep(for: .milliseconds(50)) }
+        for _ in 0..<5 {
+            let release = try #require(ImageDecodeCache.galleryRelease)
+            let released = await Self.settle { await release.value }
+            try #require(released, "the gallery release \(Self.starved)")
+            // A wall another suite builds in parallel holds the gallery again, which cancels this release.
+            guard release.isCancelled else { break }
+            ImageDecodeCache.releaseGallery(after: .milliseconds(300))
+        }
         #expect(ImageDecodeCache.gallery.object(forKey: probe) == nil)
     }
 }
@@ -136,15 +168,17 @@ extension GalleryTileLifetimeTests {
         defer { window.contentView = nil; window.close() }
         let view = AsyncImageView(frame: NSRect(x: 0, y: 0, width: 64, height: 44))
         window.contentView!.addSubview(view)
-        view.set(key: "stale-" + UUID().uuidString, fallbackText: "x", loader: { @MainActor _ in Self.pixels() })
-        await ThreadImageGalleryTests.pump { view.image != nil }
+        view.set(key: "stale-" + UUID().uuidString, fallbackText: "x", loader: { @Sendable _ in Self.pixels() })
+        let loaded = await Self.settle([view])
+        try #require(loaded, "the first load \(Self.starved)")
         let old = try #require(view.image)
-        view.reload(loader: { @MainActor _ in
+        view.reload(loader: { @Sendable _ in
             try? await Task.sleep(for: .milliseconds(200))
             return Self.pixels()
         })
         #expect(view.image === old, "the old picture stays while the new one loads")
-        await ThreadImageGalleryTests.pump { view.image !== old }
+        let reloaded = await Self.settle([view])
+        try #require(reloaded, "the reload \(Self.starved)")
         #expect(view.image != nil && view.image !== old)
     }
 }
