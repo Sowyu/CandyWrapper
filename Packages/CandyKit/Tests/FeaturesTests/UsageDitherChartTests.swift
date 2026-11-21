@@ -69,35 +69,78 @@ struct UsageDitherChartTests {
         }
     }
 
-    @Test func ditherMaskIsDeterministicAndStaysUnderTheLines() {
+
+    /// Every series cell, fill or edge, of series `k` in column `x`.
+    static func series(_ cell: UInt8) -> Int? { cell >= 2 ? (Int(cell) - 2) / 2 : nil }
+
+    @Test func maskIsDeterministicAndStaysWithinTheData() {
         let size = CGSize(width: 700, height: 224)
-        for overlap in [UsageDitherPlotView.Overlap.layered, .checker, .hatched] {
-            let a = UsageDitherPlotView.grid(Self.input(), size: size, overlap: overlap)
-            let b = UsageDitherPlotView.grid(Self.input(), size: size, overlap: overlap)
-            #expect(a == b)
-            #expect(a.cells.contains { $0 >= 2 })
-        }
-        // A cell of series k sits on or under that series' line.
         let input = Self.input()
-        let grid = UsageDitherPlotView.grid(input, size: size)
-        let frame = UsageDitherPlotView.gridFrame(size)
-        let curves = UsageDitherPlotView.curves(input)
-        let sx = size.width / UsageChartLogic.viewWidth, sy = size.height / UsageChartLogic.viewHeight
-        for y in 0..<grid.height {
-            for x in 0..<grid.width where grid[x, y] >= 2 {
-                let segs = curves[Int(grid[x, y]) - 2]
-                let line = UsageChartLogic.sample(segs, x: min(size.width, (CGFloat(x) + 0.5) * DitherFill.cell) / sx) * sy
-                #expect(frame.rect.minY + (CGFloat(y) + 0.5) * DitherFill.cell >= line - 1e-6)
+        for shape in [UsageDitherPlotView.Shape.linear, .step, .smooth] {
+            let a = UsageDitherPlotView.grid(input, size: size, shape: shape)
+            #expect(a == UsageDitherPlotView.grid(input, size: size, shape: shape))
+            let tops = UsageDitherPlotView.tops(input, size: size, shape: shape)
+            for x in 0..<a.width {
+                // Nothing above the highest quantised edge in the column, and that top cell is an edge.
+                let highest = tops.map { $0[x] }.min() ?? a.height
+                for y in 0..<a.height where a[x, y] >= 2 {
+                    #expect(y >= highest, "cell above the edge at \(x), \(y)")
+                    // A cell of series k sits on or under k's own edge.
+                    if let k = Self.series(a[x, y]) { #expect(y >= tops[k][x], "series \(k) above its edge at \(x), \(y)") }
+                }
+                if highest < a.height { #expect(a[x, highest] >= 3 && a[x, highest] % 2 == 1, "top cell is not an edge at \(x)") }
             }
         }
-        // The resting fill is the entrance's last step, and an early step holds fewer cells.
-        let early = UsageDitherPlotView.grid(input, size: size, reveal: 0.3)
-        #expect(early.cells.filter { $0 >= 2 }.count < grid.cells.filter { $0 >= 2 }.count)
-        #expect(UsageDitherPlotView.grid(input, size: size, reveal: 1) == grid)
-        #expect(grid.revealed(1).cells == grid.cells)
-        let part = grid.revealed(0.3)
-        #expect(part.cells.indices.allSatisfy { part.cells[$0] == 0 || part.cells[$0] == grid.cells[$0] })
-        #expect(part.cells.filter { $0 >= 2 }.count < grid.cells.filter { $0 >= 2 }.count)
+        // Linear tops never pass the higher of their two days, nor drop under the lower (one cell of rounding).
+        let frame = UsageDitherPlotView.gridFrame(size)
+        let tops = UsageDitherPlotView.tops(input, size: size, shape: .linear)
+        let sy = size.height / UsageChartLogic.viewHeight
+        for (k, s) in input.series.enumerated() {
+            let n = s.values.count
+            for x in 0..<frame.columns where tops[k][x] < frame.rows {
+                let f = min(Double(n - 1), (Double(x) + 0.5) * Double(DitherFill.chartCell) / Double(size.width) * Double(n - 1))
+                let i = min(n - 2, Int(f))
+                let rows = [s.values[i], s.values[i + 1]].map { (UsageChartLogic.y($0, max: input.scaleMax) * sy - frame.rect.minY) / DitherFill.chartCell }
+                #expect(Double(tops[k][x]) >= Double(rows.min()!) - 1 && Double(tops[k][x]) <= Double(rows.max()!) + 1)
+            }
+        }
+        // A day with usage always shows a cell, however small.
+        #expect(tops[3].allSatisfy { $0 == frame.rows - 1 })
+        // The entrance builds left to right and ends on the resting plot.
+        let grid = UsageDitherPlotView.grid(input, size: size)
+        let half = grid.revealed(columns: grid.width / 2)
+        #expect(half.cells.indices.allSatisfy { i in (i % grid.width) < grid.width / 2 ? half.cells[i] == grid.cells[i] : half.cells[i] == 0 })
+        #expect(grid.revealed(columns: grid.width) == grid)
+    }
+
+    @Test func texturesAreDistinctAndOrdered() {
+        #expect((0..<4).map(DitherFill.Texture.forSeries) == [.gradient, .hatch, .counterHatch, .dots])
+        // The gradient is solid at the foot and broken toward the edge.
+        let foot = (0..<8).flatMap { x in (0..<8).map { y in DitherFill.Texture.gradient.admits(x, y, depth: 0.9) } }
+        let edge = (0..<8).flatMap { x in (0..<8).map { y in DitherFill.Texture.gradient.admits(x, y, depth: 0) } }
+        #expect(foot.allSatisfy { $0 })
+        #expect(edge.filter { $0 }.count == 26)
+        // The hatches are mirror images; no two textures agree on an 8 by 8 tile.
+        let tiles = DitherFill.Texture.allCases.map { t in (0..<8).flatMap { x in (0..<8).map { y in t.admits(x, y, depth: 0.2) } } }
+        #expect(Set(tiles.map { $0.map { $0 ? "1" : "0" }.joined() }).count == 4)
+    }
+
+    @Test func legendSpotlightsAndLocks() {
+        let legend = UsageChartLegendView()
+        var seen: [String?] = []
+        legend.onSpotlight = { seen.append($0) }
+        legend.set([("claude", "Claude", .orange), ("codex", "Codex", .white)])
+        legend.toggle("codex")
+        #expect(legend.spotlight == "codex")
+        legend.toggle("codex")
+        #expect(legend.spotlight == nil)
+        #expect(seen == ["codex", nil])
+        // A spotlight dims the other series in the bitmap's colors only: the cells stay.
+        var a = Self.input(), b = Self.input()
+        b.spotlight = "claude"
+        let size = CGSize(width: 400, height: 224)
+        #expect(UsageDitherPlotView.grid(a, size: size) == UsageDitherPlotView.grid(b, size: size))
+        a.spotlight = nil
     }
 
     @Test func entrancePlaysOnceAndLeavesNothingRunning() throws {
@@ -162,7 +205,7 @@ struct UsageDitherChartTests {
         let runs = 20
         var bytes = 0
         for _ in 0..<runs {
-            let image = DitherFill.image(UsageDitherPlotView.grid(input, size: size), colors: [CGColor.black, .white, .white, .white, .white])
+            let image = UsageDitherPlotView.image(UsageDitherPlotView.grid(input, size: size), colors: [CGColor](repeating: .white, count: 9), ground: .black)
             bytes = (image?.bytesPerRow ?? 0) * (image?.height ?? 0)
         }
         let ms = Date().timeIntervalSince(start) / Double(runs) * 1000
@@ -174,101 +217,6 @@ struct UsageDitherChartTests {
     // MARK: Pictures
 
     nonisolated static let pictures = ProcessInfo.processInfo.environment["CANDY_DITHER_PICTURES"]
-
-    @Test(.enabled(if: pictures != nil)) func writePictures() throws {
-        let dir = URL(fileURLWithPath: Self.pictures!)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let motion = Motion.reducedOverride
-        defer { Motion.reducedOverride = motion; UsageChartPlotView.redesignOverride = nil }
-        Motion.reducedOverride = true
-        let size = NSSize(width: 960, height: 300)
-        for dark in [true, false] {
-            try Self.withRedesign(dark: dark) {
-                let name = dark ? "dark" : "light"
-                var shots: [(String, NSBitmapImageRep)] = []
-                for before in [true, false] {
-                    UsageChartPlotView.redesignOverride = before ? false : nil
-                    let chart = UsageChartView()
-                    chart.model = Self.model()
-                    shots.append((before ? "Before" : "After", RedesignBaselineTests.image(Self.padded(chart), size: size, dark: dark)))
-                }
-                UsageChartPlotView.redesignOverride = nil
-                try Self.write(Self.stack(shots, dark: dark, vertical: true), to: dir.appendingPathComponent("before-after-\(name).png"))
-                // The scrub on Nov 3, a busy day where three series overlap.
-                let chart = UsageChartView()
-                chart.model = Self.model()
-                let host = Self.padded(chart)
-                _ = RedesignBaselineTests.image(host, size: size, dark: dark)
-                let plot = try #require(chart.subviews.compactMap { $0 as? UsageChartPlotView }.first)
-                plot.hoverIndex = 12
-                try Self.write(RedesignBaselineTests.image(host, size: size, dark: dark), to: dir.appendingPathComponent("scrub-\(name).png"))
-            }
-        }
-        // Plot-only comparisons, dark and light rows.
-        let plot = CGSize(width: 560, height: 224)
-        for (file, variants) in [
-            ("cell-sizes", [("2pt", 2.0, UsageDitherPlotView.Overlap.checker, 1.0), ("3pt", 3, .checker, 1), ("4pt", 4, .checker, 1)]),
-            ("overlap-options", [("Layered", 3.0, UsageDitherPlotView.Overlap.layered, 1.0), ("Checker", 3, .checker, 1), ("Hatched", 3, .hatched, 1)]),
-            ("entrance-frames", [0.1, 0.3, 0.5, 0.7, 0.9, 1].map { ("\(Int($0 * 400)) ms", 3.0, UsageDitherPlotView.Overlap.checker, $0) }),
-        ] {
-            var rows: [NSBitmapImageRep] = []
-            for dark in [true, false] {
-                try Self.withRedesign(dark: dark) {
-                    let shots = variants.map { label, cell, overlap, reveal in
-                        (label, Self.plotPicture(size: plot, cell: CGFloat(cell), overlap: overlap, reveal: reveal, dark: dark))
-                    }
-                    rows.append(Self.stack(shots, dark: dark, vertical: false))
-                }
-            }
-            try Self.write(Self.stack(rows.map { ("", $0) }, dark: true, vertical: true, labels: false), to: dir.appendingPathComponent("\(file).png"))
-        }
-    }
-
-    static func padded(_ chart: UsageChartView) -> NSView {
-        let host = ConnectionsFidelityTests.Canvas(frame: .zero)
-        host.addSubview(chart)
-        chart.frame = NSRect(x: 24, y: 24, width: 912, height: UsageChartView.height)
-        return host
-    }
-
-    /// The plot alone, drawn the way the view draws it: ground, the cell bitmap scaled up nearest, then the lines.
-    static func plotPicture(size: CGSize, cell: CGFloat, overlap: UsageDitherPlotView.Overlap, reveal: Double, dark: Bool) -> NSBitmapImageRep {
-        let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)!
-        var rep: NSBitmapImageRep!
-        appearance.performAsCurrentDrawingAppearance {
-            let m = Self.model()
-            let columns = UsageChartLogic.columns(m.periods, m.byPeriod, tokens: true)
-            let scale = UsageChartLogic.scale(columns, loading: false)
-            let order: [UsageProviderKind] = [.claude, .cursor, .codex, .antigravity]
-            let input = UsageDitherPlotView.Input(series: order.map { p in
-                .init(id: p.rawValue, color: UsageStyle.color(p), values: columns.map { $0.value(p) })
-            }, scaleMax: scale.max, ticks: scale.ticks)
-            let colors = [Themed.color(\.border).cgColor] + order.map { UsageStyle.color($0).cgColor }
-            rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2), bitsPerSample: 8,
-                                   samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-                .retagging(with: .sRGB)!
-            rep.size = size
-            let ctx = NSGraphicsContext(bitmapImageRep: rep)!.cgContext
-            ctx.setFillColor(Themed.color(\.background).cgColor)
-            ctx.fill(CGRect(origin: .zero, size: size))
-            // Flip so y runs down like the view.
-            ctx.translateBy(x: 0, y: size.height); ctx.scaleBy(x: 1, y: -1)
-            let frame = UsageDitherPlotView.gridFrame(size, cell: cell)
-            if let image = DitherFill.image(UsageDitherPlotView.grid(input, size: size, overlap: overlap, reveal: reveal, cell: cell), colors: colors) {
-                ctx.saveGState()
-                ctx.interpolationQuality = .none
-                ctx.translateBy(x: frame.rect.minX, y: frame.rect.maxY); ctx.scaleBy(x: 1, y: -1)
-                ctx.draw(image, in: CGRect(origin: .zero, size: frame.rect.size))
-                ctx.restoreGState()
-            }
-            ctx.setLineWidth(1.5); ctx.setLineJoin(.round); ctx.setLineCap(.round)
-            for (i, path) in UsageDitherPlotView.linePaths(input, size: size).enumerated() {
-                guard let path else { continue }
-                ctx.addPath(path); ctx.setStrokeColor(colors[i + 1]); ctx.strokePath()
-            }
-        }
-        return rep
-    }
 
     /// Pictures side by side (or stacked) on the ground, each with a caption above it.
     static func stack(_ shots: [(String, NSBitmapImageRep)], dark: Bool, vertical: Bool, labels: Bool = true) -> NSBitmapImageRep {
@@ -300,4 +248,5 @@ struct UsageDitherChartTests {
     static func write(_ rep: NSBitmapImageRep, to url: URL) throws {
         try rep.representation(using: .png, properties: [:])!.write(to: url)
     }
+
 }

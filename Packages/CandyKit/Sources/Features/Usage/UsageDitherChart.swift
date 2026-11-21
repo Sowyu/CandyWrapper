@@ -2,11 +2,13 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
-/// Redesign's Usage plot: each series' area as an ordered-dither fill on the 3pt cell grid, dense under the line and
-/// thinning to nothing at the baseline, the gridlines as dotted rows on the same grid, and each series line as a crisp
-/// 1.5pt stroke on top. The fill is one cached bitmap with a pixel per cell, rebuilt only when the size, the figures or
-/// the appearance change. The first time it shows, the cells switch on from each line downward over 0.4 s; after that
-/// nothing moves. The hover readout and its hairline live in `UsageChartPlotView`, above this view.
+/// Redesign's Usage plot, drawn the way dither-kit draws its area chart: every series is a shape quantised to the 2pt
+/// cell grid, so its top is a staircase of cells, outlined by solid edge cells in a lifted shade of the series color,
+/// with a texture inside. The first series is solid at the foot and breaks up into ordered dither toward its edge; the
+/// next ones hatch, counter-hatch and dot. Series overlay from the baseline as in T3 (UsageProviderChart.tsx:494-510),
+/// heaviest behind, each one in front keeping a one-cell dark margin. No vector stroke and no blur: the whole plot is
+/// one cached bitmap with a pixel per cell, rebuilt only when the size, figures, spotlight or appearance change. The
+/// first time it shows, the columns build in left to right over 0.4 s; after that nothing moves.
 final class UsageDitherPlotView: DSView {
     struct Series: Equatable {
         var id: String
@@ -23,25 +25,34 @@ final class UsageDitherPlotView: DSView {
         var series: [Series] = []
         var scaleMax: Double = 0
         var ticks: [Double] = []
+        /// The series the legend spotlights; the others dim.
+        var spotlight: String?
     }
 
-    /// How a series in front shares the cells where its area overlaps one behind it.
-    enum Overlap: Equatable, Sendable {
-        /// Every series on the full grid; the one in front takes the cell.
-        case layered
-        /// Inside an overlap the series take turns on a checkerboard; outside it each keeps the full grid.
-        case checker
-        /// The heaviest series on the full grid, every other series in diagonal stripes.
-        case hatched
+    /// How the daily points become a column profile before it is quantised.
+    enum Shape: Equatable, Sendable {
+        /// Straight segments between the days.
+        case linear
+        /// Each day a flat run, half a period either side of it.
+        case step
+        /// T3's monotone curve.
+        case smooth
     }
 
-    static let overlap = Overlap.checker
+    static let shape = Shape.linear
+    static let cell = DitherFill.chartCell
+    /// Gridline dots: one cell in this many along each tick row; nil draws none.
+    static let gridEvery: Int? = nil
+    /// The edge's lift toward the text color, and the fill's fade toward the ground at the plot's top.
+    static let edgeLift: CGFloat = 0.3
+    static let topFade: Double = 0.35
+    /// How far a series out of the spotlight keeps its color.
+    static let spotlightDim: CGFloat = 0.28
     static let entranceDuration: CFTimeInterval = 0.4
     static let entranceFrames = 10
 
     var input = Input() { didSet { if input != oldValue { needsLayout = true } } }
     let fill = CALayer()
-    private var lines: [CAShapeLayer] = []
     private var rendered: Key?
     /// Whether the entrance has played; it plays once per chart.
     private(set) var entered = false
@@ -79,91 +90,94 @@ final class UsageDitherPlotView: DSView {
         if window != nil { needsLayout = true }
     }
 
-    /// The colors the bitmap paints: the gridline dots, then one per series.
+    /// The bitmap's colors: the gridline dots, then each series' fill and edge.
     private func colors() -> [CGColor] {
-        let ground = Themed.color(\.background)
-        return [Themed.color(\.border).cgColor(in: self)] + input.series.map { s in
-            (s.dim < 1 ? OKLab.mix(s.color, s.dim, ground) : s.color).cgColor(in: self)
+        let ground = Themed.color(\.background), ink = Themed.color(\.foreground)
+        var out = [Themed.color(\.border).cgColor(in: self)]
+        for s in input.series {
+            // The edge lifts from the series color first, then both dim together toward the ground.
+            var keep: CGFloat = s.dim
+            if let spot = input.spotlight, spot != s.id { keep *= Self.spotlightDim }
+            for c in [s.color, OKLab.mix(s.color, 1 - Self.edgeLift, ink)] {
+                out.append((keep < 1 ? OKLab.mix(c, keep, ground) : c).cgColor(in: self))
+            }
         }
+        return out
     }
 
     /// The grid's frame in the view: whole cells, its foot on the baseline.
-    static func gridFrame(_ size: CGSize, cell c: CGFloat = DitherFill.cell) -> (rect: CGRect, columns: Int, rows: Int) {
+    static func gridFrame(_ size: CGSize, cell c: CGFloat = cell) -> (rect: CGRect, columns: Int, rows: Int) {
         let cols = Int((size.width / c).rounded(.up)), rows = Int((size.height / c).rounded(.up))
         return (CGRect(x: 0, y: size.height - CGFloat(rows) * c, width: CGFloat(cols) * c, height: CGFloat(rows) * c), cols, rows)
     }
 
-    /// The curve of each series in view units.
-    static func curves(_ input: Input) -> [[(CGPoint, CGPoint, CGPoint, CGPoint)]] {
-        input.series.map { UsageChartLogic.curve(UsageChartLogic.points($0.values, max: input.scaleMax)) }
+    /// A series' value at `u`, 0 to 1 across the plot, before quantising. `smooth` samples T3's curve in `tops`.
+    static func value(_ values: [Double], at u: Double, shape: Shape) -> Double {
+        guard let last = values.indices.last else { return 0 }
+        guard last > 0 else { return values[0] }
+        let f = min(Double(last), max(0, u * Double(last)))
+        switch shape {
+        case .step:
+            return values[Int(UsageFormat.jsRound(f))]
+        case .linear, .smooth:
+            let i = min(last - 1, Int(f)), t = f - Double(i)
+            return values[i] + (values[i + 1] - values[i]) * t
+        }
     }
 
-    /// The whole fill as cells: gridline dots as layer 1, series `i` as layer `i + 2`. Pure, so the same size and
-    /// figures give the same cells.
-    static func grid(_ input: Input, size: CGSize, overlap: Overlap = overlap, reveal: Double = 1, cell c: CGFloat = DitherFill.cell) -> DitherFill.Grid {
+    /// Each series' top row per column, `rows` where it has nothing. A column with any usage shows at least its
+    /// bottom cell, so a small series still draws a line along the baseline.
+    static func tops(_ input: Input, size: CGSize, shape: Shape = shape, cell c: CGFloat = cell) -> [[Int]] {
+        let frame = gridFrame(size, cell: c)
+        guard size.width > 0, size.height > 0, input.scaleMax > 0 else { return input.series.map { _ in [] } }
+        let sy = size.height / UsageChartLogic.viewHeight
+        return input.series.map { s in
+            let segs = shape == .smooth ? UsageChartLogic.curve(UsageChartLogic.points(s.values, max: input.scaleMax)) : []
+            return (0..<frame.columns).map { x in
+                let u = Double(min(size.width, (CGFloat(x) + 0.5) * c) / size.width)
+                let y: CGFloat, positive: Bool
+                if shape == .smooth {
+                    y = UsageChartLogic.sample(segs, x: CGFloat(u) * UsageChartLogic.viewWidth)
+                    positive = y < UsageChartLogic.viewHeight - 1e-9
+                } else {
+                    let v = value(s.values, at: u, shape: shape)
+                    y = UsageChartLogic.y(v, max: input.scaleMax)
+                    positive = v > 0
+                }
+                guard positive else { return frame.rows }
+                let row = Int(((y * sy - frame.rect.minY) / c).rounded())
+                return min(frame.rows - 1, max(0, row))
+            }
+        }
+    }
+
+    /// The whole plot as cells: gridline dots as layer 1, series `i`'s fill as `2 + 2i` and its edge as `3 + 2i`.
+    /// Pure, so the same size and figures give the same cells.
+    static func grid(_ input: Input, size: CGSize, shape: Shape = shape, cell c: CGFloat = cell,
+                     textures: (Int) -> DitherFill.Texture = DitherFill.Texture.forSeries) -> DitherFill.Grid {
         let frame = gridFrame(size, cell: c)
         var grid = DitherFill.Grid(width: frame.columns, height: frame.rows)
         guard size.width > 0, size.height > 0 else { return grid }
-        let sx = size.width / UsageChartLogic.viewWidth, sy = size.height / UsageChartLogic.viewHeight
-        for t in input.ticks {
-            let y = UsageChartLogic.y(t, max: input.scaleMax) * sy
-            grid.dots(row: min(frame.rows - 1, max(0, Int(((y - frame.rect.minY) / c).rounded(.down)))), layer: 1)
-        }
-        // Each series' line in rows from the grid's top, per column.
-        let tops: [[Double]] = curves(input).map { segs in
-            guard !segs.isEmpty else { return [] }
-            return (0..<frame.columns).map { x in
-                let px = min(size.width, (CGFloat(x) + 0.5) * c)
-                return Double((UsageChartLogic.sample(segs, x: px / sx) * sy - frame.rect.minY) / c)
+        if let every = gridEvery {
+            let sy = size.height / UsageChartLogic.viewHeight
+            for t in input.ticks where t > 0 {
+                let y = UsageChartLogic.y(t, max: input.scaleMax) * sy
+                grid.dots(row: Int(((y - frame.rect.minY) / c).rounded(.down)), every: every, layer: 1)
             }
         }
-        switch overlap {
-        case .layered, .hatched:
-            for (i, top) in tops.enumerated() where !top.isEmpty {
-                grid.area(tops: top, layer: UInt8(i + 2), pattern: overlap == .hatched && i > 0 ? .hatched : .full, reveal: reveal)
-            }
-        case .checker:
-            // Each series on its own grid first, then each cell goes to the series whose turn it is among those whose
-            // area holds the cell, front first.
-            let own = tops.map { top -> DitherFill.Grid in
-                var g = DitherFill.Grid(width: frame.columns, height: frame.rows)
-                if !top.isEmpty { g.area(tops: top, layer: 1, reveal: reveal) }
-                return g
-            }
-            for y in 0..<frame.rows {
-                let centre = Double(y) + 0.5
-                for x in 0..<frame.columns {
-                    func holds(_ i: Int) -> Bool { x < tops[i].count && centre >= tops[i][x] }
-                    var count = 0
-                    for i in tops.indices where holds(i) { count += 1 }
-                    guard count > 0 else { continue }
-                    // The turn-th holder, front (last drawn) first.
-                    var turn = (x + y) % count, owner = -1
-                    for i in tops.indices.reversed() where holds(i) {
-                        if turn == 0 { owner = i; break }
-                        turn -= 1
-                    }
-                    if own[owner][x, y] != 0 {
-                        grid[x, y] = UInt8(owner + 2)
-                        grid.depths[y * frame.columns + x] = own[owner].depths[y * frame.columns + x]
-                    }
-                }
-            }
+        let tops = tops(input, size: size, shape: shape, cell: c)
+        for (i, top) in tops.enumerated() where !top.isEmpty {
+            grid.fill(tops: top, layer: UInt8(2 + 2 * i), texture: textures(i), gap: i > 0)
         }
+        // Every outline after every fill, so a series behind keeps its edge where a lighter one covers its area.
+        for (i, top) in tops.enumerated() where !top.isEmpty { grid.edge(tops: top, layer: UInt8(3 + 2 * i)) }
         return grid
     }
 
-    /// Each series line in the view's points, flipped like the view.
-    static func linePaths(_ input: Input, size: CGSize) -> [CGPath?] {
-        let sx = size.width / UsageChartLogic.viewWidth, sy = size.height / UsageChartLogic.viewHeight
-        func pt(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * sx, y: p.y * sy) }
-        return curves(input).map { segs in
-            guard let first = segs.first else { return nil }
-            let path = CGMutablePath()
-            path.move(to: pt(first.0))
-            for s in segs { path.addCurve(to: pt(s.3), control1: pt(s.1), control2: pt(s.2)) }
-            return path
-        }
+    /// The bitmap for a grid: fills fade toward the ground at the top of the plot, so the solid foot reads brightest.
+    static func image(_ grid: DitherFill.Grid, colors: [CGColor], ground: CGColor) -> CGImage? {
+        let fills = Set(stride(from: 2, to: colors.count + 1, by: 2).map { UInt8($0) })
+        return DitherFill.image(grid, colors: colors, ramp: (fills, ground, topFade))
     }
 
     private func render() {
@@ -172,40 +186,25 @@ final class UsageDitherPlotView: DSView {
         guard key != rendered else { return }
         rendered = key
         let frame = Self.gridFrame(bounds.size)
+        let grid = Self.grid(input, size: bounds.size)
+        let ground = Themed.color(\.background).cgColor(in: self)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = frame.rect
-        let grid = Self.grid(input, size: bounds.size)
-        fill.contents = DitherFill.image(grid, colors: colors)
-        let paths = Self.linePaths(input, size: bounds.size)
-        while lines.count < paths.count {
-            let l = CAShapeLayer()
-            l.fillColor = nil
-            l.lineWidth = 1.5
-            l.lineJoin = .round
-            l.lineCap = .round
-            layer?.addSublayer(l)
-            lines.append(l)
-        }
-        while lines.count > paths.count { lines.removeLast().removeFromSuperlayer() }
-        for (i, l) in lines.enumerated() {
-            l.frame = bounds
-            l.path = paths[i]
-            l.strokeColor = colors[i + 1]
-        }
+        fill.contents = Self.image(grid, colors: colors, ground: ground)
         CATransaction.commit()
-        playEntranceIfDue(grid, colors: colors)
+        playEntranceIfDue(grid, colors: colors, ground: ground)
     }
 
-    /// The fill builds in once, the first time the chart shows figures in a window: Core Animation flips the frames,
-    /// which exist only while it plays, and the last one is the resting fill.
-    private func playEntranceIfDue(_ grid: DitherFill.Grid, colors: [CGColor]) {
+    /// The columns build in once, left to right, the first time the chart shows figures in a window: Core Animation
+    /// flips the frames, which exist only while it plays, and the last one is the resting plot.
+    private func playEntranceIfDue(_ grid: DitherFill.Grid, colors: [CGColor], ground: CGColor) {
         guard !entered, window != nil, bounds.width > 0, input.scaleMax > 0,
               input.series.contains(where: { $0.values.contains { $0 > 0 } }) else { return }
         entered = true
         guard !Motion.reduced, let final = fill.contents else { return }
         let n = Self.entranceFrames
         let frames = (1..<n).compactMap { i in
-            DitherFill.image(grid.revealed(Double(i) / Double(n)), colors: colors)
+            Self.image(grid.revealed(columns: grid.width * i / n), colors: colors, ground: ground)
         }
         let build = CAKeyframeAnimation(keyPath: "contents")
         build.values = frames + [final]
@@ -213,4 +212,120 @@ final class UsageDitherPlotView: DSView {
         build.duration = Self.entranceDuration
         fill.add(build, forKey: "entrance")
     }
+}
+
+/// The legend over Redesign's chart: a square swatch and the name per series. Hovering an entry spotlights its series;
+/// clicking locks the spotlight until it is clicked again.
+final class UsageChartLegendView: DSView {
+    var onSpotlight: ((String?) -> Void)?
+    private var items: [UsageChartLegendItem] = []
+    private(set) var hovered: String?
+    private(set) var locked: String?
+    var spotlight: String? { locked ?? hovered }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Legend")
+    }
+
+    func set(_ entries: [(id: String, label: String, color: NSColor)]) {
+        if entries.map(\.id) != items.map(\.id) {
+            items.forEach { $0.removeFromSuperview() }
+            items = entries.map { e in
+                let item = UsageChartLegendItem(id: e.id, label: e.label, color: e.color)
+                item.onHover = { [weak self] id, inside in self?.hover(id, inside) }
+                item.onPress = { [weak self] id in self?.toggle(id) }
+                addSubview(item)
+                return item
+            }
+            if let locked, !entries.contains(where: { $0.id == locked }) { self.locked = nil }
+            hovered = nil
+            needsLayout = true
+        }
+        sync()
+    }
+
+    private func hover(_ id: String, _ inside: Bool) {
+        if inside { hovered = id } else if hovered == id { hovered = nil }
+        sync(); onSpotlight?(spotlight)
+    }
+
+    func toggle(_ id: String) {
+        locked = locked == id ? nil : id
+        sync(); onSpotlight?(spotlight)
+    }
+
+    private func sync() {
+        for item in items { item.state = (spotlight == nil || spotlight == item.id, locked == item.id) }
+    }
+
+    override var fittingSize: NSSize {
+        let w = items.reduce(0) { $0 + $1.fittingSize.width } + RedesignTokens.Space.m * CGFloat(max(0, items.count - 1))
+        return NSSize(width: ceil(w), height: 20)
+    }
+
+    override func layout() {
+        super.layout()
+        var x: CGFloat = 0
+        for item in items {
+            let w = item.fittingSize.width
+            item.frame = NSRect(x: x, y: 0, width: w, height: bounds.height)
+            x += w + RedesignTokens.Space.m
+        }
+    }
+}
+
+final class UsageChartLegendItem: DSView {
+    let id: String
+    var onHover: ((String, Bool) -> Void)?
+    var onPress: ((String) -> Void)?
+    /// Lit when nothing is spotlit or this entry is; locked when a click holds it.
+    var state = (lit: true, locked: false) {
+        didSet {
+            label.color = Themed.color(state.locked ? \.foreground : \.mutedForeground)
+            swatch.alphaValue = state.lit ? 1 : UsageDitherPlotView.spotlightDim
+            label.alphaValue = state.lit ? 1 : UsageDitherPlotView.spotlightDim
+            setAccessibilityValue(state.locked ? "spotlit" : nil)
+        }
+    }
+    private let swatch: UsageChartSwatchView
+    private let label: LabelView
+    private var tracking: NSTrackingArea?
+
+    init(id: String, label text: String, color: NSColor) {
+        self.id = id
+        swatch = UsageChartSwatchView(color: color)
+        label = LabelView(text, font: DSFont.mono(11), color: Themed.color(\.mutedForeground))
+        label.lineHeight = 16
+        super.init(frame: .zero)
+        addSubview(swatch); addSubview(label)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(text)
+        setAccessibilityHelp("Spotlights \(text) in the chart")
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var fittingSize: NSSize { NSSize(width: 8 + 6 + ceil(label.textWidth) + 1, height: 20) }
+
+    override func layout() {
+        super.layout()
+        swatch.frame = NSRect(x: 0, y: ((bounds.height - 8) / 2).rounded(), width: 8, height: 8)
+        label.frame = NSRect(x: 14, y: ((bounds.height - 16) / 2).rounded(), width: ceil(label.textWidth) + 1, height: 16)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(t)
+        tracking = t
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHover?(id, true) }
+    override func mouseExited(with event: NSEvent) { onHover?(id, false) }
+    override func mouseDown(with event: NSEvent) { onPress?(id) }
+    override func accessibilityPerformPress() -> Bool { onPress?(id); return true }
 }

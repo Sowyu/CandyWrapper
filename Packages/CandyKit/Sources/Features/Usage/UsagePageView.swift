@@ -449,7 +449,7 @@ final class UsageSummarySectionView: DSView, UsageSectionSizing {
         chartTitle = UsageStyle.label((m.window.isHourly ? "Hourly " : "Daily ") + (m.metric == "tokens" ? "processed tokens" : "cost"), 14, .medium)
         self.chart = chart
         super.init(frame: .zero)
-        for v in [big, caption, chartTitle, chart] as [NSView] { addSubview(v) }
+        for v in [big, caption, chartTitle, chart, chart.legend] as [NSView] { addSubview(v) }
         info.map(addSubview)
         // Cursor's Enable rows go right after Codex and Claude (`cursorInsertAt`).
         // Ranked by the metric shown (`rankProvidersByMetric`, 4928 usageProviders.ts:69-82, #15632).
@@ -502,6 +502,8 @@ final class UsageSummarySectionView: DSView, UsageSectionSizing {
         let rw = bounds.width - rx
         chartTitle.frame = NSRect(x: rx, y: ry, width: rw, height: 20)
         chart.frame = NSRect(x: rx, y: ry + 32, width: rw, height: UsageChartView.height)
+        let lw = min(rw, chart.legend.fittingSize.width)
+        chart.legend.frame = NSRect(x: rx + rw - lw, y: ry, width: lw, height: 20)
     }
 }
 
