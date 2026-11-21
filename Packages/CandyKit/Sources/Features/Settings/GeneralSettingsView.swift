@@ -615,7 +615,8 @@ public final class GeneralSettingsView: SettingsPageBase {
         let clear = ButtonView("Clear image cache", variant: .outline, size: .sm)
         let images = row("image-cache", title: "Image cache", detail: "Pictures from replies, kept so they show without downloading again.", control: clear)
         let describe: @MainActor (Int64?) -> Void = { [weak images] bytes in
-            let size = bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
+            // ByteCountFormatter spells zero out as "Zero KB".
+            let size = bytes.map { $0 == 0 ? "0 KB" : ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
             images?.detail = "Pictures from replies, kept so they show without downloading again." + (size.map { " Using \($0)." } ?? "")
         }
         clear.action = { [weak clear] in
