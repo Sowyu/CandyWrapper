@@ -339,6 +339,8 @@ public enum SidebarItem: Equatable, Sendable {
 /// and the settled paging.
 public struct SidebarListState: Equatable, Sendable {
     public var activeThreadId: ThreadId?
+    /// Threads this client is renaming itself (Deeper rename): their rows show the regenerating glimmer.
+    public var localTitleRegenerations: Set<ThreadId> = []
     public var snoozedExpanded = false
     public var settledExpanded = false
     /// The Working beta shelf (`sidebarWorkingShelfEnabled`) and whether it is open (collapsed by default).
@@ -811,7 +813,7 @@ public enum SidebarListBuilder {
             recedes: SidebarModel.shouldRecedeSidebarThread(status: status, isUnread: isUnread, isWoke: isWoke,
                                                             isActive: isActive, isSelected: isSelected),
             isActive: isActive, isSelected: isSelected, isRenaming: state.renamingThreadId == shell.id,
-            isRegeneratingTitle: shell.titleRegeneration != nil,
+            isRegeneratingTitle: shell.titleRegeneration != nil || state.localTitleRegenerations.contains(shell.id),
             timeLabel: SidebarModel.threadTimeLabel(t, section: section, nowMs: nowMs),
             snoozeLabel: wake.map { snoozeWakeLabel(wakeMs: $0, nowMs: nowMs) },
             workingStartedMs: working,
