@@ -33,7 +33,7 @@ public final class SshPasswordPromptDialog: DialogView {
     public var onResponse: ((String?) -> Void)?
     public init(state: SshPasswordPromptState, now: Date = Date()) {
         body = SshPasswordPromptBody(target: state.target, remaining: state.label(at: now), expired: state.remaining(at: now) == 0, password: password)
-        super.init(title: "SSH verification required", message: "Enter the password or verification code required by \(state.target). T3 Code passes your response to the local SSH process and keeps it in memory to reuse for this host. T3 Code does not write it to disk.")
+        super.init(title: "SSH verification required", message: "Enter the password or verification code required by \(state.target). CandyWrapper passes your response to the local SSH process and keeps it in memory to reuse for this host. It never writes it to disk.")
         maxWidth = 448; showsCloseButton = false
         panelContent = [body]; footerButtons = [cancel, proceed]
         cancel.action = { [weak self] in self?.respond(nil) }
@@ -105,7 +105,7 @@ public final class RelayClientInstallBody: DSView {
         count.alignment = .right; count.lineHeight = 20; title.lineHeight = 20
         title.text = stage?.label ?? "Managed relay client"
         count.text = stage.map { "\($0.step) of 7" } ?? ""; count.isHidden = stage == nil
-        detail.text = stage == nil ? "T3 Code will download and install version \(version) locally." : "Keep T3 Code open while the relay client is installed."
+        detail.text = stage == nil ? "CandyWrapper will download and install version \(version) locally." : "Keep CandyWrapper open while the relay client is installed."
         detail.font = DSFont.ui(stage == nil ? 14 : 12); detail.lineHeight = stage == nil ? 22.75 : 19.5; detail.color = Themed.color(\.mutedForeground)
         restyle()
     }
@@ -136,7 +136,7 @@ public final class RelayClientInstallBody: DSView {
 @MainActor
 public enum RelayClientInstallDialog {
     public static func make(version: String, stage: RelayClientInstallStage? = nil) -> DialogView {
-        let dialog = DialogView(title: stage == nil ? "Install relay client?" : "Installing relay client", message: stage == nil ? "T3 Code needs the relay client to make this environment available through T3 Connect." : "T3 Code is preparing this environment for secure access through T3 Connect.")
+        let dialog = DialogView(title: stage == nil ? "Install relay client?" : "Installing relay client", message: stage == nil ? "CandyWrapper needs the relay client to make this environment available through T3 Connect." : "CandyWrapper is preparing this environment for secure access through T3 Connect.")
         dialog.headerAccessory = RelayClientInstallIcon()
         dialog.maxWidth = 448; dialog.showsCloseButton = stage == nil
         dialog.panelContent = [RelayClientInstallBody(version: version, stage: stage)]

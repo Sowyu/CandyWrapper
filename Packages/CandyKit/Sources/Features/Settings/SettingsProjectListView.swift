@@ -21,10 +21,11 @@ public struct SettingsProjectListEntry: Equatable, Sendable {
         let place = isScratch ? "" : machines.count > 1 ? "\(machines.count) machines: " + machines.joined(separator: ", ") : machines.first ?? ""
         return [place, path].filter { !$0.isEmpty }.joined(separator: " · ")
     }
-    public var threadLabel: String { threadCount == 1 ? "1 thread" : "\(threadCount) threads" }
+    /// Empty for a project with no threads, so the column only holds counts that say something.
+    public var threadLabel: String { threadCount == 0 ? "" : threadCount == 1 ? "1 thread" : "\(threadCount) threads" }
     public var accessibilityLabel: String {
         let machine = machines.count > 1 ? "\(machines.count) machines, " + machines.joined(separator: ", ") : machines.first ?? ""
-        return [name, machine, threadLabel].filter { !$0.isEmpty }.joined(separator: ", ")
+        return [name, pinned ? "pinned" : "", machine, threadLabel].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }
 
@@ -161,7 +162,9 @@ final class SettingsProjectListView: DSView, SettingsGroupRow, RouteModalEscapeH
         private let icon = ProjectMonogramView(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
         private let title = LabelView("", font: DSFont.ui(13, weight: .medium))
         private let detail = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
-        private let count = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+        private let count = LabelView("", font: DSFont.ui(12).monospacedDigits, color: Themed.color(\.mutedForeground))
+        /// Pinned projects sort first, so they carry the sidebar's pin to say why.
+        private let pin = IconView(name: .pin, size: 12, strokeColor: Themed.color(\.mutedForeground))
         private let chevron = IconView(name: .chevronRight, size: 16, strokeColor: Themed.color(\.mutedForeground))
         private var tip: TooltipController?
 
@@ -172,6 +175,7 @@ final class SettingsProjectListView: DSView, SettingsGroupRow, RouteModalEscapeH
                 title.text = entry.name
                 detail.text = entry.detail
                 count.text = entry.threadLabel
+                pin.isHidden = !entry.pinned
                 setAccessibilityLabel(entry.accessibilityLabel)
                 // The full line when the row cuts it.
                 if tip == nil { tip = TooltipController.attach(to: detail, text: entry.detail) } else { tip?.text = entry.detail }
@@ -186,7 +190,7 @@ final class SettingsProjectListView: DSView, SettingsGroupRow, RouteModalEscapeH
             detail.lineHeight = 16
             count.lineHeight = 16
             count.alignment = .right
-            [icon, title, detail, count, chevron].forEach(addSubview)
+            [icon, title, detail, count, pin, chevron].forEach(addSubview)
             scalesWhenPressed = false
             setAccessibilityRole(.button)
         }
@@ -207,9 +211,14 @@ final class SettingsProjectListView: DSView, SettingsGroupRow, RouteModalEscapeH
             let h = bounds.height
             icon.frame = NSRect(x: 16, y: (h - 20) / 2, width: 20, height: 20)
             chevron.frame = NSRect(x: bounds.width - 32, y: (h - 16) / 2, width: 16, height: 16)
-            let cw = ceil(count.textWidth) + 1
+            let cw = count.text.isEmpty ? 0 : ceil(count.textWidth) + 1
             count.frame = NSRect(x: chevron.frame.minX - 8 - cw, y: (h - 16) / 2, width: cw, height: 16)
-            let tw = max(0, count.frame.minX - 16 - 48)
+            var end = cw > 0 ? count.frame.minX : chevron.frame.minX - 8
+            if !pin.isHidden {
+                pin.frame = NSRect(x: end - (cw > 0 ? 8 : 0) - 12, y: (h - 12) / 2, width: 12, height: 12)
+                end = pin.frame.minX
+            }
+            let tw = max(0, end - 16 - 48)
             if detail.text.isEmpty {
                 title.frame = NSRect(x: 48, y: (h - 18) / 2, width: tw, height: 18)
                 detail.frame = .zero

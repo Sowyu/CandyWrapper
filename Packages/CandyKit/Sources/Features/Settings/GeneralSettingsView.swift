@@ -251,7 +251,7 @@ public final class GeneralSettingsView: SettingsPageBase {
     // MARK: Behavior (SettingsPanels.tsx:2484-3043)
 
     private func behaviorSection() -> SettingsSectionView {
-        let notificationsDetail = "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while T3 Code is open."
+        let notificationsDetail = "System alerts when a thread finishes, fails, or needs input or approval. Applies to this device while CandyWrapper is open."
         let modes = ThreadNotificationMode.allCases
         let notifications = clientSelect("thread-notifications", notificationsDetail, key: "notificationMode",
                                          options: modes.map { ($0.rawValue, $0.label) }, width: 224)
@@ -518,7 +518,7 @@ public final class GeneralSettingsView: SettingsPageBase {
             guard let self, let check, let versionRow else { return }
             version.version = self.context.appVersion
             let update = self.context.update
-            let look = DesktopUpdateLogic.settingsButton(update)
+            let look = DesktopUpdateLogic.settingsButton(update, sentenceCase: ThemeRuntime.isDither(dark: check.effectiveAppearance.isDark))
             if check.title != look.label { check.title = look.label; versionRow.needsLayout = true }
             check.isEnabled = !look.disabled && !self.context.updateActionPending
             checkTip.text = update.map(DesktopUpdateLogic.buttonTooltip) ?? ""
@@ -535,7 +535,7 @@ public final class GeneralSettingsView: SettingsPageBase {
             let state = context.runtimeUpdate
             runtimeRow.isHidden = state == nil
             runtimeVersion.version = state?.currentVersion ?? ""
-            let look = DesktopUpdateLogic.settingsButton(state)
+            let look = DesktopUpdateLogic.settingsButton(state, sentenceCase: ThemeRuntime.isDither(dark: runtimeButton.effectiveAppearance.isDark))
             runtimeButton.title = look.label
             runtimeButton.isEnabled = !look.disabled
             let tooltip = state.map(DesktopUpdateLogic.buttonTooltip) ?? ""
@@ -578,12 +578,12 @@ public final class GeneralSettingsView: SettingsPageBase {
         }
         let policy = ButtonView("View policy", variant: .outline, size: .sm)
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
-        let privacy = row("privacy-policy", detail: "How we handle your data, including the anonymous usage data T3 Code collects.", control: policy)
+        let privacy = row("privacy-policy", detail: "How T3 handles your data, including the anonymous usage data the T3 Code server collects.", control: policy)
         let mobile = row("nightly-mobile-beta", title: "Mobile app", detail: "Nightly needs the beta app. The App Store and Google Play versions cannot connect.", control: NightlyMobileBetaView())
         // T3's Legal card holds the privacy policy and the licenses (SettingsPanels.tsx:2507-2537 at 4928).
         let lic = ButtonView("View licenses", variant: .outline, size: .sm)
         lic.action = { [weak self] in self?.context.openSection?(.licenses) }
-        let licenses = row("open-source-licenses", detail: "Notices for dependencies, assets, and optional tools used by T3 Code.", control: lic)
+        let licenses = row("open-source-licenses", detail: "Notices for dependencies, assets, and optional tools used by CandyWrapper and the T3 Code server.", control: lic)
         return section("about", "About", [versionRow, runtimeRow, trackRow, mobile, privacy, licenses])
     }
 

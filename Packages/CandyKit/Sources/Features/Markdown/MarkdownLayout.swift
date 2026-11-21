@@ -66,7 +66,8 @@ enum MarkdownStyle {
     static var body: NSColor { ThreadDesign.markdownBody }
     static var strong: NSColor { Themed.color(\.contrastForeground) }
     static var muted: NSColor { Themed.color(\.contrastMutedForeground) }
-    static var link: NSColor { Themed.color(\.infoForeground) }
+    /// T3's info blue; Redesign's accent, since a link is emphasis there and info is a status.
+    static let link = Themed.color(redesign: \.primary, stock: \.infoForeground)
 
     static func font(_ size: CGFloat, weight: NSFont.Weight = .regular, italic: Bool = false) -> NSFont {
         let font = DSFont.ui(size, weight: weight)

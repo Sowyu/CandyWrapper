@@ -53,6 +53,7 @@ public final class DitherTabStripView: TopbarDragView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         plus.setAccessibilityLabel("New thread")
+        TooltipController.attach(to: plus, text: "New thread in a new tab")
         plus.action = { [weak self] in self?.onNew?() }
         addSubview(plus)
         // A tab group, as VoiceOver knows NSTabView's: the tabs are its radio buttons.
@@ -250,6 +251,7 @@ public final class DitherTabStripView: TopbarDragView {
             super.init(frame: .zero)
             label.lineHeight = 18
             close.setAccessibilityLabel("Close tab")
+            TooltipController.attach(to: close, text: "Close tab")
             close.action = { [weak self] in self?.onClose?() }
             picture.imageScaling = .scaleProportionallyUpOrDown
             picture.isHidden = true

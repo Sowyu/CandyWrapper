@@ -1996,14 +1996,16 @@ public final class ThreadPanelView: DSView {
         } else if ringPill.superview !== self {
             addSubview(ringPill, positioned: .below, relativeTo: meter)
         }
-        let ringOn = docked && (meter.usage != nil || meter.reserved)
+        // Nothing until the provider reports usage, so no empty ring and no "0%".
+        let ringOn = docked && meter.usage != nil
         meter.isHidden = !ringOn
         ringPill.isHidden = !ringOn
         if !ringOn { meter.closeDetails() }
         if ringOn {
-            meter.frame = NSRect(x: belowRight - pillH, y: belowY, width: pillH, height: pillH)
+            let mw = meter.redesignWidth
+            meter.frame = NSRect(x: belowRight - mw, y: belowY, width: mw, height: pillH)
             ringPill.frame = meter.frame
-            belowRight -= pillH + spacing
+            belowRight -= mw + spacing
             shown += [ringPill, meter]
         }
         if waitingIndicator.superview !== self { addSubview(waitingIndicator, positioned: .above, relativeTo: queue) }

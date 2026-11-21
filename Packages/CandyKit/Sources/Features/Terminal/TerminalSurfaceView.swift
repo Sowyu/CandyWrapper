@@ -12,6 +12,9 @@ import T3Store
 public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDelegate {
     /// `CONTENT_PADDING` (surface.ts:36).
     static let padding: CGFloat = 4
+    /// Redesign keeps the text 8pt from the card's edge, as its code blocks and rows do; T3's 4 put the prompt
+    /// about 3pt from it.
+    private var padding: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? RedesignTokens.Space.s : Self.padding }
     /// `MAX_SCROLLBACK_ROWS` (core.ts:12).
     public static let scrollbackRows = 10_000
 
@@ -148,6 +151,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         applyTheme()
+        needsLayout = true
     }
 
     public override func updateLayer() { applyTheme() }
@@ -172,7 +176,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     /// height changes within a row.
     public override func layout() {
         super.layout()
-        var frame = bounds.insetBy(dx: Self.padding, dy: Self.padding)
+        var frame = bounds.insetBy(dx: padding, dy: padding)
         let size = terminal.getOptimalFrameSize()
         let current = terminal.getTerminal()
         let cellWidth = size.width / CGFloat(max(1, current.cols))
@@ -196,7 +200,7 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
         }
         if terminal.frame != frame { terminal.frame = frame }
         let lane = ScrollAreaScroller.laneWidth
-        scrollbar.frame = NSRect(x: bounds.maxX - 1 - lane, y: Self.padding, width: lane, height: max(0, bounds.height - 2 * Self.padding))
+        scrollbar.frame = NSRect(x: bounds.maxX - 1 - lane, y: padding, width: lane, height: max(0, bounds.height - 2 * padding))
     }
 
     /// Output that creates or clears scrollback moves the grid between the edges.

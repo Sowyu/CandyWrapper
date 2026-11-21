@@ -35,12 +35,14 @@ public struct DitherAccent: Equatable, Sendable {
         Self.contrast(Self.luminance(accent(dark: dark)), 1) >= 3 ? "#ffffff" : "#111111"
     }
 
-    /// The accent's roles in a Dither palette: primary, ring, send button and its hover, terminal cursor and selection.
+    /// The accent's roles in a Dither palette: primary, ring, send button and its hover, terminal cursor and selection,
+    /// and the update roles (badges and notices T3 draws in its blue), so Redesign has one accent.
     public func colors(dark: Bool) -> [ThemeColorRole: String] {
         let a = accent(dark: dark), fg = foreground(dark: dark)
         return [.accent: a, .focus: a, .accentForeground: fg, .messageAction: a, .messageActionForeground: fg,
                 .messageActionHover: Self.mix(a, black: 0.12), .terminalCursor: a,
-                .terminalSelection: Self.mix(a, toward: dark ? "#131314" : "#ffffff", 0.7)]
+                .terminalSelection: Self.mix(a, toward: dark ? "#131314" : "#ffffff", 0.7),
+                .update: a, .updateForeground: a, .updateSurface: Self.mix(a, toward: dark ? "#080808" : "#ffffff", dark ? 0.8 : 0.88)]
     }
 
     public var darkColor: NSColor { Self.color(dark) }

@@ -47,6 +47,20 @@ struct RedesignTokenGuardTests {
         return String(chars)
     }
 
+    /// A hard-coded hue on a Redesign path: a `#rrggbb` whose channels differ by more than 40 of 255, or a system hue.
+    /// Redesign has one accent, from the palette, and the palette's status colors (docs/research/redesign-polish-audit-2026-11-21.md).
+    static let hue = regex(##""#([0-9a-fA-F]{6})"|\.system(?:Blue|Purple|Teal|Green|Indigo|Mint|Cyan|Pink|Orange|Yellow|Red|Brown)\b"##)
+    /// Where Redesign's colors are defined, not drawn.
+    static let palettes: Set<String> = ["ThemePalette.swift", "DitherAccent.swift", "CandyTheme3669.swift"]
+
+    static func hueHits(_ s: String) -> [Double] {
+        matches(hue, s).compactMap { m in
+            guard let r = Range(m.range(at: 1), in: s), let v = Int(s[r], radix: 16) else { return 0 }
+            let c = [v >> 16 & 0xff, v >> 8 & 0xff, v & 0xff]
+            return c.max()! - c.min()! > 40 ? Double(v) : nil
+        }
+    }
+
     static func scan(file url: URL, root: URL) -> [Hit] {
         guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         let name = url.lastPathComponent
@@ -69,6 +83,12 @@ struct RedesignTokenGuardTests {
             let neg = !matches(negated, s).isEmpty
             let starts = !matches(typeStart, s).isEmpty || (!matches(ifStart, s).isEmpty && !neg)
             let scoped = whole || !blocks.isEmpty || (!matches(names, s).isEmpty && !neg)
+            if scoped, !palettes.contains(name) {
+                for v in hueHits(redesignArm(s)) {
+                    let path = url.path.replacingOccurrences(of: root.path + "/", with: "")
+                    hits.append(Hit(kind: "hue", value: v, place: "\(path):\(i + 1)", line: raw.trimmingCharacters(in: .whitespaces)))
+                }
+            }
             if scoped {
                 let t = matches(ternary, s).first
                 let arm = redesignArm(s)
@@ -134,9 +154,13 @@ struct RedesignTokenGuardTests {
             fill = isDither ? Themed.white(0.07) : Themed.white(0.2)
             box.radius = dither ? RedesignTokens.Radius.control : 22
             layer.cornerRadius = 4
+            if dither { ring = NSColor.systemPurple; gray = color("#1e1e1e") }
+            send = isDither ? color("#2b948b") : color("#346bf1")
         }
         """.write(to: file, atomically: true, encoding: .utf8)
         let hits = Self.scan(file: file, root: dir)
-        #expect(hits.map(\.value).sorted() == [0.07, 0.3, 9, 10], "\(hits)")
+        #expect(hits.filter { $0.kind != "hue" }.map(\.value).sorted() == [0.07, 0.3, 9, 10], "\(hits)")
+        // The system purple and the teal on the Redesign arm; not the gray, not T3's blue on the stock arm.
+        #expect(hits.filter { $0.kind == "hue" }.map(\.value) == [0, Double(0x2b948b)], "\(hits)")
     }
 }

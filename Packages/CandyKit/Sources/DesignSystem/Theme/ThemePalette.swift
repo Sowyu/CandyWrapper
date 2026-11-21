@@ -64,7 +64,7 @@ public struct ThemeDefinition: Equatable, Sendable {
     /// #050505, composer #0f0f0f, selected row #1a1a1a, hairline #141414). The user found the earlier #131314 to
     /// #202021 grays flat ("less grey"): near-black ground, surfaces one small step up, menus a step more, hairlines
     /// doing the separating. Hover and selected fills stay translucent overlays like Capy's `--secondary`; teal for
-    /// the focus ring, selection and send button.
+    /// the focus ring, selection, the send button and the update roles, which T3 draws in its own blue.
     static let capyDarkColors: [ThemeColorRole: String] = CandyTheme3669.darkColors.merging([
         .canvas: "#080808", .chrome: "#030303", .toolbar: "#030303", .toolbarBorder: "#141414", .toolbarControl: "#0f0f0f",
         .toolbarControlHover: "#ffffff14", .surface: "#0e0e0e", .surfaceRaised: "#0f0f0f", .surfaceOverlay: "#141414",
@@ -78,6 +78,7 @@ public struct ThemeDefinition: Equatable, Sendable {
         .sidebarControlSurface: "#0f0f0f", .sidebarRowHover: "#ffffff0f", .sidebarRowActive: "#ffffff1a",
         .sidebarRowSelected: "#ffffff1a", .sidebarBorder: "#030303", .terminalBackground: "#0c0c0c",
         .terminalCursor: "#2b948b", .terminalSelection: "#1f3d3a",
+        .update: "#2b948b", .updateForeground: "#2b948b", .updateSurface: "#0f2422",
     ]) { $1 }
     /// Light departs from Capy where its grays fail WCAG AA over the art: muted text, placeholders and labels reach
     /// 4.5:1 over the darkest dot the light scrim allows (`DitherArt.lightScrim`), icons and control edges 3:1, the
@@ -94,6 +95,7 @@ public struct ThemeDefinition: Equatable, Sendable {
         .sidebar: "#ececec", .sidebarForeground: "#1e1e1e", .sidebarMutedForeground: "#5c5c5c",
         .sidebarControlSurface: "#e4e4e4", .sidebarRowHover: "#0000000a", .sidebarRowActive: "#00000012",
         .sidebarRowSelected: "#00000012", .sidebarBorder: "#ececec", .warningForeground: "#983d00", .errorForeground: "#a80005",
+        .update: "#07837a", .updateForeground: "#07837a", .updateSurface: "#e1f0ef",
     ]) { $1 }
 
     /// The theme picker's fixed cards: T3's built-ins, then Glass and Dither.
