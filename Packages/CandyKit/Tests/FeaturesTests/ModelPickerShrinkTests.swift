@@ -322,7 +322,7 @@ import T3Store
 
     // MARK: Stress
 
-    static let sequenceChunks: [(Theme, Bool, Int)] = [(Theme.redesign, true), (.redesign, false), (.standard, true), (.glass, true)]
+    nonisolated static let sequenceChunks: [(Theme, Bool, Int)] = [(Theme.redesign, true), (.redesign, false), (.standard, true), (.glass, true)]
         .flatMap { combo in (0..<15).map { (combo.0, combo.1, $0) } }
 
     /// A few thousand random sequences of expand, collapse, tab switch, search, catalog refresh, hover and keys, in both
