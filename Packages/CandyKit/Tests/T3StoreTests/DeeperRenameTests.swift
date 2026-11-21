@@ -26,15 +26,37 @@ struct DeeperRenameTests {
         #expect(DeeperRename.prompt.contains("Do not use any tools") && DeeperRename.prompt.contains("5 words"))
     }
 
-    @Test func menuOffersItUnderRegenerateTitle() {
+    /// The user replaced T3's Regenerate title with this one, named so it reads as different (2026-11-21).
+    @Test func menuOffersOneRewriteTitleInRegenerateTitlesPlace() {
         var state = ThreadActionMenu.State()
-        #expect(!ThreadActionMenu.items(state).contains { $0.id == "deeper-rename" })
-        state.deeperRenameModel = "Claude Haiku 5.5"
-        let ids = ThreadActionMenu.items(state).map(\.id)
-        let at = ids.firstIndex(of: "deeper-rename")
-        #expect(at != nil && at == ids.firstIndex(of: "regenerate-title").map { $0 + 1 })
-        #expect(ThreadActionMenu.items(state).first { $0.id == "deeper-rename" }?.label == "Deeper rename with Claude Haiku 5.5")
+        #expect(!ThreadActionMenu.items(state).contains { $0.id == "rewrite-title" || $0.id == "regenerate-title" },
+                "no title action without side chats")
+        state.canRewriteTitle = true
+        let items = ThreadActionMenu.items(state)
+        let ids = items.map(\.id)
+        #expect(!ids.contains("regenerate-title") && !ids.contains("deeper-rename"))
+        #expect(ids.firstIndex(of: "rewrite-title") == ids.firstIndex(of: "rename").map { $0 + 1 })
+        let item = items.first { $0.id == "rewrite-title" }
+        #expect(item?.label == "Rewrite title" && item?.tooltip == "Reads the whole thread and writes a new title.")
+        #expect(items.allSatisfy { !$0.label.contains("Deeper") && !$0.label.contains("Haiku") })
         state.isRegeneratingTitle = true
-        #expect(ThreadActionMenu.items(state).first { $0.id == "deeper-rename" }?.disabled == true)
+        #expect(ThreadActionMenu.items(state).first { $0.id == "rewrite-title" }?.disabled == true)
+    }
+
+    /// Settings > Title rewrite model: the chosen model runs while the server offers it, else the default.
+    @Test func theChosenModelRunsAndAMissingOneFallsBack() {
+        let parent = ModelSelection(instanceId: "claudeAgent", model: "claude-opus-5-5")
+        let providers = [ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", displayName: "Claude",
+                                        models: [ServerProviderModel(slug: "claude-haiku-5-5", name: "Haiku"),
+                                                 ServerProviderModel(slug: "claude-sonnet-5-5", name: "Sonnet")])]
+        let sonnet = ModelSelection(instanceId: "claudeAgent", model: "claude-sonnet-5-5")
+        #expect(DeeperRename.model(chosen: nil, parent: parent, providers: providers) == (ModelSelection(instanceId: "claudeAgent", model: "claude-haiku-5-5"), false))
+        #expect(DeeperRename.model(chosen: sonnet, parent: parent, providers: providers) == (sonnet, false))
+        let gone = ModelSelection(instanceId: "claudeAgent", model: "claude-fable-5-2")
+        #expect(DeeperRename.model(chosen: gone, parent: parent, providers: providers) == (ModelSelection(instanceId: "claudeAgent", model: "claude-haiku-5-5"), true))
+        let otherProvider = ModelSelection(instanceId: "codex", model: "gpt-6-astra")
+        #expect(DeeperRename.model(chosen: otherProvider, parent: parent, providers: providers).fellBack)
+        #expect(DeeperRename.chosen(.object([:])) == nil)
+        #expect(DeeperRename.chosen(.object(["instanceId": .string("claudeAgent"), "model": .string("claude-sonnet-5-5")])) == sonnet)
     }
 }

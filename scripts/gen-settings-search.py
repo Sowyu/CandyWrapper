@@ -123,6 +123,7 @@ CANDY_ITEMS = [
     '        .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout one column details pane cost description scroll"])),',
     '        .item(SettingsSearchItem(id: "redesign-picker-account", title: "Account and limits in the model picker", to: .redesign, searchTerms: ["redesign model picker account usage limits manage provider card email plan details pane"])),',
     '        .item(SettingsSearchItem(id: "trackpad-haptics", title: "Trackpad haptics", to: .general, searchTerms: ["force touch trackpad haptic feedback tap vibration feel detent"])),',
+    '        .item(SettingsSearchItem(id: "title-rewrite-model", title: "Title rewrite model", to: .threads, searchTerms: ["rewrite title rename regenerate thread title model reads writes haiku"])),',
     '        .item(SettingsSearchItem(id: "message-rail-haptic", title: "Message rail ticks", to: .general, searchTerms: ["message rail minimap haptic trackpad tick tap strength light strong off feel"])),',
     '        .item(SettingsSearchItem(id: "image-cache", title: "Image cache", to: .maintenance, searchTerms: ["image cache pictures photos reply images disk storage clear delete free space"])),',
     '        .item(SettingsSearchItem(id: "tooltips", title: "Tooltips", to: .general, searchTerms: ["tooltip hover hint help popup delay delayed off disable label shortcut"])),',

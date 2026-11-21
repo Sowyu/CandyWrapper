@@ -475,7 +475,25 @@ public final class GeneralSettingsView: SettingsPageBase {
                     control: picker)
         _ = bindServerRow(r, keys: ["textGenerationModelSelection"], reset: "text generation model")
         binder.add { [weak picker] in picker?.refresh() }
-        return section("text-generation", "Text generation", [r, threadTitleInstructionsRow()])
+        return section("text-generation", "Text generation", [r, threadTitleInstructionsRow(), titleRewriteModelRow()])
+    }
+
+    /// CandyWrapper's Rewrite title model, kept on this device (client setting `titleRewriteModel`). Unset, it shows the
+    /// default by name; a choice the server no longer offers says it fell back.
+    private func titleRewriteModelRow() -> SettingsRowView {
+        let key = DeeperRename.settingKey
+        let picker = SettingsModelPickerControl(context: context, key: key, clientDefault: true)
+        let r = row("title-rewrite-model", detail: "The model that reads the thread and writes its title.", control: picker)
+        let slot = ResetSlot(label: "title rewrite model")
+        r.accessories = [slot]
+        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
+        binder.add { [weak self, weak picker, weak r] in
+            guard let self, let picker else { return }
+            picker.refresh()
+            slot.isShown = !self.client.isDefault(key)
+            r?.status = picker.fallbackNote
+        }
+        return r
     }
 
     /// ThreadTitleInstructionsSettings.tsx (51273020db): a 4-row textarea that saves on blur when edited.
@@ -735,10 +753,15 @@ final class SettingsModelPickerControl: DSView {
     /// The trigger's title while the targets differ (`triggerLabel`), when the row knows better than the stored values.
     var mixedLabel: String?
 
-    init(context: SettingsPageContext, key: String, unsetFrom: String? = nil) {
+    /// A client setting (Rewrite title's model): read from and written to this device, unset meaning the default the
+    /// feature runs on, with no traits and no inheritance.
+    private let clientDefault: Bool
+
+    init(context: SettingsPageContext, key: String, unsetFrom: String? = nil, clientDefault: Bool = false) {
         self.context = context
         self.key = key
         self.unsetFrom = unsetFrom
+        self.clientDefault = clientDefault
         super.init(frame: .zero)
         button.tintsIcon = false
         button.action = { [weak self] in self?.open() }
@@ -761,8 +784,32 @@ final class SettingsModelPickerControl: DSView {
     }
     static let textKeys: Set<String> = ["textGenerationModelSelection", "sourceControlWriterModelSelection"]
 
+    /// The client mode's stored choice, and whether the server still offers it.
+    private var clientChoice: (selection: ModelSelection, offered: Bool)? {
+        guard clientDefault, let chosen = DeeperRename.chosen(context.client[key]) else { return nil }
+        return (chosen, DeeperRename.isOffered(chosen, context.providers))
+    }
+    /// The client mode's default: Claude Haiku 5.5 on the first Claude instance offering it, as DeeperRename picks for a
+    /// Claude thread.
+    private var clientDefaultSelection: (ProviderInstanceEntry, String)? {
+        for entry in catalog.entries where entry.isSelectable && entry.driver == "claudeAgent" {
+            if entry.models.contains(where: { $0.slug == DeeperRename.claudeModel }) { return (entry, DeeperRename.claudeModel) }
+        }
+        return nil
+    }
+    /// Says the stored choice is gone and what runs instead, for the row's status line.
+    var fallbackNote: String? {
+        guard let choice = clientChoice, !choice.offered else { return nil }
+        let now = clientDefaultSelection.map { e, s in e.models.first { $0.slug == s }.map(ModelNames.trigger) ?? s } ?? "the thread's own model"
+        return "\(DeeperRename.modelLabel(choice.selection.model)) is no longer offered, so titles use \(now)."
+    }
+
     /// The selection shown: the setting, else the first ready provider's default (`resolveDefaultProviderModelSelection`).
     private var selection: (ProviderInstanceEntry, String)? {
+        if clientDefault {
+            if let choice = clientChoice, choice.offered, let entry = catalog.entry(choice.selection.instanceId) { return (entry, choice.selection.model) }
+            return clientDefaultSelection
+        }
         let raw = isUnset ? context.scope.values[unsetFrom!] : context.scope.values[key]
         if let id = raw["instanceId"]?.stringValue, let model = raw["model"]?.stringValue, let entry = catalog.entry(ProviderInstanceId(rawValue: id)) {
             return (entry, model)
@@ -777,10 +824,13 @@ final class SettingsModelPickerControl: DSView {
         if context.scope.connected.isEmpty {
             button.title = "Connect an environment"
             button.icon = nil
+        } else if clientDefault, selection == nil {
+            button.title = "Same as the thread"
+            button.icon = nil
         } else if let mixedLabel {
             button.title = mixedLabel
             button.icon = nil
-        } else if context.scope.isMixed([key]) {
+        } else if !clientDefault, context.scope.isMixed([key]) {
             button.title = "Mixed"
             button.icon = nil
         } else if let (entry, slug) = selection {
@@ -791,7 +841,7 @@ final class SettingsModelPickerControl: DSView {
             button.title = "No providers available"
             button.icon = nil
         }
-        traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || mixedLabel != nil || context.scope.connected.isEmpty || isUnset
+        traits.isHidden = clientDefault || descriptors.isEmpty || context.scope.isMixed([key]) || mixedLabel != nil || context.scope.connected.isEmpty || isUnset
         traits.title = ModelTraits.triggerLabel(descriptors, ultrathink: false, provider: selection?.0.driver)
         invalidateIntrinsicContentSize()
         superview?.needsLayout = true
@@ -847,6 +897,11 @@ final class SettingsModelPickerControl: DSView {
         view.onSelect = { [weak self] id, model in
             guard let self else { return }
             if let popup = self.popup { self.button.popupHost?.close(popup) }
+            if self.clientDefault {
+                let value = (try? JSONValue(encoding: ModelSelection(instanceId: id, model: model))) ?? .null
+                self.context.writeClient?([self.key: value])
+                return
+            }
             // `pickModelSelection` (shared/model.ts:542-550): the same pick keeps its options.
             let current = self.context.scope.values[self.key]
             if !self.context.scope.isMixed([self.key]), current["instanceId"]?.stringValue == id.rawValue, current["model"]?.stringValue == model { return }

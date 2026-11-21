@@ -161,6 +161,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case paperclip
     case penLine
     case pencil
+    case pencilLine
     case pencilRuler
     case pictureInPicture2
     case pilcrow
@@ -424,6 +425,7 @@ extension IconName {
         case .paperclip: return "paperclip"
         case .penLine: return "pen-line"
         case .pencil: return "pencil"
+        case .pencilLine: return "pencil-line"
         case .pencilRuler: return "pencil-ruler"
         case .pictureInPicture2: return "picture-in-picture-2"
         case .pilcrow: return "pilcrow"
@@ -1532,6 +1534,12 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z")),
                 IconElement(.path(d: "m15 5 4 4")),
+            ])
+        case .pencilLine:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M13 21h8")),
+                IconElement(.path(d: "m15 5 4 4")),
+                IconElement(.path(d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z")),
             ])
         case .pencilRuler:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

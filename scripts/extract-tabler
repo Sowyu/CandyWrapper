@@ -109,6 +109,7 @@ LUCIDE_TO_TABLER = {
     "panel-right": "layout-sidebar-right",
     "panels-top-left": "layout-navbar",
     "pen-line": "pencil-minus",
+    "pencil-line": "pencil-search",  # Rewrite title: a pencil that reads the thread (the user, 2026-11-21)
     "picture-in-picture-2": "picture-in-picture",
     "pin-off": "pinned-off",
     "play": "player-play",
