@@ -3,6 +3,7 @@ import Foundation
 import ImageIO
 import Testing
 import T3Protocol
+import T3Store
 @testable import Features
 
 /// Gallery downloads in the 1.16.0 build restarted from their first byte whenever a tile was rebuilt, and a remote
@@ -27,8 +28,8 @@ import T3Protocol
 
     /// Signs every resource and counts transfers, each taking `delay`.
     static func stub(_ count: Count, delay: Duration = .milliseconds(400)) -> () -> Void {
-        let savedResource = MarkdownImages.resourceURL, savedTransfer = MarkdownImages.transfer
-        MarkdownImages.resourceURL = { resource in
+        let savedResource = MarkdownImages.signAsset, savedTransfer = MarkdownImages.transfer
+        MarkdownImages.signAsset = { resource in
             (URL(string: "http://127.0.0.1:1/\(resource["path"]?.stringValue ?? "x").png")!, nil, nil)
         }
         MarkdownImages.transfer = { _ in
@@ -36,7 +37,7 @@ import T3Protocol
             try? await Task.sleep(for: delay)
             return Task.isCancelled ? nil : pngFile()
         }
-        return { MarkdownImages.resourceURL = savedResource; MarkdownImages.transfer = savedTransfer }
+        return { MarkdownImages.signAsset = savedResource; MarkdownImages.transfer = savedTransfer }
     }
 
     static func resource() -> JSONValue {
@@ -67,9 +68,9 @@ extension GalleryDownloadTests {
         let running = Count(), peak = Count()
         let gate = NSLock()
         nonisolated(unsafe) var now = 0
-        let savedResource = MarkdownImages.resourceURL, savedTransfer = MarkdownImages.transfer
-        defer { MarkdownImages.resourceURL = savedResource; MarkdownImages.transfer = savedTransfer }
-        MarkdownImages.resourceURL = { resource in (URL(string: "http://127.0.0.1:1/\(resource["path"]?.stringValue ?? "").png")!, nil, nil) }
+        let savedResource = MarkdownImages.signAsset, savedTransfer = MarkdownImages.transfer
+        defer { MarkdownImages.signAsset = savedResource; MarkdownImages.transfer = savedTransfer }
+        MarkdownImages.signAsset = { resource in (URL(string: "http://127.0.0.1:1/\(resource["path"]?.stringValue ?? "").png")!, nil, nil) }
         MarkdownImages.transfer = { _ in
             let n = gate.withLock { now += 1; return now }
             while peak.value < n { peak.bump() }
@@ -92,4 +93,32 @@ extension GalleryDownloadTests {
         #expect(running.value == 6)
         #expect(peak.value <= 2, "at most the queue's two transfers at once")
     }
+}
+
+extension GalleryDownloadTests {
+    /// A remote picture's tile and its kept copy (`keepRemote`) download the file once between them.
+    @Test func aTileAndItsKeptCopyShareOneDownload() async throws {
+        let count = Count()
+        let restore = Self.stub(count)
+        defer { restore() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("cw-keep-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cache = AgentImageCache(root: root)
+        let resource = Self.resource()
+        let key = "media-file:" + (resource["path"]?.stringValue ?? "")
+        let keep = Task { await cache.keepRemote(env: "remote", thread: "t", item: "i", resource: resource) }
+        await ThreadImageGalleryTests.pump { count.value == 1 }
+        // The gallery opens while the copy is on its way: its tile's loader for the same file.
+        let load = MarkdownImages.assetLoader(key: key, resource: resource)
+        let image = await load(32)
+        #expect(image != nil)
+        #expect(await keep.value != nil)
+        #expect(count.value == 1, "one transfer for the tile and the kept copy")
+        // A kept-copy lookup that starts while the copy is on its way waits for it instead of reading nothing.
+        let second = Task { await cache.keepRemote(env: "remote", thread: "t", item: "j", resource: Self.resource()) }
+        await ThreadImageGalleryTests.pump { count.value == 2 }
+        #expect(await cache.url(env: "remote", thread: "t", item: "j") != nil)
+        _ = await second.value
+    }
+
 }
