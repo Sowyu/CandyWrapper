@@ -42,6 +42,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var isRegeneratingTitle: Bool
     /// Relative time, or the settled time on the settled shelf.
     public var timeLabel: String
+    /// Redesign's flat Settled: the time joins the meta line after the branch, as in a project section.
+    public var timeInMeta = false
     /// Snoozed rows show when they come back (`snoozeWakeLabel`).
     public var snoozeLabel: String?
     /// Start of the work a Working row counts from.
@@ -79,7 +81,7 @@ public struct SidebarRowModel: Equatable, Sendable {
     /// SidebarThreadRow.tsx:1268-1276 (T3 4928): omit an otherwise empty metadata line. The remote machine icon
     /// alone doesn't make one; it moves to the title line (#26803).
     var hasMetaLine: Bool {
-        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || issueBadge != nil || terminalProcessCount > 0
+        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || issueBadge != nil || terminalProcessCount > 0 || timeInMeta
     }
 
     /// The status slot text as T3 renders it, for tests and accessibility.
@@ -167,8 +169,6 @@ public struct SidebarProjectHeaderModel: Equatable, Sendable {
     /// The Pinned section, with a pin for its icon.
     public var isPinned = false
     public var folder = false
-    /// A project's header inside Redesign's Settled: it folds, but never moves or takes a drop.
-    public var settled = false
     public var dot: FolderDot? = nil
     public enum FolderDot: String, Sendable { case attention, failed, unread, working }
 }
@@ -628,7 +628,7 @@ public enum SidebarListBuilder {
             let expanded = state.settledExpanded
             items.append(.shelfHeader(.settled, label: expanded ? "Settled" : "Settled (\(shelves.settled.count + ctx.hiddenSettledCount))", expanded: expanded, count: shelves.settled.count + ctx.hiddenSettledCount))
             if expanded, state.dither {
-                items += groupedSettled(ctx: ctx, state: state, nowMs: nowMs, row: row)
+                items += flatSettled(ctx: ctx, state: state, nowMs: nowMs, row: row)
             } else if expanded {
                 var shown = Array(shelves.settled.prefix(state.settledVisibleCount))
                 if let active = state.activeThreadId, !shown.contains(where: { $0.id == active }),
@@ -650,11 +650,11 @@ public enum SidebarListBuilder {
         t.shell.settledAt.flatMap { $0.isValid ? $0.epochMs : nil } ?? SidebarModel.resolveThreadActivityTimestamp(t)?.epochMs
     }
 
-    /// Redesign's open Settled (the user, 2026-11-21: "group by project"): the threads in the "when" range, newest
-    /// settled first and paged as T3 pages them, under the main list's project headers in the order of each project's
-    /// most recent settle. A range that matches nothing says so.
-    static func groupedSettled(ctx: Context, state: SidebarListState, nowMs: Int64,
-                               row: (SidebarThread, SidebarSection) -> SidebarItem) -> [SidebarItem] {
+    /// Redesign's open Settled: the threads in the "when" range, newest settled first and paged as T3 pages them,
+    /// in one flat list. The user had it grouped by project and then said "remove group by project bc its dumb"
+    /// (2026-11-21), so each row carries its project's avatar instead. A range that matches nothing says so.
+    static func flatSettled(ctx: Context, state: SidebarListState, nowMs: Int64,
+                            row: (SidebarThread, SidebarSection) -> SidebarItem) -> [SidebarItem] {
         let range = state.settledRange
         let filtered = range == .any ? ctx.shelves.settled : ctx.shelves.settled.filter { range.contains(settledMs($0), nowMs: nowMs) }
         var shown = Array(filtered.prefix(state.settledVisibleCount))
@@ -666,13 +666,7 @@ public enum SidebarListBuilder {
         if shown.isEmpty && unloaded == 0 {
             return range == .any ? [] : [.settledEmpty(range)]
         }
-        var order: [String] = []
-        var seen = Set<String>()
-        for t in shown {
-            let key = ctx.groupByProject[t.shell.projectId]?.key ?? "project:\(t.shell.projectId.rawValue)"
-            if seen.insert(key).inserted { order.append(key) }
-        }
-        var items = projectSections(shown, ctx: ctx, state: state, order: order, settled: true) { row($0, .settled) }
+        var items = shown.map { row($0, .settled) }
         let loadedHidden = filtered.count - shown.count
         if range == .any, loadedHidden + unloaded > 0 {
             items.append(.showMore(count: min(loadedHidden + unloaded, settledPageCount)))
@@ -726,15 +720,13 @@ public enum SidebarListBuilder {
     /// Dither (after Capy): the unpinned threads under one header per project, in the `sidebarProjectSortOrder` order:
     /// Manual keeps the order the user dragged, so a new turn never moves a section. The open thread stays visible
     /// in a folded section.
-    /// `order` overrides the sidebar's project order; `settled` keys the headers apart from the main list's, so each
-    /// folds on its own.
-    static func projectSections(_ threads: [SidebarThread], ctx: Context, state: SidebarListState, order fixed: [String]? = nil,
-                                settled: Bool = false, row: (SidebarThread) -> SidebarItem) -> [SidebarItem] {
+    static func projectSections(_ threads: [SidebarThread], ctx: Context, state: SidebarListState,
+                                row: (SidebarThread) -> SidebarItem) -> [SidebarItem] {
         var byKey: [String: [SidebarThread]] = [:]
         for t in threads {
             byKey[ctx.groupByProject[t.shell.projectId]?.key ?? "project:\(t.shell.projectId.rawValue)", default: []].append(t)
         }
-        var order = fixed ?? SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
+        var order = SidebarModel.sortProjectGroups(ctx.groups, projects: ctx.projects, threads: ctx.threadShells,
                                                             order: state.projectSortOrder, preferred: state.projectOrder).map(\.key)
         // Threads whose project has no group yet (a snapshot mid-update) follow, in thread order.
         var placed = Set(order)
@@ -748,12 +740,10 @@ public enum SidebarListBuilder {
             guard let first = list.first else { continue }
             let group = ctx.groupByProject[first.shell.projectId]
             let project = ctx.projectById[first.shell.projectId]
-            let headerKey = settled ? settledSectionPrefix + key : key
-            let expanded = !state.collapsedProjects.contains(headerKey)
+            let expanded = !state.collapsedProjects.contains(key)
             items.append(.projectHeader(SidebarProjectHeaderModel(
-                key: headerKey, label: group?.label ?? project?.title ?? "Project", projectTitle: project?.title ?? group?.label ?? "",
-                projectIcon: (group?.representative ?? project).map(ProjectIconSource.init), count: list.count, expanded: expanded,
-                settled: settled)))
+                key: key, label: group?.label ?? project?.title ?? "Project", projectTitle: project?.title ?? group?.label ?? "",
+                projectIcon: (group?.representative ?? project).map(ProjectIconSource.init), count: list.count, expanded: expanded)))
             for t in list where expanded || t.id == state.activeThreadId {
                 guard case .row(var model) = row(t) else { continue }
                 model.inProjectSection = true; model.folderMultiline = state.boringSidebarMultilineRows
@@ -762,9 +752,6 @@ public enum SidebarListBuilder {
         }
         return items
     }
-
-    /// The prefix on a project header's key inside Settled.
-    static let settledSectionPrefix = "settled:"
 
     /// A thread row's model with the context's project lookups, and the machine on scratch rows.
     static func rowModel(_ t: SidebarThread, section: SidebarSection, ctx: Context, state: SidebarListState, nowMs: Int64) -> SidebarRowModel {
@@ -828,6 +815,7 @@ public enum SidebarListBuilder {
             // Redesign's Settled shows full rows, a step dimmer than active ones, with when each settled.
             model.variant = .card
             model.recedes = !isActive && !isSelected
+            model.timeInMeta = true
             if let settledAt = shell.settledAt, settledAt.isValid {
                 model.timeLabel = "settled " + TimestampFormat.formatRelativeTimeLabel(settledAt.raw, nowMs: nowMs)
             } else {

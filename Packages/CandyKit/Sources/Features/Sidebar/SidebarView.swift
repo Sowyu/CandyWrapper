@@ -308,8 +308,7 @@ public final class SidebarContentView: DSView {
         list.onToggleProject = { [weak self] key in
             guard let self else { return }
             if self.state.collapsedProjects.remove(key) == nil { self.state.collapsedProjects.insert(key) }
-            // Settled's project folds last for the session only.
-            UserDefaults.standard.set(self.state.collapsedProjects.filter { !$0.hasPrefix(SidebarListBuilder.settledSectionPrefix) }.sorted(),
+            UserDefaults.standard.set(self.state.collapsedProjects.sorted(),
                                       forKey: Self.collapsedProjectsKey)
         }
         state.collapsedProjects = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectsKey) ?? [])

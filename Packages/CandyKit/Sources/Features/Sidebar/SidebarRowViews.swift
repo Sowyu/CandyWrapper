@@ -428,7 +428,7 @@ class SidebarRowBase: ControlView {
             onBeginSearchDrag(self, r, event)
             return
         }
-        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, !h.settled, let onBeginGroupDrag,
+        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, let onBeginGroupDrag,
            hypot(event.locationInWindow.x - p.x, event.locationInWindow.y - p.y) >= SidebarListView.dragDistance {
             pressPoint = nil
             var released = state
@@ -796,7 +796,7 @@ final class SidebarCardRowView: SidebarRowBase {
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
         // Dither sections (after Capy): the time joins the meta line, and the status slot keeps only the status.
-        if capyRow && r.inProjectSection {
+        if capyRow && (r.inProjectSection || r.timeInMeta) {
             branch.text = [branch.text, r.timeLabel].filter { !$0.isEmpty }.joined(separator: " · ")
             if r.topStatus == nil { duration.text = "" }
         }
