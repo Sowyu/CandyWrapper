@@ -264,6 +264,29 @@ public final class CollapsibleSectionHeaderView: ControlView {
         CATransaction.commit()
     }
 
+    /// Whether Redesign's hover or press fill is showing, for tests.
+    var showsFill: Bool { hoverFill.backgroundColor != nil }
+
+    /// Drops a hover or press the pointer no longer backs: the pointer is off this header or under something over it,
+    /// the window isn't key, or no button is down. The sidebar's Snoozed header kept its grey fill with the pointer
+    /// nowhere near (the user, 2026-11-21); its row calls this whenever it refreshes, moves or its window resigns key.
+    public func dropStaleHover() {
+        guard state.hovered || state.active else { return }
+        var s = state
+        if s.active, NSEvent.pressedMouseButtons == 0 { s.active = false }
+        if s.hovered {
+            let over: Bool = {
+                guard let window, window.isKeyWindow, let content = window.contentView else { return false }
+                let point = window.mouseLocationOutsideOfEventStream
+                guard bounds.contains(convert(point, from: nil)),
+                      let hit = content.hitTest(content.superview?.convert(point, from: nil) ?? point) else { return false }
+                return hit === self || hit.isDescendant(of: self)
+            }()
+            if !over { s.hovered = false }
+        }
+        if s != state { previewState(s) }
+    }
+
     /// Redesign's hover: in at once, out over `Motion.fast`.
     private func setHoverFill(_ color: CGColor?) {
         let old = hoverFill.backgroundColor

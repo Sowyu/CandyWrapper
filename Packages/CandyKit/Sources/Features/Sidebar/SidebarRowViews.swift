@@ -1433,6 +1433,17 @@ final class SidebarShelfRowView: SidebarRowBase {
         header.tone = dragTone ?? (shelf == .snoozed ? snoozedTone : .muted)
         if header.isExpanded != expanded { header.isExpanded = expanded }
         var st = header.state; st.focusVisible = isKeyboardFocused; header.previewState(st)
+        header.dropStaleHover()
+    }
+
+    private var resignObserver: NSObjectProtocol?
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver); self.resignObserver = nil }
+        guard let window else { header.dropStaleHover(); return }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.header.dropStaleHover() }
+        }
     }
 
     override func performAction() { header.performAction() }
@@ -1446,6 +1457,8 @@ final class SidebarShelfRowView: SidebarRowBase {
     override func layout() {
         super.layout()
         header.frame = bounds.insetBy(dx: 2, dy: 0)
+        // A row that moved under a still pointer, or out from under it, keeps no hover it no longer has.
+        header.dropStaleHover()
     }
 }
 

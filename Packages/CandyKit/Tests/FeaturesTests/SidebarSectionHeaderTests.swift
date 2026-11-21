@@ -28,6 +28,39 @@ struct SidebarSectionHeaderTests {
         }
     }
 
+    /// The user, 2026-11-21: "this thing permanently has the grey background". A Snoozed or Settled header with a
+    /// hover or press the pointer doesn't back (the pointer is off the window here, and no button is down) draws no
+    /// fill once its row refreshes, lays out or its window resigns key, open or closed.
+    @Test(arguments: [false, true]) func noFillWithoutThePointer(expanded: Bool) {
+        RedesignStatesTests.withRedesign(true) {
+            let window = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 280, height: 120), styleMask: [.borderless],
+                                  backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            defer { window.contentView = nil; window.close() }
+            for shelf in [SidebarShelf.snoozed, .settled] {
+                let row = SidebarShelfRowView(frame: NSRect(x: 0, y: 40, width: 264, height: 32))
+                row.appearance = NSAppearance(named: .darkAqua)
+                window.contentView = DSView(frame: NSRect(x: 0, y: 0, width: 280, height: 120))
+                window.contentView?.addSubview(row)
+                row.item = .shelfHeader(shelf, label: shelf.rawValue.capitalized, expanded: expanded, count: 2)
+                row.refresh(); row.layoutSubtreeIfNeeded()
+                #expect(!row.header.showsFill, "\(shelf) at rest")
+                for stale in [ControlView.State(hovered: true), ControlView.State(active: true)] {
+                    row.header.previewState(stale)
+                    #expect(row.header.showsFill, "the fill follows the state it is given")
+                    row.refresh()
+                    #expect(!row.header.showsFill, "\(shelf): a refresh drops \(stale)")
+                    row.header.previewState(stale)
+                    row.needsLayout = true; row.layoutSubtreeIfNeeded()
+                    #expect(!row.header.showsFill, "\(shelf): a layout drops \(stale)")
+                    row.header.previewState(stale)
+                    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
+                    #expect(!row.header.showsFill, "\(shelf): resigning key drops \(stale)")
+                }
+            }
+        }
+    }
+
     @Test func defaultThemesKeepTheInfoBlue() {
         RedesignStatesTests.withRedesign(false) {
             #expect(Self.header(.snoozed, dark: true).header.tone == .info)
