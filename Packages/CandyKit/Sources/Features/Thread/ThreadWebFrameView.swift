@@ -146,6 +146,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         web.navigationDelegate = self
         web.autoresizingMask = [.width, .height]
         web.onUserActivity = { [weak self] in self?.lastUserActivity = Date() }
+        web.setAccessibilityLabel(page.title)
         addSubview(web)
         webView = web
         needsLayout = true
@@ -373,6 +374,8 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     }
 
     /// A blank page holding only the sandboxed frame. Its policy forbids every load but the frame's origin.
+    /// The frame's name is `aria-label`, not T3's `title`: WebKit shows an iframe's title as a tooltip over the whole
+    /// page wherever the pointer rests, where Chromium does not.
     static func hostPage(_ page: Page) -> String {
         var origin = Self.origin(page.src)
         // A file's link click must reach `decide` to open in the browser; a narrower frame-src would drop it in WebKit
@@ -386,7 +389,7 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; frame-src \(escape(origin))">\
         <style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}\
         iframe{display:block;border:0;width:100%;height:100%;\(look)}</style></head>\
-        <body><iframe id="f" title="\(escape(page.title))" sandbox="\(page.kind.sandbox)"\(allow) src="\(escape(page.src.absoluteString))"></iframe></body></html>
+        <body><iframe id="f" aria-label="\(escape(page.title))" sandbox="\(page.kind.sandbox)"\(allow) src="\(escape(page.src.absoluteString))"></iframe></body></html>
         """
     }
 
