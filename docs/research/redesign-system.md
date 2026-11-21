@@ -61,7 +61,7 @@ Measured with the sandbox's thread open in dark on 2026-11-21: 24 `BackdropBlurV
 
 ## Backgrounds
 
-Four choices, the client setting `redesignBackground`: `dither` (labelled Picture, the default), `blur`, `gradient` and `flower`. Picture's own setting is Ink, Blur's is Background dim, and Gradient and Flower share Animate background (stored as `redesignGradientAnimate`, its name from when only Gradient moved).
+Four choices, the client setting `redesignBackground`: `dither` (labelled Picture, the default), `blur`, `gradient` and `flower`. Picture's own settings are Ink and Dot size, Blur's is Background dim, and Gradient and Flower share Animate background (stored as `redesignGradientAnimate`, its name from when only Gradient moved).
 
 Gradient is the user's "a dither option without an image like capy does here" and "capys plain dither isnt just static" (capy-dither-no-image.mov). No picture. Measured frame by frame from the recording (AVAssetImageGenerator, zero tolerance, 2.75 s to 12.5 s on the new-thread page): Capy's cells are binary, one navy (about #26314b) or off, on a fixed grid of 6px at 2x (3pt). They never shift or change size; the field under them changes. A 40px patch differs by under 2 levels from frame to frame, where a moving grid would differ by about 10. Soft lobes along the top drift and swell: one moves about 37pt a second to the right, the left one rises and fades, and one at the right grows from nothing to the brightest in about 5 s. The field stays in the top 25 to 30% (its centroid) and fades out by about 45% down. It did not repeat or settle in the 9.75 s on screen.
 
@@ -81,7 +81,7 @@ The user chose, after seeing a glass card behind the conversation on 2026-11-21:
 
 Picture (the setting value `dither`) was rebuilt on 2026-11-21 after the user called 1.15.2's "so non premium" (r3-picture-dither-cheap.png: a washed photo under a grey dim with dots in a few bands). They chose B1 from the mockups ("i like b1", "i like 2 ink") and no motion ("ok yeah no motion its horrid"). It lives in `PictureInk`:
 
-1. The picture covers the panel at one sample per 3pt cell, on Gradient's lattice (top left of the panel, `PictureInk.cell` = `DitherArt.gradientUnit`).
+1. The picture covers the panel at one cell per dot, on a lattice from the panel's top left. Settings > Redesign > Dot size (`redesignDotSize`, `DitherDotSize`) picks the cell: Fine 1.5pt, Medium 2pt (the default) or Coarse 3pt, Gradient's cell and 1.16.0's. The user, on 3pt on a 2x laptop: "i feel like the pixels might be a bit big". Every size is whole device pixels: Fine is 3 pixels at 2x and draws 2pt at 1x, where 1.5pt falls between pixels. I picked Medium on 2x renders of the user's Tokyo Bay skyline and street lamps and the five mockup pictures: Coarse turns a skyline into blocks, and Fine keeps the most detail but starts to read as a smooth texture instead of dots. Gradient and Flower keep 3pt.
 2. Tone is gamma-encoded luma. Each cell takes the mean of about 0.75pt samples in linear light, then a 3 by 3 blur that blends neighbours within 0.06 of each other and keeps edges brighter than that (`PictureInk.smoothed`), so grain can't flip single cells. Auto levels run from the 1st to the 99th percentile, half an S-curve, then gamma 1.15. From three quarters of the range up a cell takes its brightest sample instead of its mean, so a highlight smaller than a cell, like a lamp head, still lights it.
 3. A dark picture is lifted: a gamma (never under 0.5) takes the median tone up to 0.34. The mockups left Big Sur Dark's coastline and Sonoma's hills almost empty; the lift fills them, and a bright picture is untouched. A low-key picture is not lifted (`PictureInk.lowKey`): one with over 55 to 75% of the frame under luma 0.1 and under 15 to 30% between 0.1 and 0.35, like the user's night photo of street lamps in fog (97% under 0.1). Its levels also run to the 99.9th percentile, since its 99th is haze (0.2 in that photo), not its lamps. Big Sur Dark (43% under 0.1) and Sonoma (21%) keep the lift. Light applies the same rule to the inverted histogram. Tones under the black point, 0.06 after levels, draw no dot, and the tones above it ease in from none, so haze and grain leave the ground clean.
 4. An 8 by 8 Bayer threshold picks between neighbouring levels only: ground, deep ink, light ink in dark; ground, light ink, deep ink in light, where the dark parts of the picture take ink. Ink covers at most 85% of a level, so a bright sky keeps a pattern.
@@ -93,7 +93,15 @@ The new-thread page passes its composer's frame (`DitherArtView.setComposer`) an
 
 Settings and other pages keep their heavy scrims in dark (0.8 and 0.92) and cover the art fully in light, where the leftover dots read as grey speckle between white cards. Reduce Transparency and Increase Contrast keep theirs on every page. "Background dim" now dims only Blur, and its row is inert outside Blur; Picture keeps the theme's muted text, since its render enforces the floor itself.
 
-Picture renders once per canvas size, picture, appearance, ink, ground and page shape on a utility queue. The tone (one byte a cell) is cached for the last picture and size, so a page or ink change only re-thresholds it. Measured on the M2 Pro: decoding and toning a picture for a 1384 by 900 panel takes 34 to 170 ms, a threshold 2 ms. It holds the 462 by 300 RGBA image (554 KB) and the tone (139 KB), 693 KB in all, against 1.25 MB for 1.15.2's 2pt dots in the same panel. A miniaturized or ordered-out window drops both. The new-thread reveal is gone, so Picture runs no animation at all.
+Picture renders once per canvas size, dot size, picture, appearance, ink, ground and page shape on a utility queue. The tone (one byte a cell) is cached for the last picture, size and dot size, so a page or ink change only re-thresholds it. Measured with an -O build on the M2 Pro for a 1440 by 900pt panel over the street lamps, Tokyo Bay, Golden Gate and Sonoma (main's 3pt took 48 to 144 ms to tone):
+
+| Dot size | Cells | Decode and tone | Threshold | Cached image and tone |
+|---|---|---|---|---|
+| Coarse 3pt | 480 x 300 | 78 to 101 ms | under 1 ms | 720 KB |
+| Medium 2pt | 720 x 450 | 105 to 154 ms | 1 to 2 ms | 1.62 MB |
+| Fine 1.5pt | 960 x 600 | 133 to 190 ms | 2 to 3 ms | 2.88 MB |
+
+A miniaturized or ordered-out window drops both. The new-thread reveal is gone, so Picture runs no animation at all.
 
 While the panel's size differs from the shown canvas (a window resize or a sidebar drag), `placeArt` scales the cached image to cover the panel, centred as the picture is, so the window server scales it each frame and no band of ground shows. The sharp render follows 0.15 s after the size stops changing, or at once when a live resize ends (the user, 2026-11-21: "i need to release my mouse before it pops in"). Gradient's canvas stretches over its reach the same way. This holds for all three Backgrounds.
 

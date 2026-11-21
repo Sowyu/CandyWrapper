@@ -114,16 +114,22 @@ struct PictureInkTests {
 
     /// The same tone, inks and shape give the same cells, byte for byte, and the cells sit on the Bayer lattice:
     /// a mid tone with no fall-off lights the same cells in every 8 x 8 tile.
-    @Test func theMaskIsDeterministic() throws {
+    @Test(arguments: [1.5, 2.0, 3.0])
+    func theMaskIsDeterministic(cell: Double) throws {
         let w = 64, h = 48
         let values = (0..<(w * h)).map { UInt8(($0 * 37) % 256) }
-        let tone = PictureInk.Tone(width: w, height: h, values: values, hue: 0, median: 0.5)
+        let tone = PictureInk.Tone(width: w, height: h, values: values, hue: 0, median: 0.5, unit: cell)
         let inks = PictureInk.inks(hue: 40), ground = SIMD3<Double>(repeating: 8.0 / 255)
         for shape in [PictureInk.Shape.plain, .hero(composer: [40, 40, 100, 30]), .thread(column: [30, 0, 90, 144])] {
             let a = try #require(PictureInk.render(tone, inks: inks, ground: ground, dark: true, shape: shape, text: []))
             let b = try #require(PictureInk.render(tone, inks: inks, ground: ground, dark: true, shape: shape, text: []))
             #expect(a.dataProvider!.data! as Data == b.dataProvider!.data! as Data)
         }
+        // The same picture toned twice at this cell gives the same mask.
+        let picture = try #require(DitherArt.picture(URL(filePath: "/System/Library/Desktop Pictures/Radial Sky Blue.heic"), maxPixels: 1600))
+        let t1 = try #require(PictureInk.tone(picture, width: 200, height: 120, cell: cell))
+        let t2 = try #require(PictureInk.tone(picture, width: 200, height: 120, cell: cell))
+        #expect(t1.values == t2.values && t1.unit == cell)
         let mid = PictureInk.Tone(width: 16, height: 16, values: [UInt8](repeating: 128, count: 256), hue: 0, median: 0.5)
         let art = try #require(PictureInk.render(mid, inks: inks, ground: ground, dark: true, shape: .plain, text: []))
         let px = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
@@ -248,6 +254,19 @@ struct PictureInkTests {
         #expect(density.first! > 0.5 && density.last! < 0.05, "\(density)")
     }
 
+    /// Every dot size lands on whole device pixels at 1x and 2x: Fine is 1.5pt (3 pixels) at 2x and 2pt at 1x.
+    @Test func dotSizesLandOnWholePixels() {
+        #expect(DitherDotSize.fine.points(scale: 2) == 1.5 && DitherDotSize.fine.points(scale: 1) == 2)
+        #expect(DitherDotSize.medium.points(scale: 2) == 2 && DitherDotSize.coarse.points(scale: 2) == 3)
+        for size in DitherDotSize.allCases {
+            for scale: CGFloat in [1, 2] {
+                let px = size.points(scale: scale) * scale
+                #expect(px == px.rounded() && px >= 2, "\(size) at \(scale)x is \(px) px")
+            }
+        }
+        #expect(DitherDotSize(rawValue: "medium") == .medium && DitherDotSize(rawValue: "huge") == nil)
+    }
+
     /// Picture never moves: opening a new thread, a thread and back adds no animation to the art, no Gradient frames
     /// exist, and a live resize scales the cached image instead of rendering per frame, then renders once.
     @MainActor @Test func pictureHoldsStillAndResizesOnTheGPU() throws {
@@ -280,6 +299,17 @@ struct PictureInkTests {
         #expect(art.contentsForTesting != nil)
         #expect(animations().isEmpty)
         #expect(art.scrimAlphaForTesting == 0)
+        // Dot size applies live: Coarse renders 3pt cells, and back to Medium's 2pt, with no other change.
+        let scale = window.backingScaleFactor
+        #expect(hero.dot == DitherDotSize.medium.points(scale: scale))
+        input.ditherDotSize = .coarse
+        ThemeRuntime.apply(input)
+        #expect(art.requestForTesting?.dot == 3)
+        #expect(art.requestForTesting?.width == Int((art.bounds.width / 3).rounded(.up)))
+        #expect(animations().isEmpty)
+        input.ditherDotSize = .medium
+        ThemeRuntime.apply(input)
+        #expect(art.requestForTesting?.dot == DitherDotSize.medium.points(scale: scale))
         DitherArtView.setColumn(NSRect(x: 300, y: 0, width: 500, height: 700), from: page)
         DitherArtView.setEmphasis(.thread, from: page)
         defer { DitherArtView.setColumn(nil, from: page) }
@@ -303,10 +333,10 @@ struct PictureInkTests {
         }
         #expect(art.rendersForTesting == before)
         // The last size waits, then the end of the live resize renders it once.
-        #expect(art.requestForTesting?.width == Int((art.bounds.width / PictureInk.cell).rounded(.up)))
+        #expect(art.requestForTesting?.width == Int((art.bounds.width / art.requestForTesting!.dot).rounded(.up)))
         art.rendersInlineForTesting = true
         art.viewDidEndLiveResize()
         #expect(art.rendersForTesting == before + 1, "\(art.rendersForTesting - before) renders")
-        #expect(art.requestForTesting?.width == Int((art.bounds.width / PictureInk.cell).rounded(.up)))
+        #expect(art.requestForTesting?.width == Int((art.bounds.width / art.requestForTesting!.dot).rounded(.up)))
     }
 }

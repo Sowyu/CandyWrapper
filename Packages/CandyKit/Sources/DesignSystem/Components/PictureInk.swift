@@ -3,13 +3,12 @@ import Foundation
 import os
 
 /// Redesign's Background = Picture (the user, 2026-11-21: "i like b1", "i like 2 ink", "no motion its horrid"): the
-/// whole picture as an ordered Bayer dither in two inks of one hue on the ground, on Gradient's 3pt cell lattice, with
+/// whole picture as an ordered Bayer dither in two inks of one hue on the ground, on a cell lattice from the panel's top
+/// left whose size is the "Dot size" setting (`DitherDotSize`), with
 /// no photo showing through and no dim layer. The picture's tone (`Tone`) is computed once per picture and canvas size
 /// and cached; the inks and the page's shape (the composer's fall-off on a new thread, the reading column in a thread)
 /// only re-threshold it, a few milliseconds on a worker. Touches no AppKit view, so it runs on any thread.
 public enum PictureInk {
-    /// The cell, in points: Gradient's (`DitherArt.gradientUnit`), so both modes sit on one lattice.
-    public nonisolated static let cell: CGFloat = 3
     /// The most of a cell's level that ink may cover, so a bright sky keeps a visible pattern.
     nonisolated static let coverage = 0.85
     /// Dark pictures are lifted until the median tone reaches this, so they don't come out as an empty frame with
@@ -96,6 +95,8 @@ public enum PictureInk {
         /// How low-key the picture is for dark (`lowKey` of its histogram) and how high-key for light (the same rule on
         /// the inverted histogram), 0...1. A low-key picture keeps its black: no shadow lift.
         var lowKey = 0.0, highKey = 0.0
+        /// The cell, in points.
+        var unit = 3.0
     }
 
     /// Below this tone (after levels, 0...1, from the ground's side) a cell draws no dot, so grain and faint haze
@@ -167,7 +168,7 @@ public enum PictureInk {
         }
         let mid = values.sorted()[values.count / 2]
         return Tone(width: w, height: h, values: values, hue: autoHue(picture), median: Double(mid) / 255,
-                    lowKey: lowKey, highKey: highKey)
+                    lowKey: lowKey, highKey: highKey, unit: cell)
     }
 
     /// A 3 x 3 edge-keeping blur (a tent in space, weighted by tonal closeness): grain under `smoothRange` blends with
@@ -258,7 +259,7 @@ public enum PictureInk {
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
               let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h * 4) else { return nil }
-        let unit = Double(cell)
+        let unit = tone.unit
         let panel = CGSize(width: Double(w) * unit, height: Double(h) * unit)
         // Level 1 sits next to the ground, level 2 beyond it.
         let levels = dark ? [inks.deep, inks.light] : [inks.light, inks.deep]
@@ -336,20 +337,21 @@ public enum PictureInk {
     // MARK: Cache
 
     /// One picture's tone at one canvas size, the last asked for. The art re-thresholds it for each page and ink.
-    private struct CacheKey: Hashable { var url: URL, width: Int, height: Int }
+    private struct CacheKey: Hashable { var url: URL, width: Int, height: Int, cell: Double }
     private nonisolated static let cache = OSAllocatedUnfairLock<(key: CacheKey, tone: Tone)?>(initialState: nil)
 
-    /// The tone of the first of `urls` that decodes, at `width` x `height` cells, from the cache or decoded once.
-    nonisolated static func tone(_ urls: [URL], width: Int, height: Int) -> Tone? {
+    /// The tone of the first of `urls` that decodes, at `width` x `height` cells of `cell` points, from the cache or
+    /// decoded once.
+    nonisolated static func tone(_ urls: [URL], width: Int, height: Int, cell: Double) -> Tone? {
         for url in urls {
-            let key = CacheKey(url: url, width: width, height: height)
+            let key = CacheKey(url: url, width: width, height: height, cell: cell)
             if let hit = cache.withLock({ $0?.key == key ? $0?.tone : nil }) { return hit }
-            guard let picture = DitherArt.picture(url, maxPixels: max(width, height) * subsamples(cell: Double(cell))),
-                  let tone = tone(picture, width: width, height: height, cell: Double(cell)) else { continue }
+            guard let picture = DitherArt.picture(url, maxPixels: max(width, height) * subsamples(cell: cell)),
+                  let tone = tone(picture, width: width, height: height, cell: cell) else { continue }
             cache.withLock { $0 = (key, tone) }
             return tone
         }
-        return DitherArt.builtInPicture().flatMap { tone($0, width: width, height: height, cell: Double(cell)) }
+        return DitherArt.builtInPicture().flatMap { tone($0, width: width, height: height, cell: cell) }
     }
 
     /// Drops the cached tone, for a hidden window.

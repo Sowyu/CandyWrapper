@@ -91,7 +91,7 @@ struct DitherArtTests {
         shell.layoutSubtreeIfNeeded()
         #expect(art()?.superview === shell.main)
         #expect(art()?.requestForTesting?.blur == false)
-        #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / PictureInk.cell).rounded(.up)))
+        #expect(art()?.requestForTesting?.width == Int((shell.main.bounds.width / DitherDotSize.medium.points(scale: 2)).rounded(.up)))
     }
 
     /// Gradient: no picture, binary Bayer cells of one color on a fixed grid, like Capy's: on at the top left, off

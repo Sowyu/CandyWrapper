@@ -30,6 +30,7 @@ public final class RedesignSettingsView: SettingsPageBase {
     static let flowerReason = "Flower uses no picture. Choose Picture or Blur to change this."
     static let animateReason = "Only Gradient and Flower move. Choose one of them to change this."
     static let inkReason = "Only Picture draws in inks. Choose Picture to change this."
+    static let dotSizeReason = "Only Picture's dots change size. Choose Picture to change this."
     static let dimReason = "Picture thins its dots behind text instead of dimming. Choose Blur to change this."
     private let library: ThemeLibrary
     private var themeObserver: Int?
@@ -67,8 +68,8 @@ public final class RedesignSettingsView: SettingsPageBase {
                                    key: "redesignGradientAnimate", reset: "animate background", title: "Animate background")
         let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
-        let ink = inkRow()
-        let look: [SettingsRowView] = [picture, backgroundRow(), ink, tint, animate, dim, accentRow(), avatarsRow()]
+        let ink = inkRow(), dots = dotSizeRow()
+        let look: [SettingsRowView] = [picture, backgroundRow(), ink, dots, tint, animate, dim, accentRow(), avatarsRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
@@ -92,6 +93,8 @@ public final class RedesignSettingsView: SettingsPageBase {
             if dim.inertReason != dimOff { dim.inertReason = dimOff }
             let inkOff = off ?? (background == "dither" ? nil : Self.inkReason)
             if ink.inertReason != inkOff { ink.inertReason = inkOff }
+            let dotsOff = off ?? (background == "dither" ? nil : Self.dotSizeReason)
+            if dots.inertReason != dotsOff { dots.inertReason = dotsOff }
             let animateOff = off ?? (background == "gradient" || background == "flower" ? nil : Self.animateReason)
             if animate.inertReason != animateOff { animate.inertReason = animateOff }
         }
@@ -204,6 +207,28 @@ public final class RedesignSettingsView: SettingsPageBase {
                 well?.color = NSColor(srgbRed: c.x, green: c.y, blue: c.z, alpha: 1)
             }
             group?.invalidateIntrinsicContentSize()
+        }
+        return r
+    }
+
+    /// The size of Picture's dots (the user, 2026-11-21, on 3pt dots on a 2x laptop: "i feel like the pixels might be a
+    /// bit big"). Fine is 1.5pt, 3 pixels on a Retina screen; at 1x it draws Medium's 2pt, since 1.5pt falls between
+    /// pixels there (`DitherDotSize`).
+    private func dotSizeRow() -> SettingsRowView {
+        let key = "redesignDotSize", values = DitherDotSize.allCases.map(\.rawValue)
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Fine", nil), ("Medium", nil), ("Coarse", nil)], selected: 1)
+        toggle.setAccessibilityLabel("Dot size")
+        let r = row("redesign-dot-size", title: "Dot size",
+                    detail: "How big Picture's dots are. Fine keeps the most detail. On a screen that isn't Retina, Fine draws the same dots as Medium.",
+                    control: toggle)
+        toggle.onChange = { [weak self, weak toggle] i in
+            guard let self else { return }
+            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 1; return }
+            self.context.writeClient?([key: .string(values[i])])
+        }
+        binder.add { [weak self, weak toggle] in
+            guard let self else { return }
+            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 1
         }
         return r
     }
