@@ -124,6 +124,67 @@ public enum PopupPositioner {
         return Result(frame: frame, side: chosen, transformOrigin: origin, available: available)
     }
 
+    /// Where a placed popup sits against its anchor: its side, the gap from the anchor to the popup's near edge
+    /// (negative when it was shifted over the anchor), and its cross-axis start relative to the anchor's.
+    public struct Pin: Equatable, Sendable {
+        public var side: PopupPlacement.Side
+        public var gap: CGFloat
+        public var cross: CGFloat
+
+        public init(_ frame: CGRect, anchor: CGRect, side: PopupPlacement.Side) {
+            self.side = side
+            switch side {
+            case .bottom: gap = frame.minY - anchor.maxY
+            case .top: gap = anchor.minY - frame.maxY
+            case .right: gap = frame.minX - anchor.maxX
+            case .left: gap = anchor.minX - frame.maxX
+            }
+            cross = side.isVertical ? frame.minX - anchor.minX : frame.minY - anchor.minY
+        }
+    }
+
+    /// Places a popup of a new `size` where `pin` holds it: the same side, the same edge against the anchor and the
+    /// same start across, with its height cut to the room on that side so its content scrolls. A centered popup
+    /// stays centered on its anchor across. Only a popup wider or taller than the window moves to stay inside it.
+    public static func replace(size: CGSize, anchor: CGRect, in bounds: CGRect, pin: Pin, _ p: PopupPlacement) -> Result {
+        let inner = bounds.insetBy(dx: p.collisionPadding, dy: p.collisionPadding)
+        var frame = CGRect(origin: .zero, size: size)
+        switch pin.side {
+        case .bottom:
+            frame.origin.y = anchor.maxY + pin.gap
+            let room = inner.maxY - frame.minY
+            if room > 0 { frame.size.height = min(size.height, room) }
+        case .top:
+            let bottom = anchor.minY - pin.gap
+            let room = bottom - inner.minY
+            if room > 0 { frame.size.height = min(size.height, room) }
+            frame.origin.y = bottom - frame.height
+        case .right, .left:
+            frame.origin.x = pin.side == .right ? anchor.maxX + pin.gap : anchor.minX - pin.gap - size.width
+            frame.origin.y = anchor.minY + pin.cross
+            let room = inner.maxY - frame.minY
+            if room > 0 { frame.size.height = min(size.height, room) }
+        }
+        if pin.side.isVertical {
+            frame.origin.x = p.align == .center ? anchor.midX - size.width / 2 : anchor.minX + pin.cross
+        }
+        frame.origin.x = clamp(frame.origin.x, bounds.minX, bounds.maxX - frame.width)
+        frame.origin.y = clamp(frame.origin.y, bounds.minY, bounds.maxY - frame.height)
+        let available: CGSize = switch pin.side {
+        case .bottom: CGSize(width: inner.width, height: inner.maxY - anchor.maxY - pin.gap)
+        case .top: CGSize(width: inner.width, height: anchor.minY - pin.gap - inner.minY)
+        case .right: CGSize(width: inner.maxX - anchor.maxX - pin.gap, height: inner.height)
+        case .left: CGSize(width: anchor.minX - pin.gap - inner.minX, height: inner.height)
+        }
+        let origin: CGPoint = switch pin.side {
+        case .bottom: CGPoint(x: anchor.midX - frame.minX, y: anchor.maxY - frame.minY)
+        case .top: CGPoint(x: anchor.midX - frame.minX, y: anchor.minY - frame.minY)
+        case .right: CGPoint(x: anchor.maxX - frame.minX, y: anchor.midY - frame.minY)
+        case .left: CGPoint(x: anchor.minX - frame.minX, y: anchor.midY - frame.minY)
+        }
+        return Result(frame: frame, side: pin.side, transformOrigin: origin, available: available)
+    }
+
     /// `collisionAvoidance: { side: "shift", align: "shift" }`: no flip on either axis; shift clamps the popup
     /// inside the padded boundary, and floating-ui's `size` then offers the whole boundary height and width
     /// (ProviderModelPicker.tsx:466 at 4928, #29017).
@@ -269,6 +330,8 @@ public final class OpenPopup {
     /// Child popups (submenus) close with their parent.
     weak var parent: OpenPopup?
     public internal(set) var result: PopupPositioner.Result?
+    /// Redesign: where the first placement put the popup against its anchor, so a later re-placement keeps it there.
+    var pinned: PopupPositioner.Pin?
     /// Called once after the popup closes.
     public var onClose: (@MainActor () -> Void)?
     let container = PopupContainer()
@@ -374,6 +437,15 @@ public final class PopupHost: DSView {
         // Redesign: popups stay below the window's top band (traffic lights, tabs), never over it.
         var area = bounds
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) { area.origin.y += DitherChrome.band; area.size.height -= DitherChrome.band }
+        // Redesign: once open, a popup whose content changes size keeps its side, the edge against its anchor and its
+        // left edge, and scrolls inside when it runs out of room. Placing it afresh flipped or shifted it: the model
+        // picker's Older models group grew it down over its chip, and in Settings it jumped to the row's left side.
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let pin = popup.pinned {
+            let result = PopupPositioner.replace(size: size, anchor: anchor, in: area, pin: pin, popup.placement)
+            popup.result = result
+            popup.container.frame = result.frame
+            return
+        }
         var result = PopupPositioner.place(size: size, anchor: anchor, in: area, popup.placement)
         // `max-h-(--available-height)`: the popup never grows past the space on its side.
         let limit = result.side.isVertical ? result.available.height : area.height - 2 * popup.placement.collisionPadding
@@ -382,6 +454,8 @@ public final class PopupHost: DSView {
             result = PopupPositioner.place(size: size, anchor: anchor, in: area, popup.placement)
         }
         popup.result = result
+        // An empty first size (content not laid out yet) would pin an end-aligned popup at the anchor's far end.
+        if !result.frame.isEmpty { popup.pinned = PopupPositioner.Pin(result.frame, anchor: anchor, side: result.side) }
         let frame = result.frame
         popup.container.frame = frame
     }

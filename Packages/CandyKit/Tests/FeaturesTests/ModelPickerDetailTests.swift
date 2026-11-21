@@ -251,6 +251,20 @@ import T3Store
         }
     }
 
+    /// Switching tabs keeps the popup's size, so the rail under the pointer never moves (1.17.0 walk, 01f and 01g):
+    /// a one-model tab and Favorites take the height the first tab set and scroll in it.
+    @Test func switchingTabsKeepsThePopupsSize() throws {
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let rig = ModelPickerShrinkTests.Rig(catalog: Self.catalog(14))
+            let size = rig.dock.naturalSize
+            for rail in [ModelPickerRail.instance("codex"), .favorites, .instance("claudeAgent")] {
+                rig.picker.selectRail(rail)
+                rig.lay()
+                #expect(rig.dock.naturalSize == size, "\(rail)")
+            }
+        }
+    }
+
     // MARK: Small fixes, 2026-11-21
 
     /// A clamped description whose second line fits on its own still ends in an ellipsis.

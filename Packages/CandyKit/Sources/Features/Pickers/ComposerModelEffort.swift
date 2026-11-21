@@ -1159,18 +1159,23 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
     var detailTopHeight: CGFloat {
         let items = picker.listedItems
         let keys = items.map(\.key) + [picker.activeModel, picker.rail == .favorites ? "*" : ""]
-        // While searching the height stays where it was when typing started, as the list's own does.
+        // While searching the height stays where it was when typing started, as the list's own does. Switching tabs
+        // keeps it too, so the rail under the pointer never moves; the new tab's list scrolls in that height.
         if let topCache, topCache.keys == keys || picker.searching { return topCache.height }
+        if let cached = topCache, cached.rail != picker.rail {
+            topCache = (keys, cached.height, picker.rail)
+            return cached.height
+        }
         // Measured at the narrowest card, so dragging the card's edge never changes the popup's height.
         let narrow = ModelDetailPaneView.minWidth
         let tallestPane = items.prefix(40).map { item in
             pane.height(for: ModelDetailContent.make(item), card: cardInfo(item), width: narrow)
         }.max() ?? pane.height(for: nil, card: nil, width: narrow)
         let height = min(Self.detailMaxHeight, max(Self.detailMinHeight, picker.naturalSize.height, tallestPane + Self.gap))
-        topCache = (keys, height)
+        topCache = (keys, height, picker.rail)
         return height
     }
-    private var topCache: (keys: [String], height: CGFloat)?
+    private var topCache: (keys: [String], height: CGFloat, rail: ModelPickerRail)?
 
     private func contentChanged() {
         needsLayout = true
