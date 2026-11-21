@@ -498,9 +498,6 @@ final class ComposerController {
         queue.threadTitle = { [weak panel] in panel?.model.linkedThread?($0)?.title }
         queue.onOpenThread = { [weak panel] in panel?.model.onOpenThread?($0) }
         queue.onOpenScheduledTask = { [weak panel] in panel?.model.onOpenScheduledTask?($0) }
-        queue.onReorder = { [weak self] runId, before in
-            self?.queueCommand("queued-run.reorder", ["runId": .string(runId.rawValue), "beforeRunId": before.map { .string($0.rawValue) } ?? .null])
-        }
         queue.onRemove = { [weak self] runId in self?.queueCommand("queued-run.cancel", ["runId": .string(runId.rawValue)]) }
         queue.onSteer = { [weak self] runId in self?.sendQueued(runId) }
         queue.onEdit = { [weak self] item in self?.beginEdit(item) }
@@ -1813,7 +1810,7 @@ final class ComposerController {
                                        canStartQueuedRun: targetEnvironmentId.flatMap { capabilities[$0]?.queuedRunStart } ?? false,
                                        canSkipCompaction: (targetEnvironmentId.flatMap { capabilities[$0]?.compactionSteer } ?? false)
                                         && !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark)
-                                        && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark))
+                                       )
         var queuedSenderTitles: [String: String] = [:]
         for item in panel.queue.state.items {
             if let sender = item.message?.senderThreadId, let title = panel.model.linkedThread?(ThreadId(sender))?.title {
@@ -2028,9 +2025,9 @@ final class ComposerController {
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
         let strip = panel.contextStrip
-        let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
+        let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark)
         strip.showsPermissions = modern && thread == nil
-        // Redesign's and Glass's strips never hold Permissions, so the composer keeps its chip there.
+        // Redesign's strip never holds Permissions, so the composer keeps its chip there.
         pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip && strip.showsPermissions
         pickers.workspaceModelsScanning = workspaceSkillsScanning
         pickers.update(draftKey: draftKey ?? "", context: context)
@@ -6452,7 +6449,7 @@ extension ComposerController {
         let selection = thread?.modelSelection ?? pickers.current.modelSelection
         // `resolveContextWindowModelDisplayName` (ContextWindowMeter.logic.ts:85-98).
         let modelName = selection.map { s in
-            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map { ModelNames.trigger($0, driver: serverConfig.providers.first { $0.instanceId == s.instanceId }?.driver, spoken: !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)) } ?? s.model
+            serverConfig.providers.first { $0.instanceId == s.instanceId }?.models.first { $0.slug == s.model }.map { ModelNames.trigger($0, driver: serverConfig.providers.first { $0.instanceId == s.instanceId }?.driver, spoken: !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark)) } ?? s.model
         }
         meter.setCompactState(offered: ComposerCompaction.supportsManualCompaction(provider),
                               disabled: gate.disabled || noProvider || composer.isBusy,

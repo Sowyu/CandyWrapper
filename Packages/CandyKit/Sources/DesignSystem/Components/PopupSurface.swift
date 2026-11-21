@@ -19,7 +19,7 @@ public enum PopupSurface {
     public static var glassFill: NSColor {
         let solid = Themed.color(\.popover).blended(over: Themed.color(\.background), alpha: dropdownGlassAlpha)
         let pane = Themed.color(\.popover)
-        return NSColor(name: nil) { ThemeRuntime.framesPanes(dark: $0.isDark) ? WindowGlass.resolve(pane, in: $0) : WindowGlass.resolve(solid, in: $0) }
+        return NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? WindowGlass.resolve(pane, in: $0) : WindowGlass.resolve(solid, in: $0) }
     }
 
     /// A stock shadow's color, clear under Redesign, which draws `redesignFloating` instead.

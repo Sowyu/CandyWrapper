@@ -164,7 +164,7 @@ public final class DevicePanelView: DSView {
         toolsDrawer?.frame = NSRect(x: max(0, bounds.width - 320), y: 40, width: min(320, bounds.width), height: max(0, bounds.height - 40))
         done.frame = NSRect(x: bounds.width - 84, y: 84, width: 60, height: 28)
     }
-    public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
+    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
 }
 
 /// Frames have already been decoded. The layer retains only the newest image.

@@ -80,8 +80,6 @@ public final class SidebarLayoutView: DSView {
     public let defaults: UserDefaults
 
     public private(set) var isOpen = true
-    /// The Glass theme's frost under everything, present only while it shows.
-    private var glassBackdrop: WallpaperBackdropView?
     /// The Dither theme's picture in the main panel, present only while it shows.
     private var ditherArt: DitherArtView?
     /// Dither's hairline down the panel's sidebar edge and round its bottom left corner, faded in below the band.
@@ -116,7 +114,7 @@ public final class SidebarLayoutView: DSView {
     public init(sidebarContent: NSView? = nil, mainContent: NSView? = nil, defaults: UserDefaults = .standard, viewport: CGFloat = 1100) {
         self.defaults = defaults
         sidebar = SidebarContainerView()
-        main = GrainSurfaceView(fill: WindowGlass.mainSurface)
+        main = GrainSurfaceView(fill: Themed.color(\.background))
         width = SidebarWidth.initial(stored: SidebarWidth.load(defaults), viewport: viewport)
         super.init(frame: .zero)
         addSubview(main)
@@ -185,22 +183,17 @@ public final class SidebarLayoutView: DSView {
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        let wasGlass = glassBackdrop != nil
-        updateGlass()
-        // Behind a frosted window AppKit leaves box decorations with the old appearance's colors (the
-        // translucent theme cards stayed light in dark mode), so they redraw here.
-        if wasGlass || glassBackdrop != nil { ThemeRuntime.redrawDecorations(in: self) }
+        updateArt()
     }
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        updateGlass()
+        updateArt()
     }
 
-    /// Adds the frost under the surfaces while the Glass theme shows, and drops it otherwise. The theme runtime
-    /// calls `viewDidChangeEffectiveAppearance` on every view when the theme changes, so switching is instant.
-    private func updateGlass() {
-        glassBackdrop = WindowGlass.syncBackdrop(glassBackdrop, in: self)
+    /// Adds Redesign's art while it shows, and drops it otherwise. The theme runtime calls
+    /// `viewDidChangeEffectiveAppearance` on every view when the theme changes, so switching is instant.
+    private func updateArt() {
         // Blur draws the picture behind the whole window, sidebar included; Dither only in the main panel.
         ditherArt = DitherArtView.sync(ditherArt, in: ThemeRuntime.ditherBlur ? self : main)
         needsLayout = true // Dither frames the main panel
@@ -325,7 +318,7 @@ public final class SidebarLayoutView: DSView {
 
 /// The fixed container plus inner: `bg-sidebar surface-grain` and `border-r` in the sidebar's `--contrast-border`.
 public final class SidebarContainerView: DSView {
-    public let surface = GrainSurfaceView(fill: WindowGlass.sidebarSurface)
+    public let surface = GrainSurfaceView(fill: Themed.color(\.sidebar, sidebar: true))
     private let border = DSView()
     public var content: NSView? {
         didSet { oldValue?.removeFromSuperview(); if let content { addSubview(content) }; needsLayout = true }
@@ -343,10 +336,9 @@ public final class SidebarContainerView: DSView {
 
     public override func layout() {
         super.layout()
-        // Inner fills the padding box; the border sits on the right 1px. Under Glass the frost runs under the border
-        // too, or that column showed the bare, saturated wallpaper as a bright line.
+        // Inner fills the padding box; the border sits on the right 1px.
         let box = NSRect(x: 0, y: 0, width: bounds.width - 1, height: bounds.height)
-        surface.frame = WindowGlass.isActive(for: self) ? bounds : box
+        surface.frame = box
         border.frame = NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
         content?.frame = box
     }

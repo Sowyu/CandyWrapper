@@ -242,7 +242,7 @@ public final class FileListPane: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         for l in [border, headerBorder, footerBorder] { l.backgroundColor = Themed.color(\.border, 0.6).cgColor(in: self) }
         title.color = Themed.color(\.foreground)
         count.color = Themed.color(\.mutedForeground)

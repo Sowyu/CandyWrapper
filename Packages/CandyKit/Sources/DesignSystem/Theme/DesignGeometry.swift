@@ -4,7 +4,7 @@ import AppKit
 /// T3: apps/web/src/index.css:1115, with radius-sm/md/lg/xl/2xl derived from --radius.
 public enum DesignGeometry {
     public static func usesClassic(_ view: NSView) -> Bool {
-        ThemeRuntime.framesPanes(dark: view.effectiveAppearance.isDark)
+        ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark)
     }
 
     /// Redesign maps T3's radius onto its own scale (`DitherChrome.radius`).

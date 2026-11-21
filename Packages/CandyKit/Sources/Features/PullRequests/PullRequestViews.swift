@@ -411,7 +411,6 @@ public final class PullRequestChangeBreakdownTooltipView: DSView, PopupContent {
     private var cells: [[LabelView]] = []
     /// A view of its own so it stays above the surface's layers.
     private let rule = NSView()
-    public var frostRadius: CGFloat { 8 }
 
     public init(_ breakdown: PullRequestChangeBreakdown, additions: Int, deletions: Int) {
         super.init(frame: .zero)

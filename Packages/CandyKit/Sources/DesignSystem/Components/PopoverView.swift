@@ -61,7 +61,6 @@ public final class PopoverView: DSView, PopupContent {
             : look.shadows
     }
 
-    public var frostRadius: CGFloat { DesignGeometry.radius(cornerRadius ?? (tooltipStyle ? 8 : 10), in: self) }
 
     public override var intrinsicContentSize: NSSize {
         let i = padding.insets

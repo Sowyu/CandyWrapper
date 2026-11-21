@@ -42,10 +42,6 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var contrast: Int
     public var glassOpacity: Int
     public var blueOrangeDiff = false
-    /// CandyWrapper's Glass theme on each side: stock colors over a frosted window, every surface a frosted pane
-    /// (`WindowGlass`).
-    public var glassLight = false
-    public var glassDark = false
     /// The Dither theme on each side and its picture (nil for the desktop picture).
     public var ditherLight = false
     public var ditherDark = false
@@ -64,7 +60,7 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherAccent = DitherAccent.teal.id
     /// Picture's "Ink": where its two inks come from (`DitherInk`).
     public var ditherInk = DitherInk.auto
-    /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
+    /// "Ignore Reduce Transparency": Redesign draws as if macOS's Reduce Transparency were off.
     public var ignoreReduceTransparency = false
     /// Redesign's "Project avatars": pixel sprites (on) or T3's letters.
     public var projectSprites = true
@@ -108,24 +104,17 @@ public enum ThemeRuntime {
     /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
     nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
-    /// Whether the Glass theme frosts the window in each appearance.
-    nonisolated(unsafe) public private(set) static var glass = (light: false, dark: false)
 
-    /// macOS's Reduce Transparency as CandyWrapper's Redesign art and Glass backdrop follow it: off while the user's
+    /// macOS's Reduce Transparency as CandyWrapper's Redesign art follows it: off while the user's
     /// "Ignore Reduce Transparency" is on.
     public static func reducesTransparency(system: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) -> Bool {
         system && !input.ignoreReduceTransparency
     }
 
-    public nonisolated static func isGlass(dark: Bool) -> Bool { dark ? glass.dark : glass.light }
     /// Whether the main panel shows the Dither theme's picture in each appearance (`DitherArtView`).
     public private(set) static var dither = (light: false, dark: false)
     public private(set) static var ditherPicture: URL?
     public nonisolated static func isDither(dark: Bool) -> Bool { dark ? ditherFlags.dark : ditherFlags.light }
-    /// Whether floating panes and bubbles are frosted glass over their own blur: Glass and Dither.
-    public nonisolated static func framesPanes(dark: Bool) -> Bool {
-        isGlass(dark: dark) || (dark ? ditherFlags.dark : ditherFlags.light)
-    }
     nonisolated(unsafe) private static var ditherFlags = (light: false, dark: false)
     /// Whether project and account avatars without a picture draw `PixelSprites`: Redesign with "Project avatars" on Sprites.
     public nonisolated static func drawsSprites(dark: Bool) -> Bool { isDither(dark: dark) && spritesOn }
@@ -140,9 +129,7 @@ public enum ThemeRuntime {
         input = next
         var changed = false
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
-            || next.glassLight != old.glassLight || next.glassDark != old.glassDark
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
-            || (next.glassOpacity != old.glassOpacity && (next.glassLight || next.glassDark))
             || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
             || ((next.ditherBlur != old.ditherBlur || next.ditherGradient != old.ditherGradient || next.ditherFlower != old.ditherFlower
                  || next.ditherTintFromPicture != old.ditherTintFromPicture || next.pictureTint != old.pictureTint)
@@ -182,10 +169,6 @@ public enum ThemeRuntime {
         }
         if next.ignoreReduceTransparency != old.ignoreReduceTransparency { changed = true }
         if next.projectSprites != old.projectSprites { spritesOn = next.projectSprites; changed = true }
-        if next.glassLight != old.glassLight || next.glassDark != old.glassDark {
-            glass = (next.glassLight, next.glassDark)
-            changed = true
-        }
         if next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark || next.ditherPicture != old.ditherPicture {
             dither = (next.ditherLight, next.ditherDark)
             ditherFlags = dither
@@ -238,8 +221,8 @@ public enum ThemeRuntime {
     public nonisolated static func resolve(_ input: ThemeRuntimeInput) -> ThemePalettes {
         // The stock palettes at stock contrast are the extracted tokens themselves.
         let stock = input.contrast == 100
-        let candyLight = input.glassLight || input.ditherLight
-        let candyDark = input.glassDark || input.ditherDark
+        let candyLight = input.ditherLight
+        let candyDark = input.ditherDark
         let light = input.light == nil && stock && !candyLight ? nil
             : evaluate(input.light, contrast: input.contrast, contexts: (0, 2), candyTheme: candyLight)
         let dark = input.dark == nil && stock && !candyDark ? nil
@@ -269,7 +252,7 @@ public enum ThemeRuntime {
         }
         // The main panel's backgrounds, which Blur's scrim lays over the picture behind the sidebar too.
         let grounds = (light: (light?.0 ?? Tokens.light).background, dark: (dark?.0 ?? Tokens.dark).background)
-        func glass(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
+        func redesign(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
             // Redesign light: the sidebar's menu icons, which T3 mixes toward the sidebar, take the muted icon color
             // so they keep 3:1, and success takes `capyLightSuccess`.
             var palette = palette
@@ -314,13 +297,9 @@ public enum ThemeRuntime {
                     guard DitherArt.readableMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
                     return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
                 })
-                return WindowGlass.frosted(readable, dark: dark, sidebar: false, opacity: Double(input.glassOpacity) / 100,
-                                           lines: true, panes: false)
+                return WindowGlass.frosted(readable, dark: dark)
             }
-            guard dark ? input.glassDark : input.glassLight else { return palette }
-            let opacity = Double(input.glassOpacity) / 100
-            let readable = WindowGlass.frostReadable(palette, dark: dark, sidebar: sidebar, opacity: opacity)
-            return WindowGlass.frosted(readable, dark: dark, sidebar: sidebar, opacity: opacity)
+            return palette
         }
         // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Gradient and Flower have no picture.
         func tinted(_ palette: Palette, dark: Bool) -> Palette {
@@ -328,10 +307,10 @@ public enum ThemeRuntime {
                   dark ? input.ditherDark : input.ditherLight else { return palette }
             return PictureTint.apply(tint, to: palette)
         }
-        return ThemePalettes(light: tinted(glass(diff(light?.0 ?? Tokens.light, dark: false), dark: false, sidebar: false), dark: false),
-                             dark: tinted(glass(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true, sidebar: false), dark: true),
-                             sidebarLight: tinted(glass(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false, sidebar: true), dark: false),
-                             sidebarDark: tinted(glass(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true, sidebar: true), dark: true))
+        return ThemePalettes(light: tinted(redesign(diff(light?.0 ?? Tokens.light, dark: false), dark: false, sidebar: false), dark: false),
+                             dark: tinted(redesign(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true, sidebar: false), dark: true),
+                             sidebarLight: tinted(redesign(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false, sidebar: true), dark: false),
+                             sidebarDark: tinted(redesign(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true, sidebar: true), dark: true))
     }
 
     private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }

@@ -2424,7 +2424,6 @@ public final class ThreadPanelView: DSView {
         terminalResize.isHidden = !drawerCard || drawer == 0 || lazyTerminalDrawer.loaded?.isHidden != false
         terminalResize.frame = NSRect(x: drawerX, y: chatHeight - gap, width: drawerWidth, height: gap)
         // The rows run on under the header and fade out toward the top (`fade`).
-        let glass = WindowGlass.isActive(for: self)
         // In an open Redesign thread the first row starts below the rows' fade-in (the timeline mask), which is
         // measured from the timeline's top, the window's.
         let column = ditherHeader && !isDraft && !isEmbedded
@@ -2600,12 +2599,11 @@ public final class ThreadPanelView: DSView {
         updateFadeColors()
         fade.zPosition = 1
         header.layer?.zPosition = 2
-        // Dither's art runs up to the panel's top edge, so the rows fade out over it as a mask, as over Glass: an overlay
+        // Dither's art runs up to the panel's top edge, so the rows fade out over it as a mask: an overlay
         // in any one color would paint a band over the art, and its unfaded scrollbar column left a strip at the right.
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
-        let masks = glass || dither
-        fade.isHidden = masks || standard
+        fade.isHidden = dither || standard
         if dither, ditherTopFade {
             // An open Redesign thread: the rows are gone above the tab band's bottom, so none reads under the header
             // pill, then fade in over `Space.l`. The mask leaves the picture itself showing there, so no bar shows.
@@ -2615,13 +2613,13 @@ public final class ThreadPanelView: DSView {
             fadeMask.locations = [0, clear / h, (clear + Double(RedesignTokens.Space.l)) / h, 1].map { NSNumber(value: min($0, 1)) }
             fadeMask.colors = [0, 0, 1, 1].map { NSColor.black.withAlphaComponent($0).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
-        } else if masks {
+        } else if dither {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
             // Dither fades only the last few points at the window's edge, so the rows stay readable under the header and tabs.
-            let reach = dither ? Double(Self.ditherEdgeFade) : Double(band)
+            let reach = Double(Self.ditherEdgeFade)
             fadeMask.locations = (Self.fadeStops.map { $0 * reach / h } + [1]).map { NSNumber(value: min($0, 1)) }
-            fadeMask.colors = (Self.fadeStops.map { 1 - (dither ? Self.ditherFade($0) : Self.topFade($0)) } + [1])
+            fadeMask.colors = (Self.fadeStops.map { 1 - Self.ditherFade($0) } + [1])
                 .map { NSColor.black.withAlphaComponent($0).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
         } else if timeline.layer?.mask === fadeMask {

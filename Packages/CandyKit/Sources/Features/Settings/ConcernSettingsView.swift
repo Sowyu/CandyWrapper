@@ -13,7 +13,7 @@ public final class ConcernSettingsView: SettingsPageBase {
     /// `dither` is Redesign in the window's appearance: it moves CandyWrapper's own rows from About to General.
     public init(context: SettingsPageContext, section: SettingsSection, dither: Bool = false) {
         self.section = section
-        if section == .browser, !ThemeRuntime.framesPanes(dark: false), !ThemeRuntime.framesPanes(dark: true) {
+        if section == .browser, !ThemeRuntime.isDither(dark: false), !ThemeRuntime.isDither(dark: true) {
             let browser = BrowserSettingsPage(context: context)
             sources = [browser]
             super.init(context: context)
@@ -144,7 +144,7 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, [G("behavior", "CandyWrapper", rows: ConcernSettingsView.candyWrapperRows)])
         ]
         case .providers:
-            if ThemeRuntime.framesPanes(dark: false) || ThemeRuntime.framesPanes(dark: true) {
+            if ThemeRuntime.isDither(dark: false) || ThemeRuntime.isDither(dark: true) {
                 return [.init(.providers, scope: true), .init(.general, [G("organization", "Advanced", rows: ["compact-idle-threads"])])]
             }
             return [.init(.providers, scope: true)]

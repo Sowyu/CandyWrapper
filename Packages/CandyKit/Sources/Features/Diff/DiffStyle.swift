@@ -46,7 +46,7 @@ enum DiffStyle {
     private static func canvasRGB(_ light: UInt32, _ classicDark: UInt32, _ dark: UInt32) -> NSColor {
         let previous = rgb(light, classicDark), current = rgb(light, dark)
         return NSColor(name: nil) { appearance in
-            let color = ThemeRuntime.framesPanes(dark: appearance.isDark) ? previous : current
+            let color = ThemeRuntime.isDither(dark: appearance.isDark) ? previous : current
             var result = color
             appearance.performAsCurrentDrawingAppearance { result = color.usingColorSpace(.sRGB) ?? color }
             return result
@@ -110,7 +110,7 @@ enum DiffStyle {
             appearance.performAsCurrentDrawingAppearance {
                 let dark = appearance.isDark
                 let color: NSColor
-                if ThemeRuntime.framesPanes(dark: dark) { color = previous }
+                if ThemeRuntime.isDither(dark: dark) { color = previous }
                 else {
                     color = switch change {
                     case .new: alternateColors ? (dark ? additionBase : Themed.color(\.diffAdditionForeground))
@@ -142,7 +142,7 @@ enum DiffStyle {
         let light = NSColor(srgbRed: CGFloat(rgb[0]) / 255, green: CGFloat(rgb[1]) / 255, blue: CGFloat(rgb[2]) / 255, alpha: 1)
         return NSColor(name: nil) { appearance in
             var result = light
-            if appearance.isDark || ThemeRuntime.framesPanes(dark: false) {
+            if appearance.isDark || ThemeRuntime.isDither(dark: false) {
                 appearance.performAsCurrentDrawingAppearance { result = original.usingColorSpace(.sRGB) ?? original }
             }
             return result
@@ -186,7 +186,7 @@ enum DiffStyle {
 
     /// A pattern color from a tile drawn at 2x in a top-left coordinate space, made once per theme.
     private static func pattern(_ name: String, dark: Bool, size: CGFloat, draw: (CGContext) -> Void) -> CGColor {
-        let key = "\(name) \(dark) \(alternateColors) \(ThemeRuntime.framesPanes(dark: dark))"
+        let key = "\(name) \(dark) \(alternateColors) \(ThemeRuntime.isDither(dark: dark))"
         if let cached = patternCache[key] { return cached }
         let scale: CGFloat = 2
         let px = Int(size * scale)

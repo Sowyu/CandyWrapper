@@ -119,11 +119,10 @@ private final class ThemedColorCache: @unchecked Sendable {
         let palette = ThemeRuntime.palettes.palette(dark: isDark, sidebar: sidebar)
         let key = isDark ? dark : light
         var alpha = isDark ? darkAlpha : lightAlpha
-        // Classic Glass: T3's faint muted text (`text-muted-foreground/70`, a branch at `/40`) reads at full strength, since the
-        // frost already pushed muted text as far toward the background as 4.5:1 allows (WindowGlass.frostReadable).
-        // Redesign's muted grays sit at that floor over its art too (`DitherArt.worstBackground`): light's everywhere,
+        // Redesign: T3's faint muted text (`text-muted-foreground/70`, a branch at `/40`) reads at full strength, since
+        // its muted grays already sit at the 4.5:1 floor over its art (`DitherArt.worstBackground`): light's everywhere,
         // dark's muted text in the main panel.
-        if alpha >= 0.35, alpha < 1, ThemeRuntime.isGlass(dark: isDark) || (!isDark && ThemeRuntime.isDither(dark: false)),
+        if alpha >= 0.35, alpha < 1, !isDark, ThemeRuntime.isDither(dark: false),
            WindowGlass.frostFullStrength.contains(key) { alpha = 1 }
         if alpha >= 0.35, alpha < 1, isDark, !sidebar, ThemeRuntime.isDither(dark: true), WindowGlass.ditherFullStrength.contains(key) { alpha = 1 }
         let c = palette[keyPath: key].nsColor.multiplyingAlpha(alpha)

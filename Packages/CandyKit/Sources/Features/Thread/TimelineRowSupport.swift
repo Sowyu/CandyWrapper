@@ -433,9 +433,6 @@ final class FillView: DSView {
     }
     var border: NSColor? { didSet { needsDisplay = true } }
     var radius: CGFloat = 0 { didSet { layer?.cornerRadius = radius; if joinedTop || joinedBottom { needsLayout = true } } }
-    /// A frosted pane under classic Glass (a user bubble): edge and highlight even without a border.
-    var pane = false { didSet { needsDisplay = true } }
-    private var paneEdge: GlassEdgeLayer?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -511,12 +508,8 @@ final class FillView: DSView {
         layer?.backgroundColor = fill?.cgColor(in: self)
         layer?.borderColor = border?.cgColor(in: self)
         layer?.borderWidth = border == nil ? 0 : 1
-        let radius = drawnRadius
-        layer?.cornerRadius = radius
+        layer?.cornerRadius = drawnRadius
         if joinedTop || joinedBottom || joinedFill != nil { syncJoinedFill() }
-        // ponytail: the Glass edge keeps the full radius on a joined corner; shape them too if Glass bursts look off
-        paneEdge = WindowGlass.syncEdge(paneEdge, on: layer, in: self, radius: radius, edge: border == nil,
-                                        show: fill != nil && (pane || border != nil))
     }
 }
 

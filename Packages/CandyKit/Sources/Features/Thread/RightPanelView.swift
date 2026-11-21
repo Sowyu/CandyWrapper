@@ -528,7 +528,7 @@ final class RightPanelView: DSView {
     var isMaximized = false { didSet { if isMaximized != oldValue { needsLayout = true } } }
 
     override func updateLayer() {
-        layer?.backgroundColor = (isSheet ? Themed.color(\.background) : WindowGlass.inset).cgColor(in: self)
+        layer?.backgroundColor = (isSheet ? Themed.color(\.background) : Themed.color(\.background)).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border).cgColor(in: self)
         layer?.borderColor = isCard ? RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor : nil
     }

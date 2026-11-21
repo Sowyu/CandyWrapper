@@ -71,7 +71,7 @@ public final class BrowserPanelView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
     }
 }
 
@@ -512,7 +512,7 @@ public final class BrowserEmptyStateView: DSView {
             var box = BoxStyle()
             box.radius = 14
             box.border = Themed.color(\.contrastBorder, 0.7)
-            box.fill = WindowGlass.paneFill
+            box.fill = Themed.color(\.background)
             boxStyle = box
             rows.forEach(addSubview)
             dividers.forEach { layer?.addSublayer($0) }
@@ -780,7 +780,7 @@ public final class BrowserUnreachableView: DSView {
     }
 
     public override func updateLayer() {
-        layer?.backgroundColor = WindowGlass.ground.cgColor(in: self)
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
         icon.color = Themed.color(\.mutedForeground, 0.7)
         heading.color = Themed.color(\.foreground)
         paragraph.color = Themed.color(\.mutedForeground)

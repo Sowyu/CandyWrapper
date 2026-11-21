@@ -62,14 +62,6 @@ To reach another machine, open Settings, then Connections, then Add environment,
 
 ![Settings, light theme](docs/readme/settings-light.png)
 
-## Glass theme
-
-Glass is a CandyWrapper-only theme that frosts the sidebar and the thread so your desktop's colors show through, and you turn it on with Change theme in the command palette.
-
-![The Glass theme in dark mode over a pink wallpaper](docs/readme/glass-dark.png)
-
-![The Glass theme in light mode over the Sonoma wallpaper](docs/readme/glass-light.png)
-
 ## The numbers
 
 I ran both apps one after the other on a Mac mini M4 on 2026-10-17, against the same T3 server data. The official app was 0.1.1-nightly.20261017.3234 and CandyWrapper was commit 1a844cb, version 1.5.0. Only each app's own processes count. Both use the same T3 server, so the server is left out.

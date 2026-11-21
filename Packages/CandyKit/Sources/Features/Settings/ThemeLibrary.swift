@@ -6,7 +6,7 @@ import T3Protocol
 /// (useTheme.ts and themePalette.ts): the theme preference (`t3code:theme`), the appearance mode
 /// (`t3code:theme-appearance-mode`), the light and dark mix (`t3code:theme-halves:v1`) and the custom theme
 /// library (`t3code:themes:v1`, raw entries kept as written). `apply` turns them, with the contrast and glass
-/// client settings, into `ThemeRuntime`'s palettes and the window appearance.
+/// opacity client settings, into `ThemeRuntime`'s palettes and the window appearance.
 @MainActor
 public final class ThemeLibrary {
     public static let shared = ThemeLibrary()
@@ -54,8 +54,9 @@ public final class ThemeLibrary {
         self.pinned = pinned
     }
 
-    /// Applies the saved choice and follows the contrast and glass settings from then on.
+    /// Applies the saved choice and follows the contrast and glass opacity settings from then on.
     public func start() {
+        migrateRemovedGlass()
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInk") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
@@ -165,6 +166,50 @@ public final class ThemeLibrary {
             return ThemeDefinition(id: id, label: name, appearance: appearance, colors: colors, variants: variants,
                                    managed: seeded && value["colors"] == nil && value["variants"] == nil)
         }
+
+    // MARK: Removed Glass theme (1.17.0)
+
+    /// Set when `migrateRemovedGlass` moved a saved Glass choice to the default theme, until the app shows its note.
+    static let glassRemovedNoticeKey = "theme.glassRemovedNotice"
+
+    /// Moves every saved choice of the removed Glass theme to the default T3 Code theme in that appearance: the
+    /// theme preference, each light or dark side, and the selection Redesign sits over. Returns whether it changed
+    /// anything, and then leaves the one-time note pending. A second run finds nothing to move.
+    @discardableResult
+    func migrateRemovedGlass() -> Bool {
+        let removed = ThemePalette.removedGlassIds
+        var moved = false
+        if let p = defaults.string(forKey: Self.preferenceKey), removed.contains(p) {
+            defaults.set(appearanceMode, forKey: Self.preferenceKey)
+            moved = true
+        }
+        let raw = rawHalves
+        if raw.light.map(removed.contains) == true || raw.dark.map(removed.contains) == true {
+            var o: [String: String] = [:]
+            if let l = raw.light, !removed.contains(l) { o["light"] = l }
+            if let d = raw.dark, !removed.contains(d) { o["dark"] = d }
+            if o.isEmpty { defaults.removeObject(forKey: Self.halvesKey) }
+            else { defaults.set(try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]), forKey: Self.halvesKey) }
+            moved = true
+        }
+        if let data = defaults.data(forKey: Self.preRedesignKey),
+           var o = (try? JSONSerialization.jsonObject(with: data)) as? [String: String],
+           o.values.contains(where: removed.contains) {
+            if let p = o["preference"], removed.contains(p) { o["preference"] = appearanceMode }
+            for side in ["light", "dark"] where o[side].map(removed.contains) == true { o[side] = nil }
+            defaults.set(try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]), forKey: Self.preRedesignKey)
+            moved = true
+        }
+        if moved { defaults.set(true, forKey: Self.glassRemovedNoticeKey) }
+        return moved
+    }
+
+    /// Whether the "Glass theme removed" note is still due. Taking it clears it, so it shows once.
+    public func takeGlassRemovedNotice() -> Bool {
+        guard defaults.bool(forKey: Self.glassRemovedNoticeKey) else { return false }
+        defaults.removeObject(forKey: Self.glassRemovedNoticeKey)
+        return true
+    }
 
     // MARK: Writes (useTheme.ts setters)
 
@@ -455,7 +500,7 @@ public final class ThemeLibrary {
     }
 
     /// The palettes and window appearance for the stored choice (or the editor's draft), with the contrast
-    /// and glass settings.
+    /// and glass opacity settings.
     public func apply(client: ClientSettings = ClientSettingsStore.shared.current, app: NSApplication? = NSApp) {
         SettingsPanelMotion.durationMs = client.int("panelAnimationDurationMs")
         let (input, forced) = runtimeInput(client: client)
@@ -491,11 +536,6 @@ public final class ThemeLibrary {
         }
         for a in ThemeAppearance.allCases {
             guard let id = owner(of: a), let d = definition(id) else { continue }
-            if d.isWindowGlass {
-                // Glass wears the stock palette over a frosted window and frosts every surface.
-                if a == .light { input.glassLight = true } else { input.glassDark = true }
-                continue
-            }
             if d.isDither {
                 // Dither wears its own palette (after Capy), with its picture in the main panel.
                 if a == .light { input.ditherLight = true } else { input.ditherDark = true }

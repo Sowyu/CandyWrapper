@@ -49,12 +49,6 @@ public struct ThemeDefinition: Equatable, Sendable {
 
     public var isBuiltIn: Bool { Self.builtIns.contains { $0.id == id } }
 
-    /// CandyWrapper's own theme, not in T3: T3 Code's stock colors over a window the system frosts with a
-    /// behind-window blur (`WindowGlass`). Its id can't clash with a theme saved in T3, whose ids never
-    /// carry this prefix by convention. The runtime uses its frozen tokens instead of these editor colors.
-    public static let glass = ThemeDefinition(id: "candywrapper-glass", label: "Glass", appearance: .light,
-                                              colors: CandyTheme3669.lightColors, variants: [.dark: CandyTheme3669.darkColors])
-
     /// CandyWrapper's own theme, not in T3: the stock look with a dithered picture the user chose (the desktop picture
     /// until they do) in the main panel (`DitherArtView`). Every other surface stays solid.
     public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Redesign (Experimental)", appearance: .light,
@@ -107,10 +101,9 @@ public struct ThemeDefinition: Equatable, Sendable {
     /// `ThemeRuntime.resolve` swaps it in.
     static let capyLightSuccess = "#0e7a50"
 
-    /// The theme picker's fixed cards: T3's built-ins, then Glass and Dither.
-    public static let pickerBuiltIns = builtIns + [glass, dither]
+    /// The theme picker's fixed cards: T3's built-ins, then Dither.
+    public static let pickerBuiltIns = builtIns + [dither]
 
-    public var isWindowGlass: Bool { id == Self.glass.id }
     public var isDither: Bool { id == Self.dither.id }
 }
 
@@ -120,11 +113,12 @@ public enum ThemePalette {
     public static let reservedIds: Set<String> = ["system", "light", "dark", "t3-chat", "grove", "ocean", "ember", "iris",
                                                   "t3-chat-dark", "t3-grove", "t3-ocean", "t3-ember", "t3-iris",
                                                   "candywrapper-glass", "candywrapper-glass-native", "candywrapper-dither"]
-    static let legacyAliases = ["t3-chat-dark": "t3-chat", "t3-grove": "grove", "t3-ocean": "ocean", "t3-ember": "ember", "t3-iris": "iris",
-                               "candywrapper-glass-native": "candywrapper-glass"]
+    static let legacyAliases = ["t3-chat-dark": "t3-chat", "t3-grove": "grove", "t3-ocean": "ocean", "t3-ember": "ember", "t3-iris": "iris"]
+    /// CandyWrapper's removed Glass theme and its older Glass Native. Their ids stay reserved so no custom theme takes
+    /// them, and a saved choice of either falls back to the default theme (`ThemeLibrary.migrateRemovedGlass`).
+    public static let removedGlassIds: Set<String> = ["candywrapper-glass", "candywrapper-glass-native"]
 
-    /// `normalizeThemeId` (308-310), plus CandyWrapper's removed Glass Native, which reads as Glass (decided
-    /// 2026-10-14, docs/decisions.md). Its id stays reserved so no custom theme takes it.
+    /// `normalizeThemeId` (308-310).
     public static func normalizedId(_ id: String) -> String { legacyAliases[id] ?? id }
 
     /// `isThemeId` (110-112).

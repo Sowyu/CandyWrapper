@@ -256,7 +256,6 @@ public final class DitherProjectPopoverView: DSView, PopupContent {
         return CGSize(width: Self.width, height: Self.searchHeight + 0.5 + projectSectionHeight + noProject + 8 + 2 * Self.rowHeight)
     }
     public override var intrinsicContentSize: NSSize { popupSize }
-    public var frostRadius: CGFloat { DitherChrome.cardRadius }
 
     public override func layout() {
         super.layout()

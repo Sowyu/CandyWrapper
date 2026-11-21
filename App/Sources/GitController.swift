@@ -373,7 +373,7 @@ final class GitController {
         // Dither names the draft's machine in its chip over the composer, so the strip keeps to the checkout.
         let indicator = !(target.isDraft && ThemeRuntime.isDither(dark: panel.effectiveAppearance.isDark))
             && (runOnChoices || (env != nil && target.environmentId != environments.primaryId))
-        let modern = !ThemeRuntime.isDither(dark: strip.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: strip.effectiveAppearance.isDark)
+        let modern = !ThemeRuntime.isDither(dark: strip.effectiveAppearance.isDark)
         strip.showsEnvironment = indicator
         // From a 576pt composer the machine has its own control, so this one is the workspace alone (#27114).
         let split = strip.wideGit

@@ -97,7 +97,6 @@ final class GuestPendingMessagesView: DSView {
 
         func restyle() {
             let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-            bubble.pane = dither
             bubble.fill = dither ? TL.c(\.messageSurface) : nil
             rim.strokeColor = Themed.base("fuchsia-500", 0.5).cgColor(in: self)
         }

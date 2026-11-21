@@ -84,10 +84,10 @@ struct ThreadMinimapHoverTests {
         #expect(zone.frame.contains(NSPoint(x: map.frame.minX - 2, y: map.frame.maxY + 16)), "the arrows keep their own hover")
     }
 
-    enum Theme: CaseIterable { case standard, redesign, glass }
+    enum Theme: CaseIterable { case standard, redesign }
 
     /// T3's resting strips are dim and the strips of turns on screen bright. In every theme, over the background behind
-    /// the rail (T3's panel, or the brightest dot dark and the darkest dot light of Redesign's art and Glass's frost),
+    /// the rail (T3's panel, or the brightest dot dark and the darkest dot light of Redesign's art),
     /// a resting strip keeps at least T3's contrast ratio to an on-screen one, and stays visible over both extremes.
     @Test(arguments: Theme.allCases, [false, true])
     func restingStripsAreDimmerThanOnScreenOnes(_ theme: Theme, dark: Bool) throws {
@@ -95,7 +95,6 @@ struct ThreadMinimapHoverTests {
         defer { ThemeRuntime.apply(previous) }
         var input = previous
         input.ditherLight = theme == .redesign; input.ditherDark = theme == .redesign
-        input.glassLight = theme == .glass; input.glassDark = theme == .glass
         ThemeRuntime.apply(input)
         let (window, map) = makeRail()
         defer { map.removeFromSuperview(); window.close() }

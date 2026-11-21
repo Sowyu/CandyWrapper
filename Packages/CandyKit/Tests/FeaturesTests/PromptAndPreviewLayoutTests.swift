@@ -83,24 +83,6 @@ struct PromptAndPreviewLayoutTests {
     }
 
 
-    @Test func floatingPreviewAndControlBarStayOpaqueInGlass() throws {
-        let previous = ThemeRuntime.input
-        defer { ThemeRuntime.apply(previous) }
-        var glass = ThemeRuntimeInput(glassOpacity: 10)
-        glass.glassLight = true; glass.glassDark = true
-        ThemeRuntime.apply(glass)
-        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-            let preview = BrowserMiniPlayerView(frame: CGRect(x: 0, y: 0, width: 320, height: 233))
-            preview.appearance = NSAppearance(named: appearance)
-            preview.layoutSubtreeIfNeeded()
-            preview.updateLayer()
-            preview.viewer.updateLayer()
-            let card = try #require(preview.subviews.first)
-            #expect(card.layer?.backgroundColor?.alpha == 1)
-            #expect(preview.viewer.bar.layer?.backgroundColor?.alpha == 1)
-        }
-    }
-
     @Test func floatingPreviewFitsSmallCanvases() {
         let canvas = CGRect(x: 0, y: 52, width: 280, height: 400)
         let composer = CGRect(x: 12, y: 300, width: 256, height: 130)

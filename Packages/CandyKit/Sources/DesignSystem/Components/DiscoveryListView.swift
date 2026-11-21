@@ -13,7 +13,7 @@ public final class DiscoveryListView: BoxView {
         var box = BoxStyle()
         box.radius = DesignGeometry.radius(14, in: self)
         box.border = Themed.color(\.contrastBorder, 0.7)
-        box.fill = WindowGlass.paneFill
+        box.fill = Themed.color(\.background)
         boxStyle = box
         rows.forEach(addSubview)
         dividers.forEach { layer?.addSublayer($0) }

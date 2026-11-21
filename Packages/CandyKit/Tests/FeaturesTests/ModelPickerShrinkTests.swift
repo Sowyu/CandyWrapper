@@ -9,14 +9,13 @@ import T3Store
 /// heading, a tab switch, a search, a catalog refresh or a favorite. v1.15.0 trapped on "Show more" then "Show less"
 /// (picker-crash, 2026-11-21): the highlight kept the clicked row's index from the longer list.
 @MainActor @Suite(.serialized) struct ModelPickerShrinkTests {
-    enum Theme: CaseIterable { case standard, redesign, glass }
+    enum Theme: CaseIterable { case standard, redesign }
 
     static func withTheme(_ theme: Theme, stacked: Bool = true, account: Bool = false, _ body: () throws -> Void) rethrows {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         var input = previous
         input.ditherLight = theme == .redesign; input.ditherDark = theme == .redesign
-        input.glassLight = theme == .glass; input.glassDark = theme == .glass
         ThemeRuntime.apply(input)
         try RedesignPickerSettings.$stackedOverride.withValue(stacked) {
             try RedesignPickerSettings.$accountOverride.withValue(account) { try body() }
@@ -120,7 +119,7 @@ import T3Store
 
     /// Every layout and theme the picker has, with the card on and off.
     @Test(arguments: [(Theme.redesign, true, false), (.redesign, true, true), (.redesign, false, false), (.redesign, false, true),
-                      (.standard, true, false), (.glass, true, false)])
+                      (.standard, true, false)])
     func showMoreThenShowLessInEveryLayout(_ theme: Theme, _ stacked: Bool, _ account: Bool) throws {
         try Self.withTheme(theme, stacked: stacked, account: account) {
             let rig = Rig()
@@ -329,7 +328,7 @@ import T3Store
 
     // MARK: Stress
 
-    nonisolated static let sequenceChunks: [(Theme, Bool, Int)] = [(Theme.redesign, true), (.redesign, false), (.standard, true), (.glass, true)]
+    nonisolated static let sequenceChunks: [(Theme, Bool, Int)] = [(Theme.redesign, true), (.redesign, false), (.standard, true)]
         .flatMap { combo in (0..<15).map { (combo.0, combo.1, $0) } }
 
     /// A few thousand random sequences of expand, collapse, tab switch, search, catalog refresh, hover and keys, in both

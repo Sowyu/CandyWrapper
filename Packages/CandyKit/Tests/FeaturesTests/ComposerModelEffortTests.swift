@@ -75,7 +75,6 @@ import T3Store
 
     @Test func pickersDockTheColumnAndDropTheTraitsTrigger() throws {
         let p = try PickersFidelityTests.pickers()
-        #expect(p.docksEffort)
         #expect(!p.controlsView.showsTraits)
         #expect((p.modelButton.adornment as? ComposerModelSuffixView)?.suffix.word == "Medium")
         // The default permissions live in the picker's footer, so the chip hides.

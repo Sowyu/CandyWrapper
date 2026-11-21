@@ -270,17 +270,8 @@ public final class ToastView: DSView {
     public override func updateLayer() { restyle() }
 
 
-    /// Classic Glass's blur under the frosted pane (`WindowGlass.syncPaneBlur`).
-    private var paneBlur: BackdropBlurView?
-    private func syncPaneBlur() { paneBlur = WindowGlass.syncPaneBlur(paneBlur, in: self, radius: 10) }
-    public override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        syncPaneBlur()
-    }
-
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        syncPaneBlur()
         decoration.setNeedsDisplay()
         restyle()
     }
