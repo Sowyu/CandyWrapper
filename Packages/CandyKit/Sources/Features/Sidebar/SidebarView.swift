@@ -1036,8 +1036,39 @@ public final class SidebarContentView: DSView {
         list.tickWorkingRows()
     }
 
+    /// The y of the candy's centre: midway between the traffic lights' bottom and the search icon's top, or
+    /// between the sidebar's top and the search icon with no lights (full screen). Whole points, so it stays crisp.
+    static func brandCentre(lightsBottom: CGFloat?, searchIconTop: CGFloat) -> CGFloat {
+        (((lightsBottom ?? 0) + searchIconTop) / 2).rounded()
+    }
+
+    /// The bottom of the window's close button in this view, measured, so the candy follows wherever the
+    /// window places the lights. Nil in full screen or with the buttons hidden. Without a titled window (offscreen
+    /// renders) a windowed sidebar assumes the 14pt lights centred in the 52pt top bar.
+    private func trafficLightsBottom() -> CGFloat? {
+        if window?.styleMask.contains(.fullScreen) == true { return nil }
+        guard let window, let close = window.standardWindowButton(.closeButton) else {
+            return windowedMac ? SidebarMetrics.topbarHeight / 2 + 7 : nil
+        }
+        guard !close.isHiddenOrHasHiddenAncestor, close.window === window else { return nil }
+        let f = convert(close.bounds, from: close)
+        return isFlipped ? f.maxY : bounds.height - f.minY
+    }
+
+    private var fullScreenObservers: [NSObjectProtocol] = []
+
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        fullScreenObservers.forEach(NotificationCenter.default.removeObserver)
+        fullScreenObservers = []
+        if let window {
+            // The lights leave in full screen; the candy re-centres on each transition.
+            fullScreenObservers = [NSWindow.didEnterFullScreenNotification, NSWindow.didExitFullScreenNotification].map {
+                NotificationCenter.default.addObserver(forName: $0, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.needsLayout = true }
+                }
+            }
+        }
         scheduleLabelTimer()
         DispatchQueue.main.async { [weak self] in self?.revealRouteRow() }
         applyStage()
@@ -1080,9 +1111,13 @@ public final class SidebarContentView: DSView {
         brand.markOnly = capyBrand
         let bs = brand.intrinsicContentSize
         if capyBrand {
-            // One left edge for the whole sidebar: the 16pt icon column of the search and nav rows.
-            trigger.frame = NSRect(x: w - 8 - 28, y: 52 + (brandRow - 28) / 2, width: 28, height: 28)
-            brand.frame = NSRect(x: 16, y: 52 + (brandRow - 28) / 2, width: min(bs.width, max(0, w - 16 - 44)), height: 28)
+            // One left edge for the whole sidebar: the 16pt icon column of the search and nav rows. The candy
+            // centres in the gap between the traffic lights and the search icon (the user, r6), and the collapse
+            // button takes its centre line, its 16pt icon box ending 16 in like the rows' action icons.
+            let searchIconTop = 52 + brandRow + (SidebarNavRowView.height - 16) / 2
+            let centre = Self.brandCentre(lightsBottom: trafficLightsBottom(), searchIconTop: searchIconTop)
+            trigger.frame = NSRect(x: w - 16 - 6 - 16, y: centre - 14, width: 28, height: 28)
+            brand.frame = NSRect(x: 16, y: centre - brand.markCentreY, width: min(bs.width, max(0, w - 16 - 44)), height: 28)
         } else {
             trigger.frame = NSRect(x: controlsLeft + 1, y: (52 - 28) / 2, width: 28, height: 28)
             brand.frame = NSRect(x: SidebarMetrics.titlebarContentLeft(windowedMac: windowedMac), y: 12, width: min(bs.width, max(0, w - 12 - 130)), height: 28)
