@@ -635,6 +635,9 @@ final class MenuRowView: DSView {
     private var glyphView: IconView?
     private var badgeView: IconView?
     private var check: CAShapeLayer?
+    /// Redesign's mark on the chosen radio row: a trailing check in place of T3's resting fill, so a fill always
+    /// means the pointer or the keyboard is on the row.
+    private var chosenMark: IconView?
     private var shortcut: TrackedLabelView?
     private var accessoryView: NSView?
     private var leadingView: NSView?
@@ -675,6 +678,9 @@ final class MenuRowView: DSView {
     var isSeparator: Bool { if case .separator = item.kind { true } else { false } }
     var isCheckbox: Bool { if case .checkbox = item.kind { true } else { false } }
     var isNote: Bool { if case .note = item.kind { true } else { false } }
+    /// A checked radio row, which Redesign marks with a trailing check instead of a fill.
+    var isChosen: Bool { item.isChecked && !isCheckbox }
+    var marksChosenWithCheck: Bool { isChosen && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// The width a note wraps at.
     var wrapWidth: CGFloat = 256
     private var note: TextBlockView?
@@ -714,6 +720,7 @@ final class MenuRowView: DSView {
         if badgeView != nil { w += 8 + 14 }
         if let shortcut { w += (item.detail != nil ? 16 : item.trailingDetail != nil ? 20 : 8) + shortcut.intrinsicContentSize.width }
         if trailing != nil { w += 8 + 14 }
+        if marksChosenWithCheck { w += 8 + 14 }
         if accessoryView != nil { w += 8 + item.accessoryWidth }
         return w
     }
@@ -722,6 +729,7 @@ final class MenuRowView: DSView {
         iconView?.removeFromSuperview(); iconView = nil
         imageView?.removeFromSuperview(); imageView = nil
         trailing?.removeFromSuperview(); trailing = nil
+        chosenMark?.removeFromSuperview(); chosenMark = nil
         glyphView?.removeFromSuperview(); glyphView = nil
         badgeView?.removeFromSuperview(); badgeView = nil
         shortcut?.removeFromSuperview(); shortcut = nil
@@ -799,6 +807,12 @@ final class MenuRowView: DSView {
             addSubview(v)
             trailing = v
         }
+        if isChosen, !isLabel, !isSeparator {
+            // Built for every theme and shown only under Redesign: a theme switch from this very menu restyles it.
+            let v = IconView(name: .check)
+            addSubview(v)
+            chosenMark = v
+        }
         if let s = item.detail {
             let v = TrackedLabelView(s, font: DSFont.ui(14).monospacedDigits, tracking: 0,
                                      color: Themed.color(\.contrastSecondaryLabel), lineHeight: 20)
@@ -838,7 +852,7 @@ final class MenuRowView: DSView {
         box.radius = DesignGeometry.radius(6, in: self)
         let accent = Themed.color(\.accent)
         let selectedFill = Themed.color(\.contrastForeground, 0.08)
-        let selected = item.isChecked && !isCheckbox
+        let selected = isChosen && !marksChosenWithCheck
         switch style {
         case .menu:
             // Radio: highlighted accent wins over the checked fill.
@@ -868,6 +882,9 @@ final class MenuRowView: DSView {
         iconView?.alphaValue = item.iconColor == nil ? 0.8 : 1
         trailing?.strokeColor = Themed.color(\.contrastMutedForeground)
         trailing?.alphaValue = 0.8
+        chosenMark?.isHidden = !marksChosenWithCheck
+        chosenMark?.strokeColor = Themed.color(\.contrastMutedForeground)
+        chosenMark?.alphaValue = 0.8
         glyphView?.strokeColor = Themed.color(\.contrastMutedForeground)
         badgeView?.strokeColor = Themed.color(\.contrastMutedForeground)
         if item.mutedUntilHighlighted {
@@ -886,6 +903,8 @@ final class MenuRowView: DSView {
         super.viewDidChangeEffectiveAppearance()
         fill.setNeedsDisplay()
         restyle()
+        // ponytail: the menu keeps its width when the mark appears on a theme switch, resize the popup if a Redesign-only side clips it
+        needsLayout = true
     }
 
     private let separatorLine = CALayer()
@@ -938,6 +957,10 @@ final class MenuRowView: DSView {
         }
         if let trailing {
             trailing.frame = NSRect(x: trailingX + 2 - 16, y: (bounds.height - 16) / 2, width: 16, height: 16)
+            trailingX -= 14 + 8
+        }
+        if let chosenMark, !chosenMark.isHidden {
+            chosenMark.frame = NSRect(x: trailingX + 2 - 16, y: (bounds.height - item.extraBottom - 16) / 2, width: 16, height: 16)
             trailingX -= 14 + 8
         }
         if let shortcut {
