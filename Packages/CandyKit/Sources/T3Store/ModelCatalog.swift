@@ -272,9 +272,11 @@ public struct ModelPickerSections: Sendable {
 
     /// `selectedKeys` (`instance:slug`): the models a multi-model draft picked, each shown selected
     /// (`selectedModelKeySet`, ModelPickerContent.tsx:219-235); nil marks only the active model.
+    /// `groupsOlder`: Redesign folds every model a newer one of its tier replaced under "Older models", not only those
+    /// the server marks legacy (`ModelGenerations.older`).
     public init(catalog: ProviderCatalog, active: ProviderInstanceId, activeModel: String, favorites: [ModelFavorite],
                 rail selected: ModelPickerRail, query: String, expandedLegacy: Set<ProviderInstanceId>, selectedKeys: Set<String>? = nil, preferences: JSONValue = .object([:]),
-                expandedSubProviders: Set<String> = []) {
+                expandedSubProviders: Set<String> = [], groupsOlder: Bool = false) {
         let favoriteKeys = Set(favorites.map { "\($0.provider.rawValue):\($0.model)" })
         let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
         let visible = catalog.entries.filter(\.isVisibleInPicker)
@@ -348,8 +350,16 @@ public struct ModelPickerSections: Sendable {
                 return
             }
             // A favorited legacy model lists with the current ones (ModelPickerContent.tsx:656-666).
-            let current = items.filter { $0.model.isLegacy != true || $0.isFavorite }
-            let legacy = items.filter { $0.model.isLegacy == true && !$0.isFavorite }
+            var current = items.filter { $0.model.isLegacy != true || $0.isFavorite }
+            var legacy = items.filter { $0.model.isLegacy == true && !$0.isFavorite }
+            if groupsOlder {
+                let keep = Set(items.filter { $0.isFavorite || $0.isSelected }.map(\.model.slug))
+                let older = ModelGenerations.older(items.map(\.model), keep: keep)
+                current = items.filter { !older.contains($0.model.slug) }
+                legacy = items.filter { older.contains($0.model.slug) }
+                // Everything older would leave an empty tab behind a toggle: list them all instead.
+                if current.isEmpty { legacy = []; current = items }
+            }
             if legacy.isEmpty {
                 rows = items.map { .model($0) }
             } else {
@@ -609,5 +619,56 @@ public enum ModelTraits {
         let keptStart = options != nil ? 0 : nextLength - trimmedLength
         let offset = options != nil ? nextLength - length : keptStart - leading
         return ReasoningStep(prompt: next, cursor: min(nextLength, max(keptStart, cursor + offset)), options: options)
+    }
+}
+
+/// Redesign's "Older models" (the user, 2026-11-21: "i only want to see the latest frontier ones"): a provider's models
+/// grouped by tier, the name without its version number, so GPT-6.2-Sol, GPT-6-Sol and GPT-5.6-Sol are one tier and
+/// Claude Opus 5.5 and Claude Opus 5.1 another. The highest version in each tier is current and the rest are older.
+public enum ModelGenerations {
+    /// The slugs of the older models among `models`: those the server marks legacy, and those a higher version of the
+    /// same tier replaced. Custom models, names with no version and every slug in `keep` (the selected model and the
+    /// favorites) never count as older.
+    // ponytail: guesses from names; a "Pro" tier named like a version slips through. Drop the name rule once the server
+    // marks every replaced model `isLegacy`.
+    public static func older(_ models: [ServerProviderModel], keep: Set<String> = []) -> Set<String> {
+        let parsed = models.map { m in (m, m.isCustom ? nil : tierAndVersion(m.name.isEmpty ? m.slug : m.name)) }
+        var newest: [String: [Int]] = [:]
+        for case let (_, (tier, version)?) in parsed {
+            if let top = newest[tier], compare(version, top) <= 0 { continue }
+            newest[tier] = version
+        }
+        var out = Set<String>()
+        for (m, parts) in parsed where !keep.contains(m.slug) && !m.isCustom {
+            if m.isLegacy == true { out.insert(m.slug); continue }
+            guard let (tier, version) = parts, let top = newest[tier] else { continue }
+            if compare(version, top) < 0 { out.insert(m.slug) }
+        }
+        return out
+    }
+
+    /// The name split into its tier and its version: the first word that is a number (`6.2`, `v4`), the rest joined.
+    /// Nil when no word is a number.
+    static func tierAndVersion(_ name: String) -> (tier: String, version: [Int])? {
+        let words = name.lowercased().split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "_" || $0 == "/" })
+        guard let i = words.firstIndex(where: { version($0) != nil }), let v = version(words[i]) else { return nil }
+        var rest = words; rest.remove(at: i)
+        return (rest.joined(separator: " "), v)
+    }
+
+    private static func version(_ word: Substring) -> [Int]? {
+        let digits = word.first == "v" ? word.dropFirst() : word
+        let parts = digits.split(separator: ".", omittingEmptySubsequences: false)
+        guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isASCII) && $0.allSatisfy(\.isNumber) }) else { return nil }
+        return parts.compactMap { Int($0) }
+    }
+
+    /// Part by part as numbers, a missing part as 0, so 6.2 > 6.1 > 6 > 5.6 and 6 == 6.0.
+    static func compare(_ a: [Int], _ b: [Int]) -> Int {
+        for i in 0..<max(a.count, b.count) {
+            let x = i < a.count ? a[i] : 0, y = i < b.count ? b[i] : 0
+            if x != y { return x < y ? -1 : 1 }
+        }
+        return 0
     }
 }

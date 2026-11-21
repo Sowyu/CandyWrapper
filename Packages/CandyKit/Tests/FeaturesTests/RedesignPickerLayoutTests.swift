@@ -25,7 +25,7 @@ import T3Store
 
     static func catalog(models n: Int) -> ProviderCatalog {
         let claude = ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", displayName: "Claude",
-                                    models: (1...n).map { ServerProviderModel(slug: "m\($0)", name: "Claude Model \($0)") })
+                                    models: (1...n).map { ServerProviderModel(slug: "m\($0)", name: "Claude Model #\($0)") })
         let codex = ServerProvider(instanceId: "codex", driver: "codex", displayName: "Codex",
                                    models: [ServerProviderModel(slug: "gpt", name: "GPT")])
         return ProviderCatalog([claude, codex])
@@ -289,9 +289,9 @@ import T3Store
             if stacked {
                 #expect(dock.bounds.width == 335 && dock.column.frame.minY == picker.frame.maxY)
             } else {
-                // The list and the details pane side by side over Reasoning and the footer; the card tops the pane.
-                #expect(dock.bounds.width == picker.frame.width + dock.pane.frame.width && dock.pane.frame.minX == picker.frame.maxX)
-                #expect(dock.column.frame.minY == picker.frame.maxY && dock.column.frame.minX == 0)
+                // The list card and the details card 6pt apart over the bottom row; the account card tops the details.
+                #expect(dock.bounds.width == picker.frame.width + 6 + dock.pane.frame.width + 6 && dock.pane.frame.minX == picker.frame.maxX + 6)
+                #expect(dock.column.frame.minY == picker.frame.maxY + 6 && dock.column.frame.minX == 0)
                 #expect(Self.cards(picker).isEmpty && (Self.cards(dock.pane).first != nil) == account)
                 return
             }

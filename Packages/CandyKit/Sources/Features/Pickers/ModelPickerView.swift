@@ -43,8 +43,12 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     var dockedCapy: Bool { docked && capy }
     /// The stacked layout shows at most this many rows before it scrolls, so it never outgrows the window.
     static let stackedVisibleRows = 6
-    /// Rail and list in the detail layout.
+    /// The list card's right edge at the default details width, the rail included.
     static let detailListWidth: CGFloat = 300
+    /// The detail layout's list card holds the search row over a hairline, then the rows; the rail sits left of it.
+    static let detailSearchRow: CGFloat = 34
+    /// The list card's left edge in the detail layout: 6pt in, or 6pt past the rail.
+    var detailListLeft: CGFloat { sections.showsRail ? 6 + 32 + 6 : 6 }
     /// The highlight, or the rows under it, changed.
     var onHighlightChange: (@MainActor () -> Void)?
     /// The open provider's project models are still being scanned (ModelPickerContent.tsx:1225-1231 at 4928, #24585).
@@ -90,6 +94,8 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     private let divider = CALayer()
     private let indicator = CALayer()
     private let underline = CALayer()
+    /// The detail layout's list card (card option 2, 2026-11-21).
+    private let listCard = CALayer()
     private let searchIcon = IconView(name: .search, size: 16)
     private let list = DSView()
     private let emptyLabel = LabelView("No models found", font: DSFont.ui(14))
@@ -116,17 +122,19 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         self.activeModel = activeModel
         rail = ModelPickerSections.initialRail(active: active, favorites: favorites, catalog: catalog)
         // Opens the legacy group on an active legacy model unless it is a favorite (ModelPickerContent.tsx:433-440).
-        if let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true,
+        // Redesign lists the selected model above its Older models row instead, and the row opens closed.
+        if !ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark),
+           let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true,
            !favorites.contains(ModelFavorite(provider: active, model: activeModel)) { expandedLegacy = [active] }
         // The thread's backend opens expanded, so its models show without a click (ModelPickerContent.tsx:470-476).
         if let sub = catalog.entry(active)?.model(activeModel)?.subProvider { expandedSubProviders = [ModelPickerRow.subProviderKey(active, sub)] }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: "", expandedLegacy: expandedLegacy, preferences: self.preferences,
-                                       expandedSubProviders: expandedSubProviders)
+                                       expandedSubProviders: expandedSubProviders, groupsOlder: ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark))
         favoritesButton = RailButtonView(kind: .favorites)
         super.init(frame: .zero)
         clipsToBounds = true
-        for l in [railFill, mainFill, mainBorder, divider, indicator, underline, cardLine] {
+        for l in [listCard, railFill, mainFill, mainBorder, divider, indicator, underline, cardLine] {
             l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
             layer?.addSublayer(l)
         }
@@ -178,7 +186,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences,
-                                       expandedSubProviders: expandedSubProviders)
+                                       expandedSubProviders: expandedSubProviders, groupsOlder: capy)
         if !capy, !searching {
             // T3 3814 ModelPickerContent.tsx:583-610,832-836 fits the tallest eligible tab.
             let tabs: [ModelPickerRail] = [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) }
@@ -399,10 +407,11 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     /// The list's padding over the first row (Redesign: the card, its hairline and the "Models" label) and under the last.
     private var listTop: CGFloat {
         if stacked { return card.map { $0.preferredHeight + 1 + 6 } ?? 6 }
+        if detailed { return 5 }
         return capy ? (card.map { $0.preferredHeight + 1 + 28 } ?? 6) : 10
     }
     private var tabsH: CGFloat { stacked && sections.showsRail ? Self.tabsHeight : 0 }
-    private var listBottom: CGFloat { capy ? 6 : 10 }
+    private var listBottom: CGFloat { detailed ? 5 : capy ? 6 : 10 }
 
     private var listContentHeight: CGFloat {
         sections.rows.isEmpty ? 0 : sections.rows.map { height($0, mixed: mixesProviders) }.reduce(0, +) + CGFloat(sections.rows.count - 1) * rowGap
@@ -420,7 +429,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             // The rows' own height; the dock sets the popup's height from this and the pane, within a floor and a ceiling.
             if let frozenHeight { return CGSize(width: Self.detailListWidth, height: frozenHeight) }
             let list = sections.rows.isEmpty ? listTop + 36 : listContentHeight + listTop + listBottom
-            return CGSize(width: Self.detailListWidth, height: searchH + list)
+            return CGSize(width: Self.detailListWidth, height: 6 + Self.detailSearchRow + 1 + list + 1)
         }
         if docked { return CGSize(width: Self.width(capy), height: capy ? Self.capyHeight : Self.maxHeight) }
         if let frozenHeight { return CGSize(width: Self.width(capy), height: frozenHeight) }
@@ -461,7 +470,9 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
 
     override func layout() {
         super.layout()
+        listCard.isHidden = !detailed
         if stacked { layoutStacked(); return }
+        if detailed { layoutDetailed(); return }
         if capy { layoutCapy(); return }
         let railShown = sections.showsRail
         let mainX = railShown ? Self.railWidth : 0
@@ -517,9 +528,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         for l in [railFill, mainFill, divider, indicator] { l.isHidden = true }
         sharing?.frame = NSRect(x: 0, y: bodyHeight, width: bounds.width, height: footerHeight)
         search.frame = NSRect(x: 14, y: 7, width: bounds.width - 28, height: 26)
-        // The detail layout keeps the stacked picker's search with its icon.
-        searchIcon.isHidden = !detailed
-        if detailed { searchIcon.frame = NSRect(x: 14, y: 12, width: 16, height: 16) }
+        searchIcon.isHidden = true
         underline.frame = CGRect(x: 0, y: searchH - 1, width: bounds.width, height: 1)
         mainBorder.isHidden = !railShown
         mainBorder.frame = CGRect(x: mainX, y: searchH, width: 1, height: max(0, bodyHeight - searchH))
@@ -544,6 +553,35 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         var y = listTop - scrollOffset
         for row in rowViews {
             row.frame = NSRect(x: 6, y: y, width: inner, height: rowH)
+            y += rowH + rowGap
+        }
+        emptyLabel.frame = NSRect(x: 8, y: listTop + 2, width: list.bounds.width - 16, height: 20)
+    }
+
+    /// Redesign's detail layout on the dock's darker ground: the rail 6pt in, and the list card 6pt past it with the search
+    /// as its top row over the card's only hairline, then the rows 6pt in from the card's edges.
+    private func layoutDetailed() {
+        for l in [railFill, mainFill, divider, indicator, mainBorder, cardLine] { l.isHidden = true }
+        sharing?.frame = NSRect(x: 0, y: bodyHeight, width: bounds.width, height: footerHeight)
+        let railShown = sections.showsRail
+        for (i, b) in allRailButtons.enumerated() {
+            b.isHidden = !railShown
+            b.frame = NSRect(x: 6, y: 6 + CGFloat(i) * 36, width: 32, height: 32)
+        }
+        let cardX = detailListLeft, cardW = max(0, bounds.width - cardX)
+        listCard.frame = CGRect(x: cardX, y: 6, width: cardW, height: max(0, bodyHeight - 6))
+        searchIcon.isHidden = false
+        searchIcon.frame = NSRect(x: cardX + 10, y: 6 + 9, width: 16, height: 16)
+        search.frame = NSRect(x: cardX + 10, y: 6 + 4, width: max(0, cardW - 20), height: 26)
+        // The hairline ends at the card's edges, under its rim.
+        underline.frame = CGRect(x: cardX, y: 6 + Self.detailSearchRow, width: cardW, height: 1)
+        let listY = 6 + Self.detailSearchRow + 1
+        list.frame = NSRect(x: cardX + 1, y: listY, width: max(0, cardW - 2), height: max(0, bodyHeight - listY - 1))
+        scrollOffset = min(scrollOffset, maxScroll)
+        let inner = list.bounds.width - 10
+        var y = listTop - scrollOffset
+        for row in rowViews {
+            row.frame = NSRect(x: 5, y: y, width: inner, height: rowH)
             y += rowH + rowGap
         }
         emptyLabel.frame = NSRect(x: 8, y: listTop + 2, width: list.bounds.width - 16, height: 20)
@@ -611,9 +649,19 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     }
 
     override func updateLayer() {
+        if detailed {
+            // The Settings window's page card: the content ground and the rim (AppRouteModalView.updateLayer).
+            let rim = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
+            listCard.backgroundColor = Themed.color(\.background).cgColor(in: self)
+            listCard.borderWidth = 1
+            listCard.borderColor = rim
+            listCard.cornerRadius = RedesignTokens.Radius.control
+            listCard.cornerCurve = .continuous
+            underline.backgroundColor = rim
+        }
         if capy {
             mainBorder.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
-            underline.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+            if !detailed { underline.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self) }
             cardLine.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
             sectionLabel.color = Themed.color(\.contrastMutedForeground)
             emptyLabel.color = Themed.color(\.contrastMutedForeground)
@@ -981,6 +1029,17 @@ final class ModelRowView: DSView {
             case .subProvider:
                 name.font = DSFont.ui(14, weight: .regular)
             }
+        }
+        if capy, case .legacy(_, let count, let expanded) = row {
+            // Redesign's Older models row: the count and a chevron that turns up while the group is open.
+            name.text = "Older models"
+            secondary.text = String(count)
+            secondary.isHidden = false
+            chevron?.removeFromSuperview()
+            let c = IconView(name: expanded ? .chevronUp : .chevronDown, size: 16)
+            addSubview(c)
+            chevron = c
+            setAccessibilityExpanded(expanded)
         }
         restyle()
     }

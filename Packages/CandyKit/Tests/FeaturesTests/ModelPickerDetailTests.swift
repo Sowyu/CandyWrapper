@@ -66,7 +66,7 @@ import T3Store
     // MARK: Layout
 
     static func catalog(_ count: Int) -> ProviderCatalog {
-        let models = (1...count).map { ServerProviderModel(slug: "m\($0)", name: "Claude Model \($0)") }
+        let models = (1...count).map { ServerProviderModel(slug: "m\($0)", name: "Claude Model #\($0)") }
         return ProviderCatalog([ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", displayName: "Claude", models: models),
                                 ServerProvider(instanceId: "codex", driver: "codex", displayName: "Codex", models: [ServerProviderModel(slug: "gpt-6-astra", name: "GPT-6 Astra")])])
     }
@@ -78,10 +78,11 @@ import T3Store
             #expect(rig.dock.detailed && !rig.dock.stacked)
             let top = rig.dock.detailTopHeight
             #expect(top >= DockedModelPickerView.detailMinHeight && top <= DockedModelPickerView.detailMaxHeight)
-            #expect(rig.dock.naturalSize.width == ModelPickerView.detailListWidth + ModelDetailPaneView.width)
-            // The Reasoning row is one 28pt track with its heading on the same line.
-            #expect(rig.dock.column.frame.height == CGFloat(8 + 28 + 8), "\(rig.dock.column.frame) lines \(rig.dock.column.levelLines.map(\.frame))")
-            #expect(rig.dock.pane.frame.minX == ModelPickerView.detailListWidth)
+            #expect(rig.dock.naturalSize.width == ModelPickerView.detailListWidth + ModelDetailPaneView.width + 12)
+            // The bottom row is one 28pt line 6pt under the cards and 6pt over the popup's edge.
+            #expect(rig.dock.column.frame.height == CGFloat(28 + 6), "\(rig.dock.column.frame) lines \(rig.dock.column.levelLines.map(\.frame))")
+            #expect(rig.dock.column.frame.minY == rig.dock.pane.frame.maxY + 6)
+            #expect(rig.dock.pane.frame.minX == ModelPickerView.detailListWidth + 6)
             if count == 1 { #expect(top == DockedModelPickerView.detailMinHeight) }
             if count == 30 { #expect(top == DockedModelPickerView.detailMaxHeight) }
             // Under the ceiling, no Claude model row hides below the list.
@@ -95,8 +96,66 @@ import T3Store
             let with = rig.dock.naturalSize.height
             rig.dock.column.update(descriptors: [], ultrathink: false, locked: false, model: "Haiku")
             rig.lay()
+            // Fast and Ultracode keep the line, at the right.
+            #expect(rig.dock.column.frame.height == 34 && rig.dock.naturalSize.height == with)
+            #expect(rig.dock.footer.frame.maxX == rig.dock.bounds.width - 6)
+            rig.dock.footer.update(descriptors: [], runtimeMode: .fullAccess)
+            rig.lay()
             #expect(rig.dock.column.frame.height == 0)
-            #expect(rig.dock.naturalSize.height == with - 44)
+            #expect(rig.dock.naturalSize.height == with - 34)
+        }
+    }
+
+    /// Option A1: the levels at the left sized to their labels, Fast and Ultracode at the right, no Permissions, nothing
+    /// clipped or overlapping with five levels including "Extra high", at the default width and with the details card widest.
+    @Test func theBottomRowIsOneLineThatFits() throws {
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let rig = ModelPickerShrinkTests.Rig(), dock = rig.dock
+            #expect(dock.footer.permissions == nil && dock.footer.items.count == 3)
+            for paneWidth in [dock.paneLimits.lowerBound, ModelDetailPaneView.width, dock.paneLimits.upperBound] {
+                dock.paneHandle.onResize?(paneWidth)
+                rig.lay()
+                let track = try #require(dock.column.levelLines.first)
+                #expect(dock.column.levelLines.count == 1 && dock.column.segments.count == 5)
+                #expect(track.frame.minX == 6 && track.frame.width == track.naturalWidth)
+                #expect(track.segments.last.map { $0.frame.maxX <= track.bounds.width } == true)
+                #expect(track.segments.allSatisfy { $0.frame.width >= $0.naturalWidth })
+                let trackRight = dock.column.convert(track.frame, to: dock).maxX
+                #expect(trackRight + 6 <= dock.footer.frame.minX, "the track \(trackRight) runs into the footer \(dock.footer.frame)")
+                #expect(dock.footer.frame.maxX == dock.bounds.width - 6)
+                #expect(dock.footer.frame.minY == dock.column.frame.minY + dock.column.convert(track.frame, to: dock.column).minY)
+                #expect(dock.pane.frame.maxX == dock.bounds.width - 6 && dock.pane.frame.width == paneWidth)
+            }
+            dock.paneHandle.onReset?()
+        }
+    }
+
+    /// Dragging the details card's left edge: the drag math clamps, commits once, and double-click restores the default.
+    @Test func theDetailsCardResizes() throws {
+        #expect(ModelDetailPaneResizeHandle.width(from: 276, startX: 500, to: 450, in: 240...332) == 326)
+        #expect(ModelDetailPaneResizeHandle.width(from: 276, startX: 500, to: 300, in: 240...332) == 332)
+        #expect(ModelDetailPaneResizeHandle.width(from: 276, startX: 500, to: 600, in: 240...332) == 240)
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let rig = ModelPickerShrinkTests.Rig(), dock = rig.dock
+            let width = dock.bounds.width, height = dock.bounds.height
+            #expect(dock.paneWidth == ModelDetailPaneView.width)
+            #expect(dock.paneLimits.lowerBound == ModelDetailPaneView.minWidth)
+            #expect(width - dock.paneLimits.upperBound - 18 - dock.picker.detailListLeft == DockedModelPickerView.minListWidth)
+            // The 5pt strip sits in the gap between the cards.
+            #expect(dock.paneHandle.frame.width == 5 && dock.paneHandle.frame.minX > dock.picker.frame.maxX && dock.paneHandle.frame.maxX < dock.pane.frame.minX)
+            dock.paneHandle.onResize?(300)
+            rig.lay()
+            #expect(dock.pane.frame.width == 300 && dock.pane.frame.minX == width - 6 - 300)
+            #expect(dock.picker.frame.maxX == dock.pane.frame.minX - 6)
+            #expect(dock.bounds.width == width && dock.bounds.height == height, "the popup keeps its size while the cards trade width")
+            #expect(RedesignPickerSettings.paneWidth == nil, "nothing saves mid-drag")
+            dock.paneHandle.onCommit?()
+            #expect(RedesignPickerSettings.paneWidth == 300)
+            // A new popup opens at the saved width.
+            let again = ModelPickerShrinkTests.Rig()
+            #expect(again.dock.pane.frame.width == 300)
+            dock.paneHandle.onReset?()
+            #expect(RedesignPickerSettings.paneWidth == nil && dock.paneWidth == ModelDetailPaneView.width)
         }
     }
 
