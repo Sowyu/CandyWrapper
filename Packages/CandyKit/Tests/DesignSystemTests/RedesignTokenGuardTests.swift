@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// Redesign draws every corner radius, shadow and surface opacity from `RedesignTokens` (docs/research/redesign-system.md).
+/// Redesign draws every corner radius, shadow, surface opacity and animation duration from `RedesignTokens` (docs/research/redesign-system.md).
 /// This reads the sources and fails on a literal one on a Redesign code path, so a tenth radius can't come back.
 ///
 /// A Redesign code path is a file named `*Dither*` or `*Redesign*`, the body of a `Dither*` or `Redesign*` type, the body
@@ -24,6 +24,9 @@ struct RedesignTokenGuardTests {
         ("alpha", #"white\(|black\(|alpha:|[oO]pacity|AlphaComponent"#,
          [#"(?:white|black)\("# + number + #"\)"#, #"alpha:\s*"# + number, #"withAlphaComponent\("# + number + #"\)"#,
           #"[oO]pacity\s*=\s*"# + number]),
+        ("duration", #"[dD]uration"#,
+         [#"\b(?:duration|animationDuration)\s*=\s*"# + number,
+          #"(?:setAnimationDuration\(|withDuration:\s*|\bduration:\s*)"# + number]),
     ]
     static let flag = #"(?:ThemeRuntime\.isDither\([^)]*\)|isDither|dither\w*|capy|plain|frost)"#
 
@@ -112,7 +115,9 @@ struct RedesignTokenGuardTests {
     @Test func redesignDrawsOnlyFromTokens() {
         let files = Self.sources()
         #expect(files.count > 100, "found the sources")
+        // The picture's own resolve-in (DitherArtView) predates the motion tokens and is owned with the picture.
         let hits = files.flatMap { Self.scan(file: $0, root: Self.repo) }
+            .filter { !($0.kind == "duration" && $0.place.contains("DitherArtView.swift")) }
         #expect(hits.isEmpty, "Redesign literals outside RedesignTokens:\n\(hits.map(\.description).joined(separator: "\n"))")
     }
 
@@ -134,9 +139,11 @@ struct RedesignTokenGuardTests {
             fill = isDither ? Themed.white(0.07) : Themed.white(0.2)
             box.radius = dither ? RedesignTokens.Radius.control : 22
             layer.cornerRadius = 4
+            if dither { a.duration = 0.18 }
+            a.duration = dither ? RedesignTokens.Motion.fast : 0.2
         }
         """.write(to: file, atomically: true, encoding: .utf8)
         let hits = Self.scan(file: file, root: dir)
-        #expect(hits.map(\.value).sorted() == [0.07, 0.3, 9, 10], "\(hits)")
+        #expect(hits.map(\.value).sorted() == [0.07, 0.18, 0.3, 9, 10], "\(hits)")
     }
 }

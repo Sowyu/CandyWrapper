@@ -235,8 +235,9 @@ public final class AppRouteModalView: DSView {
 
     private func animate(entering: Bool, completion: (@MainActor () -> Void)? = nil) {
         guard !Motion.reduced, let surfaceLayer = popup.layer else { completion?(); return }
+        let scale = isDither ? RedesignTokens.Motion.scale : 0.985
         var hidden = CATransform3DMakeTranslation(surface.bounds.width / 2, surface.bounds.height / 2, 0)
-        hidden = CATransform3DScale(hidden, 0.985, 0.985, 1)
+        hidden = CATransform3DScale(hidden, scale, scale, 1)
         hidden = CATransform3DTranslate(hidden, -surface.bounds.width / 2, -surface.bounds.height / 2, 0)
         CATransaction.begin()
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion?() } }
@@ -249,8 +250,14 @@ public final class AppRouteModalView: DSView {
             let animation = CABasicAnimation(keyPath: key)
             animation.fromValue = entering ? from : to
             animation.toValue = entering ? to : from
-            animation.duration = duration
-            animation.timingFunction = key == "opacity" && duration == 0.2 ? Motion.easeInOut : CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+            if isDither {
+                // Redesign: the backdrop over `large`, the surface over `standard`, both out over `fast`.
+                animation.duration = RedesignMotion.modal(backdrop: target !== surfaceLayer, entering: entering)
+                animation.timingFunction = RedesignTokens.Motion.timing(entering: entering)
+            } else {
+                animation.duration = duration
+                animation.timingFunction = key == "opacity" && duration == 0.2 ? Motion.easeInOut : CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
+            }
             animation.fillMode = .forwards
             animation.isRemovedOnCompletion = entering
             target.add(animation, forKey: key)

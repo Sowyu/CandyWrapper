@@ -87,12 +87,14 @@ public final class ToastViewport: DSView {
             let target = Self.transform(slot, width: bounds.width)
             let opacity: Float = slot.limited ? 0 : 1
             if view.id == entering, animated, !Motion.reduced {
-                // Top-right enter: from translateX(100% + inset) at the slot's y, opacity 0.
-                let from = CATransform3DMakeTranslation(bounds.width + Self.inset, slot.translateY, 0)
-                animate(view, transform: (from, target), opacity: (0, opacity))
+                // Top-right enter: from translateX(100% + inset) at the slot's y, opacity 0. Redesign drops it in
+                // from `rise` above its slot, as a pill appears.
+                let from = dither ? CATransform3DConcat(target, CATransform3DMakeTranslation(0, -RedesignTokens.Motion.rise, 0))
+                    : CATransform3DMakeTranslation(bounds.width + Self.inset, slot.translateY, 0)
+                animate(view, transform: (from, target), opacity: (0, opacity), phase: .entering)
             } else if animated, !Motion.reduced {
                 animate(view, transform: (view.layer?.presentation()?.sublayerTransform ?? target, target),
-                        opacity: (view.layer?.presentation()?.opacity ?? opacity, opacity))
+                        opacity: (view.layer?.presentation()?.opacity ?? opacity, opacity), phase: .moving)
             }
             view.layer?.sublayerTransform = target
             view.alphaValue = CGFloat(opacity)
@@ -108,8 +110,12 @@ public final class ToastViewport: DSView {
         return CATransform3DTranslate(t, -width / 2, 0, 0)
     }
 
-    /// `transform .5s cubic-bezier(.22,1,.36,1), opacity .5s` (opacity on the default `ease`).
-    private func animate(_ view: NSView, transform: (CATransform3D, CATransform3D), opacity: (Float, Float),
+    private enum Phase { case entering, moving, leaving }
+    private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+
+    /// `transform .5s cubic-bezier(.22,1,.36,1), opacity .5s` (opacity on the default `ease`). Redesign: `large` in,
+    /// `standard` to restack, `fast` out.
+    private func animate(_ view: NSView, transform: (CATransform3D, CATransform3D), opacity: (Float, Float), phase: Phase,
                          completion: (@MainActor () -> Void)? = nil) {
         guard let layer = view.layer else { return }
         CATransaction.begin()
@@ -124,6 +130,13 @@ public final class ToastViewport: DSView {
         o.toValue = opacity.1
         o.duration = 0.5
         o.timingFunction = CAMediaTimingFunction(name: .default)
+        if dither {
+            let m = RedesignTokens.Motion.self
+            for a in [t, o] {
+                a.duration = phase == .entering ? m.large : phase == .moving ? m.standard : m.fast
+                a.timingFunction = m.timing(entering: phase != .leaving)
+            }
+        }
         layer.add(t, forKey: "sublayerTransform")
         layer.add(o, forKey: "opacity")
         CATransaction.commit()
@@ -135,6 +148,10 @@ public final class ToastViewport: DSView {
         let end: CATransform3D
         if let swipe, abs(swipe.y) > abs(swipe.x) {
             end = CATransform3DMakeTranslation(0, fromY + swipe.y - view.bounds.height - Self.inset, 0)
+        } else if dither, swipe == nil {
+            // Redesign: lifts `rise` and fades where it is.
+            end = CATransform3DConcat(view.layer?.sublayerTransform ?? CATransform3DIdentity,
+                                      CATransform3DMakeTranslation(0, -RedesignTokens.Motion.rise, 0))
         } else {
             end = CATransform3DMakeTranslation((swipe?.x ?? 0) + w, fromY, 0)
         }
@@ -142,7 +159,9 @@ public final class ToastViewport: DSView {
         let start = view.layer?.presentation()?.sublayerTransform ?? view.layer?.sublayerTransform ?? CATransform3DIdentity
         view.layer?.sublayerTransform = end
         view.alphaValue = 0
-        animate(view, transform: (start, end), opacity: (view.layer?.presentation()?.opacity ?? 1, 0)) { view.removeFromSuperview() }
+        animate(view, transform: (start, end), opacity: (view.layer?.presentation()?.opacity ?? 1, 0), phase: .leaving) {
+            view.removeFromSuperview()
+        }
     }
 
     // MARK: Swipe

@@ -130,14 +130,37 @@ public enum RedesignTokens {
         }
     }
 
-    /// One curve; hover and press take `quick`, popovers and pills that appear take `appear`.
+    /// Redesign's one motion system (docs/research/redesign-motion-2026-11-21.md). Three durations, one curve in and one
+    /// out. Everything that opens (menus, popovers, pills, toasts, modals, the right panel) moves with these; nothing
+    /// runs longer than `large`, and no surface waits for its animation before it takes clicks or keys.
     public enum Motion {
-        public static let quick: CFTimeInterval = 0.15
-        public static let appear: CFTimeInterval = 0.2
-        /// Capy's ease, `cubic-bezier(0.23, 1, 0.32, 1)`.
+        /// Exits, the hover fade out and the press.
+        public static let fast: CFTimeInterval = 0.12
+        /// Menus, popovers, pills, toasts restacking, the segmented selection.
+        public static let standard: CFTimeInterval = 0.15
+        /// Modals and their backdrop, the right panel, toasts arriving.
+        public static let large: CFTimeInterval = 0.2
+        /// One cycle of a decorative loop: the skeleton's pulse, the waiting chip's dots. Loops run only while shown.
+        public static let loop: CFTimeInterval = 1.2
+        /// Earlier names, kept for the gallery and chart code that uses them.
+        public static let quick = standard
+        public static let appear = large
+        /// Capy's ease-out, `cubic-bezier(0.23, 1, 0.32, 1)`, for everything that arrives or moves.
         @MainActor public static let curve = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
-        /// How far a pill or popover rises as it appears.
+        /// The ease-in for everything that leaves.
+        @MainActor public static let exitCurve = CAMediaTimingFunction(controlPoints: 0.4, 0, 1, 1)
+        /// How far a pill or toast travels as it appears or leaves.
         public static let rise: CGFloat = 4
+        /// The scale a popover, menu or modal opens from and closes to, about its anchor edge.
+        public static let scale: CGFloat = 0.98
+        /// A pressed button's scale.
+        public static let pressScale: CGFloat = 0.98
+        /// How far the right panel travels as it opens or closes.
+        public static let panelShift: CGFloat = 12
+
+        @MainActor public static func timing(entering: Bool) -> CAMediaTimingFunction { entering ? curve : exitCurve }
+        /// `standard` in, `fast` out.
+        public static func popover(entering: Bool) -> CFTimeInterval { entering ? standard : fast }
     }
 }
 

@@ -133,7 +133,7 @@ public final class DitherTabStripView: TopbarDragView {
     /// The dragged tab: its index, how far the pointer moved, the index it would drop at and where the tabs rest.
     private var drag: (index: Int, offset: CGFloat, over: Int, rest: [NSRect])?
     /// Capy's tab reorder: 150ms `cubic-bezier(0.23, 1, 0.32, 1)` (capy-design.md).
-    private static let slide = (duration: 0.15, timing: CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1))
+    private static let slide = (duration: RedesignTokens.Motion.standard, timing: RedesignTokens.Motion.curve)
 
     private func dragTab(_ id: String, _ phase: TabView.DragPhase) {
         guard let index = views.firstIndex(where: { $0.tab.id == id }) else { return }

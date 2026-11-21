@@ -533,9 +533,11 @@ public final class CommandPaletteOverlay: DSView {
     /// The dialog popup's motion: scale from .98 and fade, backdrop fade, 200ms.
     private func animate(entering: Bool, completion: (@MainActor () -> Void)? = nil) {
         guard let layer, let panelLayer = controller.view.layer, !Motion.reduced else { completion?(); return }
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let scale = dither ? RedesignTokens.Motion.scale : 0.98
         let f = controller.view.frame
         var hidden = CATransform3DMakeTranslation(f.width / 2, f.height / 2, 0)
-        hidden = CATransform3DScale(hidden, 0.98, 0.98, 1)
+        hidden = CATransform3DScale(hidden, scale, scale, 1)
         hidden = CATransform3DTranslate(hidden, -f.width / 2, -f.height / 2, 0)
         CATransaction.begin()
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion?() } }
@@ -546,8 +548,8 @@ public final class CommandPaletteOverlay: DSView {
             let a = CABasicAnimation(keyPath: key)
             a.fromValue = from
             a.toValue = to
-            a.duration = 0.2
-            a.timingFunction = Motion.easeInOut
+            a.duration = dither ? RedesignMotion.modal(backdrop: target === layer, entering: entering) : 0.2
+            a.timingFunction = dither ? RedesignTokens.Motion.timing(entering: entering) : Motion.easeInOut
             a.fillMode = .forwards
             a.isRemovedOnCompletion = entering
             target.add(a, forKey: key)

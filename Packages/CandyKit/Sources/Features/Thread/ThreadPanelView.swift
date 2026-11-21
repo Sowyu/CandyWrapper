@@ -1262,6 +1262,11 @@ public final class ThreadPanelView: DSView {
         // A closing panel gives back its surfaces at once (`RightPanelView.apply`); a still image of it slides away.
         if slides, !open { panelGhost = ghost(of: rightPanel, replacing: panelGhost) }
         if open { dropGhost(&panelGhost) }
+        // Redesign with Panel animations off (T3's default, 0 ms): the panel takes its room at once and its surface
+        // slides in from the edge (`RedesignMotion.panel`); a closing one leaves as a still image.
+        let redesignMotion = animated && open != wasOpen && !slides && window != nil
+            && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if redesignMotion, !open { leaveAsStill(rightPanel) }
         // 5088aff613 (PreviewPanelShell.tsx:110-138): an inline panel that closes with the keyboard inside
         // hands it to the panel toggle; AppKit would leave it on the window.
         let focusLeaves = wasOpen && !open && !rightPanel.isSheet
@@ -1289,6 +1294,24 @@ public final class ThreadPanelView: DSView {
             panelSlide.run(to: open ? 1 : 0, duration: slides ? SettingsPanelMotion.duration : 0, in: self)
             layoutNow()
         }
+        if redesignMotion, open {
+            if let layer = rightPanel.layer { RedesignMotion.panel(layer, entering: true) }
+            if !rightPanelBackdrop.isHidden, let layer = rightPanelBackdrop.layer { RedesignMotion.fade(layer) }
+        }
+    }
+
+    /// Redesign: a still image of `view` leaves over it the way `RedesignMotion.panel` closes, then goes.
+    private func leaveAsStill(_ view: NSView) {
+        guard !view.isHidden, view.bounds.width > 0, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let still = CALayer()
+        still.contents = bitmap.cgImage
+        still.contentsScale = window?.backingScaleFactor ?? 2
+        still.frame = view.frame
+        still.zPosition = 21
+        Self.copyCorners(of: view, to: still)
+        layer?.addSublayer(still)
+        RedesignMotion.panel(still, entering: false) { still.removeFromSuperlayer() }
     }
 
     /// The terminal and panel toggles sit on the panel's tab bar while the panel shows, closing slide
@@ -2126,7 +2149,13 @@ public final class ThreadPanelView: DSView {
         }
         if let pill = lazyScrollToEndPill.loaded, shown.contains(where: { $0 === pill }) { pill.isHidden = false }
 
-        // The menus float as panels: `/` above the composer, the stash list above its pill.
+        // The menus float as panels: `/` above the composer, the stash list above its pill. They open like a pill and
+        // close at once, as a choice in them takes effect.
+        let menuWasShown = !commandMenu.isHidden, stashWasShown = lazyStashMenu.loaded.map { !$0.isHidden } ?? false
+        defer {
+            if menuShown, !menuWasShown, window != nil, let layer = commandMenu.layer { RedesignMotion.pill(layer, entering: true) }
+            if stashShown, !stashWasShown, window != nil, let layer = stashMenu.layer { RedesignMotion.pill(layer, entering: true) }
+        }
         commandMenu.isHidden = !menuShown
         commandMenu.placement = .floating
         if menuShown {
@@ -2176,8 +2205,8 @@ public final class ThreadPanelView: DSView {
         }
     }
 
-    /// New pills rise 4pt and fade in, leaving ones fade out where they were, and when the set changes the others slide
-    /// to their new rows over the same 150 ms. Nothing runs while the set stays the same (typing, resizing).
+    /// New pills rise and fade in, leaving ones sink and fade out (`RedesignMotion.pill`), and when the set changes the
+    /// others slide to their new rows over `standard`. Nothing runs while the set stays the same (typing, resizing).
     private func animateDitherDock(shown: [NSView], oldFrames: [ObjectIdentifier: NSRect], exiting: NSView?) {
         let before = ditherShown
         ditherShown = shown
@@ -2187,28 +2216,26 @@ public final class ThreadPanelView: DSView {
         guard changed else { return }
         for view in shown where oldFrames[ObjectIdentifier(view)] == nil {
             view.alphaValue = 1
-            DitherPill.animateIn(view)
+            if let layer = view.layer { RedesignMotion.pill(layer, entering: true) }
         }
         let leaving = before.filter { view in !shown.contains { $0 === view } && view !== exiting && view.superview === self }
         ditherLeaving.removeAll { view in shown.contains { $0 === view } }
         ditherLeaving += leaving
         let moving = shown.compactMap { view in oldFrames[ObjectIdentifier(view)].flatMap { $0 != view.frame ? (view, $0, view.frame) : nil } }
         for (view, old, _) in moving { view.frame = old }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.15
-            context.timingFunction = DitherPill.curve
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = RedesignTokens.Motion.standard
+            context.timingFunction = RedesignTokens.Motion.curve
             for (view, _, new) in moving { view.animator().frame = new }
-            for view in leaving { view.animator().alphaValue = 0 }
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                for view in leaving {
-                    view.alphaValue = 1
-                    guard let self else { continue }
-                    self.ditherLeaving.removeAll { $0 === view }
-                    if !self.ditherShown.contains(where: { $0 === view }) { view.isHidden = true }
-                }
+        }
+        for view in leaving {
+            guard let layer = view.layer else { continue }
+            RedesignMotion.pill(layer, entering: false) { [weak self, weak view] in
+                guard let self, let view else { return }
+                self.ditherLeaving.removeAll { $0 === view }
+                if !self.ditherShown.contains(where: { $0 === view }) { view.isHidden = true }
             }
-        })
+        }
     }
 
     public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
