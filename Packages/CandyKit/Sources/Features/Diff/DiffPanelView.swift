@@ -958,6 +958,7 @@ public final class DiffPanelView: DSView {
     /// A git scope reads the checkout again when the window comes forward (`refreshOnFocus`, DiffPanel.tsx:512-517).
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window != nil { syncRedesignState() }
         if let focusObserver { NotificationCenter.default.removeObserver(focusObserver); self.focusObserver = nil }
         guard let window else { closeToolCall(); return }
         focusObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in

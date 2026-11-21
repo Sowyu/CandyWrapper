@@ -33,6 +33,7 @@ public final class FirstRunRecoveryView: DSView {
         needsLayout = true
     }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); render() }
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); render() }
     public override func updateLayer() { layer?.backgroundColor = WindowGlass.ground.cgColor(in: self) }
     public override func layout() {
         super.layout()

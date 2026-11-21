@@ -154,6 +154,11 @@ public final class FilesPanelView: DSView {
         updateChrome()
     }
 
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { updateChrome() }
+    }
+
     public override func layout() {
         super.layout()
         let h: CGFloat = inline ? 36 : 40

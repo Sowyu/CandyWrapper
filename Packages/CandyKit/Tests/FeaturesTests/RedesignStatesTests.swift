@@ -29,8 +29,9 @@ extension RedesignStatesRenderTests {
     }
 }
 
-/// Redesign's states: error copy, the state view's accessibility, and the default themes left alone.
-@MainActor
+/// Redesign's states: error copy, the state view's accessibility, and the default themes left alone. Serialized,
+/// since several switch the global theme.
+@MainActor @Suite(.serialized)
 struct RedesignStatesTests {
     static func withRedesign(_ on: Bool, _ body: () -> Void) {
         let previous = ThemeRuntime.input

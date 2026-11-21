@@ -177,6 +177,7 @@ public final class KeybindingsSettingsView: SettingsPageBase, RouteModalEscapeHa
         private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
         private func sync() { label.isHidden = redesign; state.isHidden = !redesign }
         override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); sync() }
+        override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); sync() }
         func height(forWidth width: CGFloat) -> CGFloat { redesign ? state.height(forWidth: width) : 48 + 20 + 48 }
         override func layout() {
             super.layout()

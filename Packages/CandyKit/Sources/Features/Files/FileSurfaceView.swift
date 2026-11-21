@@ -609,6 +609,7 @@ final class FileFailureView: DSView {
     }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); sync() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); sync() }
     @MainActor required init?(coder: NSCoder) { fatalError() }
     override func layout() {
         super.layout()
