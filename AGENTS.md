@@ -20,10 +20,15 @@ Run them from the repo root.
 | Check the disk before you build | `scripts/preflight` |
 | Run all tests | `scripts/test` |
 | Run some tests | `scripts/test --filter SidebarFidelityTests` |
-| Run the fast lane after each change, under a minute | `scripts/test --fast` |
+| Start a task in a warm worktree | `scripts/warm-worktree <task>`, which prints `/tmp/cw-<task>` |
+| Free your warm worktree after your last commit | `scripts/warm-worktree --done <task>` |
+| Run the suites near your change, after each change, 20 s to 2 min warm | `scripts/test --mine`, or `--mine --list` to see which |
+| Run the fast lane, the integrator after each merge | `scripts/test --fast` |
+| Rebuild the free warm worktrees from main, the integrator after merging | `scripts/warm-refresh`, in the background |
 | Run the opt-in tests against a real `t3 serve`, the sandbox server and the Keychain | `scripts/test-integration`, after `scripts/sandbox-server` |
 | Build an app to test | `scripts/build-test-app <task>` |
 | Check the app target compiles, errors only | `scripts/check-app-build` |
+| Picture or record your test app while it's covered | `/tmp/cw-ui/shot <pid> out.png`, `/tmp/cw-ui/record <pid> <seconds> <dir>` |
 | Start the sandbox T3 server | `scripts/sandbox-server` |
 | Start the 2994 Nightly sandbox server on 47392 | `SANDBOX_DIR=~/CandyWrapper-research/sandbox-2994 SANDBOX_PORT=47392 scripts/sandbox-server 0.0.46-nightly.20261011.2994`, token in that folder |
 | Regenerate the Xcode project after editing `project.yml` | `~/CandyWrapper-research/tools/xcodegen/bin/xcodegen` |
@@ -32,7 +37,7 @@ Run them from the repo root.
 | Test the secret scan | `scripts/secretscan-test` |
 | Release, only when the user asks | `scripts/release --notes notes.md <commit>`, see `docs/release.md` |
 
-`scripts/test` wraps `swift test` and first waits out any Origin energy run, as `scripts/preflight`, `scripts/run-app` and `scripts/perf-review` do. `swift test` never builds the app target, so every task that edits `App/Sources` runs `scripts/check-app-build` before its last commit and fixes what it prints. Don't call `swift test` directly. It takes several minutes, so run it in the background with a 30-minute limit. `scripts/run-app` runs until the app quits, so start it in the background too. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.
+`scripts/test` wraps `swift test` and first waits out any Origin energy run, as `scripts/preflight`, `scripts/run-app` and `scripts/perf-review` do. Agents run `scripts/test --mine`: it picks the test files you changed, every test file named after the `Features/<Area>` folder you touched, test files named after the source files you touched, `RedesignTokenGuardTests`, and `RedesignBaselineTests` when a view changed. The integrator runs `scripts/test --fast` after every merge and the full suite before a release, so agents don't run those. `swift test` never builds the app target, so every task that edits `App/Sources` runs `scripts/check-app-build` before its last commit and fixes what it prints. Don't call `swift test` directly. It takes several minutes, so run it in the background with a 30-minute limit. `scripts/run-app` runs until the app quits, so start it in the background too. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.
 
 ## Code map
 
@@ -52,16 +57,18 @@ Fidelity tests (`*FidelityTests`) draw a view offscreen and compare it pixel by 
 
 ## Check it on screen
 
-Offscreen snapshots miss bugs that only show in a real window, so look at every visible change on screen.
+Offscreen snapshots miss bugs that only show in a real window, so look at every visible change on screen. Test apps run behind the other windows and the tools drive and photograph them there, so several agents test at once without the screen lock. `docs/research/background-input-2026-11-20.md` lists what works that way.
 
 1. Run `scripts/sandbox-server`. It starts the sandbox server on port 47391, or reuses the one running.
-2. Build with `scripts/build-test-app <task>`. It prints the app's path, `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app`. The first build takes a few minutes, so allow 10.
-3. Other agents share the screen. Run `scripts/ui/screen-lock take <task>` before you launch your app, and give it back within 15 minutes with `scripts/ui/screen-lock give <task>`, after you quit your app. When `scripts/ui/screen-lock who` says `origin-run`, the user's Origin browser project is measuring energy: don't build, test, run perf or launch anything until it ends, and leave its "Origin quit unexpectedly" dialogs alone.
-4. Launch it in the background: `CANDY_APP=/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app scripts/run-app --server http://127.0.0.1:47391 --token-file ~/CandyWrapper-research/sandbox/session.token --fake-t3-connect`
-5. Once it's up, read your app's PID from `/tmp/cw-dd-<task>/Build/Products/Debug/CandyWrapper.app.pid`. No other agent writes that file.
-6. Build the input tools once with `scripts/ui/build`. They land in `/tmp/cw-ui`: click, key, type, scroll, front and axpress. Set `CW_UI_PID=<your pid>` on every input call. If a tool says your app isn't frontmost, run `/tmp/cw-ui/front <pid>` and take a screenshot before you type.
-7. Take screenshots with `screencapture -x -R<x,y,w,h> out.png`, in screen points from the top left. Check the screen's scale first with `system_profiler SPDisplaysDataType`. For motion, record with `screencapture -v` and look at the frames.
-8. When you're done, `kill <pid>`, give the screen lock back and delete `/tmp/cw-dd-<task>`.
+2. Build with `scripts/build-test-app <task>`. It prints the app's path. In a warm worktree that is `/tmp/cw-dd-slot-N/Build/Products/Debug/CandyWrapper.app`, else `/tmp/cw-dd-<task>/...`. A cold build takes a few minutes, so allow 10.
+3. Launch it in the background with `--background`: `CANDY_APP=<app path> scripts/run-app --server "http://127.0.0.1:47391" --token-file "$HOME/CandyWrapper-research/sandbox/session.token" --fake-t3-connect --background`. Its window opens behind the other apps, never takes focus and never comes forward. Without `--background` the app takes the screen, and you need the lock first.
+4. Once it's up, read your app's PID from `<app path>.pid`. No other agent writes that file.
+5. Build the tools once with `scripts/ui/build`. They land in `/tmp/cw-ui`. Set `CW_UI_PID=<your pid>` on every call: click, key, type and scroll then go to your app only, wherever it is, and leave the real pointer alone.
+6. Take pictures with `/tmp/cw-ui/shot <pid> out.png` and record motion with `/tmp/cw-ui/record <pid> <seconds> <dir>`, which writes PNG frames. `shot` prints the picture's top-left corner and scale: pixel (px, py) is the screen point (x + px / scale, y + py / scale) that click and scroll take.
+7. Typing goes to whatever has focus. A click into a text field doesn't reliably focus it from behind, so type into a field that already has focus or that focuses itself, like the ⌘K palette.
+8. Hover, tooltips, drags and native menus need the real pointer. For those, run `scripts/ui/screen-lock take <task>`, then `/tmp/cw-ui/front <pid>`, then the tool with `CW_UI_MODE=hid`. `move` and `drag` say when they need the lock. Give it back within 15 minutes with `scripts/ui/screen-lock give <task>`.
+9. When `scripts/ui/screen-lock who` says `origin-run`, the user's Origin browser project is measuring energy: don't build, test, run perf or launch anything until it ends, and leave its "Origin quit unexpectedly" dialogs alone.
+10. When you're done, `kill <pid>` and give back the screen lock if you took it. Delete `/tmp/cw-dd-<task>`, but not a `/tmp/cw-dd-slot-N`, which the next task reuses.
 
 For a quick look without driving the app, add `--snapshot /tmp/x.png --snapshot-delay 12` to the run-app arguments. The app renders its window to the PNG and quits.
 
@@ -118,7 +125,9 @@ Git and secrets:
 - Run at most four at once. Check each with `task_status` within two minutes, and cancel stalled ones with `task_cancel`.
 - Every brief says "Do not start other agents". Nested agents once multiplied the cost.
 - Research and spelled-out edits go to `claude-sonnet-5-5` at effort `medium`, judgement calls to `claude-opus-5-5` at effort `medium`.
-- Give each agent `isolation: "worktree"` and its own task name, and run `scripts/preflight` before launching them.
+- Give each agent its own task name and a warm worktree: run `scripts/warm-worktree <task>` and name the path it prints in the brief, instead of `isolation: "worktree"`, whose new path builds everything from nothing. The brief ends with `scripts/warm-worktree --done <task>` after the last commit. `scripts/warm-worktree` runs `scripts/preflight` itself.
+- After merging, run `scripts/warm-refresh` in the background, so free slots rebuild main while nobody waits. Then run `scripts/test --fast` on main. Agents run only `scripts/test --mine`.
+- Agents test their apps at the same time from behind, with `--background` and the tools in `/tmp/cw-ui`. Only hover, drags and native menus still go through the screen lock.
 - The user pays per token. Read files in slices, and keep large JSON and whole files out of context.
 
 ## This Mac

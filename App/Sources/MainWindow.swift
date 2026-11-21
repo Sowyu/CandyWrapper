@@ -56,6 +56,17 @@ final class MainWindow: NSWindow {
     /// that had just left (measured, 2026-10-12) and did nothing. A browser targets whatever is under the
     /// pointer, so a press that lands on another view than the last one starts a new click there.
     private weak var lastPressTarget: NSView?
+    private weak var backgroundPress: NSView?
+
+    /// A `--background` test app stays behind the other apps' windows while it is inactive, so agents driving it
+    /// from scripts/ui never cover the app another agent has in front.
+    override func order(_ place: NSWindow.OrderingMode, relativeTo otherWin: Int) {
+        if AppDelegate.launchesInBackground, !NSApp.isActive, place == .above, otherWin == 0 {
+            if !isVisible { super.order(.below, relativeTo: 0) }
+            return
+        }
+        super.order(place, relativeTo: otherWin)
+    }
 
     override func sendEvent(_ event: NSEvent) {
         // The one place input meets the connection: one comparison per event while the sockets are healthy, a probe of
@@ -64,6 +75,30 @@ final class MainWindow: NSWindow {
         case .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel, .mouseEntered:
             InputQuietGate.shared.noteInput(at: event.timestamp)
         default: break
+        }
+        if AppDelegate.launchesInBackground, !isKeyWindow {
+            switch event.type {
+            case .leftMouseDown, .rightMouseDown:
+                guard let view = contentView?.superview?.hitTest(event.locationInWindow) else { break }
+                backgroundPress = view
+                if event.type == .leftMouseDown, view.acceptsFirstResponder, firstResponder !== view { makeFirstResponder(view) }
+                if event.type == .leftMouseDown { view.mouseDown(with: event) } else { view.rightMouseDown(with: event) }
+                return
+            case .leftMouseDragged:
+                if let view = backgroundPress { view.mouseDragged(with: event); return }
+            case .scrollWheel:
+                // A scroll posted to the pid carries only a global location, so find the view under it here.
+                guard let global = event.cgEvent?.location, let screen = NSScreen.screens.first else { break }
+                let point = convertPoint(fromScreen: NSPoint(x: global.x, y: screen.frame.maxY - global.y))
+                if let view = contentView?.superview?.hitTest(point) { view.scrollWheel(with: event); return }
+            case .leftMouseUp, .rightMouseUp:
+                if let view = backgroundPress {
+                    backgroundPress = nil
+                    if event.type == .leftMouseUp { view.mouseUp(with: event) } else { view.rightMouseUp(with: event) }
+                    return
+                }
+            default: break
+            }
         }
         guard event.type == .leftMouseDown, let frameView = contentView?.superview else { return super.sendEvent(event) }
         let target = frameView.hitTest(event.locationInWindow)

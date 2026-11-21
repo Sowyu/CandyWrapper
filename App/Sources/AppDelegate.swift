@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LaunchTiming.mark("window built")
         if CommandLine.arguments.contains("--gallery") { showGallery(nil) }
         if CommandLine.arguments.contains("--pull-request-sample") { PullRequestsGallery.openWindow() }
-        NSApp.activate()
+        if !Self.launchesInBackground { NSApp.activate() }
         if let i = args.firstIndex(of: "--desktop-managed-preview"), args.indices.contains(i + 1) { desktopManaged?.preview(args[i + 1]) }
     }
 
@@ -388,7 +388,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setFrame(NSRect(x: 0, y: 0, width: 1100, height: 780), display: false)
             window.center()
         }
-        window.makeKeyAndOrderFront(nil)
+        if Self.launchesInBackground { window.orderBack(nil) } else { window.makeKeyAndOrderFront(nil) }
         window.layoutTrafficLights()
         mainWindow = window
         if CommandLine.arguments.contains("--chrome-check") { chromeCheck(window, toggle: sidebar.trigger) }
@@ -870,6 +870,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Sandbox and performance builds have separate defaults and file-backed drafts/stashes. Only they read
     /// development defaults that stand in for launch arguments, so a stray default cannot redirect the shipped app.
     static let isTestBuild = Bundle.main.bundleIdentifier?.hasPrefix("dev.candywrapper.test.") == true
+    /// Development: `--background` opens the window behind the other apps and never activates, so an agent's test
+    /// app starts without taking the screen from the app in front. scripts/ui drives it from behind.
+    static let launchesInBackground = CommandLine.arguments.contains("--background")
         || Bundle.main.bundleIdentifier == "dev.candywrapper.perf"
 
     @objc func showGallery(_ sender: Any?) {

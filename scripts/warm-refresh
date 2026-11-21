@@ -1,0 +1,42 @@
+#!/bin/sh
+# Builds main in every free warm slot (scripts/warm-worktree), so the next task starts from current main.
+# Each slot recompiles only what changed since its last refresh. Run it after merging to main, in the background.
+# Usage: scripts/warm-refresh [--slots N]   --slots also creates slots up to N (at most 6) and builds them cold.
+set -eu
+repo="$(cd "$(dirname "$0")/.." && pwd -P)"
+want=0
+[ "${1-}" = "--slots" ] && want="${2:?usage: scripts/warm-refresh [--slots N]}"
+[ "$want" -le 6 ] || { echo "at most 6 slots" >&2; exit 2; }
+"$repo/scripts/preflight" >&2
+main="$(git -C "$repo" rev-parse main)"
+# scripts/test names the Swift Testing macro plugin on the Command Line Tools; the build must match it to be reused.
+lib=/Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing/libTestingMacros.dylib
+plugin=""
+[ -f "$lib" ] && [ "$(xcode-select -p 2>/dev/null)" = /Library/Developer/CommandLineTools ] && plugin="-Xswiftc -load-plugin-library -Xswiftc $lib"
+for n in 1 2 3 4 5 6; do
+  slot="/tmp/cw-slot-$n"
+  [ -e "$slot" ] || [ "$n" -le "$want" ] || continue
+  if ! mkdir "$slot.taken" 2>/dev/null; then echo "slot $n: in use by $(cat "$slot.taken/owner" 2>/dev/null), skipped"; continue; fi
+  echo warm-refresh > "$slot.taken/owner"
+  trap 'rm -rf "$slot.taken"' EXIT INT TERM
+  if [ ! -e "$slot" ]; then git -C "$repo" worktree add -q --detach "$slot" "$main"; fi
+  if [ -n "$(git -C "$slot" status --porcelain)" ]; then
+    echo "slot $n: leftover changes, skipped"
+  elif [ "$(cat "$slot.built" 2>/dev/null)" = "$main" ]; then
+    echo "slot $n: already at main"
+  else
+    git -C "$slot" checkout -q --detach "$main"
+    start=$(date +%s)
+    # nice: refreshing is never urgent, and agents' own builds should win the processor.
+    # The same builds scripts/test and scripts/check-app-build run in a slot, so their outputs are reused.
+    if (cd "$slot/Packages/CandyKit" && nice -n 10 swift build --build-tests $plugin) >"$slot.refresh.log" 2>&1 &&
+       nice -n 10 "$slot/scripts/check-app-build" "/tmp/cw-dd-slot-$n" >>"$slot.refresh.log" 2>&1; then
+      echo "$main" > "$slot.built"
+      echo "slot $n: built $(git -C "$slot" log -1 --format=%h HEAD) in $(( $(date +%s) - start )) s"
+    else
+      echo "slot $n: build failed, see $slot.refresh.log"
+    fi
+  fi
+  rm -rf "$slot.taken"
+  trap - EXIT INT TERM
+done

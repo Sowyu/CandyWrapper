@@ -1,0 +1,9 @@
+# Sourced by scripts/build-test-app and scripts/check-app-build, from the repo root. Prints the worktree's
+# derived-data folder: /tmp/cw-dd-slot-N in a warm slot (scripts/warm-worktree), else /tmp/cw-dd-<name>.
+# Xcode keys its incremental state on this folder and on the source path, so one worktree keeps one folder.
+derived_data() {
+  case "$(pwd -P)" in
+    */cw-slot-[0-9]*) echo "/tmp/cw-dd-$(basename "$(pwd -P)" | sed 's/^cw-//')" ;;
+    *) echo "/tmp/cw-dd-$1" ;;
+  esac
+}
