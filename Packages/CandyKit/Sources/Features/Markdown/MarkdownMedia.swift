@@ -237,6 +237,9 @@ public enum MarkdownImages {
         }
     }
 
+    /// Fetches a signed asset URL to a file. Tests replace it to count transfers.
+    nonisolated(unsafe) static var transfer: @Sendable (URL) async -> ImageDownloadFile? = { await MarkdownImageDownload.fetch($0) }
+
     private final class WeakDownload: @unchecked Sendable { weak var value: MarkdownImageDownload? }
     nonisolated private static let downloadsLock = NSLock()
     nonisolated(unsafe) private static var downloads: [String: WeakDownload] = [:]
@@ -316,11 +319,12 @@ public enum MarkdownImages {
 
     /// A tool output loader keeps the same signed resource and downloaded file across size changes.
     /// `onFile` sees the downloaded bytes once, while the file still exists (the gallery hashes them).
+    /// The 2 s grace lets a tile rebuilt while it scrolls or the list changes pick its transfer up where it was.
     nonisolated static func assetLoader(key: String, resource: JSONValue, onFile: (@Sendable (URL) async -> Void)? = nil) -> AsyncImageView.Loader {
-        let download = MarkdownImageDownload {
+        let download = MarkdownImageDownload(grace: .seconds(2)) {
             guard let asset = await signedURL(resource: resource) else { return nil }
             if let size = asset.size { await record(size, for: key) }
-            let file = await MarkdownImageDownload.fetch(asset.url)
+            let file = await transfer(asset.url)
             if let file, let onFile { await onFile(file.url) }
             return file
         }
