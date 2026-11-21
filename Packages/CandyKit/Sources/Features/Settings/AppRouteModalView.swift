@@ -17,6 +17,9 @@ public final class AppRouteModalView: DSView {
     private let decoration = BoxDecorationLayer()
     private let divider = CALayer()
     private let navigationBackground = CALayer()
+    /// Redesign with a nav (Settings): the page as one rounded card on the darker chrome, 8pt from the modal's
+    /// edges and the nav, in place of the divider and the header bar (the user's option B, settings-panes-mock.html).
+    let pageCard = DSView()
     private var keyMonitor: Any?
     private var backdropPressed = false
     public private(set) var isClosing = false
@@ -44,6 +47,9 @@ public final class AppRouteModalView: DSView {
         navigationBackground.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
         surface.layer?.addSublayer(navigationBackground)
         surface.layer?.masksToBounds = true
+        pageCard.layer?.masksToBounds = true
+        pageCard.layer?.cornerCurve = .continuous
+        surface.addSubview(pageCard)
         surface.addSubview(content)
         navigation.map(surface.addSubview)
         surface.layer?.addSublayer(divider)
@@ -125,7 +131,7 @@ public final class AppRouteModalView: DSView {
         decoration.layout(boxSize: frame.size)
         popup.frame = frame
         surface.frame = NSRect(origin: .zero, size: frame.size)
-        let radius: CGFloat = bounds.width >= 640 ? 16 : 0
+        let radius = Self.radius(width: bounds.width, dither: isDither)
         surface.layer?.cornerRadius = radius
         pill.isHidden = !isDither
         pill.radius = radius
@@ -135,9 +141,36 @@ public final class AppRouteModalView: DSView {
         let edge: CGFloat = bounds.width >= 640 ? 1 : 0
         navigationBackground.frame = NSRect(x: edge, y: edge, width: navWidth, height: max(0, frame.height - 2 * edge))
         navigation?.frame = navigationBackground.frame
-        content.frame = NSRect(x: edge + navWidth, y: edge, width: max(0, frame.width - navWidth - 2 * edge), height: max(0, frame.height - 2 * edge))
-        divider.frame = NSRect(x: edge + navWidth - 1, y: edge, width: navigation == nil ? 0 : 1, height: max(0, frame.height - 2 * edge))
+        let carded = isDither && navigation != nil
+        let page = NSRect(x: edge + navWidth, y: edge, width: max(0, frame.width - navWidth - 2 * edge), height: max(0, frame.height - 2 * edge))
+        pageCard.isHidden = !carded
+        (content as? SettingsPageView)?.inCard = carded
+        if carded {
+            navigationBackground.frame = surface.bounds
+            pageCard.frame = Self.pageCardFrame(page: page, edgeToEdge: radius == 0)
+            pageCard.layer?.cornerRadius = radius
+            if content.superview !== pageCard { pageCard.addSubview(content) }
+            content.frame = pageCard.bounds
+        } else {
+            if content.superview !== surface { surface.addSubview(content, positioned: .below, relativeTo: navigation) }
+            content.frame = page
+        }
+        divider.frame = NSRect(x: edge + navWidth - 1, y: edge, width: navigation == nil || carded ? 0 : 1, height: max(0, frame.height - 2 * edge))
         CATransaction.commit()
+    }
+
+    /// The card's corner: T3's 16 (AppRouteModal.tsx `sm:rounded-2xl`) in the default themes, Redesign's one surface
+    /// radius there, and square once the modal runs edge to edge under 640pt.
+    static func radius(width: CGFloat, dither: Bool) -> CGFloat {
+        width >= 640 ? (dither ? RedesignTokens.Radius.panel : 16) : 0
+    }
+
+    /// Redesign's page card: an even 8pt from the modal's top, right and bottom and from the nav, or the whole page
+    /// when the modal itself runs edge to edge.
+    static func pageCardFrame(page: NSRect, edgeToEdge: Bool) -> NSRect {
+        guard !edgeToEdge else { return page }
+        let gap = RedesignTokens.Space.s
+        return NSRect(x: page.minX + gap, y: page.minY + gap, width: max(0, page.width - 2 * gap), height: max(0, page.height - 2 * gap))
     }
 
     private var isDither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
@@ -154,13 +187,17 @@ public final class AppRouteModalView: DSView {
             tint.backgroundColor = Themed.color(\.background, effectiveAppearance.isDark ? 0.72 : 0.6).cgColor(in: self)
             decoration.boxStyle = BoxStyle()
             divider.backgroundColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
-            navigationBackground.backgroundColor = nil
+            // The nav sits straight on the sidebar's chrome; the page card takes the content ground and the rim.
+            navigationBackground.backgroundColor = navigation == nil ? nil : Themed.color(\.sidebar).cgColor(in: self)
+            pageCard.layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+            pageCard.layer?.borderWidth = bounds.width >= 640 ? 1 : 0
+            pageCard.layer?.borderColor = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
             return
         }
         blurred.isHidden = false
         tint.backgroundColor = Themed.color(\.background, effectiveAppearance.isDark ? 0.64 : 0.6).cgColor(in: self)
         var style = BoxStyle()
-        style.radius = bounds.width >= 640 ? 16 : 0
+        style.radius = Self.radius(width: bounds.width, dither: false)
         style.fill = Themed.color(\.background)
         style.border = bounds.width >= 640 ? Themed.color(\.border) : nil
         style.shadows = bounds.width >= 640 ? [BoxShadow(y: 25, blur: 50, spread: -12, color: Themed.black(0.4))] : []
