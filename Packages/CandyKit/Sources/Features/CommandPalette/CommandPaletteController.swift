@@ -466,14 +466,9 @@ public final class CommandPaletteOverlay: DSView {
         for sibling in container.subviews where sibling !== self {
             NotificationCenter.default.addObserver(self, selector: #selector(siblingMoved), name: NSView.frameDidChangeNotification, object: sibling)
         }
-        // Redesign centres on the composer's column, which moves when the sidebar or a right panel opens or closes.
-        NotificationCenter.default.addObserver(self, selector: #selector(columnMoved), name: DitherArtView.columnDidChange, object: nil)
     }
 
-    @objc private func columnMoved() { if !isClosing { needsLayout = true } }
-
     @objc private func siblingMoved() {
-        if !isClosing { needsLayout = true }
         guard !snapshotPending, !isClosing else { return }
         snapshotPending = true
         Task { @MainActor [weak self] in
@@ -486,7 +481,6 @@ public final class CommandPaletteOverlay: DSView {
 
     private func stopObserving() {
         NotificationCenter.default.removeObserver(self, name: NSView.frameDidChangeNotification, object: nil)
-        NotificationCenter.default.removeObserver(self, name: DitherArtView.columnDidChange, object: nil)
     }
 
     public func close() {
@@ -516,26 +510,7 @@ public final class CommandPaletteOverlay: DSView {
         let width = min(CommandPaletteView.width, bounds.width - 32)
         let top = max(16, (bounds.height * 0.1).rounded())
         let height = min(controller.view.intrinsicContentSize.height, bounds.height - 2 * top)
-        controller.view.frame = NSRect(x: Self.panelX(width: width, in: bounds, column: redesignColumn()), y: top, width: width, height: height)
-    }
-
-    /// Redesign's composer column and content area in this view's coordinates; nil in the default themes, which keep
-    /// T3's window-centred popup.
-    private func redesignColumn() -> (column: NSRect, area: NSRect)? {
-        guard let window, ThemeRuntime.isDither(dark: effectiveAppearance.isDark),
-              let found = DitherArtView.frontColumn(in: window) else { return nil }
-        return (convert(found.column, from: nil), convert(found.area, from: nil))
-    }
-
-    /// The palette's left edge: centred on the composer's column (the user, 2026-11-21: the palette sat 100pt left of
-    /// the composer with the sidebar open), kept 16pt inside the content area, and centred on the window as T3 does
-    /// when there is no column or the content area is too narrow for it.
-    static func panelX(width: CGFloat, in bounds: NSRect, column: (column: NSRect, area: NSRect)?) -> CGFloat {
-        let centred = ((bounds.width - width) / 2).rounded()
-        guard let column else { return centred }
-        let area = column.area.intersection(bounds).insetBy(dx: 16, dy: 0)
-        guard area.width >= width else { return centred }
-        return min(max((column.column.midX - width / 2).rounded(), area.minX), area.maxX - width)
+        controller.view.frame = NSRect(x: ((bounds.width - width) / 2).rounded(), y: top, width: width, height: height)
     }
 
     public override func updateLayer() {
