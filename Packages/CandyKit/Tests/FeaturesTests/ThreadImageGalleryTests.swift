@@ -257,6 +257,30 @@ struct ThreadImageGalleryTests {
     }
 
     /// The grid card is as tall as its masonry, between the empty state's minimum and the window's room.
+    /// Tab to the close button, then an arrow: the ring moves onto a tile and the button gives up the focus, so only
+    /// one ring shows; Tab back to the button takes it off the tile (1.17.0 walk, 05c).
+    @Test func onlyTheFocusedViewShowsARing() throws {
+        let wall = ThreadImageWallView()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = wall
+        defer { window.contentView = nil }
+        wall.images = (0..<4).map { GalleryImage(source: .url("https://wall.invalid/\($0).png"), threadId: "t", agent: "Main",
+                                                  entryId: "e\($0)", at: "2026-10-23T10:00:00Z") }
+        wall.layoutSubtreeIfNeeded()
+        window.makeFirstResponder(wall.close)
+        let right = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                  context: nil, characters: "\u{F703}", charactersIgnoringModifiers: "\u{F703}", isARepeat: false, keyCode: 124))
+        wall.close.keyDown(with: right)
+        #expect(wall.masonry.focused == 0)
+        #expect(window.firstResponder === wall)
+        window.makeFirstResponder(wall.close)
+        #expect(wall.masonry.focused == nil)
+        // The next arrow picks the ring up where it was.
+        wall.close.keyDown(with: right)
+        #expect(wall.masonry.focused == 1)
+    }
+
     @Test func cardHeightFollowsItsMasonry() {
         let view = ThreadImageGalleryView()
         #expect(view.frame.height == ThreadImageGalleryView.minHeight)
