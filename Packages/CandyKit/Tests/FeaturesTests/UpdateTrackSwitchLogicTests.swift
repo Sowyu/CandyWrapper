@@ -16,6 +16,18 @@ struct UpdateTrackSwitchLogicTests {
                   platformOS: os, databaseMigration: migration, ownServer: own)
     }
 
+    /// Redesign says the switch moves the T3 servers and interrupts threads, and leaves this app's version alone.
+    @Test func redesignWordingNamesTheServersAndThreads() {
+        typealias L = UpdateTrackSwitchLogic
+        #expect(L.redesignTrackLine(unswitched: nil, selected: "latest") == "Sets the T3 server track on your connected machines. This app has one release track.")
+        #expect(L.redesignTrackLine(unswitched: 2, selected: "latest").hasSuffix(" 2 machines still run Nightly."))
+        let lead = L.redesignLead(moves: [.init(machine: "Mac mini", from: "0.1.11-nightly.20261119.4928", to: "0.1.10"),
+                                          .init(machine: "vps", from: nil, to: "0.1.10")], stopped: 3, continuing: 0)
+        #expect(lead == ["This moves the T3 servers on Mac mini from 0.1.11-nightly.20261119.4928 to 0.1.10 and vps to 0.1.10.",
+                         "3 running threads will be interrupted.", "This app's own version does not change."])
+        #expect(L.redesignLead(moves: [], stopped: 0, continuing: 0) == ["No T3 server changes version.", "This app's own version does not change."])
+    }
+
     @Test func movesServersAndCarriesTheTrackAndMigration() {
         let plan = L.targets([Self.machine("a", "0.0.45"), Self.machine("d", "0.0.45", path: .desktopManaged)], release: Self.nightly)
         #expect(plan.skipped.isEmpty)
