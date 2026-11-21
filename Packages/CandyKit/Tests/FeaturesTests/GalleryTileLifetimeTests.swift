@@ -73,3 +73,29 @@ import T3Protocol
         #expect(opened == 2)
     }
 }
+
+extension GalleryTileLifetimeTests {
+    /// A tile that leaves and comes back, or a gallery reopened soon after closing, shows its pixels in the same pass
+    /// from the wall's own cache, and that cache empties once the gallery has stayed closed.
+    @Test func aReturningTileShowsAtOnceAndAClosedGalleryLetsGo() async throws {
+        let window = ThreadImageWallTests.window()
+        defer { window.contentView = nil; window.close() }
+        let (wall, images) = try await loadedWall(window)
+        #expect(wall.masonry.cache === ImageDecodeCache.gallery)
+        let cached = images.filter { ImageDecodeCache.gallery.object(forKey: "\($0.pixelKey)|cover" as NSString) != nil }
+        #expect(cached.count == wall.masonry.tiles.count, "every tile's decode is kept")
+        // Tiles go, as when they scroll a viewport away or the gallery closes, and come back.
+        wall.images = []
+        wall.images = images
+        wall.masonry.relayout()
+        // The layout pass before the window draws sizes the new tiles; no turn of the run loop.
+        wall.layoutSubtreeIfNeeded()
+        #expect(!wall.masonry.tiles.isEmpty)
+        #expect(wall.masonry.tiles.values.allSatisfy { $0.thumb.image != nil }, "no placeholder for a picture seen before")
+        // The timeline's cache holds none of them.
+        #expect(images.allSatisfy { ImageDecodeCache.memory.object(forKey: "\($0.pixelKey)|cover" as NSString) == nil })
+        ImageDecodeCache.releaseGallery(after: .milliseconds(20))
+        await ThreadImageGalleryTests.pump { ImageDecodeCache.gallery.object(forKey: "\(images[0].pixelKey)|cover" as NSString) == nil }
+        #expect(images.allSatisfy { ImageDecodeCache.gallery.object(forKey: "\($0.pixelKey)|cover" as NSString) == nil })
+    }
+}

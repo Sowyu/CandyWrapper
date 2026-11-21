@@ -34,6 +34,8 @@ public final class AsyncImageView: DSView {
     /// path: decodes then go through `memory`. Leave it off for keys whose bytes can change, like a
     /// workspace file path.
     public var cacheable = false
+    /// Where a `cacheable` view keeps its decodes; the full gallery's tiles have their own.
+    var memoryCache = ImageDecodeCache.memory
     /// Redesign's loading skeleton: a soft fill, an image glyph and a shimmer sweep, only while a decode is in flight.
     public var skeleton = false { didSet { if skeleton != oldValue { updateSkeleton() } } }
     private var shimmer: CAGradientLayer?
@@ -213,7 +215,7 @@ public final class AsyncImageView: DSView {
         guard window != nil, !isHiddenOrHasHiddenAncestor, let loader, let key, let side = decodeSide,
               task == nil, side > max(attemptedSide, loadedSide) else { return }
         let memoryKey = cacheable ? memoryKey : nil
-        if let memoryKey, let hit = Self.memory.object(forKey: memoryKey as NSString), hit.side > loadedSide {
+        if let memoryKey, let hit = memoryCache.object(forKey: memoryKey as NSString), hit.side > loadedSide {
             loadedSide = hit.side
             show(hit.image)
             ImageTiming.mark("memory", "\(key) \(hit.side)/\(side)")
@@ -223,13 +225,13 @@ public final class AsyncImageView: DSView {
         attemptedSide = side
         failed = false
         fallback.text = pendingText
-        let generation = self.generation
+        let generation = self.generation, cache = memoryCache
         ImageTiming.mark("request", "\(key) \(side)")
         task = Task { [weak self] in
             guard !Task.isCancelled else { return }
             let result: ImageDecodeCache.Cached?
             if let memoryKey {
-                result = await ImageDecodeCache.load(key: memoryKey, side: side, loader: loader)
+                result = await ImageDecodeCache.load(key: memoryKey, side: side, in: cache, loader: loader)
             } else {
                 result = await loader(side).map { ImageDecodeCache.Cached($0, side: side) }
             }

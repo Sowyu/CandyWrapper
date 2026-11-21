@@ -40,10 +40,9 @@ final class GalleryMasonryView: DSView {
     }
     /// Builds an image's loader; called once per image while it stays in `images`.
     var makeLoader: ((GalleryImage) -> AsyncImageView.Loader)?
-    /// The card shares the decode cache with the timeline, so a reopened card shows its pictures at once. The full
-    /// gallery keeps its pixels in its tiles only, so closing it frees them all: a decode already in flight when a
-    /// shared request is cancelled can still land in the cache after the views are gone.
-    var sharedCache = true
+    /// Where tiles keep their decodes, so a tile that scrolls back shows at once. The card shares the timeline's cache;
+    /// the full gallery has its own (`ImageDecodeCache.gallery`), emptied a while after it closes.
+    var cache = ImageDecodeCache.memory
     var onSelect: ((Int) -> Void)?
     /// The placed height or the measured estimate changed; the card resizes to fit.
     var onContentHeight: (() -> Void)?
@@ -62,8 +61,6 @@ final class GalleryMasonryView: DSView {
     private var loaders: [String: AsyncImageView.Loader] = [:]
     private var measuring: Set<String> = []
     private var failed: Set<String> = []
-    /// First loads of pictures not tiled yet, handed to their tile as its first pixels. Without the shared cache only.
-    private var measured: [String: CGImage] = [:]
     nonisolated(unsafe) private var observer: NSObjectProtocol?
     private var lastWidth: CGFloat = 0
 
@@ -206,9 +203,8 @@ final class GalleryMasonryView: DSView {
             tile.action = { [weak self] in self?.onSelect?(index) }
             tile.frame = frames[index]
             tile.keyFocused = index == focused
-            tile.thumb.cacheable = sharedCache
-            tile.show(image, key: image.pixelKey, loader: failed.contains(image.pixelKey) ? { @Sendable _ in nil } : loader(image),
-                      preview: measured.removeValue(forKey: image.pixelKey))
+            tile.thumb.memoryCache = cache
+            tile.show(image, key: image.pixelKey, loader: failed.contains(image.pixelKey) ? { @Sendable _ in nil } : loader(image))
         }
     }
 
@@ -255,7 +251,7 @@ final class GalleryMasonryView: DSView {
     private func measured(_ image: GalleryImage, _ pixels: CGImage?, side: Int) {
         measuring.remove(image.pixelKey)
         if let pixels {
-            if sharedCache { ImageDecodeCache.store(pixels, side: side, key: "\(image.pixelKey)|cover") } else { measured[image.pixelKey] = pixels }
+            ImageDecodeCache.store(pixels, side: side, key: "\(image.pixelKey)|cover", in: cache)
             if image.naturalSize == nil { MarkdownImages.record(CGSize(width: pixels.width, height: pixels.height), for: image.key) }
         } else {
             failed.insert(image.pixelKey)
@@ -274,10 +270,8 @@ final class GalleryMasonryView: DSView {
     /// The pictures that failed while this view showed them.
     var failedImages: [GalleryImage] { images.filter { failed.contains($0.pixelKey) } }
 
-    /// Lets go of the loaders (and their downloaded files) and any first loads not tiled yet. The full gallery calls
-    /// it on close, after its tiles are gone.
+    /// Lets go of the loaders and their downloaded files. The full gallery calls it on close, after its tiles are gone.
     func releaseDecodes() {
-        measured = [:]
         loaders = [:]
     }
 
@@ -582,7 +576,8 @@ public final class ThreadImageWallView: DSView {
         close.setTooltip("Close", shortcut: "Esc")
         close.setAccessibilityLabel("Close")
         close.action = { [weak self] in self?.onClose?() }
-        masonry.sharedCache = false
+        masonry.cache = ImageDecodeCache.gallery
+        ImageDecodeCache.holdGallery()
         masonry.makeLoader = { [weak self] image in
             ThreadImageGalleryView.loader(image, onHash: { hash in self?.onHash?(image, hash) })
         }
@@ -780,6 +775,7 @@ public final class ThreadImageWallView: DSView {
         onFailed?(masonry.failedImages)
         masonry.images = []
         masonry.releaseDecodes()
+        ImageDecodeCache.releaseGallery()
     }
 
     /// The large view's short fade in and out over the wall; it ends on the resting pixels.

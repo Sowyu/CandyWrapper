@@ -29,6 +29,40 @@ enum ImageDecodeCache {
         return cache
     }()
 
+    /// The full gallery's tile decodes, kept apart from the timeline's so 80 tiles never push its pictures out. A
+    /// tile that scrolls back, or a gallery reopened soon after closing, shows at once. Emptied a minute after the
+    /// gallery closes and on memory pressure, so a closed gallery holds nothing for long.
+    // ponytail: 64 MB holds about 80 screenshots at a 400px column; raise it if galleries with hundreds reload on scroll
+    static let gallery: NSCache<NSString, Cached> = {
+        let cache = NSCache<NSString, Cached>()
+        cache.name = "ThreadImageWallView.tiles"
+        cache.totalCostLimit = 64 << 20
+        return cache
+    }()
+    private static var galleryRelease: Task<Void, Never>?
+    private static var pressure: DispatchSourceMemoryPressure?
+
+    /// The gallery opened: keep its decodes, and empty them when memory runs low.
+    static func holdGallery() {
+        galleryRelease?.cancel(); galleryRelease = nil
+        guard pressure == nil else { return }
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+        source.setEventHandler { MainActor.assumeIsolated { gallery.removeAllObjects() } }
+        source.resume()
+        pressure = source
+    }
+
+    /// The gallery closed: its decodes go after `delay` unless it opens again first.
+    static func releaseGallery(after delay: Duration = .seconds(60)) {
+        galleryRelease?.cancel()
+        galleryRelease = Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            gallery.removeAllObjects()
+            galleryRelease = nil
+        }
+    }
+
     private final class Request {
         let id = UUID()
         let side: Int
@@ -53,17 +87,18 @@ enum ImageDecodeCache {
 
     static func clear() {
         memory.removeAllObjects()
+        gallery.removeAllObjects()
         for request in requests.values.joined() { request.task?.cancel() }
         requests.removeAll()
     }
 
-    static func store(_ image: CGImage, side: Int, key: String) {
+    static func store(_ image: CGImage, side: Int, key: String, in memory: NSCache<NSString, Cached> = memory) {
         let key = key as NSString
         guard memory.object(forKey: key).map({ $0.side < side }) ?? true else { return }
         memory.setObject(Cached(image, side: side), forKey: key, cost: image.bytesPerRow * image.height)
     }
 
-    static func load(key: String, side: Int, loader: @escaping AsyncImageView.Loader) async -> Cached? {
+    static func load(key: String, side: Int, in memory: NSCache<NSString, Cached> = memory, loader: @escaping AsyncImageView.Loader) async -> Cached? {
         guard !Task.isCancelled else { return nil }
         if let hit = memory.object(forKey: key as NSString), hit.side >= side { return hit }
         let request: Request
@@ -74,7 +109,7 @@ enum ImageDecodeCache {
             requests[key, default: []].append(request)
             request.task = Task {
                 let image = await loader(side)
-                if let image, !Task.isCancelled { store(image, side: side, key: key) }
+                if let image, !Task.isCancelled { store(image, side: side, key: key, in: memory) }
                 return Task.isCancelled ? nil : image
             }
         }
