@@ -251,6 +251,14 @@ final class ComposerEffortRowView: ControlView {
 /// `ComposerEffortColumn` (ComposerModelEffort.tsx:525-562): `w-48`, `bg-muted/40` and a left rule; a header naming
 /// the reasoning control and the model, then the levels and the model's other options.
 final class ComposerEffortColumnView: DSView {
+    /// Redesign's labels are sentence case: "Extra High" reads "Extra high". Words in capitals (an acronym) keep them.
+    static func sentenceCase(_ label: String) -> String {
+        let words = label.split(separator: " ", omittingEmptySubsequences: false)
+        return words.enumerated().map { i, w in
+            i == 0 || w.dropFirst().contains(where: \.isUppercase) ? String(w) : w.lowercased()
+        }.joined(separator: " ")
+    }
+
     static let width: CGFloat = 192
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// Redesign puts the section under the model list in both its layouts: the levels as one segmented track, then the
@@ -387,8 +395,9 @@ final class ComposerEffortColumnView: DSView {
             line = []; lineWidth = 4
         }
         for (i, row) in rows.enumerated() {
-            guard case .level(let label, let selected, let isDefault) = row.kind else { continue }
+            guard case .level(let serverLabel, let selected, let isDefault) = row.kind else { continue }
             row.isHidden = true
+            let label = capy ? Self.sentenceCase(serverLabel) : serverLabel
             let s = ComposerFooterSegmentView(title: label, checked: selected)
             // The column's "Default" caption has no room in a segment; it moves to the tooltip and the label.
             s.toolTip = isDefault ? [row.toolTip, "Default"].compactMap { $0 }.joined(separator: "\n") : row.toolTip

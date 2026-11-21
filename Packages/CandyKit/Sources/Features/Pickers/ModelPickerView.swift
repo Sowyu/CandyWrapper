@@ -1062,7 +1062,8 @@ final class ModelRowView: DSView {
             providerIcon.frame = NSRect(x: x, y: mid - 8, width: 16, height: 16)
             x += 16 + 8
         }
-        let fixed = (check == nil ? 0 : 8 + 14) + (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0)
+        let checkW: CGFloat = check == nil ? 0 : 8 + 14
+        let fixed = checkW + Self.newBadgeWidth(newBadge, name: name.textWidth, room: right - x - checkW)
         let nameW = max(0, min(ceil(name.textWidth), right - x - fixed))
         name.frame = NSRect(x: x, y: mid - 19.25 / 2, width: nameW, height: 19.25)
         x += nameW
@@ -1108,13 +1109,22 @@ final class ModelRowView: DSView {
             providerIcon.frame = NSRect(x: x, y: mid - 8, width: 16, height: 16)
             x += 16 + 10
         }
-        let badgeW = newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0
+        let badgeW = Self.newBadgeWidth(newBadge, name: name.textWidth, room: right - x)
         let nameW = max(0, min(ceil(name.textWidth), right - x - badgeW))
         name.frame = NSRect(x: x, y: mid - 10, width: nameW, height: 20)
         if let newBadge {
             let s = newBadge.intrinsicContentSize
             newBadge.frame = NSRect(x: x + nameW + 8, y: mid - s.height / 2, width: s.width, height: s.height)
         }
+    }
+
+    /// The room the NEW badge takes after the name, 0 when it hides: the name and the jump key keep their room, so
+    /// the badge, a status, gives way first.
+    static func newBadgeWidth(_ badge: NSView?, name: CGFloat, room: CGFloat) -> CGFloat {
+        guard let badge else { return 0 }
+        let w = 8 + badge.intrinsicContentSize.width
+        badge.isHidden = ceil(name) + w > room
+        return badge.isHidden ? 0 : w
     }
 
     /// Redesign docked: glyph, name, the check after it and the badge; the backend count and chevron, or the star on
@@ -1143,7 +1153,8 @@ final class ModelRowView: DSView {
             providerIcon.frame = NSRect(x: x, y: mid - 8, width: 16, height: 16)
             x += 16 + 10
         }
-        let fixed = (check == nil ? 0 : 8 + 14) + (newBadge.map { 8 + $0.intrinsicContentSize.width } ?? 0)
+        let checkW: CGFloat = check == nil ? 0 : 8 + 14
+        let fixed = checkW + Self.newBadgeWidth(newBadge, name: name.textWidth, room: right - x - checkW)
         let nameW = max(0, min(ceil(name.textWidth), right - x - fixed))
         name.frame = NSRect(x: x, y: mid - 10, width: nameW, height: 20)
         x += nameW
@@ -1223,10 +1234,20 @@ final class NewBadgeView: DSView {
     }
 
     override func updateLayer() {
+        // Redesign: a status, not an action, so the muted text on a hairline rim and no fill; the accent already
+        // marks the selected model.
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            layer?.backgroundColor = nil
+            layer?.borderColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+            label.color = Themed.color(\.contrastMutedForeground)
+            return
+        }
         layer?.backgroundColor = Themed.color(\.update, 0.15).cgColor(in: self)
         layer?.borderColor = Themed.color(\.update, 0.35).cgColor(in: self)
         label.color = Themed.color(\.updateForeground)
     }
+
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 }
 
 /// The row's favorite toggle: `Button size="icon-xs" variant="ghost-muted"`, a 12pt star,
