@@ -813,7 +813,8 @@ final class PaletteCommands {
 
     /// `settingsSearchItems` (CommandPalette.tsx:2310-2331): "Settings · <section>", opening the page at the row.
     private func settingsItems(_ query: String) -> [PaletteEntry] {
-        hiddenItems(query) + SettingsSearch.search(query, in: SettingsSearch.available(settings.searchAvailability())).map { item in
+        hiddenItems(query) + SettingsSearch.search(query, in: SettingsSearch.available(settings.searchAvailability())).map { found in
+            let item = ConcernSettingsView.located(found, dither: settings.isDither)
             var entry = PaletteEntry(value: "setting:\(item.id)", searchTerms: [item.title, item.to.label] + item.searchTerms,
                                      title: item.title, description: "Settings \u{00B7} \(item.to.label)", icon: .settings,
                                      action: .run({ [weak self] in

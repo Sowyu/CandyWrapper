@@ -212,8 +212,7 @@ extension SettingsController {
 
     /// A search result: open its page, then scroll its anchor into view and pulse it.
     func jump(to item: SettingsSearchItem) {
-        // The default themes keep CandyWrapper's own rows in About (ConcernSettingsView.candyWrapperRows).
-        let to = !isDither && ConcernSettingsView.candyWrapperRows.contains(item.id) ? .about : item.to
+        let to = ConcernSettingsView.located(item, dither: isDither).to
         show(to.isAvailable ? to : section)
         guard to.isAvailable else { return }
         let target: NSView? = switch to {
@@ -230,7 +229,7 @@ extension SettingsController {
 
     private func generalPage() -> ConcernSettingsView {
         if let general { return general }
-        let v = ConcernSettingsView(context: pageContext, section: .general)
+        let v = ConcernSettingsView(context: pageContext, section: .general, dither: isDither)
         v.onHeightChange = { [weak self] in self?.page.pageChanged() }
         general = v
         return v
@@ -252,7 +251,7 @@ extension SettingsController {
         let v: SettingsPageBase = switch section {
         case .projects: ProjectSettingsView(context: c)
         case .chat, .diffs, .threads, .browser, .devices, .worktrees, .maintenance, .about, .providers, .sourceControl:
-            ConcernSettingsView(context: c, section: section)
+            ConcernSettingsView(context: c, section: section, dither: isDither)
         case .integrations: IntegrationsSettingsView(context: c)
         case .storage: StorageSettingsView(context: c)
         case .archive: ArchiveSettingsView(context: c)
@@ -281,7 +280,7 @@ extension SettingsController {
     func refreshPages() {
         guard isOpen else { return }
         updateContext()
-        nav.searchItems = SettingsSearch.available(searchAvailability())
+        nav.searchItems = SettingsSearch.available(searchAvailability()).map { ConcernSettingsView.located($0, dither: isDither) }
         if let d = ditherSection {
             ditherPages[d]?.refresh()
         } else {

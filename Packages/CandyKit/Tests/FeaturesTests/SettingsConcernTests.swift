@@ -62,6 +62,30 @@ struct SettingsConcernTests {
         }
     }
 
+    /// Release check 1.16.0, M1: Tooltips and Trackpad haptics live in General's Input group in Redesign and in
+    /// About's CandyWrapper group in the default themes, once each, and search opens the page that holds them.
+    @Test func candyWrapperRowsShowOnceAndSearchLandsOnThem() {
+        let context = SettingsPagesFidelityTests.context()
+        for dither in [false, true] {
+            let general = ConcernSettingsView(context: context, section: .general, dither: dither)
+            let about = ConcernSettingsView(context: context, section: .about, dither: dither)
+            general.refresh(); about.refresh()
+            for id in ConcernSettingsView.candyWrapperRows {
+                #expect((general.anchor(id) != nil) == dither, "\(id) in General, dither \(dither)")
+                #expect((about.anchor(id) != nil) == !dither, "\(id) in About, dither \(dither)")
+                let item = try! #require(SettingsSearch.items.first { $0.id == id })
+                #expect(ConcernSettingsView.located(item, dither: dither).to == (dither ? .general : .about))
+                var group = (dither ? general : about).anchor(id)
+                while let v = group, !(v is SettingsSectionView) { group = v.superview }
+                #expect((group as? SettingsSectionView)?.title == (dither ? "Input" : "CandyWrapper"), "\(id)")
+            }
+            #expect(about.anchor("app-version") != nil)
+            #expect(general.anchor("quit-confirmation") != nil)
+        }
+        let other = try! #require(SettingsSearch.items.first { $0.id == "send-shortcut" })
+        #expect(ConcernSettingsView.located(other, dither: true) == other)
+    }
+
     @Test func devicePagesStayUsableWithAnOfflineEnvironmentSelected() {
         let context = SettingsPageContext()
         context.scope = SettingsScopeState(environments: [.init(id: "offline", label: "Offline", connected: false)], primaryId: "offline")
