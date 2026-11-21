@@ -125,7 +125,7 @@ Text keeps its values. Body #f5f5f5 is 18.4:1 on the ground and 16.9:1 on a menu
 
 | State | Treatment |
 |---|---|
-| Hover | text color at `State.hover` 0.06 (dark) or 0.042 (light), 150 ms |
+| Hover | text color at `State.hover` 0.06 (dark) or 0.042 (light), at once in and over `Motion.fast` out |
 | Pressed | text color at `State.pressed` 0.1 or 0.07, while held or while its menu is open |
 | Selected | text color at `State.selected` 0.1, or the palette's `sidebarRowSelected` in the sidebar |
 | Focus | the accent ring T3 draws (`BoxShadow.focusRing`), only for keyboard focus, never with an underline |
@@ -134,7 +134,7 @@ Hover clears through `HoverSync` when the pointer leaves, when the window loses 
 
 ## Motion
 
-One curve, `cubic-bezier(0.23, 1, 0.32, 1)` (`Motion.curve`). Hover and press take `Motion.quick`, 150 ms. Pills and popovers that appear rise `Motion.rise`, 4pt, and fade in over 150 ms. Under Reduce Motion they appear without moving. Nothing animates at rest.
+Three durations, `Motion.fast` 120 ms for exits, the hover fade out and the press, `Motion.standard` 150 ms for menus, popovers and pills, `Motion.large` 200 ms for modals and the right panel. Everything that arrives or moves takes `Motion.curve`, `cubic-bezier(0.23, 1, 0.32, 1)`, and everything that leaves `Motion.exitCurve`. Menus and popovers scale from 0.98 about their anchor, pills and toasts travel `Motion.rise`, 4pt, and a pressed button scales to 0.98. The patterns live in `RedesignMotion`, and `RedesignTokenGuardTests` fails on a literal duration on a Redesign path. Under Reduce Motion surfaces appear without moving. Nothing animates at rest. The inventory is `docs/research/redesign-motion-2026-11-21.md`.
 
 ## Measured contrast
 

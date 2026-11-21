@@ -190,9 +190,12 @@ public final class ModalHost: DSView {
 
     /// Backdrop fades over 200ms; the dialog popup scales from .98 and fades, a sheet slides 32px
     /// toward its edge and fades, both 200ms `cubic-bezier(.4,0,.2,1)`. Reduce Motion skips the motion.
+    /// Redesign: the dialog scales from `Motion.scale` over `standard`, the backdrop fades over `large`, and both leave
+    /// over `fast` on the ease-in.
     func animate(entering: Bool, completion: (@MainActor () -> Void)? = nil) {
         guard let layer, let panelLayer = panel.layer, !Motion.reduced else { completion?(); return }
-        let hidden = hiddenTransform()
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let hidden = hiddenTransform(scale: dither ? RedesignTokens.Motion.scale : 0.98)
         CATransaction.begin()
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion?() } }
         for (target, key, from, to) in [
@@ -202,8 +205,8 @@ public final class ModalHost: DSView {
             let a = CABasicAnimation(keyPath: key)
             a.fromValue = from
             a.toValue = to
-            a.duration = 0.2
-            a.timingFunction = Motion.easeInOut
+            a.duration = dither ? RedesignMotion.modal(backdrop: target === layer, entering: entering) : 0.2
+            a.timingFunction = dither ? RedesignTokens.Motion.timing(entering: entering) : Motion.easeInOut
             a.fillMode = .forwards
             a.isRemovedOnCompletion = entering
             target.add(a, forKey: key)
@@ -211,14 +214,14 @@ public final class ModalHost: DSView {
         CATransaction.commit()
     }
 
-    private func hiddenTransform() -> CATransform3D {
+    private func hiddenTransform(scale: CGFloat) -> CATransform3D {
         guard case .sheet(let side) = panel.kind else {
             // Scale about the popup's center: the view layer's anchor is its origin. A nested popup
             // also starts and ends 32px lower (`data-nested:data-starting-style:translate-y-8`).
             let f = panel.frame
             let drop: CGFloat = parentHost == nil ? 0 : 32
             var t = CATransform3DMakeTranslation(f.width / 2, f.height / 2 + drop, 0)
-            t = CATransform3DScale(t, 0.98, 0.98, 1)
+            t = CATransform3DScale(t, scale, scale, 1)
             return CATransform3DTranslate(t, -f.width / 2, -f.height / 2, 0)
         }
         switch side {

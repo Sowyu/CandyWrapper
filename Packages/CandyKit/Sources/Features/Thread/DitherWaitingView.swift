@@ -135,7 +135,7 @@ public final class DitherWaitingView: ControlView {
             let a = CAKeyframeAnimation(keyPath: "opacity")
             a.values = [0.25, 1, 0.25]
             a.keyTimes = [0, 0.5, 1]
-            a.duration = 1.2
+            a.duration = RedesignTokens.Motion.loop
             a.repeatCount = .infinity
             // Diagonal order, so the light runs from one corner to the other.
             a.beginTime = CACurrentMediaTime() + Double(i % 3 + i / 3) * 0.12

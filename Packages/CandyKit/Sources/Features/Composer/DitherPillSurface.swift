@@ -23,24 +23,6 @@ public enum DitherPill {
     @MainActor public static func shadow(_ layer: CALayer, path: CGRect, radius: CGFloat, dark: Bool) {
         RedesignTokens.Shadow.resting.apply(to: layer, path: SmoothCorners.path(path, radius, flipped: false), dark: dark)
     }
-
-    /// The motion for a pill that appears: up 4pt and in from clear, 150 ms on Capy's curve.
-    @MainActor public static func animateIn(_ view: NSView) {
-        guard !Motion.reduced, let layer = view.layer else { return }
-        let rise = CABasicAnimation(keyPath: "transform.translation.y")
-        rise.fromValue = RedesignTokens.Motion.rise
-        rise.toValue = 0
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = 0
-        fade.toValue = 1
-        for a in [rise, fade] {
-            a.duration = RedesignTokens.Motion.quick
-            a.timingFunction = curve
-            layer.add(a, forKey: "pill.in." + a.keyPath!)
-        }
-    }
-
-    @MainActor public static var curve: CAMediaTimingFunction { RedesignTokens.Motion.curve }
 }
 
 /// The pill chrome as a view, placed under a control that draws no surface of its own (the chips, the checkout and

@@ -233,8 +233,13 @@ public struct PopupMotion: Sendable, Equatable {
     public var duration: CFTimeInterval = Motion.Durations.default
     /// Glides after a trigger that scrolls (`followTrigger`) instead of moving at once.
     public var glides = false
+    /// Opens and closes with Redesign's popover motion under Redesign, at once in the other themes.
+    public var movesInRedesign = false
 
+    /// At once in every theme: a tooltip that follows another one (`data-instant`).
     public static let none = PopupMotion(enterScale: nil, exitScale: nil)
+    /// Menus, selects and pickers: T3 shows them at once; Redesign opens them like a popover.
+    public static let menu = PopupMotion(enterScale: nil, exitScale: nil, movesInRedesign: true)
     /// Popover: scale .98 + opacity 0 both ways. T3 3105 f570294df (ui/popover.tsx:92) added the ending style.
     public static let popover = PopupMotion(enterScale: 0.98, exitScale: 0.98)
     /// Tooltip: scale .98 + opacity 0 both ways.
@@ -342,7 +347,7 @@ public final class PopupHost: DSView {
     /// Opens `content` next to `trigger`. Closes any open popup that is not an ancestor first.
     @discardableResult
     public func open(_ content: PopupContent, trigger: NSView?, anchorRect: CGRect? = nil, placement: PopupPlacement,
-                     motion: PopupMotion = .none, swallowsOutsideClick: Bool = false, pressesTrigger: Bool = true,
+                     motion: PopupMotion = .menu, swallowsOutsideClick: Bool = false, pressesTrigger: Bool = true,
                      returnsFocus: Bool = true, parent: OpenPopup? = nil, passive: Bool = false) -> OpenPopup {
         if let parent { closeChildren(of: parent) } else if passive { popups.filter(\.isPassive).forEach { close($0, returnFocus: false) } } else { closeAll() }
         if passive {
@@ -420,8 +425,9 @@ public final class PopupHost: DSView {
                     let a = CABasicAnimation(keyPath: "position")
                     a.fromValue = NSValue(point: old)
                     a.toValue = NSValue(point: layer.position)
-                    a.duration = Motion.Durations.default
-                    a.timingFunction = Motion.easeInOut
+                    let dither = ThemeRuntime.isDither(dark: self.effectiveAppearance.isDark)
+                    a.duration = dither ? RedesignTokens.Motion.standard : Motion.Durations.default
+                    a.timingFunction = dither ? RedesignTokens.Motion.curve : Motion.easeInOut
                     layer.add(a, forKey: "position")
                 }
             })
@@ -524,9 +530,14 @@ public final class PopupHost: DSView {
 
     // MARK: Motion
 
+    /// T3's popup motion in the default themes. Redesign opens every popup that moves at all (menus included) the same
+    /// way: scale from `Motion.scale` about the anchor edge and fade, `standard` in on the ease-out, `fast` out on the
+    /// ease-in. A close mid-open starts from what is on screen. The popup takes events from its first frame.
     private func animate(_ popup: OpenPopup, entering: Bool) {
         let container = popup.container
-        let scale = entering ? popup.motion.enterScale : popup.motion.exitScale
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        var scale = entering ? popup.motion.enterScale : popup.motion.exitScale
+        if dither, scale != nil || popup.motion.movesInRedesign { scale = RedesignTokens.Motion.scale }
         guard let scale, !Motion.reduced, window != nil, let layer = container.layer else {
             if !entering { container.removeFromSuperview() }
             return
@@ -536,6 +547,7 @@ public final class PopupHost: DSView {
         t = CATransform3DScale(t, scale, scale, 1)
         t = CATransform3DTranslate(t, -origin.x, -origin.y, 0)
         let small = NSValue(caTransform3D: t), identity = NSValue(caTransform3D: CATransform3DIdentity)
+        let shown = layer.presentation()
         CATransaction.begin()
         if !entering {
             if popup.isPassive { exitingPassive.append(container) }
@@ -547,14 +559,14 @@ public final class PopupHost: DSView {
             }
         }
         let transform = CABasicAnimation(keyPath: "sublayerTransform")
-        transform.fromValue = entering ? small : identity
+        transform.fromValue = entering ? small : shown.map { NSValue(caTransform3D: $0.sublayerTransform) } ?? identity
         transform.toValue = entering ? identity : small
         let fade = CABasicAnimation(keyPath: "opacity")
-        fade.fromValue = entering ? 0 : 1
+        fade.fromValue = entering ? 0 : shown?.opacity ?? 1
         fade.toValue = entering ? 1 : 0
         for a in [transform, fade] {
-            a.duration = popup.motion.duration
-            a.timingFunction = Motion.easeInOut
+            a.duration = dither ? RedesignTokens.Motion.popover(entering: entering) : popup.motion.duration
+            a.timingFunction = dither ? RedesignTokens.Motion.timing(entering: entering) : Motion.easeInOut
             a.fillMode = .both
             a.isRemovedOnCompletion = entering
         }

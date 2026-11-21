@@ -21,8 +21,13 @@ open class ControlView: DSView {
     public internal(set) var state = State() {
         didSet {
             guard state != oldValue else { return }
+            var transitions = transitions, duration = Motion.Durations.default
+            if window != nil, ThemeRuntime.isDither(dark: effectiveAppearance.isDark),
+               let hover = RedesignMotion.hoverTransition(from: oldValue, to: state) {
+                (transitions, duration) = hover
+            }
             if transitions.isEmpty || window == nil { return stateDidChange(from: oldValue) }
-            Motion.transitioning(transitions) {
+            Motion.transitioning(transitions, duration: duration) {
                 stateDidChange(from: oldValue)
                 // A restyle in `updateLayer` runs now, inside the transition, not at the next display pass.
                 if needsDisplay { displayIfNeeded() }
@@ -347,15 +352,20 @@ open class ControlView: DSView {
         // Scale around the center: the layer's anchor stays at its origin under AppKit.
         // sublayerTransform, because AppKit resets `transform` whenever it syncs the view's geometry
         // (attaching to a window, frame changes). Controls draw only in sublayers and subviews.
+        // Redesign: `pressScale` over `fast` on its ease-out, down and back up.
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let scale = pressed ? (dither ? RedesignTokens.Motion.pressScale : 0.97) : 1
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         var t = CATransform3DMakeTranslation(center.x, center.y, 0)
-        t = CATransform3DScale(t, pressed ? 0.97 : 1, pressed ? 0.97 : 1, 1)
+        t = CATransform3DScale(t, scale, scale, 1)
         t = CATransform3DTranslate(t, -center.x, -center.y, 0)
         if Motion.reduced {
             layer.sublayerTransform = t
             return
         }
-        Motion.animate(layer, keyPath: "sublayerTransform", to: NSValue(caTransform3D: t), duration: Motion.Durations.default)
+        Motion.animate(layer, keyPath: "sublayerTransform", to: NSValue(caTransform3D: t),
+                       duration: dither ? RedesignTokens.Motion.fast : Motion.Durations.default,
+                       timing: dither ? RedesignTokens.Motion.curve : Motion.easeInOut)
         layer.sublayerTransform = t
     }
 }

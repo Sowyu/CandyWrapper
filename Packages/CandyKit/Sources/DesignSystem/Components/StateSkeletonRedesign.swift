@@ -101,7 +101,7 @@ public final class StateSkeletonView: DSView {
         let a = CABasicAnimation(keyPath: "opacity")
         a.fromValue = 1
         a.toValue = dim
-        a.duration = 1.2
+        a.duration = RedesignTokens.Motion.loop
         a.autoreverses = true
         a.repeatCount = .infinity
         a.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)

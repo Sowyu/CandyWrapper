@@ -38,6 +38,32 @@ public final class ToggleView: ControlView {
 
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
+    private var snapsRestyle = false
+
+    /// Where this toggle's fill sits on screen, in `layer`'s coordinates.
+    func shownFill(in layer: CALayer) -> CGRect {
+        let shown = decoration.presentation() ?? decoration
+        return (self.layer ?? decoration).convert(shown.frame, to: layer)
+    }
+
+    /// Redesign's segmented selection: the press snaps, and the new fill slides over from `from` (the old one's frame
+    /// in `layer`'s coordinates) over `standard` on the ease-out, so the selection moves instead of fading.
+    func setPressed(_ pressed: Bool, slidingFrom from: CGRect?, in layer: CALayer) {
+        snapsRestyle = true
+        isPressed = pressed
+        snapsRestyle = false
+        guard pressed, let from, !Motion.reduced, let own = self.layer else { return }
+        let to = own.convert(decoration.frame, to: layer)
+        guard to.width > 0, from != to else { return }
+        var t = CATransform3DMakeTranslation(from.midX - to.midX, from.midY - to.midY, 0)
+        t = CATransform3DScale(t, from.width / to.width, from.height / max(1, to.height), 1)
+        let slide = CABasicAnimation(keyPath: "transform")
+        slide.fromValue = NSValue(caTransform3D: t)
+        slide.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        slide.duration = RedesignTokens.Motion.standard
+        slide.timingFunction = RedesignTokens.Motion.curve
+        decoration.add(slide, forKey: "redesign.selection")
+    }
     private var iconView: IconView?
 
     public convenience init(_ title: String? = nil, icon: IconName? = nil, variant: Variant = .default,
@@ -65,7 +91,10 @@ public final class ToggleView: ControlView {
     }
 
     public override func performAction() {
+        // In a Redesign segmented group the group moves the selection (`ToggleGroupView.selectedIndex`); no fade here.
+        snapsRestyle = variant == .segmented && onPressedChange != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         isPressed.toggle()
+        snapsRestyle = false
         onPressedChange?(isPressed)
         super.performAction()
     }
@@ -136,7 +165,7 @@ public final class ToggleView: ControlView {
         transitions = variant == .segmented ? .colors : []
         decoration.transition = variant == .segmented ? [] : [.shadow]
         let look = ToggleStyles.look(variant: variant, state: state, pressed: isPressed, radius: radius)
-        Motion.transitioning(transitions) {
+        Motion.transitioning(snapsRestyle ? [] : transitions) {
             decoration.boxStyle = look.box
             label.color = look.text
             iconView?.strokeColor = look.text
@@ -221,7 +250,16 @@ public final class ToggleGroupView: DSView {
     public private(set) var items: [ToggleView] = []
     /// Index of the pressed item, nil when none is.
     public var selectedIndex: Int? {
-        didSet { for (i, item) in items.enumerated() { item.isPressed = i == selectedIndex } }
+        didSet {
+            // Redesign slides the selection from the old segment to the new one.
+            if variant == .segmented, window != nil, ThemeRuntime.isDither(dark: effectiveAppearance.isDark),
+               let layer, let old = oldValue, items.indices.contains(old), let new = selectedIndex, new != old {
+                let from = items[old].shownFill(in: layer)
+                for (i, item) in items.enumerated() { item.setPressed(i == new, slidingFrom: i == new ? from : nil, in: layer) }
+                return
+            }
+            for (i, item) in items.enumerated() { item.isPressed = i == selectedIndex }
+        }
     }
     public final var onChange: (@MainActor (Int?) -> Void)?
 
