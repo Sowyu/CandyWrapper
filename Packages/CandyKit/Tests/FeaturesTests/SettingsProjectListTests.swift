@@ -8,6 +8,18 @@ import T3Protocol
 /// search, and the page in light and dark.
 @MainActor
 struct SettingsProjectListTests {
+    /// With no projects the empty state offers Add project, which runs the app's add-project flow.
+    @Test func emptyStateAddsAProject() {
+        let list = SettingsProjectListView(entries: [], select: { _ in })
+        #expect(list.noProjects.state.action == nil)
+        var added = 0
+        list.onAddProject = { added += 1 }
+        let action = list.noProjects.state.action
+        #expect(action?.title == "Add project")
+        action?.handler()
+        #expect(added == 1)
+    }
+
     static let machines = [("a", "Studio Mac"), ("b", "Build box"), ("c", "Travel laptop")]
 
     /// 19 projects over 3 machines: 15 plain ones, one grouped across two machines, three scratch folders.

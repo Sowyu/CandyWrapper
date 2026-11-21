@@ -12,4 +12,10 @@ public enum DesignGeometry {
         if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) { return DitherChrome.radius(previous) }
         return usesClassic(view) ? previous : max(0, previous - 2)
     }
+
+    /// The corner of a small control's own fill (a hover, press or selection fill on a raw layer): Redesign's control
+    /// radius, else `stock`. `radius(_:in:)` leaves anything under 5 alone, which kept such fills near square.
+    public static func controlRadius(_ stock: CGFloat, in view: NSView) -> CGFloat {
+        ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) ? RedesignTokens.Radius.control : stock
+    }
 }

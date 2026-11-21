@@ -77,6 +77,9 @@ public final class ExpandedImagePreviewView: DSView {
         previous.setAccessibilityLabel("Previous media")
         next.setAccessibilityLabel("Next media")
         close.setAccessibilityLabel("Close image preview")
+        TooltipController.redesign(previous, "Previous image (←)")
+        TooltipController.redesign(next, "Next image (→)")
+        TooltipController.redesign(close, "Close image preview (Esc)")
         addSubview(close)
         close.action = { [weak self] in self?.dismiss() }
         previous.action = { [weak self] in self?.move(-1) }
@@ -136,6 +139,7 @@ public final class ExpandedImagePreviewView: DSView {
                 let toggle = ButtonView(nil, icon: .text, variant: .overlay, size: .iconMicro)
                 toggle.iconSize = 12
                 toggle.action = { [weak self] in self?.toggleDetails() }
+                TooltipController.redesign(toggle, "Show details")
                 contents = toggle
                 syncToggle()
             } else {

@@ -39,14 +39,18 @@ public enum DitherFill {
         (Double(DitherArt.bayer[(y & 7) * 8 + (x & 7)]) + 0.5) / 64
     }
 
-    /// How full a gradient is at `depth`, 0 at the edge to 1 at the foot: about half under the edge, solid from half
-    /// way down.
+    /// How full a gradient is at `depth`, 0 at the edge to 1 at the foot of that column's own area: about half under
+    /// the edge, breaking up gradually over the top `reach` of the area. The holes thin out slowly (a square root),
+    /// so the last scattered rows reach about half way down, as dither-kit's area chart does.
     public nonisolated static func density(depth t: Double) -> Double {
-        min(1, edgeDensity + (1 - edgeDensity) * 2 * max(0, t))
+        let open = max(0, 1 - max(0, t) / reach)
+        return min(1, 1 - (1 - edgeDensity) * open.squareRoot())
     }
 
     /// The gradient's density right under the edge.
-    public nonisolated static let edgeDensity: Double = 0.4
+    public nonisolated static let edgeDensity: Double = 0.5
+    /// How far down the area the break-up reaches, as a share of the area's height at that column.
+    public nonisolated static let reach: Double = 0.55
 
     public struct Grid: Equatable, Sendable {
         public let width: Int
@@ -78,7 +82,8 @@ public enum DitherFill {
         /// A shape's inside in its texture, in `layer`, over whatever is there. With `gap`, the cells around the
         /// shape are cleared first, so a shape in front keeps a one-cell dark margin from the one behind. A column
         /// only one cell tall clears no margin, so a series that barely registers draws a line, not a dark band.
-        public mutating func fill(tops: [Int], layer: UInt8, texture: Texture, gap: Bool) {
+        /// `holes` is the layer for the cells inside the shape that the texture leaves open; 0 leaves them clear.
+        public mutating func fill(tops: [Int], layer: UInt8, texture: Texture, gap: Bool, holes: UInt8 = 0) {
             let n = min(width, tops.count)
             if gap {
                 for x in 0..<n where tops[x] < height - 1 {
@@ -92,7 +97,7 @@ public enum DitherFill {
             for x in 0..<n where tops[x] < height {
                 let top = tops[x], depth = Double(height - top)
                 for y in top..<height {
-                    self[x, y] = texture.admits(x, y, depth: Double(y - top) / depth) ? layer : 0
+                    self[x, y] = texture.admits(x, y, depth: Double(y - top) / depth) ? layer : holes
                 }
             }
         }

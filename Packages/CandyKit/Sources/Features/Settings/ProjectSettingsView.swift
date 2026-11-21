@@ -85,6 +85,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
             if let list = scopeNotice as? SettingsProjectListView { list.reload(entries, select: select); return }
             let list = SettingsProjectListView(entries: entries, select: select)
             list.onDelete = { [weak self] key in self?.confirmListDelete(key) }
+            if let add = context.addProject { list.onAddProject = { add() } }
             scopeNotice = list
             body = [list]
             return

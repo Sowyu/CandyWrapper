@@ -246,6 +246,7 @@ open class ControlView: DSView {
 
     /// `aria-label`, else the tooltip when the control shows no text (an icon button).
     open override func accessibilityLabel() -> String? {
+        if let tip = TooltipController.redesignText(for: self) { return tip }
         if let explicit = super.accessibilityLabel(), !explicit.isEmpty { return explicit }
         guard accessibilityTitle()?.isEmpty ?? true else { return nil }
         return TooltipController.text(for: self) ?? toolTip

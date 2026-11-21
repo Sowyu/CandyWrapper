@@ -376,6 +376,7 @@ public final class ComposerImageShelfView: DSView {
                 HoverReveal.withoutAnimation { revealRemove() }
             }
             remove.setAccessibilityLabel("Remove \(tile.name)")
+            TooltipController.redesign(remove, "Remove \(tile.name)")
             retry.setAccessibilityLabel("Retry upload for \(tile.name)")
             setAccessibilityLabel("Preview \(tile.name)")
             switch tile.status {

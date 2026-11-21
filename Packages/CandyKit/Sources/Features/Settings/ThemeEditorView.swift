@@ -348,13 +348,13 @@ public final class ThemeEditorController {
     /// `handleSaved` (ThemeEditorHost.tsx:33-104).
     private func didSave(_ theme: ThemeDefinition, created: Bool, merged: ThemeAppearance?) {
         if let merged {
-            library.setTheme(theme.id)
+            library.keepingRedesign { library.setTheme(theme.id) }
             toast?("\(theme.label) updated", "Its \(merged.rawValue) palette was added.", .success)
         } else if !created {
             let wasActive = library.definition(library.preference)?.id == theme.id || library.halves.light == theme.id || library.halves.dark == theme.id
             toast?("\(theme.label) saved", wasActive ? "Your changes are now active." : "Your changes are saved.", .success)
         } else {
-            library.setTheme(theme.id)
+            library.keepingRedesign { library.setTheme(theme.id) }
             toast?("\(theme.label) created", "It’s now active.", .success)
         }
     }

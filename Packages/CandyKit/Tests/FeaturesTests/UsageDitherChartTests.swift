@@ -71,7 +71,11 @@ struct UsageDitherChartTests {
 
 
     /// Every series cell, fill or edge, of series `k` in column `x`.
-    static func series(_ cell: UInt8) -> Int? { cell >= 2 ? (Int(cell) - 2) / 2 : nil }
+    /// The series a cell belongs to: its fill and edge layers, then its hole layer after every fill and edge.
+    static func series(_ cell: UInt8, of n: Int = input().series.count) -> Int? {
+        let c = Int(cell)
+        return c >= 2 + 2 * n ? c - 2 - 2 * n : c >= 2 ? (c - 2) / 2 : nil
+    }
 
     @Test func maskIsDeterministicAndStaysWithinTheData() {
         let size = CGSize(width: 700, height: 224)
@@ -113,13 +117,35 @@ struct UsageDitherChartTests {
         #expect(grid.revealed(columns: grid.width) == grid)
     }
 
+    /// Inside a series the cells its texture leaves open are its own hole layer, a dark tint of its color, never clear.
+    @Test func holesTakeTheSeriesTint() {
+        let size = CGSize(width: 700, height: 224)
+        let input = Self.input()
+        let n = input.series.count
+        let grid = UsageDitherPlotView.grid(input, size: size)
+        let tops = UsageDitherPlotView.tops(input, size: size)
+        var holes = 0
+        for x in 1..<grid.width - 1 where tops[0][x] < grid.height - 4 {
+            // Clear of the one-cell margin a series in front keeps around itself, in this column and its neighbours.
+            for y in tops[0][x]..<grid.height where tops.dropFirst().allSatisfy({ f in (x - 1...x + 1).allSatisfy { y < f[$0] - 1 } }) {
+                #expect(grid[x, y] != 0, "clear cell inside series 0 at \(x), \(y)")
+                if grid[x, y] == UsageDitherPlotView.holeLayer(0, of: n) { holes += 1 }
+            }
+        }
+        #expect(holes > 0)
+    }
+
     @Test func texturesAreDistinctAndOrdered() {
         #expect((0..<4).map(DitherFill.Texture.forSeries) == [.gradient, .hatch, .counterHatch, .dots])
         // The gradient is solid at the foot and broken toward the edge.
         let foot = (0..<8).flatMap { x in (0..<8).map { y in DitherFill.Texture.gradient.admits(x, y, depth: 0.9) } }
         let edge = (0..<8).flatMap { x in (0..<8).map { y in DitherFill.Texture.gradient.admits(x, y, depth: 0) } }
         #expect(foot.allSatisfy { $0 })
-        #expect(edge.filter { $0 }.count == 26)
+        #expect(edge.filter { $0 }.count == 32)
+        // It breaks up over the top 55% of the area's own height, thinning slowly: still open a third of the way down.
+        let third = (0..<8).flatMap { x in (0..<8).map { y in DitherFill.Texture.gradient.admits(x, y, depth: 0.33) } }
+        #expect(third.filter { !$0 }.count >= 16)
+        #expect(DitherFill.density(depth: 0.55) == 1)
         // The hatches are mirror images; no two textures agree on an 8 by 8 tile.
         let tiles = DitherFill.Texture.allCases.map { t in (0..<8).flatMap { x in (0..<8).map { y in t.admits(x, y, depth: 0.2) } } }
         #expect(Set(tiles.map { $0.map { $0 ? "1" : "0" }.joined() }).count == 4)
@@ -205,7 +231,7 @@ struct UsageDitherChartTests {
         let runs = 20
         var bytes = 0
         for _ in 0..<runs {
-            let image = UsageDitherPlotView.image(UsageDitherPlotView.grid(input, size: size), colors: [CGColor](repeating: .white, count: 9), ground: .black)
+            let image = UsageDitherPlotView.image(UsageDitherPlotView.grid(input, size: size), colors: [CGColor](repeating: .white, count: 13), ground: .black)
             bytes = (image?.bytesPerRow ?? 0) * (image?.height ?? 0)
         }
         let ms = Date().timeIntervalSince(start) / Double(runs) * 1000

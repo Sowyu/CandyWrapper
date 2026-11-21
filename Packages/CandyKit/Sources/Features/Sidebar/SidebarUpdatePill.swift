@@ -168,8 +168,8 @@ public final class SidebarUpdatePillView: ControlView {
         var color = Themed.color(\.sidebarIconColor, sidebar: true)
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             // Dither: a quiet control inside the account row, filled only under the pointer (the user, 2026-10-22),
-            // concentric with the row's corner 8 in.
-            box.radius = DitherChrome.nested(in: SidebarAccountRowView.radius, inset: 8)
+            // on the control radius like its neighbours. Nesting it in the row's 8 at 8 in floored it at 2, near square.
+            box.radius = RedesignTokens.Radius.control
             if enabled, state.hovered || state.active { box.fill = Themed.color(\.sidebarRowActive, sidebar: true) }
             if showUpdateIconState || enabled && state.hovered { color = fg }
         } else if showUpdateIconState {

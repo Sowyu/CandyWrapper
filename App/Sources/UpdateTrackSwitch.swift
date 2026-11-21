@@ -106,7 +106,16 @@ final class UpdateTrackSwitch {
         if let line = UpdateEverythingLogic.threadsLine(stopped: threads.stopped, continuing: threads.continuing) { notes.append(line) }
         if let reason = idle.disabledReason { notes.append(reason) }
 
-        let dialog = DialogView(kind: .alertDialog, title: "Switch to \(label)?", message: "Version \(release.version)")
+        var title = "Switch to \(label)?", message = "Version \(release.version)"
+        if ThemeRuntime.isDither(dark: window.effectiveAppearance.isDark) {
+            // Redesign leads with what changes: the servers, the threads, and not this app (UpdateTrackSwitchLogic.redesignLead).
+            let lead = L.redesignLead(moves: moving.map { L.Move(machine: $0.machine.label, from: $0.machine.serverVersion, to: $0.targetVersion) },
+                                      stopped: threads.stopped, continuing: threads.continuing)
+            title = "Switch T3 servers to \(label)?"
+            message = lead[0]
+            notes = Array(lead.dropFirst()) + [idle.note, idle.disabledReason].compactMap { $0 }
+        }
+        let dialog = DialogView(kind: .alertDialog, title: title, message: message)
         dialog.maxWidth = 576
         if !description.rows.isEmpty {
             let content = UpdateEverythingDialogContent(description)

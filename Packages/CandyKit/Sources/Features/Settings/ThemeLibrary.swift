@@ -256,7 +256,18 @@ public final class ThemeLibrary {
     /// Posted after any change to the stored choice or the library.
     public static let didChange = Notification.Name("CandyThemeLibraryDidChange")
 
+    private var holding = 0, heldChange = false
+
+    /// Runs `body` with one change notification at the end, so a switch made of several writes applies once.
+    func batch(_ body: () -> Void) {
+        holding += 1
+        body()
+        holding -= 1
+        if holding == 0, heldChange { heldChange = false; changed() }
+    }
+
     private func changed() {
+        if holding > 0 { heldChange = true; return }
         apply()
         for o in observers { o.block() }
         NotificationCenter.default.post(name: Self.didChange, object: self)
@@ -267,9 +278,17 @@ public final class ThemeLibrary {
     /// The card that owns an appearance; nil is the standard T3 Code card.
     public func ownerCard(_ appearance: ThemeAppearance) -> String? { halves[appearance] ?? definition(preference)?.id }
 
-    /// Rings on a card's circles: the appearances it owns (`pickedModesFor`).
+    /// The card that owns an appearance where Redesign is off: what the grid shows and edits. Redesign has no card;
+    /// it is turned on and off in Settings > Redesign.
+    public func underlyingOwnerCard(_ appearance: ThemeAppearance) -> String? {
+        let u = underlying
+        if let id = u[appearance], let d = definition(id), d.colors(for: appearance) != nil { return d.id }
+        return definition(u.preference)?.id
+    }
+
+    /// Rings on a card's circles: the appearances it owns where Redesign is off (`pickedModesFor`).
     public func pickedModes(_ cardId: String?) -> [ThemeAppearance] {
-        ThemeAppearance.allCases.filter { ownerCard($0) == cardId }
+        ThemeAppearance.allCases.filter { underlyingOwnerCard($0) == cardId }
     }
 
     /// `persistTheme(appearanceMode === "system" ? "system" : appearanceMode)`: back to the standard look.
@@ -307,30 +326,108 @@ public final class ThemeLibrary {
 
     // MARK: The Redesign switch (Settings > Redesign)
 
-    /// The theme in use before the Redesign tab's switch turned on: `{preference, light?, dark?}`.
+    /// The theme in use before Redesign turned on: `{preference, light?, dark?}`. It is what applies where Redesign
+    /// is off, and what the Themes grid edits while Redesign is on.
     static let preRedesignKey = "theme.preRedesign"
+    /// Settings > Redesign's "Use in": "both", "dark" or "light", kept while Redesign is off for the next switch on.
+    static let redesignUseInKey = "theme.redesignUseIn"
 
-    /// Redesign paints either appearance, whether the switch or the theme picker chose it.
-    public var isRedesignOn: Bool { ThemeAppearance.allCases.contains { owner(of: $0) == ThemeDefinition.dither.id } }
+    /// A theme choice: the base preference and the halves over it.
+    public struct Selection: Equatable, Sendable {
+        public var preference: String
+        public var light: String?
+        public var dark: String?
+        public subscript(_ a: ThemeAppearance) -> String? { a == .light ? light : dark }
+    }
 
-    /// On remembers the current choice and its mix and picks Redesign. Off brings them back, or the standard
-    /// look when nothing was remembered or the remembered theme is gone.
-    public func setRedesign(_ on: Bool) {
-        guard on != isRedesignOn else { return }
-        if on {
-            var o = ["preference": preference]
-            o["light"] = rawHalves.light
-            o["dark"] = rawHalves.dark
-            defaults.set(try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]), forKey: Self.preRedesignKey)
-            setTheme(ThemeDefinition.dither.id)
-            return
+    /// Redesign paints either appearance, whether the switch or an older build's theme card chose it.
+    public var isRedesignOn: Bool { !redesignAppearances.isEmpty }
+
+    /// The appearances Redesign paints.
+    public var redesignAppearances: Set<ThemeAppearance> {
+        Set(ThemeAppearance.allCases.filter { owner(of: $0) == ThemeDefinition.dither.id })
+    }
+
+    /// The appearances "Use in" turns Redesign on for: both unless the user chose one.
+    public var redesignUseIn: Set<ThemeAppearance> {
+        switch defaults.string(forKey: Self.redesignUseInKey) {
+        case "dark": [.dark]
+        case "light": [.light]
+        default: Set(ThemeAppearance.allCases)
         }
-        let saved = defaults.data(forKey: Self.preRedesignKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] }
-        defaults.removeObject(forKey: Self.preRedesignKey)
-        let usable = { (id: String?) in id.map { ["system", "light", "dark"].contains($0) || (self.definition($0) != nil && !(self.definition($0)?.isDither ?? true)) } ?? false }
-        guard let saved, usable(saved["preference"]) else { useStandard(); return }
-        setTheme(saved["preference"]!)
-        for a in ThemeAppearance.allCases where usable(saved[a.rawValue]) { setThemeHalf(a, saved[a.rawValue]) }
+    }
+
+    private func usableUnder(_ id: String?) -> Bool {
+        guard let id else { return false }
+        return ["system", "light", "dark"].contains(id) || (definition(id).map { !$0.isDither } ?? false)
+    }
+
+    /// The selection where Redesign is off: the stored one while Redesign is off, else the one it replaced. A
+    /// Redesign chosen from an older build's card saved nothing, so the standard look stands under it.
+    public var underlying: Selection {
+        let ditherId = ThemeDefinition.dither.id
+        let raw = rawHalves
+        guard isRedesignOn else { return Selection(preference: preference, light: raw.light, dark: raw.dark) }
+        if let o = defaults.data(forKey: Self.preRedesignKey).flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: String] }),
+           usableUnder(o["preference"]) {
+            return Selection(preference: o["preference"]!, light: usableUnder(o["light"]) ? o["light"] : nil,
+                             dark: usableUnder(o["dark"]) ? o["dark"] : nil)
+        }
+        return Selection(preference: preference == ditherId ? appearanceMode : preference,
+                         light: raw.light == ditherId ? nil : raw.light, dark: raw.dark == ditherId ? nil : raw.dark)
+    }
+
+    private func write(_ s: Selection) {
+        setTheme(s.preference)
+        if let l = s.light { setThemeHalf(.light, l) }
+        if let d = s.dark { setThemeHalf(.dark, d) }
+    }
+
+    /// Settings > Redesign's "Use in": saved for the next switch on, and applied at once while Redesign is on.
+    public func setRedesignUseIn(_ appearances: Set<ThemeAppearance>) {
+        guard !appearances.isEmpty else { return }
+        defaults.set(appearances.count > 1 ? "both" : appearances.contains(.dark) ? "dark" : "light", forKey: Self.redesignUseInKey)
+        if isRedesignOn { setRedesign(in: appearances) } else { changed() }
+    }
+
+    /// The master switch: on in the appearances "Use in" names, or off, bringing back the theme Redesign replaced.
+    public func setRedesign(_ on: Bool) { setRedesign(in: on ? redesignUseIn : []) }
+
+    /// Redesign in exactly these appearances; the others show the underlying selection.
+    public func setRedesign(in appearances: Set<ThemeAppearance>) {
+        guard appearances != redesignAppearances else { return }
+        let u = underlying
+        batch {
+            guard !appearances.isEmpty else {
+                defaults.removeObject(forKey: Self.preRedesignKey)
+                write(u)
+                return
+            }
+            var o = ["preference": u.preference]
+            o["light"] = u.light
+            o["dark"] = u.dark
+            defaults.set(try? JSONSerialization.data(withJSONObject: o, options: [.sortedKeys]), forKey: Self.preRedesignKey)
+            if appearances.count == ThemeAppearance.allCases.count {
+                setTheme(ThemeDefinition.dither.id)
+            } else {
+                write(u)
+                for a in appearances { setThemeHalf(a, ThemeDefinition.dither.id) }
+            }
+        }
+    }
+
+    /// Runs a Themes grid change on the selection Redesign sits over, then puts Redesign back where it was, so a
+    /// card picked while Redesign is on takes effect where Redesign is off and when it is turned off.
+    public func keepingRedesign(_ body: () -> Void) {
+        let on = redesignAppearances
+        guard !on.isEmpty, pinned == nil else { body(); return }
+        let u = underlying
+        batch {
+            defaults.removeObject(forKey: Self.preRedesignKey)
+            write(u)
+            body()
+            setRedesign(in: on)
+        }
     }
 
     // MARK: Applying (applyTheme, useTheme.ts:375-412)

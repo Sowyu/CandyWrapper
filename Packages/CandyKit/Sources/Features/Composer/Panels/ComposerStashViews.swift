@@ -322,6 +322,7 @@ private final class StashRowView: DSView {
     }
 
     override func updateLayer() {
+        layer?.cornerRadius = DesignGeometry.controlRadius(4, in: self)
         layer?.backgroundColor = highlighted ? Themed.color(\.accent).cgColor(in: self) : nil
         for t in thumbs { t.layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self) }
     }

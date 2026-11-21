@@ -87,6 +87,8 @@ public final class SettingsPageContext {
     public var signInToConnect: (() -> Void)?
     /// Leaves Settings for the thread view (after removing the open project).
     public var closeSettings: (() -> Void)?
+    /// Closes Settings and opens the sidebar's add-project flow.
+    public var addProject: (() -> Void)?
     /// Copies text and shows a toast with the title.
     public var copy: ((String, String) -> Void)?
     /// `projects.mutate project.update` on every member, stopping at the first failure (`updateAllMembers`).

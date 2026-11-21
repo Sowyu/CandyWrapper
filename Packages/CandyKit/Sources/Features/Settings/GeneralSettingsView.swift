@@ -562,12 +562,22 @@ public final class GeneralSettingsView: SettingsPageBase {
         let trackRow = row("update-track", title: "Update track", detail: "Use stable releases or nightly builds. Switch back anytime.", control: track)
         binder.add { [weak self, weak trackRow] in
             guard let self, let trackRow else { return }
+            let selected = (self.context.update?.channel ?? .latest).rawValue
+            if ThemeRuntime.isDither(dark: trackRow.effectiveAppearance.isDark) {
+                let n = self.context.trackSwitchAvailable ? self.context.unswitchedMachines : nil
+                let line = UpdateTrackSwitchLogic.redesignTrackLine(unswitched: n, selected: selected)
+                if trackRow.detail != line { trackRow.detail = line }
+                if let n, n > 0 {
+                    let review: @MainActor () -> Void = { [weak self] in self?.context.reviewTrackSwitch?() }
+                    trackRow.detailLink = (title: "Review", action: review)
+                } else { trackRow.detailLink = nil }
+                return
+            }
             guard self.context.trackSwitchAvailable else {
                 trackRow.detailLink = nil
                 trackRow.detail = "Use stable releases or nightly builds. Switch back anytime."
                 return
             }
-            let selected = (self.context.update?.channel ?? .latest).rawValue
             let n = self.context.unswitchedMachines
             let line = UpdateTrackSwitchLogic.trackLine(unswitched: n, selected: selected)
             if trackRow.detail != line { trackRow.detail = line }

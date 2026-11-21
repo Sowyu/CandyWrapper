@@ -191,4 +191,50 @@ import T3Store
             rig.expectConsistent()
         }
     }
+
+    // MARK: Small fixes, 2026-11-21
+
+    /// A clamped description whose second line fits on its own still ends in an ellipsis.
+    @Test func clampedDescriptionEndsInAnEllipsis() {
+        let text = NSAttributedString(string: "Fast Claude model for responsive assistance, classification, and lightweight agents",
+                                      attributes: [.font: DSFont.ui(13)])
+        for width: CGFloat in stride(from: 220, through: 300, by: 4) {
+            guard TextBlockLayout(text, width: width, lineHeight: 20).lines.count > 2 else { continue }
+            let layout = TextBlockLayout(text, width: width, lineHeight: 20, maxLines: 2)
+            guard let last = layout.lines.last, layout.lines.count == 2 else { continue }
+            #expect(layout.widths.last! <= width + 0.5, "\(width)")
+            #expect(Self.endsInEllipsis(last.line), "\(width)")
+        }
+    }
+
+    static func endsInEllipsis(_ line: CTLine) -> Bool {
+        let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+        guard let run = runs.last else { return false }
+        let count = CTRunGetGlyphCount(run)
+        var glyph = CGGlyph(0)
+        CTRunGetGlyphs(run, CFRange(location: count - 1, length: 1), &glyph)
+        let font = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName] as! CTFont
+        var chars: [UniChar] = Array("\u{2026}".utf16)
+        var ellipsis = CGGlyph(0)
+        CTFontGetGlyphsForCharacters(font, &chars, &ellipsis, 1)
+        return glyph == ellipsis
+    }
+
+    @Test func redesignEffortLabelsAreSentenceCase() {
+        #expect(ComposerEffortColumnView.sentenceCase("Extra High") == "Extra high")
+        #expect(ComposerEffortColumnView.sentenceCase("Max") == "Max")
+        #expect(ComposerEffortColumnView.sentenceCase("GPT Mode") == "GPT mode")
+        #expect(ComposerEffortColumnView.sentenceCase("Use XHIGH") == "Use XHIGH")
+    }
+
+    /// The NEW badge gives way before the name or the jump key lose room.
+    @Test func newBadgeYieldsFirst() {
+        let badge = NewBadgeView()
+        let w = 8 + badge.intrinsicContentSize.width
+        #expect(ModelRowView.newBadgeWidth(badge, name: 100, room: 100 + w) == w)
+        #expect(!badge.isHidden)
+        #expect(ModelRowView.newBadgeWidth(badge, name: 100, room: 100 + w - 1) == 0)
+        #expect(badge.isHidden)
+        #expect(ModelRowView.newBadgeWidth(nil, name: 100, room: 0) == 0)
+    }
 }

@@ -74,6 +74,7 @@ struct PickersFidelityTests {
         Case(reference: "13-model-picker", rect: CGRect(x: 317, y: 411, width: 362, height: 298), backdropAt: CGPoint(x: 314, y: 420)) { p in
             let config = try! PickersFidelityTests.recordedConfig()
             let view = ModelPickerView(catalog: ProviderCatalog(config.providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
+            view.jumpLabel = { "⌘\($0 + 1)" } // as the app's keymap labels them
             // Redesign docks the picker as one column since 2026-11-20 (the user's layout): list, Reasoning, footer.
             let dock = DockedModelPickerView(picker: view)
             dock.column.update(descriptors: p.current.descriptors, ultrathink: false, locked: false, model: p.current.modelTriggerLabel(spoken: true))

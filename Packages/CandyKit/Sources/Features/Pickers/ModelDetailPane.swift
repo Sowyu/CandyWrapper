@@ -123,7 +123,9 @@ final class ModelDetailPaneView: DSView {
         about.text = content.description ?? ""
         about.isHidden = content.description == nil
         let credit = ModelNotes.source.map { "From \($0.name) (\($0.licence) licence), fetched \($0.fetched)." }
-        about.toolTip = credit
+        // Two lines show; the tooltip and VoiceOver get the whole description.
+        about.toolTip = [content.description, credit].compactMap { $0 }.joined(separator: "\n\n")
+        about.setAccessibilityLabel(content.description)
         priceRows = content.prices.isEmpty ? [row("No price known", "", credit: nil)] : content.prices.map { row($0.label, $0.value, credit: nil) }
         factRows = content.facts.map { row($0.label, $0.value, credit: credit) }
         let inputs = content.inputs.compactMap(Self.input)

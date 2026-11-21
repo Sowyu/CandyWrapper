@@ -29,6 +29,9 @@ public final class RedesignSettingsView: SettingsPageBase {
     private var themeObserver: Int?
     /// The master switch, bound to the theme picker's setting.
     let master: SwitchView
+    /// Where Redesign shows: both appearances, or one, with the theme from Settings > Appearance in the other.
+    let useIn = settingsSelect(RedesignSettingsView.useInChoices.map(\.0), width: 136)
+    static let useInChoices: [(String, Set<ThemeAppearance>)] = [("Light and dark", [.light, .dark]), ("Dark only", [.dark]), ("Light only", [.light])]
     /// The rows inert while Redesign is off: all but the switch and Ignore Reduce Transparency.
     private(set) var gated: [SettingsRowView] = []
 
@@ -40,10 +43,17 @@ public final class RedesignSettingsView: SettingsPageBase {
         super.init(context: context)
         master.setAccessibilityLabel("Redesign")
         master.onChange = { on in library.setRedesign(on) }
+        // The old theme card could pick Redesign for one appearance; "Use in" keeps that.
+        useIn.setAccessibilityLabel("Use Redesign in")
+        useIn.onChange = { index in library.setRedesignUseIn(Self.useInChoices[index].1) }
         let masterRow = row("redesign", title: "Redesign",
                             detail: "CandyWrapper's own look, with a picture behind the chat. Off goes back to the theme you had before.",
-                            control: master)
-        binder.add { [weak master] in master?.isOn = library.isRedesignOn }
+                            control: SettingsControlGroup([useIn, master], gap: 12))
+        binder.add { [weak self, weak master] in
+            master?.isOn = library.isRedesignOn
+            let shown = library.isRedesignOn ? library.redesignAppearances : library.redesignUseIn
+            if let i = Self.useInChoices.firstIndex(where: { $0.1 == shown }), self?.useIn.selectedIndex != i { self?.useIn.selectedIndex = i }
+        }
 
         let picture = pictureRow(), dim = dimRow()
         // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").

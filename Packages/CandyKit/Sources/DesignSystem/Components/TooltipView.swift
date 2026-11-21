@@ -107,6 +107,11 @@ public final class TooltipController: NSResponder, HoverSyncClient {
     /// pointer is over it.
     public var interactive = false
     public static var providerTimeout: TimeInterval = 0.4
+    /// Shows only under Redesign, where it is also the control's accessibility label; the default themes keep T3's
+    /// buttons, which have none.
+    public var redesignOnly = false
+    /// Read each time the tooltip opens, so a rebound shortcut shows.
+    public var textProvider: (@MainActor () -> String)?
 
     private weak var view: NSView?
     private var tracking: NSTrackingArea?
@@ -128,7 +133,26 @@ public final class TooltipController: NSResponder, HoverSyncClient {
     /// The tooltip text attached to `view`, for its accessibility label.
     static func text(for view: NSView) -> String? {
         guard let c = objc_getAssociatedObject(view, &associationKey) as? TooltipController, !c.text.isEmpty else { return nil }
-        return c.text
+        if c.redesignOnly, !ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) { return nil }
+        return c.textProvider?() ?? c.text
+    }
+
+    /// A Redesign-only tooltip's text while Redesign shows, which then replaces the control's accessibility label.
+    static func redesignText(for view: NSView) -> String? {
+        guard let c = objc_getAssociatedObject(view, &associationKey) as? TooltipController, c.redesignOnly else { return nil }
+        return text(for: view)
+    }
+
+    /// Attaches a Redesign-only tooltip naming `action`, followed by `shortcut()` in parentheses when it returns one.
+    /// Calling it again on the same view, as a row's update does, retitles the one already attached.
+    @discardableResult
+    public static func redesign(_ view: NSView, _ action: String, shortcut: (@MainActor () -> String?)? = nil) -> TooltipController {
+        let c = objc_getAssociatedObject(view, &associationKey) as? TooltipController ?? attach(to: view, text: action)
+        c.text = action
+        c.redesignOnly = true
+        c.textProvider = nil
+        if let shortcut { c.textProvider = { shortcut().map { "\(action) (\($0))" } ?? action } }
+        return c
     }
 
     init(view: NSView, text: String, variant: TooltipView.Variant, placement: PopupPlacement, delay: TimeInterval, closeDelay: TimeInterval) {
@@ -161,7 +185,10 @@ public final class TooltipController: NSResponder, HoverSyncClient {
     public var isShown: Bool { popup != nil }
 
     public func show(instant: Bool = false) {
-        guard popup == nil, (!text.isEmpty || content != nil), let view, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
+        guard popup == nil, let view else { return }
+        if redesignOnly, !ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) { return }
+        if let textProvider { text = textProvider() }
+        guard !text.isEmpty || content != nil, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
         // Redesign, after Capy: no tooltip over the trigger's own open menu. Other themes keep T3's, which shows it.
         if ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark),
            host.popups.contains(where: { $0.trigger === view && !$0.isPassive }) { return }

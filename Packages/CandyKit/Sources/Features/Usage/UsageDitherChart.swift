@@ -90,10 +90,10 @@ final class UsageDitherPlotView: DSView {
         if window != nil { needsLayout = true }
     }
 
-    /// The bitmap's colors: the gridline dots, then each series' fill and edge.
+    /// The bitmap's colors: the gridline dots, then each series' fill and edge, then each series' holes.
     private func colors() -> [CGColor] {
         let ground = Themed.color(\.background), ink = Themed.color(\.foreground)
-        var out = [Themed.color(\.border).cgColor(in: self)]
+        var out = [Themed.color(\.border).cgColor(in: self)], holes: [CGColor] = []
         for s in input.series {
             // The edge lifts from the series color first, then both dim together toward the ground.
             var keep: CGFloat = s.dim
@@ -101,8 +101,9 @@ final class UsageDitherPlotView: DSView {
             for c in [s.color, OKLab.mix(s.color, 1 - Self.edgeLift, ink)] {
                 out.append((keep < 1 ? OKLab.mix(c, keep, ground) : c).cgColor(in: self))
             }
+            holes.append(OKLab.mix(s.color, Self.holeTint * keep, ground).cgColor(in: self))
         }
-        return out
+        return out + holes
     }
 
     /// The grid's frame in the view: whole cells, its foot on the baseline.
@@ -167,16 +168,24 @@ final class UsageDitherPlotView: DSView {
         }
         let tops = tops(input, size: size, shape: shape, cell: c)
         for (i, top) in tops.enumerated() where !top.isEmpty {
-            grid.fill(tops: top, layer: UInt8(2 + 2 * i), texture: textures(i), gap: i > 0)
+            grid.fill(tops: top, layer: UInt8(2 + 2 * i), texture: textures(i), gap: i > 0, holes: holeLayer(i, of: tops.count))
         }
         // Every outline after every fill, so a series behind keeps its edge where a lighter one covers its area.
         for (i, top) in tops.enumerated() where !top.isEmpty { grid.edge(tops: top, layer: UInt8(3 + 2 * i)) }
         return grid
     }
 
-    /// The bitmap for a grid: fills fade toward the ground at the top of the plot, so the solid foot reads brightest.
+    /// Series `i`'s holes, after every fill and edge layer: dither-kit draws a hole as a dark tint of the series
+    /// color, not the ground.
+    static func holeLayer(_ i: Int, of count: Int) -> UInt8 { UInt8(2 + 2 * count + i) }
+    /// How much of the series color a hole keeps over the ground.
+    static let holeTint: CGFloat = 0.4
+
+    /// The bitmap for a grid: fills and their holes fade toward the ground at the top of the plot, so the solid foot
+    /// reads brightest.
     static func image(_ grid: DitherFill.Grid, colors: [CGColor], ground: CGColor) -> CGImage? {
-        let fills = Set(stride(from: 2, to: colors.count + 1, by: 2).map { UInt8($0) })
+        let count = (colors.count - 1) / 3
+        let fills = Set((0..<count).flatMap { [UInt8(2 + 2 * $0), holeLayer($0, of: count)] })
         return DitherFill.image(grid, colors: colors, ramp: (fills, ground, topFade))
     }
 

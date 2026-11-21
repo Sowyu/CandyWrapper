@@ -65,11 +65,12 @@ public struct TextBlockLayout {
             let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "\u{2026}", attributes: attributes))
             let text = NSMutableAttributedString(attributedString: string.attributedSubstring(from: NSRange(location: range.location, length: range.length)))
             while let c = text.string.last, c.isWhitespace { text.deleteCharacters(in: NSRange(location: text.length - 1, length: 1)) }
-            let content = CTLineCreateWithAttributedString(text)
             text.append(NSAttributedString(string: "\u{2026}", attributes: attributes))
             let whole = CTLineCreateWithAttributedString(text)
+            // Truncate the line with its ellipsis: a line that fits on its own would come back from CoreText
+            // unchanged, with no ellipsis, and read as a sentence cut off.
             let last = CTLineGetTypographicBounds(whole, nil, nil, nil) <= Double(width) ? whole
-                : CTLineCreateTruncatedLine(content, Double(width), .end, ellipsis) ?? content
+                : CTLineCreateTruncatedLine(whole, Double(width), .end, ellipsis) ?? whole
             lines = Array(lines.prefix(maxLines - 1)) + [TextLine(line: last)]
         }
         self.lines = lines

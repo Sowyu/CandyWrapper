@@ -51,6 +51,8 @@ final class DitherTabsController {
         _ = ThreadTabsSetting.observe { [weak self] in self?.applySetting() }
         layout.backButton.action = { [weak history] in history?.back() }
         layout.forwardButton.action = { [weak history] in history?.forward() }
+        TooltipController.redesign(layout.backButton, "Back") { ActiveKeymap.label(for: "navigation.back") }
+        TooltipController.redesign(layout.forwardButton, "Forward") { ActiveKeymap.label(for: "navigation.forward") }
         applySetting()
     }
 

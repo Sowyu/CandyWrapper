@@ -63,20 +63,27 @@ final class UpdateEverything {
     func providersChanged() { refresh() }
 
     /// T3 3669 ws.ts:2310-2380: refreshModels invalidates the latest-version cache before discovery.
-    func check() async -> Bool {
+    /// One outcome per machine that failed, by its name, else `.checked`.
+    func check() async -> [SidebarUpdateCheck.Outcome] {
         async let servers = serverUpdates.check()
         async let runtime = serverUpdates.runtimeUpdater?.check() ?? true
-        let providers = await withTaskGroup(of: Bool.self) { group in
+        let runtimeId = serverUpdates.runtimeUpdater?.environmentId
+        let providers = await withTaskGroup(of: String?.self) { group in
             for id in environments.environmentIds where environments.state(id)?.status == .connected {
-                group.addTask { [weak self] in await self?.checkProviders(id) ?? false }
+                group.addTask { [weak self] in await self?.checkProviders(id) ?? false ? nil : id }
             }
-            var succeeded = true
-            for await result in group { if !result { succeeded = false } }
-            return succeeded
+            var failed: [String] = []
+            for await id in group { if let id { failed.append(id) } }
+            return failed
         }
-        let (serverResult, runtimeResult) = await (servers, runtime)
+        let (serverFailed, runtimeResult) = await (servers, runtime)
         refresh()
-        return providers && serverResult && runtimeResult
+        var failed = serverFailed + providers
+        if !runtimeResult, let runtimeId { failed.append(runtimeId) }
+        var outcomes: [SidebarUpdateCheck.Outcome] = []
+        for id in environments.environmentIds where failed.contains(id) { outcomes.append(.machineFailed(environments.label(id) ?? id)) }
+        if !runtimeResult, runtimeId == nil { outcomes.append(.machineFailed("This Mac")) }
+        return outcomes.isEmpty ? [.checked] : outcomes
     }
 
     private func checkProviders(_ id: String) async -> Bool {

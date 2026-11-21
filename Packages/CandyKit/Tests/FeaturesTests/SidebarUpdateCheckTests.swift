@@ -18,20 +18,35 @@ struct SidebarUpdateCheckTests {
         var transitions: [SidebarUpdateCheck.State] = []
         check.onChange = { transitions.append($0) }
         #expect(check.state == .idle)
-        let task = Task { await check.run(checks: [{ await app.wait() }, { await server.wait() }, { await providers.wait() }], hasUpdates: { false }) }
+        let task = Task { await check.run(checks: [{ [await app.wait() ? .checked : .appFailed(reason: nil)] }, { [await server.wait() ? .checked : .machineFailed("A")] },
+                                                   { [await providers.wait() ? .checked : .machineFailed("B")] }], hasUpdates: { false }) }
         while providers.continuation == nil || server.continuation == nil || app.continuation == nil { await Task.yield() }
         #expect(check.state == .checking)
-        await check.run(checks: [{ Issue.record("A second click must not start another check"); return false }], hasUpdates: { false })
+        await check.run(checks: [{ Issue.record("A second click must not start another check"); return [.checked] }], hasUpdates: { false })
         app.finish(); server.finish()
         #expect(check.state == .checking)
         providers.finish()
         await task.value
         #expect(check.state == .upToDate)
         #expect(transitions == [.checking, .upToDate])
-        await check.run(checks: [{ true }], hasUpdates: { true })
+        await check.run(checks: [{ [.checked] }], hasUpdates: { true })
         #expect(check.state == .updatesAvailable)
-        await check.run(checks: [{ true }, { false }], hasUpdates: { false })
+        await check.run(checks: [{ [.checked] }, { [.machineFailed("Mac mini")] }], hasUpdates: { false })
         #expect(check.state == .failed)
+        #expect(check.failures == [.machineFailed("Mac mini")])
+        // An update check or download already under way is not a failure, and says nothing.
+        await check.run(checks: [{ [.busy] }, { [.checked] }], hasUpdates: { false })
+        #expect(check.state == .busy && check.failures.isEmpty)
+    }
+
+    @Test func failureToastNamesWhatFailed() {
+        typealias C = SidebarUpdateCheck
+        #expect(C.failureCopy([.appFailed(reason: nil)]) == ("Could not check for updates", "This app's own update check failed."))
+        #expect(C.failureCopy([.appFailed(reason: "Offline.")]).message == "This app's own update check failed: Offline.")
+        #expect(C.failureCopy([.machineFailed("vps")]) == ("Could not check updates on vps", "Try again once it is reachable."))
+        let both = C.failureCopy([.machineFailed("vps"), .appFailed(reason: nil), .machineFailed("Mac mini"), .machineFailed("Pi")])
+        #expect(both.title == "Could not check updates on vps, Mac mini and Pi")
+        #expect(both.message == "This app's own update check failed. Try again once they are reachable.")
     }
 
     @Test func footerGlyphsReachTheBitmap() {

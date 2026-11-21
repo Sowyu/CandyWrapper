@@ -336,7 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                           pill: sidebar.updatePill, window: window,
                                           toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts },
                                           providers: { [weak threads] env in threads?.composer.config(env)?.providers ?? [] })
-        updates?.checkEnvironmentUpdates = { [weak everything] in await everything?.check() ?? false }
+        updates?.checkEnvironmentUpdates = { [weak everything] in await everything?.check() ?? [.checked] }
         updateEverything = everything
         updates?.trackSwitch = UpdateTrackSwitch(updater: updater, environments: environments, serverUpdates: threads.serverUpdates, window: window,
                                                  toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts })
@@ -538,6 +538,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
         threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }
         threads.composer.onAddProject = { [weak commands] in commands?.addProject() }
+        // Settings > Projects' empty state: the palette's add-project flow lives in the main window, over Settings.
+        settings.pageContext.addProject = { [weak settings, weak commands] in settings?.close(); commands?.addProject() }
         threads.composer.scratchEnvironment = { [weak palette] in palette?.scratchTargetEnvironmentId }
         threads.composer.onStartWithoutProject = { [weak palette] env in palette?.startScratchThread(env) }
         threads.composer.openScratchProject = { [weak palette] env in await palette?.openScratchProject(env) }

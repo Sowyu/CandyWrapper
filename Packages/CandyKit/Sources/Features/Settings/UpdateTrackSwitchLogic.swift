@@ -178,6 +178,39 @@ public enum UpdateTrackSwitchLogic {
             : "This app stays on its current build until a Stable release is newer, then updates to it."
     }
 
+    // MARK: Redesign's wording
+
+    /// Redesign's Update track row: the switch moves the T3 servers, while CandyWrapper itself has one release track
+    /// (every release so far is on the default channel), which the user could not tell from T3's wording.
+    public static func redesignTrackLine(unswitched: Int?, selected: String) -> String {
+        let lead = "Sets the T3 server track on your connected machines. This app has one release track."
+        guard let unswitched, unswitched > 0 else { return lead }
+        let other = label(selected == "nightly" ? "latest" : "nightly")
+        return lead + (unswitched == 1 ? " 1 machine still runs \(other)." : " \(unswitched) machines still run \(other).")
+    }
+
+    /// One server a switch moves, from its version to the target.
+    public struct Move: Equatable, Sendable {
+        public var machine: String, from: String?, to: String
+        public init(machine: String, from: String?, to: String) { self.machine = machine; self.from = from; self.to = to }
+    }
+
+    /// Redesign's dialog, before the per-machine table: which servers change version and from what to what, the
+    /// threads that stop, and that this app's own version stays.
+    public static func redesignLead(moves: [Move], stopped: Int, continuing: Int) -> [String] {
+        var lines: [String] = []
+        let parts = moves.map { m in m.from.map { "\(m.machine) from \($0) to \(m.to)" } ?? "\(m.machine) to \(m.to)" }
+        if parts.isEmpty {
+            lines.append("No T3 server changes version.")
+        } else {
+            let list = parts.count == 1 ? parts[0] : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
+            lines.append("This moves the T3 \(parts.count == 1 ? "server" : "servers") on \(list).")
+        }
+        if let threads = UpdateEverythingLogic.threadsLine(stopped: stopped, continuing: continuing) { lines.append(threads) }
+        lines.append("This app's own version does not change.")
+        return lines
+    }
+
     /// The Update track row's line (SettingsPanels.tsx:370-395): machines still on the other track, or what a switch does.
     public static func trackLine(unswitched: Int, selected: String) -> String {
         guard unswitched > 0 else { return "Switches this app and every connected machine whose database the target release supports." }
