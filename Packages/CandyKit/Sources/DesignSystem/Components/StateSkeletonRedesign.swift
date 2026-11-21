@@ -71,7 +71,9 @@ public final class StateSkeletonView: DSView {
                 let w = bar.width == 0 ? bar.height : max(bar.height, (width - bar.x) * bar.width).rounded()
                 let x = bar.trailing ? pad + width - w : pad + bar.x
                 bars[i].frame = CGRect(x: x, y: y + ((rowHeight - bar.height) / 2).rounded(), width: w, height: bar.height)
-                bars[i].cornerRadius = bar.height > 12 ? RedesignTokens.Radius.card : RedesignTokens.Radius.capsule(bar.height)
+                // A bubble-sized bar takes the card corner, a text line round ends.
+                let block = bar.height > 12
+                bars[i].cornerRadius = block ? RedesignTokens.Radius.card : RedesignTokens.Radius.capsule(bar.height)
                 i += 1
             }
             y += rowHeight + (row.first?.height ?? 0 > 12 ? RedesignTokens.Space.s : 0)
