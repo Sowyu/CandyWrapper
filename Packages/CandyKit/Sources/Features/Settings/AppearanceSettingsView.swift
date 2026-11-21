@@ -78,6 +78,8 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let grid = ThemeCardGridView()
         // While Redesign is on the cards pick the theme under it; Redesign itself is switched in Settings > Redesign.
         let redesignNotice = SettingsNoticeView("")
+        // On the Themes heading's 16pt inset (SettingsSubheadingView), the button's label too.
+        redesignNotice.inset = 16
         let openRedesign = ButtonView("Open Redesign settings", variant: .link, size: .sm)
         openRedesign.action = { [weak self] in self?.context.openSection?(.redesign) }
         redesignNotice.button = openRedesign

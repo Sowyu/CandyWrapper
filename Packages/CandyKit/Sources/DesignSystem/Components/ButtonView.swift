@@ -38,6 +38,8 @@ public final class ButtonView: ControlView {
 
     public var variant: Variant = .default { didSet { restyle() } }
     public var size: Size = .default { didSet { restyle(); invalidateIntrinsicContentSize() } }
+    /// Where the label starts inside the button, its padding and border, for lining a label up with text beside it.
+    public var labelInset: CGFloat { size.metrics.padding + 1 }
     public var title: String? { didSet { label.text = title ?? ""; syncLabel(); invalidateIntrinsicContentSize(); needsLayout = true } }
     public var icon: IconName? { didSet { updateIcons() } }
     /// Replaces the leading glyph with a visible-only, Reduce Motion-aware spinner.

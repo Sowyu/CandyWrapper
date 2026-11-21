@@ -117,4 +117,22 @@ struct RedesignSwitchTests {
         #expect(AppearanceSettingsView.redesignNotice([.dark])
                 == "Redesign is on in dark mode, so the theme you pick here shows in light mode and when Redesign is off.")
     }
+
+    /// Appearance's Redesign note and its "Open Redesign settings" label start where the Themes heading does
+    /// (1.17.0 walk, 09g).
+    @Test func theRedesignNoteSitsOnTheHeadingsInset() throws {
+        let heading = SettingsSubheadingView("Themes")
+        heading.frame = NSRect(x: 0, y: 0, width: 700, height: 28)
+        heading.layoutSubtreeIfNeeded()
+        let headingX = try #require(heading.subviews.compactMap { $0 as? LabelView }.first).frame.minX
+        let note = SettingsNoticeView("Redesign is on, so the theme you pick here shows when Redesign is off.")
+        note.inset = 16
+        let button = ButtonView("Open Redesign settings", variant: .link, size: .sm)
+        note.button = button
+        note.frame = NSRect(x: 0, y: 0, width: 700, height: note.height(forWidth: 700))
+        note.layoutSubtreeIfNeeded()
+        let text = try #require(note.subviews.first { $0 is TextBlockView })
+        #expect(text.frame.minX == headingX)
+        #expect(button.frame.minX + button.labelInset == headingX)
+    }
 }
