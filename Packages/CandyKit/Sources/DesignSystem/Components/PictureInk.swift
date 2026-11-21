@@ -120,7 +120,12 @@ public enum PictureInk {
         return DitherArt.smoothstep(0.55, 0.75, black) * (1 - DitherArt.smoothstep(0.15, 0.3, shadow))
     }
 
-    nonisolated static func tone(_ picture: CGImage, width w: Int, height h: Int, cell: Double = 3) -> Tone? {
+    /// The long side Auto's hue is read from. The hue comes from its own decode of this size, never from the tone's
+    /// picture, which is decoded larger for a bigger window or finer dots: on the Great Wave a decode under about
+    /// 1930 pixels scored blue (245 degrees) and a larger one olive, turned green, so a window resize changed the inks.
+    nonisolated static let hueSide = 600
+
+    nonisolated static func tone(_ picture: CGImage, width w: Int, height h: Int, cell: Double = 3, hue: Double? = nil) -> Tone? {
         let s = subsamples(cell: cell), sw = w * s, sh = h * s
         guard w > 0, h > 0, let px = cover(picture, width: sw, height: sh) else { return nil }
         // Linear luma per sample; the cell's mean (the area's light) and its brightest sample.
@@ -167,7 +172,7 @@ public enum PictureInk {
             return UInt8((t * 255).rounded())
         }
         let mid = values.sorted()[values.count / 2]
-        return Tone(width: w, height: h, values: values, hue: autoHue(picture), median: Double(mid) / 255,
+        return Tone(width: w, height: h, values: values, hue: hue ?? autoHue(picture), median: Double(mid) / 255,
                     lowKey: lowKey, highKey: highKey, unit: cell)
     }
 
@@ -376,7 +381,8 @@ public enum PictureInk {
             let key = CacheKey(url: url, width: width, height: height, cell: cell)
             if let hit = cache.withLock({ $0?.key == key ? $0?.tone : nil }) { return hit }
             guard let picture = DitherArt.picture(url, maxPixels: max(width, height) * subsamples(cell: cell)),
-                  let tone = tone(picture, width: width, height: height, cell: cell) else { continue }
+                  let tone = tone(picture, width: width, height: height, cell: cell,
+                                  hue: DitherArt.picture(url, maxPixels: hueSide).map(autoHue)) else { continue }
             cache.withLock { $0 = (key, tone) }
             return tone
         }

@@ -41,6 +41,20 @@ struct PictureInkTests {
         #expect(close(inks.light, light), "light \(hex(inks.light))")
     }
 
+    /// Auto's inks come from the picture alone: the same file gives the same hue at a small window with Coarse dots
+    /// and a large one with Fine dots, though the tone decodes it four times larger.
+    @Test func autoInkIgnoresTheWindowAndDotSize() throws {
+        let url = URL(filePath: "/System/Library/CoreServices/DefaultDesktop.heic")
+        try #require(FileManager.default.fileExists(atPath: url.path))
+        PictureInk.dropCache()
+        let small = try #require(PictureInk.tone([url], width: 280, height: 260, cell: 3))
+        PictureInk.dropCache()
+        let large = try #require(PictureInk.tone([url], width: 1146, height: 824, cell: 1.5))
+        PictureInk.dropCache()
+        let picture = try #require(DitherArt.picture(url, maxPixels: PictureInk.hueSide))
+        #expect(small.hue == large.hue && small.hue == PictureInk.autoHue(picture))
+    }
+
     /// A near-grey picture takes Capy's navy hue, and an olive one turns leaf green.
     @Test func greyTakesNavyAndOliveTurnsGreen() {
         #expect(PictureInk.autoHue(flat(0.6, 0.6, 0.62)) == PictureInk.navyHue)
