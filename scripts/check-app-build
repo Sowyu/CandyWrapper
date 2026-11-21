@@ -2,11 +2,13 @@
 # Builds the app target into a scratch derived-data folder and prints only the compiler's error lines.
 # Exits non-zero on any error. Every task that edits App/Sources runs it before its last commit, because
 # `swift test` only builds CandyKit and never sees the app target.
-# Usage: scripts/check-app-build [derived-data-dir], default /tmp/cw-check-app-build.
+# Usage: scripts/check-app-build [derived-data-dir]. The default is the worktree's own folder, the one
+# scripts/build-test-app uses: /tmp/cw-dd-slot-N in a warm slot, else /tmp/cw-dd-<worktree folder name>.
 # It uses scripts/build-test-app's flags, so it never reads the Keychain.
 set -u
 cd "$(dirname "$0")/.."
-dd="${1-/tmp/cw-check-app-build}"
+. scripts/derived-data
+dd="${1-$(derived_data "$(basename "$(pwd -P)" | sed 's/^cw-//')")}"
 scripts/preflight >/dev/null || { echo "scripts/preflight failed, not building" >&2; exit 2; }
 log="$(mktemp -t cw-check-app-build)"
 xcodebuild -scmProvider system -packageAuthorizationProvider netrc -disableAutomaticPackageResolution \

@@ -1,7 +1,10 @@
 #!/bin/sh
-# Builds a Debug app into /tmp/cw-dd-<task> with its own bundle id and URL scheme, so it shares no
-# settings, drafts or URL handling with the user's app or other agents' apps. Prints the app's path;
-# build output goes to stderr. Delete /tmp/cw-dd-<task> when the task is done.
+# Builds a Debug app with its own bundle id and URL scheme, so it shares no settings, drafts or URL handling
+# with the user's app or other agents' apps. Prints the app's path; build output goes to stderr.
+# It builds into the worktree's own derived data, the one scripts/check-app-build uses too: /tmp/cw-dd-slot-N in a
+# warm slot (scripts/warm-worktree), else /tmp/cw-dd-<task>. CANDY_DD picks another folder. Xcode rebuilds
+# everything when that folder or the source path changes; a different bundle id only relinks (3 s).
+# Delete /tmp/cw-dd-<task> when the task is done; slot folders stay for the next task.
 # Usage: CANDY_APP="$(scripts/build-test-app <task>)" scripts/run-app ...
 # Set CANDY_BUILD_JOBS=2 to limit compiler work on the shared Mac.
 set -eu
@@ -16,11 +19,13 @@ case "$build_jobs" in
   *) set -- -jobs "$build_jobs" ;;
 esac
 cd "$(dirname "$0")/.."
+. scripts/derived-data
+dd="${CANDY_DD:-$(derived_data "$task")}"
 scripts/preflight >&2
 # Xcode's own source control reads github.com credentials from the Keychain while it resolves Sparkle, and on
 # a Mac with no saved login that stops the build at a Keychain dialog. System git with the pinned
 # Package.resolved never asks, and netrc keeps package authorization out of the Keychain too.
 xcodebuild -scmProvider system -packageAuthorizationProvider netrc -disableAutomaticPackageResolution -project CandyWrapper.xcodeproj -scheme CandyWrapper -configuration Debug \
-  -derivedDataPath "/tmp/cw-dd-$task" PRODUCT_BUNDLE_IDENTIFIER="dev.candywrapper.test.$task" \
+  -derivedDataPath "$dd" PRODUCT_BUNDLE_IDENTIFIER="dev.candywrapper.test.$task" \
   CANDY_URL_SCHEME="candywrapper-$task" "$@" build -quiet >&2
-echo "/tmp/cw-dd-$task/Build/Products/Debug/CandyWrapper.app"
+echo "$dd/Build/Products/Debug/CandyWrapper.app"

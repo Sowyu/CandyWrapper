@@ -1,0 +1,81 @@
+#!/bin/sh
+# Gives a task a worktree that builds warm. Xcode and SwiftPM rebuild everything when the source path or the
+# build folder changes (measured 2026-11-20, docs/research/warm-builds-2026-11-20.md), so an APFS clone of a
+# build can't seed a new path. Instead six slots, /tmp/cw-slot-1 to /tmp/cw-slot-6, keep their paths and their
+# build folders (Packages/CandyKit/.build inside, /tmp/cw-dd-slot-N for Xcode) from task to task, and a task
+# recompiles only what differs from the slot's last build.
+#
+# Usage:
+#   scripts/warm-worktree <task> [base]   check out branch <task> from base (default main) in a free slot and
+#                                         link /tmp/cw-<task> to it; prints /tmp/cw-<task>
+#   scripts/warm-worktree --done <task>   after you committed: frees the slot, keeps the branch and the builds
+#   scripts/warm-worktree --list          shows each slot, its task and the commit it last built
+# Work in /tmp/cw-<task> as in any worktree. Finish with --done, not `git worktree remove`, which would delete
+# the slot and its builds.
+set -eu
+repo="$(cd "$(dirname "$0")/.." && pwd -P)"
+slots=6
+
+slot_of() { readlink "/tmp/cw-$1" 2>/dev/null | sed -n 's|^/tmp/cw-slot-\([0-9]*\)$|\1|p'; }
+
+case "${1-}" in
+--list)
+  for n in $(seq 1 $slots); do
+    [ -e "/tmp/cw-slot-$n" ] || continue
+    owner="$(cat "/tmp/cw-slot-$n.taken/owner" 2>/dev/null || echo free)"
+    built="$(cat "/tmp/cw-slot-$n.built" 2>/dev/null || echo never)"
+    echo "slot $n: $owner, refreshed $(git -C "$repo" log -1 --format='%h %ar' "$built" 2>/dev/null || echo never)"
+  done
+  exit 0 ;;
+--done)
+  task="${2:?usage: scripts/warm-worktree --done <task>}"
+  n="$(slot_of "$task")"
+  [ -n "$n" ] || { echo "/tmp/cw-$task is not a warm slot" >&2; exit 1; }
+  slot="/tmp/cw-slot-$n"
+  if [ -n "$(git -C "$slot" status --porcelain)" ]; then
+    echo "$slot has uncommitted changes or untracked files: commit or remove them first" >&2; exit 1
+  fi
+  git -C "$slot" checkout -q --detach
+  rm -f "/tmp/cw-$task"
+  rm -rf "/tmp/cw-slot-$n.taken"
+  echo "slot $n is free; branch $task stays"
+  exit 0 ;;
+-* | '') echo "usage: scripts/warm-worktree <task> [base] | --done <task> | --list" >&2; exit 2 ;;
+esac
+
+task="$1"
+base="${2:-main}"
+case "$task" in *[!a-z0-9-]*) echo "task names are lowercase letters, digits and dashes" >&2; exit 2 ;; esac
+if [ -n "$(slot_of "$task")" ]; then echo "/tmp/cw-$task"; exit 0; fi
+[ ! -e "/tmp/cw-$task" ] || { echo "/tmp/cw-$task already exists and is not a warm slot" >&2; exit 1; }
+"$repo/scripts/preflight" >&2
+
+n=""
+for i in $(seq 1 $slots); do
+  if mkdir "/tmp/cw-slot-$i.taken" 2>/dev/null; then n=$i; break; fi
+done
+if [ -z "$n" ]; then
+  echo "all $slots slots are taken (scripts/warm-worktree --list); for a cold worktree: git worktree add -b $task /tmp/cw-$task $base" >&2
+  exit 1
+fi
+echo "$task" > "/tmp/cw-slot-$n.taken/owner"
+slot="/tmp/cw-slot-$n"
+release() { rm -rf "/tmp/cw-slot-$n.taken"; }
+if [ ! -e "$slot" ]; then
+  git -C "$repo" worktree add -q --detach "$slot" "$base" || { release; exit 1; }
+  echo "slot $n is new, so its first build is cold; scripts/warm-refresh keeps free slots built" >&2
+fi
+if [ -n "$(git -C "$slot" status --porcelain)" ]; then
+  release; echo "$slot has leftover changes; look at them before reusing the slot" >&2; exit 1
+fi
+if git -C "$repo" show-ref -q --verify "refs/heads/$task"; then
+  git -C "$slot" checkout -q "$task" || { release; exit 1; }
+else
+  git -C "$slot" checkout -q -b "$task" "$base" || { release; exit 1; }
+fi
+ln -s "$slot" "/tmp/cw-$task"
+built="$(cat "$slot.built" 2>/dev/null || true)"
+if [ -n "$built" ]; then
+  echo "slot $n, last refreshed at $(git -C "$slot" log -1 --format=%h "$built"), $(git -C "$slot" diff --name-only "$built" HEAD -- '*.swift' | wc -l | tr -d ' ') Swift files differ" >&2
+fi
+echo "/tmp/cw-$task"
