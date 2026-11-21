@@ -142,10 +142,11 @@ under Show details (X, changed in one place for every caller).
 
 ## Counts
 
-84 entries above by surface, counting each line group once: 33 empty, 15 loading, 36 error or disconnected.
-Changed: 53 (19 E, 9 L, 25 X). Left: 31, each with its reason in the table: menu rows and counters where one line is
-right, popovers and timeline rows that read as content, views with their own buttons already, and three that need
-plumbing first (native file preview, timeline web rows, Settings add-project).
+48 entries: the 47 table rows above and the toasts. A row can hold more than one state, so by state they hold 30 empty,
+12 loading and 20 error or disconnected. Changed: 31 entries. Left: 17, each with its reason in its row: menu rows and
+counters where one line is right, popovers and timeline rows that read as content, views that already have their own
+buttons, and three that need plumbing first (the native file preview, the timeline's web rows, an add-project action in
+Settings).
 
 ## Places the app still says "T3 Code"
 
