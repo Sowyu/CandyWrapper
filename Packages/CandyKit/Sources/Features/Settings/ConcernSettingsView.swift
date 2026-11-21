@@ -79,7 +79,7 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, [G("behavior", "Notifications", rows: ["thread-notifications", "in-app-notifications"])]),
             .init(.general, [G("organization", "Sidebar", rows: ["project-grouping", "project-order", "working-shelf"])]),
             .init(.general, [G("confirmations", nil)]),
-            .init(.general, [G("behavior", "Display", rows: ["language", "time-format"])])
+            .init(.general, [G("behavior", "Display", rows: ["language", "time-format", "tooltips"])])
         ]
         case .chat: return [
             .init(.general, [G("behavior", "Composer", rows: ["composer-rich-text", "send-shortcut", "skills-in-slash-menu"])]),

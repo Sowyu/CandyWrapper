@@ -98,10 +98,10 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
                                                                                "composer-rich-text", "send-shortcut",
                                                                                "follow-up-behavior"])]),
             .init(.general, [G("behavior", "Diffs and panels", rows: ["hide-whitespace-changes", "default-diff-file-state", "diff-layout",
-                                                                      "proactive-panels", "tooltips"]),
+                                                                      "proactive-panels"]),
                              G("confirmations", nil, rows: ["unpin-confirmation", "archive-confirmation", "delete-confirmation",
                                                             "terminal-close-confirmation", "quit-confirmation"]),
-                             G("behavior", "Input", rows: ["trackpad-haptics"])]),
+                             G("behavior", "Input", rows: ["trackpad-haptics", "tooltips"])]),
         ]
         case .appearance: return [.init(.appearance)]
         case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications", "menu-bar"])])]
