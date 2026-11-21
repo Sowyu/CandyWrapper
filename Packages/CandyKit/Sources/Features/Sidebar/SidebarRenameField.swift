@@ -82,6 +82,7 @@ final class SidebarRenameFieldView: DSView {
     }
 
     override func updateLayer() {
+        layer?.cornerRadius = DesignGeometry.controlRadius(4, in: self)
         layer?.backgroundColor = SB.c(\.card).cgColor(in: self)
         layer?.borderColor = (input.state.focused ? SB.c(\.foreground) : SB.c(\.input)).cgColor(in: self)
     }

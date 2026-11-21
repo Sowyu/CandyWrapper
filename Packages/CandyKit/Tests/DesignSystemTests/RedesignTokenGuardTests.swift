@@ -141,6 +141,22 @@ struct RedesignTokenGuardTests {
         #expect(hits.isEmpty, "Redesign literals outside RedesignTokens:\n\(hits.map(\.description).joined(separator: "\n"))")
     }
 
+    /// A corner nested in an 8pt surface at 8 or more in floors at 2, near square: that is how the account row's
+    /// update check ended up square with no literal radius anywhere. Only the window's 16pt corner leaves room.
+    @Test func nestedCornersKeepTheirRoundness() throws {
+        let call = Self.regex(#"nested\(in:\s*([^,]+),\s*inset:\s*(\d+(?:\.\d+)?)\)"#)
+        var hits: [String] = []
+        for file in Self.sources() {
+            let s = try String(contentsOf: file, encoding: .utf8)
+            for m in Self.matches(call, s) {
+                guard let outer = Range(m.range(at: 1), in: s), let inset = Range(m.range(at: 2), in: s),
+                      Double(s[inset])! >= 8, !s[outer].lowercased().contains("window") else { continue }
+                hits.append("\(file.lastPathComponent): nested(in: \(s[outer]), inset: \(s[inset]))")
+            }
+        }
+        #expect(hits.isEmpty, "Use RedesignTokens.Radius.control for a control inside an 8pt surface:\n\(hits.joined(separator: "\n"))")
+    }
+
     /// The scanner itself: each kind of literal on a Redesign path is caught, the stock arm and tokens are not.
     @Test func scannerCatchesLiterals() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "RedesignTokenGuard-\(getpid())")

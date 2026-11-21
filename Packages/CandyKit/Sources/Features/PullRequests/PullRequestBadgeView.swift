@@ -298,6 +298,7 @@ public final class ThreadPullRequestsMiniListView: DSView, PopupContent {
 
     public override func layout() {
         super.layout()
+        highlight.cornerRadius = DesignGeometry.controlRadius(4, in: self)
         decoration.layout(boxSize: bounds.size)
         // The scroll area spans the padding box less 4pt at each end; its rows start 4pt in, so a list that
         // fits rests where it did without the scroll area.

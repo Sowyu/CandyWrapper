@@ -234,6 +234,7 @@ final class ComposerEffortRowView: ControlView {
     }
 
     override func updateLayer() {
+        fill.cornerRadius = DesignGeometry.controlRadius(4, in: self)
         let lit = (state.hovered || focused || state.popupOpen) && state.enabled
         // `hover:bg-foreground/[0.09] focus-visible:bg-foreground/[0.09]` (COLUMN_ROW, ComposerModelEffort.tsx:188).
         fill.backgroundColor = lit ? (capy ? Themed.color(\.contrastForeground, 0.07) : Themed.color(\.contrastForeground, 0.09)).cgColor(in: self) : nil

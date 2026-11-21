@@ -141,6 +141,7 @@ final class CrumbButton: DSView {
     }
 
     override func updateLayer() {
+        layer?.cornerRadius = DesignGeometry.controlRadius(4, in: self)
         layer?.backgroundColor = hovered ? Themed.color(\.accent).cgColor(in: self) : nil
     }
 

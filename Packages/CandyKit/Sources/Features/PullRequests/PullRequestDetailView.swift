@@ -1346,7 +1346,7 @@ final class LinkLabel: DSView {
     override func layout() {
         super.layout()
         label.frame = NSRect(x: padding, y: (bounds.height - 16) / 2, width: max(0, bounds.width - 2 * padding), height: 16)
-        layer?.cornerRadius = 4
+        layer?.cornerRadius = DesignGeometry.controlRadius(4, in: self)
     }
 
     override func updateLayer() { Motion.setBackground(layer, hovered && padding > 0 ? Themed.color(\.accent, 0.45).cgColor(in: self) : nil) }
