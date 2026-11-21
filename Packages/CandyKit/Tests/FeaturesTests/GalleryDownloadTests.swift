@@ -8,7 +8,14 @@ import T3Store
 
 /// Gallery downloads in the 1.16.0 build restarted from their first byte whenever a tile was rebuilt, and a remote
 /// kept copy downloaded the same file a second time.
-@MainActor @Suite(.serialized) struct GalleryDownloadTests {
+/// Off the main actor: in a full parallel run other suites hold it for tens of seconds, longer than the 2 s grace.
+@Suite(.serialized) struct GalleryDownloadTests {
+    /// Waits up to 60 s for `done`, without the main actor.
+    static func wait(until done: @Sendable () async -> Bool) async {
+        let end = ContinuousClock.now + .seconds(60)
+        while !(await done()), ContinuousClock.now < end { try? await Task.sleep(for: .milliseconds(20)) }
+    }
+
     final class Count: @unchecked Sendable {
         private let lock = NSLock()
         private var n = 0
@@ -51,7 +58,7 @@ import T3Store
         let resource = Self.resource()
         let load = MarkdownImages.assetLoader(key: "media-file:" + (resource["path"]?.stringValue ?? ""), resource: resource)
         let first = Task { await load(64) }
-        await ThreadImageGalleryTests.pump { count.value == 1 }
+        await Self.wait { count.value == 1 }
         // The tile scrolls out or the list changes: its request is cancelled mid-transfer, and the new tile asks again.
         first.cancel()
         _ = await first.value
@@ -107,7 +114,7 @@ extension GalleryDownloadTests {
         let resource = Self.resource()
         let key = "media-file:" + (resource["path"]?.stringValue ?? "")
         let keep = Task { await cache.keepRemote(env: "remote", thread: "t", item: "i", resource: resource) }
-        await ThreadImageGalleryTests.pump { count.value == 1 }
+        await Self.wait { count.value == 1 }
         // The gallery opens while the copy is on its way: its tile's loader for the same file.
         let load = MarkdownImages.assetLoader(key: key, resource: resource)
         let image = await load(32)
@@ -116,7 +123,7 @@ extension GalleryDownloadTests {
         #expect(count.value == 1, "one transfer for the tile and the kept copy")
         // A kept-copy lookup that starts while the copy is on its way waits for it instead of reading nothing.
         let second = Task { await cache.keepRemote(env: "remote", thread: "t", item: "j", resource: Self.resource()) }
-        await ThreadImageGalleryTests.pump { count.value == 2 }
+        await Self.wait { count.value == 2 }
         #expect(await cache.url(env: "remote", thread: "t", item: "j") != nil)
         _ = await second.value
     }

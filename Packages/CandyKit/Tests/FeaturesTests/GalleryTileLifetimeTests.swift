@@ -12,16 +12,37 @@ import T3Protocol
     }
 
     /// A wall in a window whose tiles all show their pixels.
-    private func loadedWall(_ window: NSWindow) async throws -> (ThreadImageWallView, [GalleryImage]) {
+    /// `prefilled` puts the pixels in the wall's cache first, so tiles show without a task: in a full parallel run the
+    /// cooperative pool can be busy for over a minute, longer than any wait here.
+    private func loadedWall(_ window: NSWindow, prefilled: Bool = true) async throws -> (ThreadImageWallView, [GalleryImage]) {
         let wall = ThreadImageWallView(frame: window.contentView!.bounds)
         window.contentView!.addSubview(wall)
         wall.masonry.makeLoader = { _ in { @Sendable _ in Self.pixels() } }
+        #expect(wall.masonry.cache === ImageDecodeCache.gallery)
+        // A cache of its own: AsyncImageCacheTests empties the shared ones in parallel.
+        wall.masonry.cache = NSCache()
         let images = ThreadImageWallTests.measuredImages()
+        if prefilled, let pixels = Self.pixels() {
+            for image in images { wall.masonry.cache.setObject(ImageDecodeCache.Cached(pixels, side: 4096), forKey: "\(image.pixelKey)|cover" as NSString) }
+        }
         wall.images = images
         wall.layoutSubtreeIfNeeded()
         wall.masonry.relayout()
-        await ThreadImageGalleryTests.pump { !wall.masonry.tiles.isEmpty && wall.masonry.tiles.values.allSatisfy { $0.thumb.image != nil } }
-        try #require(wall.masonry.tiles.count >= 4 && wall.masonry.tiles.values.allSatisfy { $0.thumb.image != nil })
+        // Up to 60 s: in a full parallel run other suites hold the main actor that long. A parallel
+        // `AsyncImageView.clearMemory()` cancels decodes in flight, so a tile that failed that way is built again.
+        let end = Date().addingTimeInterval(60)
+        while !(!wall.masonry.tiles.isEmpty && wall.masonry.tiles.values.allSatisfy { $0.thumb.image != nil }), Date() < end {
+            try? await Task.sleep(for: .milliseconds(50))
+            if wall.masonry.tiles.values.contains(where: { $0.thumb.failureState != nil }) {
+                wall.images = []
+                wall.images = images
+                wall.layoutSubtreeIfNeeded()
+                wall.masonry.relayout()
+            }
+        }
+        let tiles = wall.masonry.tiles.values
+        try #require(tiles.count >= 4 && tiles.allSatisfy { $0.thumb.image != nil },
+                     "\(tiles.count) tiles, \(wall.masonry.frames.count) placed, \(tiles.filter { $0.thumb.image == nil }.count) without pixels, \(tiles.filter { $0.thumb.failureState != nil }.count) failed, sizes \(tiles.map { $0.thumb.bounds.size }.prefix(2)), window \(wall.window != nil)")
         return (wall, images)
     }
 
@@ -80,9 +101,9 @@ extension GalleryTileLifetimeTests {
     @Test func aReturningTileShowsAtOnceAndAClosedGalleryLetsGo() async throws {
         let window = ThreadImageWallTests.window()
         defer { window.contentView = nil; window.close() }
-        let (wall, images) = try await loadedWall(window)
-        #expect(wall.masonry.cache === ImageDecodeCache.gallery)
-        let cached = images.filter { ImageDecodeCache.gallery.object(forKey: "\($0.pixelKey)|cover" as NSString) != nil }
+        let (wall, images) = try await loadedWall(window, prefilled: false)
+        let cache = wall.masonry.cache
+        let cached = images.filter { cache.object(forKey: "\($0.pixelKey)|cover" as NSString) != nil }
         #expect(cached.count == wall.masonry.tiles.count, "every tile's decode is kept")
         // Tiles go, as when they scroll a viewport away or the gallery closes, and come back.
         wall.images = []
@@ -94,9 +115,14 @@ extension GalleryTileLifetimeTests {
         #expect(wall.masonry.tiles.values.allSatisfy { $0.thumb.image != nil }, "no placeholder for a picture seen before")
         // The timeline's cache holds none of them.
         #expect(images.allSatisfy { ImageDecodeCache.memory.object(forKey: "\($0.pixelKey)|cover" as NSString) == nil })
-        ImageDecodeCache.releaseGallery(after: .milliseconds(20))
-        await ThreadImageGalleryTests.pump { ImageDecodeCache.gallery.object(forKey: "\(images[0].pixelKey)|cover" as NSString) == nil }
-        #expect(images.allSatisfy { ImageDecodeCache.gallery.object(forKey: "\($0.pixelKey)|cover" as NSString) == nil })
+        // The gallery's own cache lets go a while after it closes, and not before.
+        let probe = "release-" + UUID().uuidString as NSString
+        ImageDecodeCache.gallery.setObject(ImageDecodeCache.Cached(try #require(Self.pixels()), side: 64), forKey: probe)
+        ImageDecodeCache.releaseGallery(after: .milliseconds(300))
+        #expect(ImageDecodeCache.gallery.object(forKey: probe) != nil)
+        let end = Date().addingTimeInterval(60)
+        while ImageDecodeCache.gallery.object(forKey: probe) != nil, Date() < end { try? await Task.sleep(for: .milliseconds(50)) }
+        #expect(ImageDecodeCache.gallery.object(forKey: probe) == nil)
     }
 }
 
