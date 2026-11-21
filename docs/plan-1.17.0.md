@@ -115,7 +115,7 @@ What to build:
 - A larger flower means larger frames. The release walk already measured 126 MB on the Flower page (item 4). Render at a coarser cell size or fewer frames, and report the footprint. Idle cost with motion stopped must stay at zero.
 - Mock it first: three or four compositions (centred and oversized, low and cropped by the bottom edge, off to one side, a top-down view) on the new-thread page and on a thread, dark and light, as PNG sheets. The user picks before anything is wired in. The standalone renderer tools are in `~/CandyWrapper-research/sandbox/lotus-2026-11-21/tools/`.
 
-### 7. Picture dither for dark photos
+### 7. Picture dither: dark photos and dot size
 
 The user's own wallpaper looks bad in 1.16.0. It is a night photo of three street lamps in fog: almost all black, with bright lamp heads and soft cones of light. Dithered, the whole window is covered in scattered single dots and the lamps are lost. Their words: "wait my one aint look that good??? this is the og photo". Both pictures are in `~/CandyWrapper-research/sandbox/redesign-user-notes/` as `r7-user-wallpaper-streetlamps-original.png` and `-dithered.png`.
 
@@ -130,6 +130,13 @@ What to build, with this photo as the test case next to the five from the mockup
 - Consider one user control in Settings > Redesign beside Ink, only if the automatic choice cannot serve both kinds of photo: "Detail" or "Brightness", with Auto as the default. The old "Background dim" row is inert in Picture today.
 - The agent that collected wallpapers on 2026-11-21 wrote down which photos dither well (`~/CandyWrapper-research/sandbox/wallpapers-2026-11-21/`). Use its rejects as more test cases.
 - Mock the before and after on the user's photo first and show them.
+
+Dot size, same file. The user tried a bright, detailed photo too (a Tokyo Bay skyline, `r7-user-wallpaper-tokyo-bay-original.png` and `-dithered.png` in the notes folder): "even bright photos looks a bit eh on my laptop i feel like the pixels might be a bit big". They are right. Picture uses 3pt cells, chosen to match Capy's gradient. On a 2x laptop screen that is 6 pixels a dot, and a skyline turns into blocks. 1.15.2 used 2pt dots.
+
+- Try 2pt and 1.5pt cells (3 pixels at 2x) on that photo and on the five mockup photos, on a 2x and a 1x screen. Smaller cells keep detail; too small and it stops reading as dither. Show 1.5, 2 and 3 side by side on the user's two photos and let them pick.
+- Offer it as a setting beside Ink, "Dot size": Fine, Medium, Coarse, if one size cannot suit both a skyline and a statue. Check the cached image's size and the render time at the finer sizes (about 2.25 times the cells at 2pt, 4 times at 1.5pt).
+- Gradient and Flower keep their own 3pt grid unless the user asks.
+- In the same screenshot the conversation text sits on busy mid-tone dots and is hard to read, even though it passes the measured contrast floor. That is the case for item 9, the clean reading column. Show the user that screenshot when asking.
 
 ### 8. Thin scrollbars and one focus ring
 
