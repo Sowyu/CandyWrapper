@@ -8,7 +8,8 @@ import Testing
 /// The default themes keep T3's 16pt card, divider and header bar.
 @MainActor
 struct RouteModalCardTests {
-    static func modal(dither: Bool, width: CGFloat, title: String = "General") -> (AppRouteModalView, SettingsPageView) {
+    static func modal(dither: Bool, width: CGFloat, title: String = "General",
+                      content: (NSView & SettingsGroupRow)? = nil) -> (AppRouteModalView, SettingsPageView) {
         var input = ThemeRuntime.input
         input.ditherLight = dither; input.ditherDark = dither
         ThemeRuntime.apply(input)
@@ -16,7 +17,7 @@ struct RouteModalCardTests {
         page.header.isRouteModal = true
         page.header.section = .general
         page.header.restore.isHidden = false
-        page.page = SettingsStackView()
+        page.page = content ?? SettingsStackView()
         page.ditherHeading = (title, "")
         let nav = DSView()
         let modal = AppRouteModalView(label: "Settings", content: page, navigation: nav)
@@ -56,6 +57,49 @@ struct RouteModalCardTests {
         let (_, page) = Self.modal(dither: true, width: 840, title: "A very long settings page title that runs into the buttons")
         let title = page.ditherTitle.convert(page.ditherTitle.bounds, to: page)
         #expect(title.minY >= page.header.close.frame.maxY)
+        // Right under the 40pt row, at the scroll's top: where the dropped title sat before the row was fixed.
+        #expect(title.minY == 40 && page.ditherTitle.superview !== page)
+    }
+
+    /// The page scrolls only below the card's fixed 40pt top row, so a scrolled row never runs under close or
+    /// Restore (1.16.0: "Restore device defaults" drew over the Delete confirmation toggle).
+    @Test(arguments: [1100, 840] as [CGFloat]) func scrolledRowsStayClearOfTheControls(width: CGFloat) throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (_, page) = Self.modal(dither: true, width: width, content: GeneralSettingsView(context: SettingsPagesFidelityTests.context()))
+        #expect(page.rowRule.isHidden)
+        page.scroll.scroll(to: NSPoint(x: 0, y: 300))
+        #expect(page.scroll.scrollView.contentView.bounds.minY == 300)
+        #expect(!page.rowRule.isHidden && page.rowRule.frame.maxY == 40)
+        let controls = [page.header.close.frame, page.header.restore.frame]
+        #expect(page.scroll.frame.minY >= controls.map(\.maxY).max()!)
+        let general = try #require(page.page)
+        func rows(_ view: NSView) -> [NSView] { view.isHidden ? [] : [view] + view.subviews.flatMap(rows) }
+        var checked = 0
+        for row in rows(general) {
+            // What the page draws of the row: its frame clipped to the scroll area.
+            let drawn = row.convert(row.bounds, to: page).intersection(page.scroll.frame)
+            guard !drawn.isEmpty else { continue }
+            checked += 1
+            for control in controls { #expect(!drawn.intersects(control), "\(type(of: row)) \(drawn) under \(control)") }
+        }
+        #expect(checked > 10)
+    }
+
+    /// At rest the title moves up 10pt from 16 into the row, centred on the buttons, and the page keeps its 28pt
+    /// under it, so the first section moves up 10 too (72 to 62).
+    @Test(arguments: [1100, 840] as [CGFloat]) func restingTitleSitsInTheTopRow(width: CGFloat) throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (_, page) = Self.modal(dither: true, width: width)
+        // General as the app shows it: titled by its section, no subtitle line.
+        page.ditherHeading = nil
+        page.layoutSubtreeIfNeeded()
+        let title = page.ditherTitle.convert(page.ditherTitle.bounds, to: page)
+        #expect(title.minY == 6 && title.midY == page.header.close.frame.midY)
+        let first = try #require(page.page)
+        #expect(first.convert(first.bounds, to: page).minY == 62)
+        #expect(page.scroll.frame.minY == 40 && page.header.frame.height == 40)
     }
 
     @Test func defaultThemesKeepT3sFrame() {
