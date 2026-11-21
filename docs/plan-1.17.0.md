@@ -41,7 +41,7 @@ The rules that came out of it are in `docs/research/redesign-system.md`:
 
 ## Work for 1.17.0
 
-Suggested order. Items 1 to 8 need no answer from the user.
+Suggested order. Items 1 to 9 need no decision from the user before starting, though several say to mock first and let them pick. Item 10 needs two answers.
 
 ### 1. Video and GIFs in replies
 
@@ -142,9 +142,15 @@ Dot size, same file. The user tried a bright, detailed photo too (a Tokyo Bay sk
 
 Approved by the user as part of "what else can make this app more premium". Thin overlay scrollbars everywhere in Redesign and one focus ring style. Small.
 
-### 9. Clean reading column in dark. Ask first.
+### 9. Readable text over the Picture background
 
-In Redesign dark with a Picture background, conversation text sits on a thinned dither. It measures 10:1 but reads busy. Light mode already has a plain column with the picture only in the margins (`PictureInk`, `lightColumnIsClean`). The orchestrator recommended the same for dark. **The user has not answered.** Ask before building.
+This is no longer a question of whether. The user reported it twice on 1.16.0: "also see this text hard to read", with `r7-text-hard-to-read-over-dither.png` in the notes folder, and the Tokyo Bay screenshot in item 7 shows the same thing. In Redesign dark with Background = Picture, conversation text runs over the dither. `PictureInk` thins and dims the dots behind the reading column until body text measures 7:1 and muted text 4.5:1 at the worst cell, and it still reads badly, because dots of changing brightness sit right behind the letters. The measured floor was the wrong test.
+
+- Recommended fix, not yet confirmed by the user: a plain near-black reading column, with the picture only in the margins and above the first message. Light mode already does this (`lightColumnIsClean` in `PictureInkTests`, built in the light-mode pass). Do the same in dark.
+- Mock two or three treatments on the user's own screenshots before building: a plain column with a soft fade at its edges, a plain column as wide as the composer, and a much stronger dim that keeps a trace of the picture. Show them and let the user pick. The user has not chosen between them.
+- User bubbles, code blocks, tables and cards are already solid. The problem is body text and muted text on the bare background.
+- The same rule then applies to the Flower when it becomes a full background (item 6) and to Gradient.
+- If the inset card layout (item 10) is built, the card is the plain ground and this is solved there for that layout. It still has to be right with the card switched off.
 
 ### 10. Inset card layout for threads. Ask first.
 
