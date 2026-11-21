@@ -111,7 +111,11 @@ public final class TerminalDrawerView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        let top: CGFloat = isPanel || isCard ? 0 : 1
+        // The card reserves its action row: the terminals' first line starts under the buttons instead of running
+        // beneath them (the user, terminal-card after-drawer-right-panel-dark.png). Split panes share the row.
+        let size = actions.intrinsicContentSize
+        let cardRow = isCard && !actions.isHidden ? CardTopRow(width: w, pill: .zero, trailing: [size]) : nil
+        let top: CGFloat = cardRow?.height ?? (isPanel || isCard ? 0 : 1)
         border.frame = CGRect(x: 0, y: 0, width: w, height: 1)
         handle.frame = NSRect(x: 0, y: 0, width: w, height: Self.handleHeight)
         let content = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
@@ -123,11 +127,9 @@ public final class TerminalDrawerView: DSView {
         } else {
             grid.frame = content
         }
-        let size = actions.intrinsicContentSize
-        if isCard {
+        if let cardRow {
             // The card's top row, like the right panel's: 24pt controls 4pt in from the top and right.
-            let row = CardTopRow(width: w, pill: .zero, trailing: [size])
-            actions.frame = row.trailing[0]
+            actions.frame = cardRow.trailing[0]
         } else {
             // `absolute right-2 top-2`, from the aside's border box.
             actions.frame = NSRect(x: w - 8 - size.width, y: 8, width: size.width, height: size.height)
