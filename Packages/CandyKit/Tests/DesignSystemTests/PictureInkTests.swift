@@ -76,22 +76,30 @@ struct PictureInkTests {
         #expect(abs(deep.h - PictureInk.oklch(srgb: accent).h) < 2)
     }
 
-    /// Behind a thread's column, body text keeps 7:1 and muted text 4.5:1 against the worst cell, for the brightest,
-    /// the busiest and the most saturated pictures, in dark and in light.
-    /// Light leaves no dot behind the column or in the 16pt gap beside it, and the ink is back past the edge.
+    /// Light holds the same cap mirrored. Its muted text (#737373) measures 4.47:1 on the plain ground, so nothing but
+    /// ground fits behind the column; the ink comes back over the margin with no step, so the column isn't cut out.
     @Test func lightColumnIsClean() throws {
         let w = 400, h = 20, ground = SIMD3<Double>(repeating: 0xf8 / 255.0)
         let column: [Double] = [300, 0, 600, 60]
         let tone = PictureInk.Tone(width: w, height: h, values: [UInt8](repeating: 0, count: w * h), hue: 0, median: 0.5)
         let art = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 250), ground: ground, dark: false,
-                                                 shape: .thread(column: column), text: [SIMD3(repeating: 0x17 / 255.0), SIMD3(repeating: 0x5c / 255.0)]))
+                                                 shape: .thread(column: column), text: [SIMD3(repeating: 0x0a / 255.0), SIMD3(repeating: 0x73 / 255.0)]))
         let b = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
-        func inked(_ x: Int) -> Bool { (0..<h).contains { y in b[y * row + x * 4] != 0xf8 || b[y * row + x * 4 + 2] != 0xf8 } }
-        for x in 0..<w {
-            let px = Double(x) * 3 + 1.5
-            if px >= column[0] - 16, px <= column[0] + column[2] + 16 { #expect(!inked(x), "x \(px)") }
-            if px < column[0] - 48 || px > column[0] + column[2] + 48 { #expect(inked(x), "x \(px)") }
+        // The mean luminance of each column of cells.
+        func lum(_ x: Int) -> Double { (0..<h).map { y in PictureInk.luminance(SIMD3(Double(b[y * row + x * 4]), Double(b[y * row + x * 4 + 1]), Double(b[y * row + x * 4 + 2])) / 255) }.reduce(0, +) / Double(h) }
+        let plain = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 250), ground: ground, dark: false, shape: .plain, text: []))
+        let p = [UInt8](plain.dataProvider!.data! as Data)
+        for x in 0..<w where Double(x) * 3 + 1.5 >= column[0] && Double(x) * 3 + 1.5 <= column[0] + column[2] {
+            #expect(b[x * 4] == 0xf8 && b[x * 4 + 2] == 0xf8, "x \(x)")
         }
+        // Out from the column, in bands one Bayer tile wide, the ink comes back without a step: never lighter outward.
+        let first = Int(((column[0] + column[2]) / 3).rounded(.up))
+        let bands = stride(from: first, to: w - 7, by: 8).map { x in (x..<(x + 8)).map(lum).reduce(0, +) / 8 }
+        let steps = zip(bands, bands.dropFirst()).map { $0.0 - $0.1 }
+        let total = bands.first! - bands.last!
+        #expect(total > 0.5 && steps.allSatisfy { $0 > -0.005 && $0 < total / 3 }, "\(steps)")
+        // And by the panel's edge it is the picture as it is.
+        #expect(Array(b[(w - 1) * 4..<(w - 1) * 4 + 3]) == Array(p[(w - 1) * 4..<(w - 1) * 4 + 3]))
     }
 
     @Test(arguments: [true, false])
@@ -120,9 +128,7 @@ struct PictureInkTests {
                         worst = dark ? max(worst, l) : min(worst, l)
                     }
                 }
-                // Dark also darkens toward the middle (`readingCalm`): at 0.7 the photos measured body 14.1:1 and muted
-                // 6.6:1 at the worst cell, so its floor sits above the 7:1 and 4.5:1 the cap alone guarantees.
-                let floors = dark ? (body: 12.0, muted: 6.0) : (body: 7.0, muted: 4.5)
+                let floors = PictureInk.floors(dark: dark)
                 #expect(PictureInk.contrast(PictureInk.luminance(text[0]), worst) >= floors.body)
                 #expect(PictureInk.contrast(PictureInk.luminance(text[1]), worst) >= floors.muted)
             }
@@ -175,25 +181,51 @@ struct PictureInkTests {
         #expect(slopes.max()! < 2)
     }
 
-    /// Rendered over an even picture, the dots get fewer toward the column's centre band by band, and in light the
-    /// column stays clean as before.
-    @Test func theDotsThinTowardTheMiddle() throws {
-        let w = 480, h = 64, ground = SIMD3<Double>(repeating: 8.0 / 255)
-        let column: [Double] = [360, 0, 720, 192]
-        let tone = PictureInk.Tone(width: w, height: h, values: [UInt8](repeating: 150, count: w * h), hue: 0, median: 0.5)
-        let art = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 200), ground: ground, dark: true,
-                                                 shape: .thread(column: column), text: []))
-        let b = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
-        // Eight-cell bands, one Bayer tile wide, from the centre out to the right edge.
-        var density: [Double] = []
-        for band in stride(from: 240, to: w - 7, by: 8) {
-            var on = 0
-            for y in 0..<h { for x in band..<(band + 8) where b[y * row + x * 4 + 2] != 8 { on += 1 } }
-            density.append(Double(on) / Double(8 * h))
+    /// The cap, as a pure function: a cell within it comes back unchanged, one past it comes back at it, the result
+    /// never passes the input, and at the content area's edge (fall-off 0) nothing changes.
+    @Test(arguments: [true, false])
+    func theCapOnlyBitesWherePictureIsBright(dark: Bool) {
+        let column = dark ? 0.0165 : 0.944
+        for f in stride(from: 0.0, through: 1, by: 0.05) {
+            let cap = PictureInk.cellCap(column: column, falloff: f, dark: dark)
+            for y in stride(from: 0.0, through: 1, by: 0.01) {
+                let out = PictureInk.capped(y, cap: cap, dark: dark)
+                #expect(dark ? out <= y : out >= y)
+                if dark ? y <= cap : y >= cap { #expect(out == y) } else { #expect(abs(out - cap) < 1e-12) }
+                if f == 0 { #expect(out == y, "f 0, y \(y)") }
+            }
         }
-        #expect(zip(density, density.dropFirst()).allSatisfy { $0.1 >= $0.0 - 1e-9 }, "\(density)")
-        #expect(density.first! < density.last! * (1 - PictureInk.readingCalm) + 0.05, "\(density)")
-        #expect(density.last! > 0.5, "\(density)")
+        #expect(abs(PictureInk.cellCap(column: column, falloff: 1, dark: dark) - column) < 1e-12)
+        // It relaxes steadily from the column outward.
+        let caps = stride(from: 1.0, through: 0, by: -0.01).map { PictureInk.cellCap(column: column, falloff: $0, dark: dark) }
+        #expect(zip(caps, caps.dropFirst()).allSatisfy { dark ? $0.1 >= $0.0 : $0.1 <= $0.0 })
+    }
+
+    /// Rendered, a dark picture behind a thread is left exactly as it is, and a bright one is held to the cap in the
+    /// column and comes back to full at the panel's edge.
+    @Test func onlyBrightCellsChange() throws {
+        let w = 480, h = 64, ground = SIMD3<Double>(repeating: 8.0 / 255)
+        let column: [Double] = [360, 0, 720, 192], text: [SIMD3<Double>] = [SIMD3(repeating: 0xf5 / 255.0), SIMD3(0xaa, 0xaa, 0xab) / 255.0]
+        let inks = PictureInk.inks(hue: 200)
+        func render(_ value: UInt8, _ shape: PictureInk.Shape) throws -> [UInt8] {
+            let tone = PictureInk.Tone(width: w, height: h, values: [UInt8](repeating: value, count: w * h), hue: 0, median: 0.5)
+            let art = try #require(PictureInk.render(tone, inks: inks, ground: ground, dark: true, shape: shape, text: text))
+            return [UInt8](art.dataProvider!.data! as Data)
+        }
+        // Near black: no dot anywhere, thread or not.
+        #expect(try render(10, .thread(column: column)) == render(10, .plain))
+        // Bright: the column's cells meet the floor, the edge's match the plain art.
+        let bright = try render(200, .thread(column: column)), plain = try render(200, .plain)
+        let bound = try #require(PictureInk.textBound(text, dark: true))
+        for y in 0..<h {
+            for x in 0..<w {
+                let i = y * w * 4 + x * 4
+                let l = PictureInk.luminance(SIMD3(Double(bright[i]), Double(bright[i + 1]), Double(bright[i + 2])) / 255)
+                if (Double(x) + 0.5) * 3 >= column[0], (Double(x) + 0.5) * 3 <= column[0] + column[2] { #expect(l <= bound) }
+            }
+            let edge = y * w * 4 + (w - 1) * 4
+            #expect(Array(bright[edge..<(edge + 3)]) == Array(plain[edge..<(edge + 3)]))
+        }
     }
 
     /// The same tone, inks and shape give the same cells, byte for byte, and the cells sit on the Bayer lattice:

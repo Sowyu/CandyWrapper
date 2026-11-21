@@ -230,41 +230,23 @@ public enum PictureInk {
         return around * (0.25 + 0.75 * edge)
     }
 
-    /// How much darker the picture gets toward the middle of a thread in dark (the user, 2026-11-21: "no plain near
-    /// black just more blacker near the middle subtly so its not super obvious"): right behind the text this share of
-    /// the dots drops out and the rest lose this share of their light, easing to none by the margins.
-    nonisolated static let readingCalm = 0.7
-    /// How the darkening lets go beside the column (`calmFalloff`): the power on the distance before its smoothstep.
-    /// Above 1 the fade spreads out toward the window's edge. I compared powers on the Great Wave at 1975pt and the
-    /// street lamps at half size: curves that let go near the column (a smoothstep squared or cubed) left a bright
-    /// strip beside it, and a plain smoothstep a softer one, so the user's "even more subtle fade out on the edges"
-    /// got 1.3, whose fade runs evenly to the edge.
+    /// The text floors behind a thread's reading column, against the worst cell. Dark holds body at 14:1 and muted at
+    /// 6.8:1, what the Great Wave in a 1975pt window needed to read comfortably (picture-fix-2026-11-21/5 and 7).
+    /// Light holds 7:1 and 4.5:1: muted text on its plain ground measures 4.47:1, so no dot fits behind it anyway.
+    nonisolated static func floors(dark: Bool) -> (body: Double, muted: Double) { dark ? (14, 6.8) : (7, 4.5) }
+    /// How the cap lets go beside the column (`calmFalloff`): the power on the distance before its smoothstep.
     nonisolated static let calmSpread = 1.3
+    /// How fast the cap relaxes toward the window's edge: `cellCap` takes the fall-off to this power, so above 1 the
+    /// cap lets go sooner beside the column and a picture in the margin keeps more of its light. Compared at 1, 2 and 3
+    /// on the Great Wave, the street lamps and the full moon in a 1975pt window: 3 brought back a bright strip beside
+    /// the column on the Great Wave, 2 keeps its fade smooth and gives the lamps and the moon's rim a little more light.
+    nonisolated static let capRelax = 2.0
     /// The threshold jitter along the fade, in levels: a hash, strongest mid-fade and none at either end, so the line
-    /// where a smooth fade crosses from the deep ink to the light one breaks into dots instead of a solid strip.
+    /// where a fade crosses from the deep ink to the light one breaks into dots instead of a solid strip. It never
+    /// touches a cell with no tone, so black stays black.
     nonisolated static let calmJitter = 0.16
-    /// Light's share behind the column: none. Muted text needs a cell of luminance 0.94 or more there, so any dot left
-    /// behind the column is a near-white smudge; light keeps a clean reading column and the ink on the margins.
-    nonisolated static let lightColumnDensity = 0.0
-    /// Text floors behind the column, measured against the worst cell: body 7:1, muted 4.5:1.
-    nonisolated static let bodyFloor = 7.0, mutedFloor = 4.5
 
-    /// Light's edge beside the column: a 16pt clear gap, then the ink back to full over 32pt. With the column clean,
-    /// dark's 120pt feather left only sparse stray dots in a window's usual 40 to 60pt margins; a short edge gives
-    /// the margins a solid band of the picture on either side of a clean page.
-    nonisolated static let lightColumnGap: Double = 16, lightColumnFeather: Double = 32
-
-    /// 0 behind the column, easing to 1 at the panel's edges on the darkening's curve, so the text's contrast cap and
-    /// the far ink come back as gradually as the dots do; in light, `lightColumnGap` and `lightColumnFeather`.
-    nonisolated static func columnOpen(_ x: Double, column c: [Double], panelWidth: Double, dark: Bool = true) -> Double {
-        if !dark {
-            let d = x < c[0] ? c[0] - x : x > c[0] + c[2] ? x - c[0] - c[2] : 0
-            return DitherArt.smoothstep(lightColumnGap, lightColumnGap + lightColumnFeather, d)
-        }
-        return 1 - columnCalm(x, column: c, panelWidth: panelWidth)
-    }
-
-    /// The darkening's weight at `x` for a thread's reading column, before `readingCalm`: 1 across the column, then
+    /// The cap's weight at `x` for a thread's reading column: 1 across the column, then
     /// `calmFalloff` of the way to the panel's edge on that side, so a narrow margin (a small window, a right panel)
     /// gets the whole curve squeezed into it and never ends in a step.
     nonisolated static func columnCalm(_ x: Double, column c: [Double], panelWidth: Double) -> Double {
@@ -274,19 +256,31 @@ public enum PictureInk {
         return calmFalloff(margin < 1 ? 1 : d / margin)
     }
 
-    /// The darkening at `t` of the way from the column's edge (0) to the panel's edge (1): 1 to 0 on a smoothstep of
+    /// The cap's weight at `t` of the way from the column's edge (0) to the panel's edge (1): 1 to 0 on a smoothstep of
     /// `t` to the `calmSpread`, so it has no slope at either end and no visible start or end.
     nonisolated static func calmFalloff(_ t: Double) -> Double {
         1 - DitherArt.smoothstep(0, 1, pow(min(max(t, 0), 1), calmSpread))
     }
 
+    /// The brightest (dark) or darkest (light) a cell may be at fall-off `f`: the column's cap at 1, relaxing in
+    /// luminance on a log scale to no cap at 0, the content area's edge. The cap only bites where the picture is brighter
+    /// than it (darker in light), so a dark photo behind a thread is left as it is.
+    nonisolated static func cellCap(column cap: Double, falloff f: Double, dark: Bool) -> Double {
+        let k = pow(min(max(f, 0), 1), capRelax)
+        return dark ? pow(max(cap, 1e-6), k) : 1 - pow(max(1 - cap, 1e-6), k)
+    }
+
+    /// A cell's luminance `y` held to `cap`: unchanged when it is within it, the cap when it is past it.
+    nonisolated static func capped(_ y: Double, cap: Double, dark: Bool) -> Double { dark ? min(y, cap) : max(y, cap) }
+
     // MARK: Threshold
 
     /// The art: `tone` thresholded in `inks` over `ground` for `shape`. In dark the light parts of the picture take
     /// ink (ground, deep, light); in light the dark parts do (ground, light, deep). Dither runs only between
-    /// neighbouring levels. `text` is the body and muted text colors (sRGB 0...1), whose floors hold behind a column.
+    /// neighbouring levels. `text` is the body and muted text colors (sRGB 0...1), whose floors hold behind a column:
+    /// there each ink is held to the cell cap (`cellCap`), which relaxes across the margin, and nothing else changes.
     nonisolated static func render(_ tone: Tone, inks: Inks, ground: SIMD3<Double>, dark: Bool, shape: Shape,
-                                   text: [SIMD3<Double>], calmStrength: Double = readingCalm) -> CGImage? {
+                                   text: [SIMD3<Double>]) -> CGImage? {
         let w = tone.width, h = tone.height
         guard w > 0, h > 0,
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
@@ -303,56 +297,33 @@ public enum PictureInk {
         }
         let groundBytes = ground.byteTriple
         let levelBytes = levels.map(\.byteTriple)
-        // Behind a column, the luminance each level may reach so the text keeps its floors.
+        // Behind a column each level's ink is held to the cell cap, which relaxes toward the panel's edges.
         let groundY = luminance(ground)
-        let bound = textBound(text, dark: dark)
-        let capped = levels.map { capToward(ground: ground, ink: $0, groundY: groundY, bound: bound, dark: dark) }
-        var row = [Double](repeating: 1, count: w)
-        var open = [Double](repeating: 1, count: w), calm = [Double](repeating: 0, count: w)
-        var fade = [Double](repeating: 0, count: w)
-        if case let .thread(column?) = shape, column.count == 4 {
+        var row = [Double](repeating: 1, count: w), fade = [Double](repeating: 0, count: w)
+        var columnInks: [(UInt8, UInt8, UInt8)]?
+        if case let .thread(column?) = shape, column.count == 4, let bound = textBound(text, dark: dark) {
+            var inksAt = [(UInt8, UInt8, UInt8)](repeating: (0, 0, 0), count: w * 2)
             for x in 0..<w {
-                let px = (Double(x) + 0.5) * unit
-                open[x] = columnOpen(px, column: column, panelWidth: panel.width, dark: dark)
-                if dark {
-                    let c = columnCalm(px, column: column, panelWidth: panel.width)
-                    calm[x] = calmStrength * c
-                    fade[x] = calmJitter * 4 * c * (1 - c)
-                }
+                let f = columnCalm((Double(x) + 0.5) * unit, column: column, panelWidth: panel.width)
+                let cap = cellCap(column: bound, falloff: f, dark: dark)
+                fade[x] = calmJitter * 4 * f * (1 - f)
+                for k in 0..<2 { inksAt[x * 2 + k] = capToward(ground: ground, ink: levels[k], groundY: groundY, bound: cap, dark: dark).byteTriple }
             }
+            columnInks = inksAt
         }
-        // Each column's two inks: capped for the text near the column, then darkened toward the ground in linear light.
-        let gl = SIMD3(lin(ground.x), lin(ground.y), lin(ground.z))
-        let columnInks: [(UInt8, UInt8, UInt8)]? = open.allSatisfy({ $0 >= 1 }) && calm.allSatisfy({ $0 <= 0 }) ? nil
-            : (0..<(w * 2)).map { i in
-                let x = i / 2, k = i % 2
-                let c = capped[k] + (levels[k] - capped[k]) * open[x]
-                guard calm[x] > 0 else { return c.byteTriple }
-                let m = gl + (SIMD3(lin(c.x), lin(c.y), lin(c.z)) - gl) * (1 - calm[x])
-                return SIMD3(enc(m.x), enc(m.y), enc(m.z)).byteTriple
-            }
         for y in 0..<h {
             let py = (Double(y) + 0.5) * unit
             for x in 0..<w {
                 let px = (Double(x) + 0.5) * unit
-                var density = 1.0, top = 2.0
-                switch shape {
-                case .plain: break
-                case let .hero(composer): density = heroDensity(px, py, panel: panel, composer: composer)
-                case .thread:
-                    // Dark thins the dots toward the middle on the wide falloff; both inks are capped to the text's
-                    // floor there, so neither level needs to drop. Light keeps a clean column and the near level beside it.
-                    let z = open[x]
-                    if dark { density = 1 - calm[x] } else {
-                        density = lightColumnDensity + (1 - lightColumnDensity) * z
-                        top = coverage + (2 - coverage) * z
-                    }
-                }
-                row[x] = min(lut[Int(tone.values[y * w + x])] * coverage * 2 * density, top)
-                if fade[x] > 0 {
+                var density = 1.0
+                if case let .hero(composer) = shape { density = heroDensity(px, py, panel: panel, composer: composer) }
+                let v = lut[Int(tone.values[y * w + x])] * coverage * 2 * density
+                row[x] = v
+                if fade[x] > 0, v > 0 {
                     var hash = UInt32(truncatingIfNeeded: x &* 73_856_093 ^ y &* 19_349_663)
                     hash = (hash ^ (hash >> 13)) &* 1_274_126_177
-                    row[x] = min(max(row[x] + fade[x] * (Double(hash >> 24) / 255 - 0.5), 0), top)
+                    let reach = fade[x] * DitherArt.smoothstep(0, 0.25, v)
+                    row[x] = min(max(v + reach * (Double(hash >> 24) / 255 - 0.5), 0), 2)
                 }
             }
             let b = (y & 7) * 8
@@ -369,13 +340,13 @@ public enum PictureInk {
         return ctx.makeImage()
     }
 
-    /// The brightest (dark) or darkest (light) luminance behind text that keeps body at `bodyFloor` and muted at
-    /// `mutedFloor`; nil when no text is given.
+    /// The brightest (dark) or darkest (light) luminance behind text that keeps body and muted at their `floors`; nil
+    /// when no text is given.
     nonisolated static func textBound(_ text: [SIMD3<Double>], dark: Bool) -> Double? {
         guard text.count == 2 else { return nil }
-        let body = luminance(text[0]), muted = luminance(text[1])
-        if dark { return min((body + 0.05) / bodyFloor - 0.05, (muted + 0.05) / mutedFloor - 0.05) }
-        return max(bodyFloor * (body + 0.05) - 0.05, mutedFloor * (muted + 0.05) - 0.05)
+        let body = luminance(text[0]), muted = luminance(text[1]), f = floors(dark: dark)
+        if dark { return min((body + 0.05) / f.body - 0.05, (muted + 0.05) / f.muted - 0.05) }
+        return max(f.body * (body + 0.05) - 0.05, f.muted * (muted + 0.05) - 0.05)
     }
 
     /// `ink` moved toward `ground` in linear light until its luminance is within `bound`. The two stay one hue.
