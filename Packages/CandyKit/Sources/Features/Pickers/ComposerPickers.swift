@@ -192,7 +192,17 @@ public final class ComposerPickers {
             // The picker's footer holds Permissions, so the chip shows only off the default (composerControlsOwnership.ts:1-31),
             // except in Redesign's detail picker, whose footer leaves it out.
             let defaultMode = context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode
-            controlsView.permissionsIconOnly = false
+            // Redesign draws access as a square icon chip in every mode; the tooltip and VoiceOver name the mode (the user,
+            // 2026-11-21: "just have it be like a small icon").
+            let iconOnly = ThemeRuntime.isDither(dark: modelButton.effectiveAppearance.isDark)
+            controlsView.permissionsIconOnly = iconOnly
+            if iconOnly {
+                accessButton.paddingOverride = (5, 5)
+                accessButton.setTooltip(mode.label)
+                accessButton.setAccessibilityLabel(mode.label)
+            } else {
+                accessButton.setAccessibilityLabel(nil)
+            }
             // Unrestricted always shows its chip, so the danger stays visible. Redesign's detail picker has no Permissions
             // in its footer, so there the chip shows in every mode.
             let pickerHasAccess = !ThemeRuntime.isDither(dark: modelButton.effectiveAppearance.isDark) || RedesignPickerSettings.stacked
