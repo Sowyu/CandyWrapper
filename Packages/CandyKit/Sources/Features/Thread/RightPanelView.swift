@@ -447,8 +447,8 @@ final class RightPanelView: DSView {
             strip.addSubview(add)
         }
         let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + (pinAdd ? -4 : 24)
-        // A narrower strip keeps the active tab in view.
-        if strip.frame.width != lastStripWidth { lastStripWidth = strip.frame.width; revealActiveTab = true }
+        // In the card a narrower strip keeps the active tab in view.
+        if strip.frame.width != lastStripWidth { lastStripWidth = strip.frame.width; if row != nil { revealActiveTab = true } }
         // In the card the arrows go when they would leave less than one tab and the +; the fade and the wheel remain.
         let arrows = overflow && (row == nil || strip.frame.width - 48 >= CardTopRow.minTabRoom - 28)
         scrollLeft.isHidden = !arrows; scrollRight.isHidden = !arrows
