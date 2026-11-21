@@ -148,6 +148,21 @@ Each row gives the place, what happened on main before this change and what happ
 | Gradient background, DesignSystem/Components/DitherArtView.swift | discrete keyframe loop over 12 s, only while seen | unchanged, listed only |
 | Picture resolve-in, DitherArtView.swift:172 | 750 ms | unchanged, exempt from the guard |
 
+## On screen
+
+Recorded on the M2 Pro (1920 by 1080 at 1x) with `screencapture -v`, main at 778a928e against this branch, the sandbox server on 47392, Redesign with the dithered picture. The strips are in `~/CandyWrapper-research/sandbox/motion-2026-11-21/`, one PNG per pattern, main above and this branch below, each frame labelled in ms from the first frame of the main change. `screencapture` writes a frame only when the screen changes, so the times are the frames it kept.
+
+| Pattern | Main | This branch |
+|---|---|---|
+| Header menu (`menu.png`) | one frame, pops | about 100 ms of frames, scale and fade |
+| Model picker (`popover.png`) | about 117 ms | about 100 ms, with the ease-out's long tail under the threshold |
+| Right panel opening (`panel.png`) | one frame, pops | about 117 ms of visible slide and fade, ends on the frame main shows |
+| Right panel closing (`panel-close.png`) | one frame, pops | about 117 ms |
+| Settings (`modal.png`) | about 100 ms | about 100 ms |
+| Press on the composer's + (`press.png`) | 0.97 | 0.98; a 2% scale of a 24 pt button moves under a pixel, so the strip shows little |
+
+The app's CPU in `top`, one-second samples, read 0.0% one second after the panel opened and closed, and 0.0 to 0.1% at idle after each pattern. No pattern leaves an animation on its layer (`RedesignMotionTests`, `RedesignPanelMotionTests`).
+
 ## What I left and why
 
 1. The sidebar collapse still follows the Panel animations setting. It reflows the main panel on every display-link frame, which is the per-frame CPU work this system avoids. A layer-only version would slide the sidebar's image while the content takes its new width at once, which reads as a jump on a surface this wide.
