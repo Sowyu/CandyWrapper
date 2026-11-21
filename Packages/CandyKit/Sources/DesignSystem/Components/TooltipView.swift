@@ -257,13 +257,15 @@ public enum Tooltips {
         dismiss()
     }
 
+    /// What the monitor watches: presses, keys, scrolls and drags close a tooltip, and so does ⌘⇧ (`flagsChanged`).
+    static let monitoredEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown, .scrollWheel,
+                                                         .magnify, .leftMouseDragged, .rightMouseDragged, .flagsChanged]
+
     /// Installs the monitor while a tooltip waits or shows, and removes it otherwise.
     static func sync() {
         let needed = armed != nil || shown != nil
         if needed, monitor == nil {
-            let types: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown, .scrollWheel,
-                                                .magnify, .leftMouseDragged, .rightMouseDragged, .flagsChanged]
-            monitor = NSEvent.addLocalMonitorForEvents(matching: types) { event in
+            monitor = NSEvent.addLocalMonitorForEvents(matching: monitoredEvents) { event in
                 MainActor.assumeIsolated { handle(event) }
                 return event
             }

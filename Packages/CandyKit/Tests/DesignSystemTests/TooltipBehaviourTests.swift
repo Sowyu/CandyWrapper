@@ -160,6 +160,23 @@ import Testing
         #expect(!c[0].isShown, "⌘⇧ (a screenshot) closes it")
     }
 
+    /// The monitor that feeds `handle` watches modifier changes, and a hand presses ⇧ then ⌘ for ⌘⇧4: the first
+    /// keeps the tooltip, the second closes it. The release walk could not hold modifiers down, so this is the check.
+    /// (Posting a real `flagsChanged` through `NSApp.sendEvent` crashes the test host.)
+    @Test func screenshotModifiersReachTheMonitor() {
+        let (window, c, clock, restore) = fixture()
+        defer { restore() }
+        #expect(Tooltips.monitoredEvents.contains(.flagsChanged))
+        c[0].pointerEntered()
+        clock.fire()
+        #expect(c[0].isShown && Tooltips.isMonitoring)
+        Tooltips.handle(event(.flagsChanged, flags: [.shift], window: window))
+        #expect(c[0].isShown, "⇧ alone keeps it")
+        Tooltips.handle(event(.flagsChanged, flags: [.shift, .command], window: window))
+        #expect(!c[0].isShown, "⌘⇧ closes it")
+        #expect(!Tooltips.isMonitoring, "and the monitor goes with it")
+    }
+
     @Test func resigningKeyDismisses() {
         let (window, c, clock, restore) = fixture()
         defer { restore() }
