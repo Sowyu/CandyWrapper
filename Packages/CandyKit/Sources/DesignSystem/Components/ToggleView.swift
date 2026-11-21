@@ -135,7 +135,8 @@ public final class ToggleView: ControlView {
         // (toggle.tsx:34) replaces it through tailwind-merge and fades text, icon and background instead.
         transitions = variant == .segmented ? .colors : []
         decoration.transition = variant == .segmented ? [] : [.shadow]
-        let look = ToggleStyles.look(variant: variant, state: state, pressed: isPressed, radius: radius)
+        let look = ToggleStyles.look(variant: variant, state: state, pressed: isPressed, radius: radius,
+                                     redesignLight: RedesignTokens.Segment.light(in: self))
         Motion.transitioning(transitions) {
             decoration.boxStyle = look.box
             label.color = look.text
@@ -150,7 +151,8 @@ public final class ToggleView: ControlView {
 
 @MainActor
 enum ToggleStyles {
-    static func look(variant: ToggleView.Variant, state: ControlView.State, pressed: Bool, radius: CGFloat) -> (box: BoxStyle, text: NSColor) {
+    static func look(variant: ToggleView.Variant, state: ControlView.State, pressed: Bool, radius: CGFloat,
+                     redesignLight: Bool = false) -> (box: BoxStyle, text: NSColor) {
         var box = BoxStyle()
         box.radius = radius
         box.border = .clear
@@ -194,6 +196,17 @@ enum ToggleStyles {
             } else if state.enabled && !pressed {
                 box.beforeShadows.append(BoxShadow(y: -1, color: Themed.pick(light: .clear, dark: Themed.white(0.02))))
             }
+
+        case .segmented where redesignLight:
+            // Redesign light: the selection is a white card on a quiet track (`RedesignTokens.Segment`).
+            if pressed {
+                box.fill = RedesignTokens.Segment.selectedFill
+                box.border = RedesignTokens.Segment.selectedRim
+                box.shadows.append(RedesignTokens.Segment.selectedShadow)
+            } else if hover {
+                box.fill = RedesignTokens.Segment.hoverFill
+            }
+            text = pressed || hover ? fg : muted
 
         case .segmented:
             if pressed {
@@ -284,7 +297,7 @@ public final class ToggleGroupView: DSView {
         var box = BoxStyle()
         if variant == .segmented {
             box.radius = DesignGeometry.radius(10, in: self)
-            box.fill = Themed.color(\.contrastInput, 0.4)
+            box.fill = RedesignTokens.Segment.light(in: self) ? RedesignTokens.Segment.trackFill : Themed.color(\.contrastInput, 0.4)
         }
         track.boxStyle = box
         track.setNeedsDisplay()

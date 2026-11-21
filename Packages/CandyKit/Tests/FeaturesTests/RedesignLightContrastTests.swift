@@ -26,7 +26,8 @@ struct RedesignLightContrastTests {
         input.ditherLight = true
         input.light = ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!)
         let palettes = ThemeRuntime.resolve(input)
-        let darkestDot = gray((249 - DitherArt.reach * (1 - DitherArt.lightScrim(.hero))) / 255)
+        let ground = palettes.light.background.srgb.x * 255
+        let darkestDot = gray((ground - DitherArt.reach * (1 - DitherArt.lightScrim(.hero))) / 255)
         for p in [palettes.light, palettes.sidebarLight] {
             for c in [p.foreground, p.mutedForeground, p.secondaryLabel, p.placeholder, p.sidebarMutedForeground, p.infoForeground,
                       p.warningForeground, p.destructiveForeground] {
@@ -42,6 +43,39 @@ struct RedesignLightContrastTests {
             #expect(ratio(a, darkestDot) >= 3)
             #expect(ratio(.white, a) >= 4.5)
         }
+    }
+
+    /// The light palette's own steps (docs/research/redesign-light-audit-2026-11-21.md): body 7:1 and muted 4.5:1 on
+    /// every surface text sits on, status 4.5:1, and the ground, sidebar and cards
+    /// three distinct steps.
+    @Test func lightPaletteKeepsItsSteps() {
+        var input = ThemeRuntimeInput()
+        input.ditherLight = true
+        input.light = ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!)
+        let palettes = ThemeRuntime.resolve(input)
+        let p = palettes.light, s = palettes.sidebarLight
+        let opaque = [p.background, p.card, p.popover, s.sidebar]
+        for bg in opaque { #expect(bg.srgb.w >= 1) }
+        // The user bubble may be an overlay on the art; check it composited over the ground.
+        let bubble = p.messageSurface.srgb, a = bubble.w, g = p.background.srgb
+        let over = TokenColor(srgb: SIMD4(bubble.x * a + g.x * (1 - a), bubble.y * a + g.y * (1 - a), bubble.z * a + g.z * (1 - a), 1),
+                              displayP3: SIMD4(0, 0, 0, 1))
+        for bg in opaque + [over] {
+            #expect(ratio(p.foreground, bg) >= 7)
+            #expect(ratio(p.mutedForeground, bg) >= 4.5)
+            #expect(ratio(p.successForeground, bg) >= 4.5)
+            #expect(ratio(p.warningForeground, bg) >= 4.5)
+            #expect(ratio(p.destructiveForeground, bg) >= 4.5)
+        }
+        #expect(ratio(s.successForeground, s.sidebar) >= 4.5)
+        #expect(ratio(p.iconMuted, p.card) >= 4.5)
+        // Three visible steps: sidebar darker than the ground, cards white above it.
+        let l = { (c: TokenColor) in WindowGlass.luminance(c) }
+        #expect(l(s.sidebar) < l(p.background) && l(p.background) < l(p.card))
+        #expect(ratio(p.background, p.card) >= 1.04)
+        #expect(ratio(s.sidebar, p.background) >= 1.05)
+        // Not pure white everywhere: the ground is off-white.
+        #expect(p.background.srgb.x < 0.99)
     }
 
     @Test func syntaxReadsOnACodeBlockOverTheArt() {

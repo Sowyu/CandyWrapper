@@ -665,8 +665,23 @@ final class ComposerFooterSegmentView: ControlView {
             if last { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
         }
         layer?.maskedCorners = corners
-        layer?.backgroundColor = checked ? Themed.color(\.input, 0.72).cgColor(in: self) : nil
-        layer?.borderWidth = state.focusVisible || focused ? 2 : 0; layer?.borderColor = Themed.color(\.ring).cgColor(in: self)
+        let lightRedesign = RedesignTokens.Segment.light(in: self)
+        if lightRedesign {
+            // Redesign light: the pick is a white card with the rim and the resting shadow on a quiet track.
+            layer?.backgroundColor = checked ? RedesignTokens.Segment.selectedFill.cgColor(in: self)
+                : state.hovered ? RedesignTokens.Segment.hoverFill.cgColor(in: self) : nil
+            if let layer {
+                RedesignTokens.Shadow.resting.apply(to: layer, path: CGPath(rect: .zero, transform: nil), dark: false)
+                // The shadow follows the rounded fill as the segment resizes.
+                layer.shadowPath = nil
+                if !checked { layer.shadowOpacity = 0 }
+            }
+        } else {
+            layer?.backgroundColor = checked ? Themed.color(\.input, 0.72).cgColor(in: self) : nil
+            layer?.shadowOpacity = 0
+        }
+        layer?.borderWidth = state.focusVisible || focused ? 2 : lightRedesign && checked ? 1 : 0
+        layer?.borderColor = (state.focusVisible || focused ? Themed.color(\.ring) : RedesignTokens.Segment.selectedRim).cgColor(in: self)
         alphaValue = state.enabled ? 1 : 0.64
         let color = checked || state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground)
         label.color = color
@@ -697,7 +712,11 @@ final class ComposerFooterGroupView: DSView {
             s.frame = NSRect(x: x, y: Self.inset, width: next - x, height: 24); x = next
         }
     }
-    override func updateLayer() { layer?.cornerRadius = Self.radius; layer?.backgroundColor = Themed.color(\.input, 0.4).cgColor(in: self) }
+    override func updateLayer() {
+        layer?.cornerRadius = Self.radius
+        let fill = RedesignTokens.Segment.light(in: self) ? RedesignTokens.Segment.trackFill : Themed.color(\.input, 0.4)
+        layer?.backgroundColor = fill.cgColor(in: self)
+    }
 }
 
 /// The footer's Permissions trigger (`PermissionsMenu`, :666-706): `ms-auto h-7 px-2 rounded-md text-xs gap-1.5`, the
