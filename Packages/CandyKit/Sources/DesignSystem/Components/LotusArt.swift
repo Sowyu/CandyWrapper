@@ -122,10 +122,39 @@ public enum LotusArt {
         }
         pod(open: opening(ring: rings.count - 1, bloom: b), into: &m)
         m.layer.append(0)
+        receptacle(open: opening(ring: 0, bloom: b), into: &m)
+        m.layer.append(-1)
         return m
     }
 
     static let podRadius: Float = 0.22, podHeight: Float = 0.26
+    /// The receptacle: a low, shaded saucer under the petals' bases. Between the inner petals, and between rings
+    /// while they open, the eye saw straight through to the ground, a hole near the centre on a light ground.
+    static let receptacleRadius: Float = 0.5, receptacleHeight: Float = 0.08
+
+    static func receptacle(open o: Float, into m: inout Mesh) {
+        let first = m.positions.count
+        let radius = receptacleRadius * (0.4 + 0.6 * o)
+        for s in 0..<along {
+            let rho = 1 - Float(s) / Float(along - 1)
+            for c in 0..<across {
+                let phi = 2 * Float.pi * Float(c) / Float(across - 1)
+                m.positions.append(SIMD3(cos(phi) * rho * radius, receptacleHeight * (1 - rho * rho), sin(phi) * rho * radius))
+                let slope = receptacleHeight * 2 * rho / radius
+                m.normals.append(normalize(SIMD3(cos(phi) * slope, 1, sin(phi) * slope)))
+                m.shade.append(0.35)
+                m.edge.append(0)
+                m.glow.append(0.4)
+            }
+        }
+        let f = UInt32(first)
+        for s in 0..<(along - 1) {
+            for c in 0..<(across - 1) {
+                let i0 = f + UInt32(s * across + c), i1 = i0 + 1, i2 = i0 + UInt32(across), i3 = i2 + 1
+                m.indices += [i0, i2, i1, i1, i2, i3]
+            }
+        }
+    }
 
     /// The seed pod: a low dome where the petals meet, on the petals' grid so it counts as one more petal. It fills
     /// the gaps between the inner petals' bases, which show as holes on a light ground.
@@ -627,12 +656,16 @@ public enum LotusArt {
     /// The share of the ink a deep cell shows over the ground, so one mask carries two inks: 255 is the ink, this the
     /// ink at that share over the ground (about PictureInk's deep ink at L 0.52 under a light ink at L 0.82).
     public static let deepAlpha: UInt8 = 140
+    /// Light's ink: the accent's hue at this OKLCH lightness and at most this chroma, deep enough to read on the
+    /// off-white ground.
+    public static let lightInk = (l: 0.46, c: 0.14)
 
     /// How much ink a cell takes, 0...1. In dark the lit parts take ink; in light the shaded parts do, over a floor
-    /// that keeps the silhouette where the flower is brightest.
+    /// that keeps the silhouette where the flower is brightest. Light's floor is high, so the lit petals still show
+    /// as the deep ink's dots on the off-white ground instead of washing out (stage 1 floored at 0.16).
     static func ink(_ shot: Shot, _ k: Int, dark: Bool) -> Float {
         let l = shot.light[k], c = shot.cover[k]
-        return dark ? c * pow(l, 0.9) : c * (0.16 + 0.84 * pow(1 - l, 1.1))
+        return dark ? c * pow(l, 0.9) : c * (0.42 + 0.58 * pow(1 - l, 0.85))
     }
 
     /// The mask for `shot`: one byte a cell, row 0 at the top. With one ink a cell is on (255) where its ink beats the
@@ -683,6 +716,8 @@ public enum LotusArt {
     public static let idlePeriod = 16.0, idleFPS = 10.0
     /// How far the bloom turns beyond the idle turn's own sweep, and how much smaller the bud starts.
     static let bloomSweep = 26 * Double.pi / 180, budScale = 0.82
+    /// How open the bloom's first frame is.
+    static let budOpen = 0.12
 
     /// The idle turn's speed, radians a second.
     static var spin: Double { symmetry / idlePeriod }
@@ -692,13 +727,19 @@ public enum LotusArt {
         let n = Int((bloomDuration * bloomFPS).rounded())
         return (0..<n).map { i in
             let t = Double(i) / Double(n)
-            // Eased out, with a gentle start so the bud does not pop open in the first frames.
-            let eased = 1 - pow(1 - pow(t, 1.4), 2.6)
+            // Eased out, with a gentle start so the bud does not pop open in the first frames. It starts a little
+            // open, a bud with its tips parted, since a closed bud is a smudge at this size.
+            let eased = budOpen + (1 - budOpen) * (1 - pow(1 - pow(t, 1.4), 2.6))
             // Ends at turn 0 with the idle turn's speed, so the hand-over has no kink.
             let turn = spin * bloomDuration * (t - 1) - bloomSweep * pow(1 - t, 3)
             return Pose(bloom: eased, turn: turn, breath: 0, scale: budScale + (1 - budScale) * eased)
         }
     }
+
+    /// The open flower at rest: the idle loop's first pose and the bloom's end.
+    public static let openPose = Pose(bloom: 1)
+    /// How long the bloom's first frames fade in over the ground, seconds.
+    public static let bloomFadeIn = 0.3
 
     /// The idle loop's poses; the pose after the last is the first.
     public static func idlePoses() -> [Pose] {
@@ -747,12 +788,19 @@ public enum LotusArt {
     }
 
     /// Renders both sequences. Each frame is independent, so `parallel` spreads them over the cores.
-    // ponytail: renders the whole set before returning; render the bloom first and the idle loop after it starts if
-    // the wait on opening a thread shows.
     public static func frames(placement: Placement, dark: Bool, inks: Int, density: [Float]? = nil, top: [Float]? = nil,
                               cap: [UInt8]? = nil, samples: Int = 2, parallel: Bool = true) -> Frames {
-        let poses = bloomPoses() + idlePoses()
-        let bloomCount = bloomPoses().count
+        let bloom = masks(bloomPoses(), placement: placement, dark: dark, inks: inks, density: density, top: top, cap: cap,
+                          samples: samples, parallel: parallel)
+        let idle = masks(idlePoses(), placement: placement, dark: dark, inks: inks, density: density, top: top, cap: cap,
+                         samples: samples, parallel: parallel)
+        guard let bloom, let idle else { return Frames(bloom: [], idle: []) }
+        return Frames(bloom: bloom, idle: idle)
+    }
+
+    /// One mask per pose, or nil if any failed. `parallel` spreads them over the cores.
+    public static func masks(_ poses: [Pose], placement: Placement, dark: Bool, inks: Int, density: [Float]? = nil,
+                             top: [Float]? = nil, cap: [UInt8]? = nil, samples: Int = 2, parallel: Bool = true) -> [CGImage]? {
         nonisolated(unsafe) let out = UnsafeMutableBufferPointer<CGImage?>.allocate(capacity: poses.count)
         out.initialize(repeating: nil)
         defer { out.deinitialize(); out.deallocate() }
@@ -763,7 +811,125 @@ public enum LotusArt {
         }
         if parallel { DispatchQueue.concurrentPerform(iterations: poses.count, execute: one) } else { (0..<poses.count).forEach(one) }
         let all = out.compactMap { $0 }
-        guard all.count == poses.count else { return Frames(bloom: [], idle: []) }
-        return Frames(bloom: Array(all[..<bloomCount]), idle: Array(all[bloomCount...]))
+        return all.count == poses.count ? all : nil
+    }
+
+    // MARK: Placement (stage 2)
+
+    /// Which page the flower sits on: centred over the new thread's composer, or small beside a thread's column.
+    public enum Kind: Hashable, Sendable { case hero, thread }
+
+    /// What a page reports: its content area (below the band, left of the right panel) and what the flower must keep
+    /// `clearance` from: the composer and the pills around it on a new thread, the reading column in a thread, and the
+    /// header pill. Points, from the art's top left, y down.
+    public struct Stage: Equatable, Sendable {
+        public var kind: Kind
+        public var content: CGRect
+        public var keepOut: [CGRect]
+        public init(kind: Kind, content: CGRect, keepOut: [CGRect]) { self.kind = kind; self.content = content; self.keepOut = keepOut }
+    }
+
+    /// Where the open flower sits: its centre and radius in points, same space as the stage.
+    public struct Spot: Equatable, Sendable {
+        public var centre: CGPoint
+        public var radius: CGFloat
+        public init(centre: CGPoint, radius: CGFloat) { self.centre = centre; self.radius = radius }
+
+        /// The box any bloom or idle frame can cover.
+        public var box: CGRect {
+            CGRect(x: centre.x - extent.left * radius, y: centre.y - extent.up * radius,
+                   width: (extent.left + extent.right) * radius, height: (extent.up + extent.down) * radius)
+        }
+    }
+
+    /// `reach` in points per point of radius.
+    static let extent = (left: CGFloat(reach.left), right: CGFloat(reach.right), up: CGFloat(reach.up), down: CGFloat(reach.down))
+
+    /// How far the flower keeps from the content area's edges and from everything in `keepOut`, in points.
+    public static let clearance: CGFloat = 24
+    /// Below this radius the dots no longer read as a flower (about 20 cells), so it hides.
+    public static let minRadius: CGFloat = 60
+    /// The new-thread flower's largest radius: 96 cells, about 5.4 MB of masks for the whole set.
+    public static let heroMaxRadius: CGFloat = 288
+    /// The thread flower's largest radius, in the margin beside the column.
+    public static let threadMaxRadius: CGFloat = 150
+
+    /// Where the flower goes on `stage`, or nil when it would be smaller than `minRadius`. The new thread: centred
+    /// across the content area, centred down the free space above whatever `keepOut` holds below its top (the
+    /// composer and its pills), as large as fits. A thread: top right of the content area, centred across the free
+    /// margin right of the column, as large as fits there. It never comes within `clearance` of a keep-out rectangle
+    /// or the content area's edge.
+    public static func spot(for stage: Stage) -> Spot? {
+        let c = stage.content, gap = clearance
+        let blocks = stage.keepOut.map { $0.insetBy(dx: -gap, dy: -gap) }
+        guard c.width > 2 * gap, c.height > 2 * gap else { return nil }
+        let largest = stage.kind == .hero ? heroMaxRadius : threadMaxRadius
+        let w = extent.left + extent.right, h = extent.up + extent.down
+        // Radii from the largest down in half points; the first that fits wins.
+        var r = Swift.min(largest, (c.width - 2 * gap) / w, (c.height - 2 * gap) / h)
+        while r >= minRadius {
+            if let spot = fit(stage, radius: r, blocks: blocks), blocks.allSatisfy({ !$0.intersects(spot.box) }) { return spot }
+            r -= 0.5
+        }
+        return nil
+    }
+
+    private static func fit(_ stage: Stage, radius r: CGFloat, blocks: [CGRect]) -> Spot? {
+        let c = stage.content, gap = clearance
+        let w = (extent.left + extent.right) * r, h = (extent.up + extent.down) * r
+        switch stage.kind {
+        case .hero:
+            // Across: centred on the content area. Down: the free run from the top to the first thing below it,
+            // wherever it sits across, so the composer, its pills and its cards are one floor.
+            let x = c.midX - (extent.right - extent.left) * r / 2
+            let below = blocks.sorted { $0.minY < $1.minY }
+            // Only the run above the composer group: never below or beside it.
+            var top = c.minY + gap
+            for b in below + [CGRect(x: c.minX, y: c.maxY - gap, width: c.width, height: 0)] {
+                guard b.minY <= top else {
+                    guard b.minY - top >= h else { return nil }
+                    let y = top + (b.minY - top - h) / 2 + extent.up * r
+                    return Spot(centre: CGPoint(x: x, y: y), radius: r)
+                }
+                top = Swift.max(top, b.maxY)
+            }
+            return nil
+        case .thread:
+            // Down: from the top. Across: the free run right of anything beside it, the flower centred in it.
+            let y0 = c.minY + gap, y1 = y0 + h
+            let left = blocks.filter { $0.minY < y1 && $0.maxY > y0 && $0.midX < c.maxX }.map(\.maxX).max() ?? (c.minX + gap)
+            let lo = Swift.max(left, c.minX + gap), hi = c.maxX - gap
+            guard hi - lo >= w else { return nil }
+            let x = (lo + hi) / 2 - (extent.right - extent.left) * r / 2
+            return Spot(centre: CGPoint(x: x, y: y0 + extent.up * r), radius: r)
+        }
+    }
+
+    /// Radii render in steps of 8%, from `minRadius`, in whole cells: a resize lands on one of about 20 frame sets,
+    /// never a new one per point. The flower shows at its bucket's radius, at most 8% under the spot's.
+    public static func bucket(_ radius: CGFloat, cell: CGFloat = 3) -> Int {
+        let base = Double(minRadius / cell)
+        let steps = (log(Double(radius / cell) / base) / log(1.08)).rounded(.down)
+        return Int((base * pow(1.08, Swift.max(0, steps))).rounded(.down))
+    }
+
+    /// The canvas for a flower of `radius` cells, wherever it sits: the cells any frame can cover, its centre on a
+    /// whole cell, so one set serves every position.
+    public static func canvas(radius: Int) -> Placement {
+        let r = Double(radius)
+        let left = (reach.left * r).rounded(.up), up = (reach.up * r).rounded(.up)
+        return Placement(width: Int(left + (reach.right * r).rounded(.up)), height: Int(up + (reach.down * r).rounded(.up)),
+                         centreX: left, centreY: up, radius: r)
+    }
+
+    /// The new thread's thinning: full at the flower's middle, a third of the dots at the canvas's bottom edge, where
+    /// the composer sits beneath it.
+    public static func heroDensity(_ p: Placement) -> [Float] {
+        var d = [Float](repeating: 1, count: p.width * p.height)
+        for y in 0..<p.height {
+            let t = smooth(Float(p.centreY + 0.15 * p.radius), Float(p.height), Float(y) + 0.5)
+            for x in 0..<p.width { d[y * p.width + x] = 1 - 0.65 * t }
+        }
+        return d
     }
 }

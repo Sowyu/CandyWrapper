@@ -25,7 +25,7 @@ import T3Protocol
         // The theme picker turns Redesign on: the switch follows and the rows wake.
         lib.setTheme(ThemeDefinition.dither.id)
         #expect(page.master.isOn)
-        // Animate gradient waits for Gradient and Background dim for Blur; the default Background is Picture.
+        // Animate background waits for Gradient or Flower and Background dim for Blur; the default Background is Picture.
         #expect(page.gated.allSatisfy { [nil, RedesignSettingsView.animateReason, RedesignSettingsView.dimReason].contains($0.inertReason) })
         // The switch turns it off, and on again: the picker follows.
         page.master.onChange?(false)
@@ -72,12 +72,23 @@ import T3Protocol
         #expect(gradient.string("redesignBackground") == "gradient")
         #expect(library().runtimeInput(client: gradient).0.ditherGradient)
         #expect(!library().runtimeInput(client: gradient).0.ditherBlur)
+        // Flower, the fourth choice, reaches the runtime alone; "Animate background" keeps Gradient's stored key.
+        let flower = ClientSettings(decoding: .object(["redesignBackground": .string("flower"), "redesignGradientAnimate": .bool(false)]))
+        #expect(flower.string("redesignBackground") == "flower")
+        let flowerInput = library().runtimeInput(client: flower).0
+        #expect(flowerInput.ditherFlower && !flowerInput.ditherGradient && !flowerInput.ditherBlur)
+        #expect(!flowerInput.ditherGradientAnimates)
+        #expect(!library().runtimeInput(client: gradient).0.ditherFlower)
     }
 
     @Test func searchFindsTheTabAndEveryRow() {
         let ids = ["redesign", "redesign-picture", "background-dim", "accent-color", "ignore-reduce-transparency", "composer-collapse",
                    "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate", "redesign-tint"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
+        for word in ["flower", "lotus"] {
+            #expect(SettingsSearch.search(word).contains { $0.id == "redesign-background" }, "\(word)")
+            #expect(SettingsSearch.search(word).contains { $0.id == "redesign-gradient-animate" }, "\(word)")
+        }
         for id in ids {
             let item = SettingsSearch.item(id)
             #expect(item?.to == .redesign, "\(id)")

@@ -67,9 +67,9 @@ public struct ClientSettings: Equatable, Sendable {
         "ditherBackgroundDim": SettingSpec(.int(0...90), .number(35)),  // CandyWrapper only: Redesign's dim over the art in threads  // T3 stops at 40 (settings.ts:94); CandyWrapper goes to 10, the value stays local
         "ignoreReduceTransparency": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign and Glass ignore macOS's Reduce Transparency
         "ditherAccent": SettingSpec(.string(maxLength: 32), .string("teal")),  // CandyWrapper only: Redesign's accent, a DitherAccent id
-        "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, or accent dots with no picture
+        "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient", "flower"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, accent dots with no picture, or a dithered lotus
         "redesignProjectAvatars": SettingSpec(.literals(["sprites", "letters"]), .string("sprites")),  // CandyWrapper only: Redesign's generated project and account avatars, pixel sprites or T3's letters
-        "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient background moves on the new-thread page
+        "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient and Flower backgrounds move ("Animate background")
         "redesignTintFromPicture": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's surfaces lean toward the picture's color
         "redesignInk": SettingSpec(.literals(["auto", "accent", "custom"]), .string("auto")),  // CandyWrapper only: where Redesign's Picture takes its two inks
         "redesignInkColor": SettingSpec(.string(maxLength: 9), .string("#86cdff")),  // CandyWrapper only: Picture's light ink when Ink is Custom, #rrggbb
