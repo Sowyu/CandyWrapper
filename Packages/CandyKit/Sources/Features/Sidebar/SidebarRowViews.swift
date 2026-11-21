@@ -428,7 +428,7 @@ class SidebarRowBase: ControlView {
             onBeginSearchDrag(self, r, event)
             return
         }
-        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, let onBeginGroupDrag,
+        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, !h.settled, let onBeginGroupDrag,
            hypot(event.locationInWindow.x - p.x, event.locationInWindow.y - p.y) >= SidebarListView.dragDistance {
             pressPoint = nil
             var released = state
@@ -584,15 +584,17 @@ final class CapyHoverGroup {
     let jump = KbdView()
     /// With its word, the group's one labelled button: with Pin and Archive gone there is room (the user).
     let settle = RowActionButton(icon: .check, size: 14, title: "Settle", accessibility: "Settle thread")
+    /// A settled row's restore, in Settle's place.
+    let unsettle = RowActionButton(icon: .undo2, size: 14, accessibility: "Un-settle thread")
     let snooze = RowActionButton(icon: .clock, size: 14, accessibility: "Snooze thread").menuTrigger()
     let more = RowActionButton(icon: .ellipsis, size: 14, accessibility: "More actions").menuTrigger()
     /// What the hovered row shows, left to right; placed while hidden too, so a fade-out stays put.
     var shown: [NSView] = []
-    var all: [NSView] { [jump, settle, snooze, more] }
+    var all: [NSView] { [jump, settle, unsettle, snooze, more] }
     var menuOpen: Bool { snooze.state.popupOpen || more.state.popupOpen }
 
     init() {
-        for b in [settle, snooze, more] { b.padding = 3 }
+        for b in [settle, unsettle, snooze, more] { b.padding = 3 }
     }
 }
 
@@ -845,6 +847,7 @@ final class SidebarCardRowView: SidebarRowBase {
             HoverReveal.snap(g.all, visible: false, hides: true)
             let id: () -> ThreadId? = { [weak self] in self?.row?.id }
             g.settle.action = { [weak self] in if let i = id() { self?.actions.settle(i) } }
+            g.unsettle.action = { [weak self] in if let i = id() { self?.actions.unsettle(i) } }
             g.snooze.action = { [weak self, weak g] in if let i = id(), let g { self?.actions.snooze(i, g.snooze) } }
             g.more.action = { [weak self, weak g] in if let i = id(), let g { self?.actions.moreMenu(i, g.more) } }
             capyGroup = g
@@ -853,7 +856,7 @@ final class SidebarCardRowView: SidebarRowBase {
         // The jump label is read only while the actions show, so a resting list never asks for it.
         let hint = visible ? actions.jumpHint(r.id) : nil
         if let hint { g.jump.keys = hint }
-        let shown: [NSView] = (hint == nil ? [] : [g.jump]) + [g.settle] + (snoozes ? [g.snooze] : []) + [g.more]
+        let shown: [NSView] = (hint == nil ? [] : [g.jump]) + [r.action == .unsettle ? g.unsettle : g.settle] + (snoozes ? [g.snooze] : []) + [g.more]
         let gone = g.all.filter { v in !shown.contains { $0 === v } }
         HoverReveal.snap(gone, visible: false, hides: true)
         HoverReveal.fade(shown, visible: visible, hides: true)
@@ -1388,6 +1391,14 @@ final class SidebarSlimRowView: SidebarRowBase {
 final class SidebarShelfRowView: SidebarRowBase {
     let header = CollapsibleSectionHeaderView("")
     var onToggle: (@MainActor (SidebarShelf) -> Void)?
+    /// Redesign's open Settled: the "when" button beside the chevron, which opens the range picker.
+    var onRange: (@MainActor (NSView) -> Void)?
+    var range = SettledRange.any { didSet { if range != oldValue { refresh() } } }
+    private(set) lazy var rangeButton: SettledRangeButton = {
+        let b = SettledRangeButton()
+        b.action = { [weak self, weak b] in if let b { self?.onRange?(b) } }
+        return b
+    }()
     /// While a row is dragged the settled header reads at full strength, and takes the accent while
     /// the lifted row is over it (Sidebar.tsx:800-818).
     var dragTone: CollapsibleSectionHeaderView.Tone? { didSet { if dragTone != oldValue { refresh() } } }
@@ -1402,6 +1413,7 @@ final class SidebarShelfRowView: SidebarRowBase {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(header)
+        header.dithersRule = true
         header.onToggle = { [weak self] _ in
             if case .shelfHeader(let shelf, _, _, _)? = self?.item { self?.onToggle?(shelf) }
         }
@@ -1413,14 +1425,23 @@ final class SidebarShelfRowView: SidebarRowBase {
         header.title = classic ? label : shelf.rawValue.capitalized
         countLabel.text = String(count)
         countLabel.lineHeight = 16
-        header.accessory = classic ? nil : countLabel
-        header.tone = dragTone ?? (shelf == .snoozed ? .info : .muted)
+        let ranged = shelf == .settled && expanded && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if ranged { rangeButton.range = range }
+        header.accessory = ranged ? rangeButton : classic ? nil : countLabel
+        // Redesign: Snoozed takes the accent where T3 has its info blue (the user, 2026-11-21: "this is good we def want these").
+        let snoozedTone: CollapsibleSectionHeaderView.Tone = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .accent : .info
+        header.tone = dragTone ?? (shelf == .snoozed ? snoozedTone : .muted)
         if header.isExpanded != expanded { header.isExpanded = expanded }
         var st = header.state; st.focusVisible = isKeyboardFocused; header.previewState(st)
     }
 
     override func performAction() { header.performAction() }
-    override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) == nil ? nil : header }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard super.hitTest(point) != nil else { return nil }
+        if header.accessory === rangeButton, rangeButton.superview != nil,
+           rangeButton.frame.contains(header.convert(point, from: superview)) { return rangeButton }
+        return header
+    }
 
     override func layout() {
         super.layout()
@@ -1447,7 +1468,7 @@ final class SidebarShowMoreRowView: SidebarRowBase {
     override func refresh() {
         surface.cornerRadius = rowRadius
         guard case .showMore(let count)? = item else { return }
-        label.text = "Show \(count) more"
+        label.text = count == 0 ? "Load older" : "Show \(count) more"
         let hovered = state.hovered || isKeyboardFocused
         let color = hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground, DesignGeometry.usesClassic(self) ? 0.55 : 1)
         let glyph: IconName = DesignGeometry.usesClassic(self) ? .plus : .chevronDown

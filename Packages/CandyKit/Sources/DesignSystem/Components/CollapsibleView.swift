@@ -94,11 +94,20 @@ public final class CollapsibleSectionHeaderView: ControlView {
         didSet { oldValue?.removeFromSuperview(); accessory.map(addSubview); needsLayout = true }
     }
     public final var onToggle: (@MainActor (Bool) -> Void)?
+    /// Under Redesign the rule becomes `DitherStrip` in the row's color and the row takes Redesign's hover fill. The
+    /// sidebar's section headers opt in; other headers keep the rule.
+    public var dithersRule = false { didSet { if dithersRule != oldValue { needsLayout = true; restyle() } } }
 
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
     private let rule = CALayer()
     private let chevron = CAShapeLayer()
+    private let hoverFill = CALayer()
+    /// The strip: filled with the row's color through `stripMask`, so a color or appearance change never re-renders it.
+    private let strip = CALayer()
+    private let stripMask = CALayer()
+    private var stripSpan: DitherStrip.Span?
+    private var showsStrip: Bool { dithersRule && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
     public init(_ title: String, tone: Tone = .muted, expanded: Bool = false) {
         self.title = title
@@ -110,12 +119,20 @@ public final class CollapsibleSectionHeaderView: ControlView {
         label.font = DSFont.ui(12, weight: .medium)
         label.lineHeight = 16
         decoration.host = self
+        layer?.addSublayer(hoverFill)
         layer?.addSublayer(decoration)
         layer?.addSublayer(rule)
+        layer?.addSublayer(strip)
+        hoverFill.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "cornerRadius": NSNull()]
+        strip.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "hidden": NSNull()]
+        stripMask.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull()]
+        stripMask.anchorPoint = .zero
+        stripMask.magnificationFilter = .nearest
+        strip.mask = stripMask
         layer?.addSublayer(chevron)
         addSubview(label)
         rule.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
-        chevron.actions = ["position": NSNull(), "bounds": NSNull(), "strokeColor": NSNull(), "transform": NSNull(), "path": NSNull()]
+        chevron.actions = ["position": NSNull(), "bounds": NSNull(), "strokeColor": NSNull(), "transform": NSNull(), "path": NSNull(), "lineWidth": NSNull()]
         chevron.fillColor = nil
         chevron.lineWidth = 1 // stroke 2 of 24 units at 12px
         chevron.lineCap = .round
@@ -155,10 +172,29 @@ public final class CollapsibleSectionHeaderView: ControlView {
         x += labelWidth + 8
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        rule.isHidden = accessory != nil && !DesignGeometry.usesClassic(self)
+        let dithered = showsStrip
+        rule.isHidden = dithered || (accessory != nil && !DesignGeometry.usesClassic(self))
         rule.frame = CGRect(x: x, y: midY - 0.5, width: max(0, right - 8 - x), height: 1)
+        strip.isHidden = !dithered
+        hoverFill.frame = bounds
+        hoverFill.cornerRadius = RedesignTokens.Radius.control
+        if dithered { layoutStrip(labelEnd: label.frame.maxX, limit: right - 8, midY: midY) }
         chevron.position = CGPoint(x: bounds.width - 8 - 6, y: midY)
         CATransaction.commit()
+    }
+
+    /// Centred on the label's x-height line, about 1pt under the row's middle, with its rows on the cell lattice.
+    private func layoutStrip(labelEnd: CGFloat, limit: CGFloat, midY: CGFloat) {
+        let span = DitherStrip.span(labelEnd: labelEnd, limit: limit)
+        let height = CGFloat(DitherStrip.rows) * DitherStrip.cell
+        let top = ((midY + 1 - height / 2) / DitherStrip.cell).rounded() * DitherStrip.cell
+        strip.frame = CGRect(x: span.minX, y: top, width: span.maxX - span.minX, height: height)
+        stripMask.frame = strip.bounds
+        // Rendered only when the columns change: a width change that moves the label or the chevron.
+        if span != stripSpan {
+            stripSpan = span
+            stripMask.contents = DitherStrip.mask(span)
+        }
     }
 
     private func rotateChevron(animated: Bool) {
@@ -166,7 +202,12 @@ public final class CollapsibleSectionHeaderView: ControlView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if animated, window != nil, !Motion.reduced {
-            Motion.animate(chevron, keyPath: "transform.rotation.z", to: angle, duration: Motion.Durations.default)
+            if showsStrip {
+                Motion.animate(chevron, keyPath: "transform.rotation.z", to: angle, duration: RedesignTokens.Motion.standard,
+                               timing: RedesignTokens.Motion.curve)
+            } else {
+                Motion.animate(chevron, keyPath: "transform.rotation.z", to: angle, duration: Motion.Durations.default)
+            }
         }
         chevron.transform = CATransform3DMakeRotation(angle, 0, 0, 1)
         CATransaction.commit()
@@ -204,6 +245,8 @@ public final class CollapsibleSectionHeaderView: ControlView {
             line = Themed.color(\.primary, 0.5)
         }
         label.color = text
+        let fill = showsStrip ? RedesignTokens.State.fill(state, dark: effectiveAppearance.isDark)?.cgColor(in: self) : nil
+        setHoverFill(fill)
         var box = BoxStyle()
         box.radius = DesignGeometry.radius(8, in: self)
         // `ring-inset` is in the class list, but Chromium paints this ring outside the box with T3's
@@ -214,6 +257,30 @@ public final class CollapsibleSectionHeaderView: ControlView {
         CATransaction.setDisableActions(true)
         rule.backgroundColor = line.cgColor(in: self)
         chevron.strokeColor = text.cgColor(in: self)
+        // The mock's 0.7 over the label's color.
+        let ink = text.cgColor(in: self)
+        strip.backgroundColor = showsStrip ? ink.copy(alpha: ink.alpha * 0.7) : nil
+        chevron.lineWidth = showsStrip ? IconView.ditherStroke : 1
         CATransaction.commit()
+    }
+
+    /// Redesign's hover: in at once, out over `Motion.fast`.
+    private func setHoverFill(_ color: CGColor?) {
+        let old = hoverFill.backgroundColor
+        guard !CFEqual(old ?? CGColor.clear, color ?? CGColor.clear) else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        hoverFill.backgroundColor = color
+        CATransaction.commit()
+        if color == nil, let old, window != nil, !Motion.reduced {
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = old
+            fade.toValue = CGColor.clear
+            fade.duration = RedesignTokens.Motion.fast
+            fade.timingFunction = RedesignTokens.Motion.exitCurve
+            hoverFill.add(fade, forKey: "backgroundColor")
+        } else {
+            hoverFill.removeAnimation(forKey: "backgroundColor")
+        }
     }
 }

@@ -43,6 +43,11 @@ public final class SidebarListView: DSView {
     /// The empty list's Add project button.
     var onAddProject: (@MainActor () -> Void)?
     var onShowAllProjects: (@MainActor () -> Void)?
+    /// Redesign's Settled: the empty state's Show any time, and the header's "when" button.
+    var onShowAnyTime: (@MainActor () -> Void)?
+    var onSettledRange: (@MainActor (NSView) -> Void)?
+    /// The range the Settled header's "when" button shows.
+    var settledRange = SettledRange.any
     /// The pointer moved over a search result (`onMouseMove` highlights it).
     var onHighlightSearchResult: (@MainActor (Int) -> Void)?
     var rowActions = SidebarRowActions()
@@ -353,6 +358,7 @@ public final class SidebarListView: DSView {
         case .shelf:
             let shelf = SidebarShelfRowView()
             shelf.onToggle = { [weak self] in self?.onToggleShelf?($0) }
+            shelf.onRange = { [weak self] in self?.onSettledRange?($0) }
             view = shelf
         case .showMore: view = SidebarShowMoreRowView()
         // A click reaches `open`, which folds the section.
@@ -371,6 +377,10 @@ public final class SidebarListView: DSView {
             let row = SidebarNoProjectsRowView()
             row.onAddProject = { [weak self] in self?.onAddProject?() }
             row.onShowAllProjects = { [weak self] in self?.onShowAllProjects?() }
+            view = row
+        case .settledEmpty:
+            let row = SidebarSettledEmptyRowView()
+            row.onShowAnyTime = { [weak self] in self?.onShowAnyTime?() }
             view = row
         }
         if kind == .searchResult {
@@ -413,6 +423,7 @@ public final class SidebarListView: DSView {
         configureCount += 1
         if let card = view as? SidebarCardRowView { card.actions = rowActions; card.nowMs = nowMs }
         if let slim = view as? SidebarSlimRowView { slim.actions = rowActions }
+        if let shelf = view as? SidebarShelfRowView { shelf.range = settledRange }
         if case .row(let r) = item, r.isRenaming { lendRenameField(to: view, item) } else { lendRenameField(to: view, nil) }
         view.configure(item)
         view.isKeyboardFocused = item.key == focusedKey
@@ -732,6 +743,7 @@ public final class SidebarListView: DSView {
         case .searchResult(let r): onOpenSearchResult?(r.id)
         case .noProjects: onAddProject?()
         case .scopeEmpty: onShowAllProjects?()
+        case .settledEmpty: onShowAnyTime?()
         case .draftDivider, .emptyText: break
         }
     }

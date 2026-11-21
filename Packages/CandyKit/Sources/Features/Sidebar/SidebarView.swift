@@ -238,6 +238,8 @@ public final class SidebarContentView: DSView {
     }
     static let scopeDefaultsKey = "sidebar.projectScopeKeys"
     private var scopePopup: OpenPopup?
+    /// Redesign's Settled "when" picker.
+    private var rangePopup: OpenPopup?
 
     /// The search field's text. Searching starts at one non-blank character (Sidebar.tsx:2896).
     public private(set) var searchQuery = ""
@@ -306,7 +308,9 @@ public final class SidebarContentView: DSView {
         list.onToggleProject = { [weak self] key in
             guard let self else { return }
             if self.state.collapsedProjects.remove(key) == nil { self.state.collapsedProjects.insert(key) }
-            UserDefaults.standard.set(Array(self.state.collapsedProjects), forKey: Self.collapsedProjectsKey)
+            // Settled's project folds last for the session only.
+            UserDefaults.standard.set(self.state.collapsedProjects.filter { !$0.hasPrefix(SidebarListBuilder.settledSectionPrefix) }.sorted(),
+                                      forKey: Self.collapsedProjectsKey)
         }
         state.collapsedProjects = Set(UserDefaults.standard.stringArray(forKey: Self.collapsedProjectsKey) ?? [])
         state.projectOrder = SidebarProjectOrder.stored
@@ -326,6 +330,8 @@ public final class SidebarContentView: DSView {
                                               activeTimeOrdered: self.state.workingShelfEnabled && !self.state.usesProjectFolders)
         }
         list.onShowMore = { [weak self] in self?.state.settledVisibleCount += SidebarListBuilder.settledPageCount }
+        list.onShowAnyTime = { [weak self] in self?.setSettledRange(.any) }
+        list.onSettledRange = { [weak self] anchor in self?.toggleSettledRangePicker(anchor) }
         list.onHighlightSearchResult = { [weak self] i in self?.setSearchHighlight(i, scroll: false) }
         list.onOpenSearchResult = { [weak self] id in self?.selectSearchResult(id) }
         filterButton.addSubview(filterMonogram)
@@ -564,7 +570,10 @@ public final class SidebarContentView: DSView {
                 let shelves = [state.workingExpanded, state.snoozedExpanded, state.settledExpanded]
                 let shelvesUnchanged = shelves == lastShelfExpansion
                 lastShelfExpansion = shelves
+                list.settledRange = state.settledRange
                 list.setItems(items, animated: animated && shelvesUnchanged, generation: listCache?.generation)
+                // An unchanged header keeps its view, so the "when" button learns a new range here.
+                (list.view(forKey: "shelf:settled") as? SidebarShelfRowView)?.range = state.settledRange
             }
         }
         // The results `ul` is a listbox named "Thread search results" (Sidebar.tsx:5151-5156).
@@ -943,6 +952,35 @@ public final class SidebarContentView: DSView {
         scopePopup = popup
         window?.makeFirstResponder(view.search)
     }
+
+    /// Settled's "when" picker, under the header's button (or over it, near the window's foot).
+    func toggleSettledRangePicker(_ anchor: NSView) {
+        guard let host = anchor.popupHost else { return }
+        if let open = rangePopup, host.popups.contains(where: { $0 === open }) { host.close(open); return }
+        let body = SettledRangePickerView(current: state.settledRange)
+        body.onSelect = { [weak self] range in
+            guard let self else { return }
+            if let open = self.rangePopup { host.close(open) }
+            self.setSettledRange(range)
+        }
+        var placement = PopupPlacement.dropdown
+        placement.align = .end
+        let popup = host.open(PickerPopupView(body), trigger: anchor, placement: placement, swallowsOutsideClick: true)
+        popup.onClose = { [weak self] in self?.rangePopup = nil }
+        rangePopup = popup
+    }
+
+    /// A new range starts Settled's paging over.
+    func setSettledRange(_ range: SettledRange) {
+        guard state.settledRange != range else { return }
+        var next = state
+        next.settledRange = range
+        next.settledVisibleCount = SidebarListBuilder.settledInitialCount
+        state = next
+    }
+
+    /// The open "when" picker, for tests.
+    var settledRangePickerView: SettledRangePickerView? { (rangePopup?.content as? PickerPopupView)?.body as? SettledRangePickerView }
 
     private func closeScopePopup() {
         if let scopePopup { filterButton.popupHost?.close(scopePopup) }

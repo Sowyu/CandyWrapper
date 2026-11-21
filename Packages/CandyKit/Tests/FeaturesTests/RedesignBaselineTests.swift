@@ -312,7 +312,7 @@ struct RedesignBaselineTests {
         }
     }
 
-    static func image(_ view: NSView, size: NSSize, dark: Bool) -> NSBitmapImageRep {
+    static func image(_ view: NSView, size: NSSize, dark: Bool, inWindow: (() -> Void)? = nil) -> NSBitmapImageRep {
         let canvas = ConnectionsFidelityTests.Canvas(frame: NSRect(origin: .zero, size: size))
         canvas.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         view.frame = canvas.bounds; canvas.addSubview(view)
@@ -325,7 +325,10 @@ struct RedesignBaselineTests {
         let art = DitherArtView.sync(nil, in: canvas)
         if view is DitherSettingsSectionView { DitherArtView.setEmphasis(.settings, from: view) }
         defer { DitherArtView.setEmphasis(nil, from: view); art?.removeFromSuperview() }
-        layout(canvas); window.display(); CATransaction.flush()
+        layout(canvas)
+        // A step that needs the window, such as opening a popover, then lays out again.
+        if let inWindow { inWindow(); layout(canvas) }
+        window.display(); CATransaction.flush()
         let thumbnail = NSBitmapImageRep(data: try! Data(contentsOf: ComposerAttachmentsFidelityTests.fixture))!.cgImage!
         func display(_ v: NSView) {
             if let image = v as? AsyncImageView {

@@ -254,18 +254,21 @@ final class ScopeRowView: ControlView {
     private let pin: ProjectPinSlot?
     /// The sidebar's `ProjectRowActions` column: a pin slot on every row, kept even when there is no pin.
     private let actionsColumn: Bool
+    /// A plain choice (Settled's range picker): its own glyph, and a check at the right on the current one.
+    private let check: IconView?
     var isHighlighted: () -> Bool = { false }
     var onHover: (@MainActor () -> Void)?
     var onSettings: (@MainActor (String) -> Void)?
     var onTogglePin: (@MainActor (String) -> Void)?
 
-    init(item: SidebarProjectScopeView.Item, selected: Bool, extra: SidebarProjectScopeView.Extra = .allProjects) {
+    init(item: SidebarProjectScopeView.Item, selected: Bool, extra: SidebarProjectScopeView.Extra = .allProjects, icon: IconName? = nil) {
         self.item = item
         self.selected = selected
-        folder = IconView(name: extra == .allProjects ? .folder : .folderPlus, size: 16)
-        settings = item.key == nil || extra == .addProject ? nil : ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
-        pin = item.key != nil && item.canPin ? ProjectPinSlot(name: item.label, pinned: item.pinned) : nil
-        actionsColumn = extra == .allProjects
+        folder = IconView(name: icon ?? (extra == .allProjects ? .folder : .folderPlus), size: 16)
+        settings = item.key == nil || extra == .addProject || icon != nil ? nil : ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
+        pin = item.key != nil && item.canPin && icon == nil ? ProjectPinSlot(name: item.label, pinned: item.pinned) : nil
+        actionsColumn = extra == .allProjects && icon == nil
+        check = icon == nil ? nil : IconView(name: .check, size: 14)
         badge = item.badge.map { _ in EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14)) }
         super.init(frame: .zero)
         scalesWhenPressed = false
@@ -274,7 +277,8 @@ final class ScopeRowView: ControlView {
         layer?.addSublayer(fill)
         selectedCircle.actions = ["backgroundColor": NSNull(), "borderColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         selectedMark.strokeWidth = 4
-        if item.key == nil { addSubview(folder) } else { addSubview(monogram); monogram.projectTitle = item.projectTitle ?? item.label; monogram.source = item.projectIcon }
+        if let check { addSubview(check); check.isHidden = !selected }
+        if item.key == nil || check != nil { addSubview(folder) } else { addSubview(monogram); monogram.projectTitle = item.projectTitle ?? item.label; monogram.source = item.projectIcon }
         label.text = item.label
         label.font = DSFont.ui(14)
         label.lineHeight = 20
@@ -306,7 +310,7 @@ final class ScopeRowView: ControlView {
     }
 
     var naturalWidth: CGFloat {
-        let actions: CGFloat = actionsColumn ? (settings == nil ? 24 : 48) : (pin == nil ? 0 : 24)
+        let actions: CGFloat = actionsColumn ? (settings == nil ? 24 : 48) : (pin == nil ? 0 : 24) + (check == nil ? 0 : 14)
         return 16 + 16 + 8 + ceil(label.textWidth) + (badge == nil ? 0 : 8 + 14) + (actions == 0 ? 0 : 8 + actions)
     }
 
@@ -347,6 +351,8 @@ final class ScopeRowView: ControlView {
         settings?.isHidden = !lit
         pin?.revealed = lit
         folder.strokeColor = Themed.color(\.contrastMutedForeground)
+        check?.strokeColor = lit ? Themed.color(\.contrastAccentForeground) : Themed.color(\.contrastForeground)
+        if check != nil { selectedCircle.isHidden = true; selectedMark.isHidden = true }
         badge?.color = Themed.color(\.contrastMutedForeground)
         setAccessibilitySelected(selected)
     }
@@ -374,6 +380,7 @@ final class ScopeRowView: ControlView {
             badge?.frame = NSRect(x: 32 + labelW + 8, y: (h - 14) / 2, width: 14, height: 14)
             return
         }
+        if let check { check.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 8 }
         if let badge { badge.frame = NSRect(x: right - 14, y: (h - 14) / 2, width: 14, height: 14); right -= 14 + 8 }
         if let pin { pin.frame = NSRect(x: right - 24, y: y24, width: 24, height: 24); right -= 24 + 8 }
         label.frame = NSRect(x: 32, y: (h - 20) / 2, width: max(0, right - 32), height: 20)
