@@ -40,6 +40,45 @@ struct SidebarDitherRowTests {
         window.contentView = nil
     }
 
+    /// A Snoozed row lines up with the Settled cards under Redesign: the same icon column and title edge, and its wake
+    /// time in the accent the Snoozed header takes (1.17.0 walk, 06e).
+    @Test func snoozedRowsLineUpWithSettledRows() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var dither = previous
+        dither.ditherLight = true; dither.ditherDark = true
+        ThemeRuntime.apply(dither)
+        let content = SidebarContentView()
+        content.hideWorkingShelf()
+        content.now = { SidebarPreview.referenceNow }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 255, height: 780), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = content
+        content.frame = NSRect(x: 0, y: 0, width: 255, height: 780)
+        content.state.snoozedExpanded = true
+        content.state.settledExpanded = true
+        content.setSnapshot(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo")], threads: [
+            SidebarPreview.thread("a1", "Active one", project: "p1", kind: .read, minutesAgo: 3),
+            SidebarPreview.thread("z1", "History of lighthouses", project: "p1", kind: .read, minutesAgo: 400,
+                                  extra: ["snoozedUntil": SidebarPreview.iso(-90), "snoozedAt": SidebarPreview.iso(60)]),
+            SidebarPreview.thread("s1", "Image speed video", project: "p1", kind: .read, minutesAgo: 1500,
+                                  extra: ["settledOverride": "settled", "settledAt": SidebarPreview.iso(1400)]),
+        ]), animated: false)
+        content.layoutSubtreeIfNeeded()
+        content.list.layoutSubtreeIfNeeded()
+        let snoozed = try #require(content.list.rowView("thread:z1") as? SidebarSlimRowView)
+        let settled = try #require(content.list.rowView("thread:s1") as? SidebarCardRowView)
+        snoozed.layoutSubtreeIfNeeded(); settled.layoutSubtreeIfNeeded()
+        func icon(_ v: NSView) -> NSRect? { v.subviews.first { $0 is ProjectMonogramView && !$0.isHidden }?.frame }
+        func label(_ v: NSView, _ text: String) -> LabelView? { v.subviews.compactMap { $0 as? LabelView }.first { $0.text == text } }
+        #expect(icon(snoozed)?.minX == icon(settled)?.minX)
+        #expect(label(snoozed, "History of lighthouses")?.frame.minX == label(settled, "Image speed video")?.frame.minX)
+        let time = try #require(snoozed.subviews.compactMap { $0 as? LabelView }.first { $0.text != "History of lighthouses" && !$0.text.isEmpty })
+        #expect(time.color == Themed.color(\.primary, 1, sidebar: true))
+        window.contentView = nil
+    }
+
     @Test func projectSectionsFollowTheListStateAndSurvivePatches() throws {
         let now = Int64(SidebarPreview.referenceNow.timeIntervalSince1970 * 1000)
         func snapshot(_ title: String) -> ShellSnapshot {
