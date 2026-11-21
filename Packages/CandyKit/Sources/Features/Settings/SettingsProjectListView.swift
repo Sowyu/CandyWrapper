@@ -81,8 +81,10 @@ public enum SettingsProjectList {
 final class SettingsProjectListView: DSView, SettingsGroupRow, RouteModalEscapeHandler {
     let search = InputGroupView(placeholder: "Search projects", leading: .icon(.search))
     private let group = SettingsGroupView(rows: [])
-    private let noMatch = KeybindingsSettingsView.EmptyMessageRow("No projects match")
-    private let noProjects = KeybindingsSettingsView.EmptyMessageRow("Add a project from the sidebar to configure it here.")
+    private let noMatch = KeybindingsSettingsView.EmptyMessageRow("No projects match",
+        redesign: StateCopy(title: "No projects match", detail: "Search by the project's name or its machine.", icon: .search))
+    private let noProjects = KeybindingsSettingsView.EmptyMessageRow("Add a project from the sidebar to configure it here.",
+        redesign: StateCopy(title: "No projects yet", detail: "Add a project from the sidebar to configure it here.", icon: .folder))
     private var entries: [SettingsProjectListEntry] = []
     private var rowViews: [String: Row] = [:]
     private var select: @MainActor (String) -> Void

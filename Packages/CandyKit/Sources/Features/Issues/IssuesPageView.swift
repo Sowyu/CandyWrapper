@@ -184,6 +184,7 @@ public final class IssuesPageView: DSView {
                 bodyView = PullRequestListGhostView(rows: 7, caption: nil)
             case .unavailable(let message, let retrying):
                 let empty = EmptyView(title: "Could not load issues", message: message, icon: .circleDot)
+                empty.redesign = StateErrorText.describe(raw: message, title: "Could not load issues", icon: .circleDot)
                 let b = ButtonView(retrying ? "Retrying…" : "Retry", icon: .refreshCw, variant: .outline, size: .sm)
                 b.isEnabled = !retrying
                 b.action = { [weak self] in self?.onRetry?() }

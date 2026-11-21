@@ -40,6 +40,11 @@ public final class FilesPanelView: DSView {
     public var searchTruncated = false { didSet { updateChrome() } }
     public var searchPending = false { didSet { updateChrome() } }
     private var noMatches = false
+    /// Redesign's state in the tree's place: a skeleton before the first listing, the failure with Retry, or no
+    /// matches. The default themes keep T3's status lines.
+    let stateView = EmptyView(title: "", size: .default)
+    let stateSkeleton = StateSkeletonView(shape: .list)
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
     public override init(frame frameRect: NSRect) {
         scroll = ScrollAreaView(documentView: treeView)
@@ -64,7 +69,9 @@ public final class FilesPanelView: DSView {
         errorButton.lineHeight = 19.5
         border.actions = ["frame": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(border)
-        [scroll, refresh, searchField, expandAll, status, errorButton].forEach(addSubview)
+        [scroll, refresh, searchField, expandAll, status, errorButton, stateView, stateSkeleton].forEach(addSubview)
+        stateView.isHidden = true
+        stateSkeleton.isHidden = true
         treeView.onLoad = { [weak self] dirs in self?.onLoad?(dirs) }
         treeView.onModelChange = { [weak self] in self?.updateChrome() }
         updateChrome()
@@ -120,8 +127,36 @@ public final class FilesPanelView: DSView {
         } else {
             status.isHidden = true
         }
+        syncRedesignState(loading: loading)
         needsLayout = true
         needsDisplay = true
+    }
+
+    /// The Redesign state for what the status lines say now.
+    private func syncRedesignState(loading: Bool) {
+        let firstLoad = loading && !treeView.model.ready && errorText == nil
+        var copy: StateCopy?
+        if redesign, let errorText {
+            copy = StateErrorText.describe(raw: errorText, title: "Could not list files", icon: .folder)
+            stateView.action = StateAction("Retry", icon: .refreshCw) { [weak self] in self?.onRefresh?() }
+        } else if redesign, noMatches {
+            copy = StateCopy(title: "No matching files", detail: "Try part of the file name or a shorter path.", icon: .search)
+            stateView.action = nil
+        }
+        stateView.redesign = copy
+        stateView.isHidden = copy == nil
+        stateSkeleton.isHidden = !(redesign && firstLoad)
+        if redesign, copy != nil || firstLoad { status.isHidden = true; errorButton.isHidden = true }
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateChrome()
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { updateChrome() }
     }
 
     public override func layout() {
@@ -149,8 +184,10 @@ public final class FilesPanelView: DSView {
             status.frame = NSRect(x: 12, y: y + 4, width: max(0, w - 24), height: 16)
             y += 24
         }
-        scroll.isHidden = noMatches
+        scroll.isHidden = noMatches || !stateView.isHidden || !stateSkeleton.isHidden
         scroll.frame = NSRect(x: 0, y: y, width: w, height: max(0, bounds.height - y))
+        stateView.frame = scroll.frame
+        stateSkeleton.frame = scroll.frame
     }
 
     public override func updateLayer() {

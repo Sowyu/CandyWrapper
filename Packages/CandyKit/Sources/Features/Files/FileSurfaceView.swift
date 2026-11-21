@@ -250,8 +250,13 @@ public final class FileSurfaceView: DSView {
         let view: NSView?
         switch content {
         case .loading:
-            let spinner = SpinnerView(size: .lg, tone: .muted)
-            view = Centered(spinner, size: NSSize(width: 20, height: 20))
+            // Redesign: lines shaped like the file instead of a lone spinner.
+            if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+                view = StateSkeletonView(shape: .diff)
+            } else {
+                let spinner = SpinnerView(size: .lg, tone: .muted)
+                view = Centered(spinner, size: NSSize(width: 20, height: 20))
+            }
         case .directory:
             view = nil
         case .failure(let message, let attempted, let cwd):
@@ -574,6 +579,8 @@ final class Centered: NSView {
 /// the workspace folder, centered.
 final class FileFailureView: DSView {
     private let lines: [LabelView]
+    /// Redesign's state view in place of the red line and the path lines.
+    let state = EmptyView(title: "", size: .default)
     init(message: String, attemptedPath: String?, cwd: String?) {
         var lines = [LabelView(message, font: DSFont.ui(12), color: Themed.color(\.destructive))]
         if let attemptedPath { lines.append(LabelView("Attempted path " + attemptedPath, font: DSFont.ui(12), color: Themed.color(\.mutedForeground))) }
@@ -582,7 +589,27 @@ final class FileFailureView: DSView {
         super.init(frame: .zero)
         for l in lines { l.alignment = .center; l.lineHeight = 19.5; addSubview(l) }
         setAccessibilityRole(.staticText)
+        state.redesign = Self.copy(message: message, attemptedPath: attemptedPath, cwd: cwd)
+        addSubview(state)
+        sync()
     }
+
+    /// T3's failure lines (FileViewerSurface.tsx) as one state: what failed, and the path that was tried.
+    static func copy(message: String, attemptedPath: String?, cwd: String?) -> StateCopy {
+        let title = message.contains("image") ? "Could not load this image" : message.contains("preview") ? "Could not preview this file" : "Could not open this file"
+        let detail = attemptedPath.map { "Nothing was found at \($0). Check the link's path or find the file in Files." }
+            ?? (message.hasPrefix("Unable") ? "The file may have been moved or deleted, or it is too large to preview." : StateErrorText.sentence(message))
+        return StateCopy(title: title, detail: detail, icon: .file, details: ([message] + [cwd.map { "Workspace folder: \($0)" }].compactMap { $0 }).joined(separator: "\n"))
+    }
+
+    private func sync() {
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        lines.forEach { $0.isHidden = redesign }
+        state.isHidden = !redesign
+    }
+
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); sync() }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); sync() }
     @MainActor required init?(coder: NSCoder) { fatalError() }
     override func layout() {
         super.layout()
@@ -592,6 +619,7 @@ final class FileFailureView: DSView {
             l.frame = NSRect(x: 24, y: y, width: max(0, bounds.width - 48), height: 19.5)
             y += 19.5 + 12
         }
+        state.frame = bounds
     }
 }
 

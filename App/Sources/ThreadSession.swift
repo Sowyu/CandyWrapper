@@ -334,12 +334,17 @@ final class ThreadSession {
                 let json = try await supervisor.request(tag, payload: payload)
                 return try JSONDecoder().decode(ThreadTurnDiff.self, from: JSONEncoder().encode(json))
             } catch let error as RPCClientError {
-                throw DiffLoadError(errorDescription: error.description)
+                throw DiffLoadError(error)
             }
         }
     }
 
-    struct DiffLoadError: LocalizedError { var errorDescription: String? }
+    /// The RPC failure as text for T3's error line, with the typed error kept so Redesign can say what failed.
+    struct DiffLoadError: LocalizedError, TypedErrorCarrying {
+        var errorDescription: String?
+        var typedError: RPCTypedError?
+        init(_ error: RPCClientError) { errorDescription = error.description; typedError = error.typedError }
+    }
 
     /// `review.getDiffPreview` for the diff panel's Changes and Uncommitted scopes. A refusal reaches the panel,
     /// which shows its message over "No patch available" (DiffPanel.tsx:1074-1076 in Nightly 2994). Nightly 2994
@@ -351,7 +356,7 @@ final class ThreadSession {
                                                         payload: ReviewDiffPreview.input(cwd: cwd, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
                 return try JSONDecoder().decode(ReviewDiffPreview.self, from: JSONEncoder().encode(json))
             } catch let error as RPCClientError {
-                throw DiffLoadError(errorDescription: error.description)
+                throw DiffLoadError(error)
             }
         }
     }
@@ -364,7 +369,7 @@ final class ThreadSession {
                                                         payload: ReviewDiffPreview.input(cwd: cwd, commitSha: sha, baseRef: baseRef, ignoreWhitespace: ignoreWhitespace))
                 return try json.decode(as: ReviewDiffPreview.self)
             } catch let error as RPCClientError {
-                throw DiffLoadError(errorDescription: error.description)
+                throw DiffLoadError(error)
             }
         }
     }
@@ -377,7 +382,7 @@ final class ThreadSession {
                 return try await supervisor.request(ReviewBranchCommits.method, payload: ReviewBranchCommits.input(cwd: cwd, baseRef: baseRef))
                     .decode(as: ReviewBranchCommits.self)
             } catch let error as RPCClientError {
-                throw DiffLoadError(errorDescription: error.description)
+                throw DiffLoadError(error)
             }
         }
     }
@@ -391,7 +396,7 @@ final class ThreadSession {
                                                           oldPath: file.oldPath ?? file.path, newPath: file.path))
                 return try json.decode(as: ReviewDiffFileContents.self)
             } catch let error as RPCClientError {
-                throw DiffLoadError(errorDescription: error.description)
+                throw DiffLoadError(error)
             }
         }
     }
@@ -412,7 +417,7 @@ final class ThreadSession {
                 let json = try await supervisor.request("orchestration.getTurnItem", payload: encode(input))
                 return try json.decode(as: GetTurnItemResult.self)
             } catch let error as RPCClientError {
-                throw DiffLoadError(errorDescription: error.description)
+                throw DiffLoadError(error)
             }
         }
     }
@@ -426,7 +431,7 @@ final class ThreadSession {
                 let result = try json.decode(as: GetTurnItemResult.self)
                 return TurnItemDetail.resolve(result, wireType: wireType)
             } catch let error as RPCClientError {
-                throw DiffLoadError(errorDescription: error.description)
+                throw DiffLoadError(error)
             }
         }
     }

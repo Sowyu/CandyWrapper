@@ -214,11 +214,19 @@ public final class CommandPaletteView: DSView {
             }
             resultsHeight = groups.isEmpty ? 100 : y + 8
         case .empty(let message, let actionsOnly):
-            let l = LabelView(message ?? (actionsOnly ? "No matching actions." : "No matching commands, projects, or threads."),
-                              font: DSFont.ui(14))
-            l.lineHeight = 20
-            l.alignment = .center
-            panelViews.append(l)
+            let text = message ?? (actionsOnly ? "No matching actions." : "No matching commands, projects, or threads.")
+            if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+                // Redesign: the card state, an icon over the same line.
+                let state = EmptyView(title: text, size: .compact)
+                state.redesign = StateCopy(title: text.hasSuffix(".") ? String(text.dropLast()) : text,
+                                           icon: text.hasPrefix("Couldn") ? .circleAlert : .search)
+                panelViews.append(state)
+            } else {
+                let l = LabelView(text, font: DSFont.ui(14))
+                l.lineHeight = 20
+                l.alignment = .center
+                panelViews.append(l)
+            }
         case .loading(let message):
             let l = LabelView(message, font: DSFont.ui(14))
             l.lineHeight = 20
@@ -331,7 +339,8 @@ public final class CommandPaletteView: DSView {
             for (label, top) in zip(panelViews, labelTops) { label.frame = NSRect(x: 16, y: top, width: width - 32, height: 16) }
             realizeRows()
         case .empty:
-            panelViews.first?.frame = NSRect(x: 0, y: 40, width: width, height: 20)
+            if let state = panelViews.first as? EmptyView { state.frame = NSRect(x: 0, y: 0, width: width, height: 100) }
+            else { panelViews.first?.frame = NSRect(x: 0, y: 40, width: width, height: 20) }
         case .loading:
             panelViews.first?.frame = NSRect(x: 16, y: 12, width: width - 32, height: 20)
         case .custom(let view):
