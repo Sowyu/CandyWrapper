@@ -437,18 +437,29 @@ final class RightPanelView: DSView {
             strip.frame = NSRect(x: edge + 8, y: 0, width: max(0, bounds.width - edge - 8 - 112), height: Self.tabBarHeight)
         }
         let widths = tabs.map(\.preferredWidth)
-        let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24
-        let overflow = total > strip.bounds.width
+        let overflow = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + 24 > strip.bounds.width
+        // In the card, overflowing tabs scroll on their own and the + stays put after them, so it is always in reach.
+        let pinAdd = row != nil && overflow
+        if pinAdd {
+            strip.frame.size.width = max(0, strip.frame.width - 28)
+            if add.superview !== self { addSubview(add) }
+        } else if add.superview !== strip {
+            strip.addSubview(add)
+        }
+        let total = widths.reduce(0, +) + CGFloat(tabs.count) * 4 + (pinAdd ? -4 : 24)
+        // A narrower strip keeps the active tab in view.
+        if strip.frame.width != lastStripWidth { lastStripWidth = strip.frame.width; revealActiveTab = true }
         // In the card the arrows go when they would leave less than one tab and the +; the fade and the wheel remain.
-        let arrows = overflow && (row == nil || strip.frame.width - 48 >= CardTopRow.minTabRoom)
+        let arrows = overflow && (row == nil || strip.frame.width - 48 >= CardTopRow.minTabRoom - 28)
         scrollLeft.isHidden = !arrows; scrollRight.isHidden = !arrows
         if arrows { strip.frame.size.width = max(0, strip.frame.width - 48) }
         let arrowY = strip.frame.midY - 12
-        scrollLeft.frame = NSRect(x: strip.frame.maxX, y: arrowY, width: 24, height: 24)
-        scrollRight.frame = NSRect(x: strip.frame.maxX + 24, y: arrowY, width: 24, height: 24)
+        let arrowX = strip.frame.maxX + (pinAdd ? 28 : 0)
+        scrollLeft.frame = NSRect(x: arrowX, y: arrowY, width: 24, height: 24)
+        scrollRight.frame = NSRect(x: arrowX + 24, y: arrowY, width: 24, height: 24)
         if revealActiveTab, let i = tabs.firstIndex(where: \.isActive) {
             let start = widths[..<i].reduce(0, +) + CGFloat(i) * 4
-            let end = start + widths[i] + (i == tabs.count - 1 ? 4 + 24 : 0)
+            let end = start + widths[i] + (i == tabs.count - 1 && !pinAdd ? 4 + 24 : 0)
             if start < stripOffset { stripOffset = start }
             if end > stripOffset + strip.bounds.width { stripOffset = end - strip.bounds.width }
         }
@@ -464,7 +475,8 @@ final class RightPanelView: DSView {
             x += w + 4
         }
         layoutDrag()
-        add.frame = NSRect(x: x, y: tabY, width: 24, height: 24)
+        add.frame = pinAdd ? NSRect(x: strip.frame.maxX + 4, y: strip.frame.midY - 12, width: 24, height: 24)
+            : NSRect(x: x, y: tabY, width: 24, height: 24)
         let content = NSRect(x: edge, y: contentTop, width: max(0, bounds.width - edge), height: max(0, bounds.height - contentTop))
         lazyDiff.loaded?.frame = content
         if let files = lazyFiles.loaded, files.superview === self { files.frame = content }
@@ -509,6 +521,7 @@ final class RightPanelView: DSView {
         CATransaction.commit()
     }
     private let stripFade = CAGradientLayer()
+    private var lastStripWidth: CGFloat = -1
 
     /// Over the thread in a narrow window, where the Glass theme's clear fill would show the thread through.
     var isSheet = false { didSet { if isSheet != oldValue { needsDisplay = true } } }
