@@ -24,9 +24,13 @@ final class GalleryMasonryView: DSView {
     var images: [GalleryImage] = [] {
         didSet {
             guard images != oldValue else { return }
+            // A tile follows its picture to its new place and keeps its pixels: downloads, hashes and counts change
+            // the list many times while pictures load. Only pictures that left the list lose their tile.
             let keys = Set(images.map(\.pixelKey))
             loaders = loaders.filter { keys.contains($0.key) }
-            for (index, tile) in tiles { tile.removeFromSuperview(); tiles[index] = nil }
+            let gone = tileViews.keys.filter { !keys.contains($0) }
+            for key in gone { tileViews.removeValue(forKey: key)?.removeFromSuperview() }
+            ImageTiming.mark("wall-list", "\(images.count) images, \(gone.count) tiles removed, \(tileViews.count) kept")
             relayout()
         }
     }
@@ -43,7 +47,14 @@ final class GalleryMasonryView: DSView {
     var focused: Int? { didSet { if focused != oldValue { for (i, t) in tiles { t.keyFocused = i == focused } } } }
 
     private(set) var frames: [CGRect] = []
-    private(set) var tiles: [Int: GalleryTileView] = [:]
+    /// The live tiles by pixel key, so a list change moves a tile instead of building a new one.
+    private var tileViews: [String: GalleryTileView] = [:]
+    /// The live tiles by index in `images`.
+    var tiles: [Int: GalleryTileView] {
+        var out: [Int: GalleryTileView] = [:]
+        for (index, image) in images.enumerated() { if let tile = tileViews[image.pixelKey] { out[index] = tile } }
+        return out
+    }
     private var loaders: [String: AsyncImageView.Loader] = [:]
     private var measuring: Set<String> = []
     private var failed: Set<String> = []
@@ -171,17 +182,19 @@ final class GalleryMasonryView: DSView {
     /// Tiles for the placed images near the viewport; the rest go, with their pixels.
     func tile() {
         let live = liveRect
-        let wanted = Set(frames.indices.filter { frames[$0].intersects(live) })
-        for (index, tile) in tiles where !wanted.contains(index) { tile.removeFromSuperview(); tiles[index] = nil }
-        for index in wanted.sorted() {
+        var wanted: [String: Int] = [:]
+        for index in frames.indices where frames[index].intersects(live) { wanted[images[index].pixelKey] = wanted[images[index].pixelKey] ?? index }
+        for key in tileViews.keys where wanted[key] == nil { tileViews.removeValue(forKey: key)?.removeFromSuperview() }
+        for (key, index) in wanted.sorted(by: { $0.value < $1.value }) {
             let image = images[index]
-            let tile = tiles[index] ?? {
+            let tile = tileViews[key] ?? {
                 let tile = GalleryTileView(radius: metrics.radius)
-                tile.action = { [weak self] in self?.onSelect?(index) }
                 addSubview(tile)
-                tiles[index] = tile
+                tileViews[key] = tile
                 return tile
             }()
+            // The index moves when pictures before this one come or go.
+            tile.action = { [weak self] in self?.onSelect?(index) }
             tile.frame = frames[index]
             tile.keyFocused = index == focused
             tile.thumb.cacheable = sharedCache
