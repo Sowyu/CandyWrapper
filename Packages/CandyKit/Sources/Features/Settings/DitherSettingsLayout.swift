@@ -101,7 +101,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
                                                                       "proactive-panels"]),
                              G("confirmations", nil, rows: ["unpin-confirmation", "archive-confirmation", "delete-confirmation",
                                                             "terminal-close-confirmation", "quit-confirmation"]),
-                             G("behavior", "Input", rows: ["trackpad-haptics", "tooltips"])]),
+                             G("behavior", "Input", rows: ["trackpad-haptics", "message-rail-haptic", "tooltips"])]),
         ]
         case .appearance: return [.init(.appearance)]
         case .notifications: return [.init(.general, [G("behavior", "Alerts", rows: ["thread-notifications", "in-app-notifications", "menu-bar"])])]

@@ -619,7 +619,8 @@ extension SettingsController {
         labels += client("confirmThreadUnpin", "Unpin confirmation") + client("confirmThreadArchive", "Archive confirmation")
         labels += client("confirmTerminalClose", "Terminal close confirmation")
         labels += client("confirmThreadDelete", "Delete confirmation") + client("confirmQuit", "Quit shortcut")
-        labels += client("menuBarItemEnabled", "Menu bar icon") + client("trackpadHaptics", "Trackpad haptics") + client("tooltips", "Tooltips")
+        labels += client("menuBarItemEnabled", "Menu bar icon") + client("trackpadHaptics", "Trackpad haptics")
+        labels += client("messageRailHaptic", "Message rail ticks") + client("tooltips", "Tooltips")
         labels += server("textGenerationModelSelection", "Text generation model")
         labels += server("threadTitleInstructions", "Thread title instructions")  // SettingsPanels.tsx:520-522
         return labels
@@ -653,7 +654,7 @@ extension SettingsController {
                           "showSkillsInSlashMenu", "composerCollapseOnScroll", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
                           "toolCallVisibility", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
                           "confirmTerminalClose", "language",
-                          "menuBarItemEnabled", "trackpadHaptics", "tooltips"]
+                          "menuBarItemEnabled", "trackpadHaptics", "messageRailHaptic", "tooltips"]
         ClientSettingsStore.shared.update(Dictionary(uniqueKeysWithValues: clientKeys.map { ($0, ClientSettings.fields[$0]!.defaultValue) }))
         let s = pageContext.scope.values
         var patch: [String: JSONValue] = [:]

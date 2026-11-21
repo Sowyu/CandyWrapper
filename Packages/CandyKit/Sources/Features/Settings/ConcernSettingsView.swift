@@ -74,7 +74,7 @@ public final class ConcernSettingsView: SettingsPageBase {
     }
 
     /// Rows only CandyWrapper has: About's CandyWrapper group in the default themes, General's Input group in Redesign.
-    public static let candyWrapperRows = ["tooltips", "trackpad-haptics"]
+    public static let candyWrapperRows = ["tooltips", "trackpad-haptics", "message-rail-haptic"]
 
     /// A search result pointed at the section that shows its row in this layout.
     public static func located(_ item: SettingsSearchItem, dither: Bool) -> SettingsSearchItem {
@@ -87,7 +87,7 @@ public final class ConcernSettingsView: SettingsPageBase {
         typealias G = DitherSettingsSlice.Group
         switch page {
         case .general where dither: return slices(.general, dither: false)
-            + [.init(.general, [G("behavior", "Input", rows: ["trackpad-haptics", "tooltips"])])]
+            + [.init(.general, [G("behavior", "Input", rows: ["trackpad-haptics", "message-rail-haptic", "tooltips"])])]
         case .about where dither: return Array(slices(.about, dither: false).dropLast())
         case .general: return [
             .init(.general, [G("behavior", "Notifications", rows: ["thread-notifications", "in-app-notifications"])]),

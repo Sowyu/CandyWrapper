@@ -411,7 +411,7 @@ public final class SidebarRailView: DSView {
 
     public override func mouseDown(with event: NSEvent) {
         guard let layoutView else { return }
-        if event.clickCount == 2 { layoutView.resetWidth(); Haptics.tap(.alignment); return }
+        if event.clickCount == 2 { layoutView.resetWidth(); return }
         let width = layoutView.beginDrag()
         dragStart = (event.locationInWindow.x, width, width)
         moved = false

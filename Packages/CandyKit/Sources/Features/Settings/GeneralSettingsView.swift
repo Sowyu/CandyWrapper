@@ -338,6 +338,9 @@ public final class GeneralSettingsView: SettingsPageBase {
                                    reset: "menu bar icon", title: "Show in menu bar")
         let haptics = clientSwitch("trackpad-haptics", "Needs a Force Touch trackpad and follows Force Click and haptic feedback in System Settings.",
                                    key: "trackpadHaptics", reset: "trackpad haptics", title: "Trackpad haptics")
+        let railTicks = clientSelect("message-rail-haptic", "The tap you feel moving along a thread's message rail. Strong ticks every message.",
+                                     key: "messageRailHaptic", options: [("off", "Off"), ("light", "Light"), ("medium", "Standard"), ("strong", "Strong")],
+                                     width: 160, reset: "message rail ticks", hideIndicator: false, label: "Message rail ticks")
         let tooltips = clientSelect("tooltips", "Delayed waits about a second before a tooltip opens. Off keeps them closed; VoiceOver still reads them.",
                                     key: "tooltips", options: [("on", "On"), ("delayed", "Delayed"), ("off", "Off")],
                                     width: 160, reset: "tooltips", hideIndicator: false, label: "Tooltips")
@@ -353,7 +356,7 @@ public final class GeneralSettingsView: SettingsPageBase {
                                        key: "screenReaderWindowTitle", reset: "screen reader window title", label: "Screen reader window title",
                                        title: "Screen reader window title")
         return section("behavior", "Behavior", [notifications, inApp, language, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
-                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar, haptics, tooltips])
+                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar, haptics, railTicks, tooltips])
     }
 
     /// A select over a boolean client key.
