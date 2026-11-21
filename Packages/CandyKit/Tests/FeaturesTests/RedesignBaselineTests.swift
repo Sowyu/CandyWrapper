@@ -243,7 +243,7 @@ struct RedesignBaselineTests {
             gradientThread.layoutSubtreeIfNeeded(); gradientThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-gradient", gradientThread, panelSize)
         }
-        #expect(count == 98)
+        #expect(count == 112)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
