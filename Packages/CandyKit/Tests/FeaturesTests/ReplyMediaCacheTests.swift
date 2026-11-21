@@ -71,7 +71,10 @@ import UniformTypeIdentifiers
         let tasks = keys.map { key in Task { if await queue.acquire(key) { log.lock.withLock { log.keys.append(key) } } } }
         for _ in 0..<200 where log.lock.withLock({ log.keys.count }) < 2 { try? await Task.sleep(for: .milliseconds(5)) }
         #expect(Set(log.lock.withLock { log.keys }) == [keys[3], keys[2]])
-        await queue.release(); await queue.release()
+        // One slot at a time, so the order of the log is the order of the hand-outs.
+        await queue.release()
+        for _ in 0..<200 where log.lock.withLock({ log.keys.count }) < 3 { try? await Task.sleep(for: .milliseconds(5)) }
+        await queue.release()
         for task in tasks { await task.value }
         #expect(log.lock.withLock { log.keys }.suffix(2) == [keys[1], keys[0]])
         await queue.release(); await queue.release()
