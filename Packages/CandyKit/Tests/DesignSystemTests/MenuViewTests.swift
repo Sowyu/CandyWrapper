@@ -45,6 +45,28 @@ struct MenuViewTests {
         }
     }
 
+    /// A select list opened by the pointer (Settings > General > Message rail ticks) shows its choice with the check
+    /// alone under Redesign; the first arrow key then lands on the choice. The default themes and a keyboard open
+    /// highlight the choice at once, as base-ui does.
+    @Test func aSelectOpenedByThePointerHasNoRestingHighlight() {
+        let items = ["Off", "Light", "Standard"].enumerated().map { MenuItem($1, kind: .radio($0 == 1)) }
+        withTheme(dither: true) {
+            let list = MenuPopupView(items: items, style: .select)
+            list.highlightOnOpen(1, byKeyboard: false)
+            #expect(list.highlightedIndex == nil)
+            #expect(list.popupHandleKey(.down))
+            #expect(list.highlightedIndex == 1)
+            let keyed = MenuPopupView(items: items, style: .select)
+            keyed.highlightOnOpen(1, byKeyboard: true)
+            #expect(keyed.highlightedIndex == 1)
+        }
+        withTheme(dither: false) {
+            let list = MenuPopupView(items: items, style: .select)
+            list.highlightOnOpen(1, byKeyboard: false)
+            #expect(list.highlightedIndex == 1)
+        }
+    }
+
     @Test func redesignHoveredChoiceShowsFillAndCheck() {
         withTheme(dither: true) {
             let chosen = row(checked: true)

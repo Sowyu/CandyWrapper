@@ -546,7 +546,7 @@ public final class RunOnControl: ComposerContextControl {
         let list = MenuPopupView(items: listItems(), style: .select)
         list.minimumWidth = trigger.bounds.width
         list.hostPopup = host.open(list, trigger: trigger, placement: .dropdown, swallowsOutsideClick: true)
-        list.highlightedIndex = options.firstIndex { $0.environmentId == selectedId }.map { $0 + 1 }
+        list.highlightOnOpen(options.firstIndex { $0.environmentId == selectedId }.map { $0 + 1 })
         openList = list
     }
 

@@ -237,7 +237,7 @@ public final class SelectView: ControlView {
         if !alignItemWithTrigger { placement.align = popupAlign; placement.side = popupSide }
         let popup = host.open(list, trigger: self, placement: placement, swallowsOutsideClick: true)
         list.hostPopup = popup
-        list.highlightedIndex = selectedRow ?? (NSApp.currentEvent?.type == .keyDown ? list.selectable.first : nil)
+        list.highlightOnOpen(selectedRow ?? (NSApp.currentEvent?.type == .keyDown ? list.selectable.first : nil))
         if alignItemWithTrigger, let frame = Self.alignedFrame(list: list, selected: selectedRow, trigger: host.convert(bounds, from: self),
                                                                textInset: 1 + size.metrics.padding, bounds: host.bounds) {
             popup.container.frame = frame
