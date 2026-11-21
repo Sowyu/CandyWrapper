@@ -43,6 +43,8 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     private let describe: (Int) -> String
     /// Redesign drops the label to just the glyph and the count when the row is short of room.
     public var showsTitle = true { didSet { if showsTitle != oldValue { title.isHidden = !showsTitle; needsLayout = true } } }
+    /// Off for a pill with no count, Redesign's Scroll to end.
+    public var showsCount = true { didSet { if showsCount != oldValue { countLabel.isHidden = !showsCount; needsLayout = true } } }
     private let countLabel = glassLabel("0", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
 
     /// The stash's badge by default; Redesign's Queued pill passes the queue's glyph, title and spoken label.
@@ -66,6 +68,7 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     public func width(showingTitle: Bool) -> CGFloat {
         sizeForPill()
         let label = showingTitle ? ceil(title.textWidth) + 4 : 0
+        guard showsCount else { return padX * 2 + Self.row + (showingTitle ? 4 + label : 0) }
         return padX * 2 + Self.row + 4 + label + max(Self.row, ceil(countLabel.textWidth))
     }
     /// Redesign's 32pt pill: 13pt text and 6 a side, like the context pills beside it.

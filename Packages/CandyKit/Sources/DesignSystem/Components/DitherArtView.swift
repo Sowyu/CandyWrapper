@@ -13,11 +13,12 @@ public final class DitherArtView: NSView {
     private let art = CALayer()
     /// The background over the art, one share across the panel, plus a faint veil of it behind the chat column.
     private let scrim = CAGradientLayer()
-    /// The band's color over the panel's top, so the art meets the tab strip band with no edge.
+    /// The band's color over the panel's top edge, a thin fade into the window's top.
     private let blend = CAGradientLayer()
-    /// How far down the panel the band's color reaches: the thread header's height. The blend eases out from the top
-    /// edge (`DitherChrome.bandBlend`), so the art shows from the panel's top with no solid strip.
-    public static let topBlend: CGFloat = DitherChrome.band
+    /// How far down the panel the band's color reaches: only the window's top edge, the same reach as the rows' fade
+    /// there. It reached the band's whole 52 before, a grey slab under the title the user removed ("lets remove this
+    /// early fade i only want the one up here", 2026-11-21).
+    public static let topBlend: CGFloat = 20
     private var shown: DitherArt.Request?
     private var pending: DitherArt.Request?
     private var debounce: DispatchWorkItem?
@@ -423,11 +424,13 @@ public final class DitherArtView: NSView {
                                         frames: ThemeRuntime.ditherGradientAnimates ? Int(DitherArt.gradientPeriod * DitherArt.gradientFPS) : 1)
         } else {
             let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
+            let fallbacks = [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url }
+            PictureTint.sync([url].compactMap { $0 } + fallbacks)
             let unit = DitherArt.unit(blur: blur)
             request = DitherArt.Request(url: url, width: Int((rect.width / unit).rounded(.up)),
                                         height: Int((rect.height / unit).rounded(.up)),
                                         background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
-                                        fallbacks: [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url },
+                                        fallbacks: fallbacks,
                                         blur: blur)
         }
         guard request != shown, request != pending else { return }

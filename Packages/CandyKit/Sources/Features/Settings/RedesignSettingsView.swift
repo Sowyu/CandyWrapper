@@ -42,7 +42,9 @@ public final class RedesignSettingsView: SettingsPageBase {
         // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").
         let animate = clientSwitch("redesign-gradient-animate", "Let Gradient's dots drift on the new-thread page. They stop while the window is in the background and under Reduce Motion.",
                                    key: "redesignGradientAnimate", reset: "animate gradient", title: "Animate gradient")
-        let look: [SettingsRowView] = [picture, backgroundRow(), animate, dim, accentRow()]
+        let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
+                                key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
+        let look: [SettingsRowView] = [picture, backgroundRow(), tint, animate, dim, accentRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture, Glass and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let collapse = clientSwitch("composer-collapse",
@@ -59,7 +61,7 @@ public final class RedesignSettingsView: SettingsPageBase {
             for r in self.gated where r.inertReason != off { r.inertReason = off }
             // Gradient shows no picture, so the picture's own settings do nothing.
             let pictureOff = off ?? (self.client.string("redesignBackground") == "gradient" ? Self.gradientReason : nil)
-            for r in [picture, dim] where r.inertReason != pictureOff { r.inertReason = pictureOff }
+            for r in [picture, tint, dim] where r.inertReason != pictureOff { r.inertReason = pictureOff }
             let animateOff = off ?? (self.client.string("redesignBackground") == "gradient" ? nil : Self.animateReason)
             if animate.inertReason != animateOff { animate.inertReason = animateOff }
         }

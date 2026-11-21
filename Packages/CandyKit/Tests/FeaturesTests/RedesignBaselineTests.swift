@@ -184,6 +184,17 @@ struct RedesignBaselineTests {
                 }
                 try capture(name, AppRouteModalView(label: "Settings", content: page, navigation: nav), NSSize(width: 1100, height: 780))
             }
+            // Tint from picture on (every other image runs with it off): the fixture picture's color in the surfaces.
+            input.ditherTintFromPicture = true
+            input.pictureTint = PictureTint.tint(of: try #require(DitherArt.picture(ComposerAttachmentsFidelityTests.fixture, maxPixels: 64)))
+            ThemeRuntime.apply(input)
+            let tintThread = ComposerFidelityTests.panel(width: 844, dark: dark)
+            tintThread.timeline.context.now = { Self.now }
+            tintThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            tintThread.layoutSubtreeIfNeeded(); tintThread.timeline.scroll(toFraction: 0)
+            try capture("thread-markdown-top-tint", tintThread, panelSize)
+            input.ditherTintFromPicture = false; input.pictureTint = nil
+            ThemeRuntime.apply(input)
             // Background set to Blur: the same picture blurred, under a thread, the new-thread page, the sidebar and Settings.
             input.ditherBlur = true
             ThemeRuntime.apply(input)
@@ -218,7 +229,7 @@ struct RedesignBaselineTests {
             gradientThread.layoutSubtreeIfNeeded(); gradientThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-gradient", gradientThread, panelSize)
         }
-        #expect(count == 96)
+        #expect(count == 98)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

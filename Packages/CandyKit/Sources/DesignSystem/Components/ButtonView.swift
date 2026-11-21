@@ -293,6 +293,16 @@ public final class ButtonView: ControlView {
         label.font = monospaced ? DSFont.mono(m.font, weight: .medium) : DSFont.ui(m.font, weight: .medium)
         label.lineHeight = m.line
         var look = ButtonStyles.look(variant: variant, state: state, radius: size == .micro || size == .iconMicro ? DesignGeometry.radius(m.radius, in: self) : m.radius)
+        if variant == .glass, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            // Redesign draws no blur and ignores Glass opacity, so a glass button floating over content takes the
+            // solid resting surface instead: at the user's 10% opacity its label sat straight on the text behind it.
+            let dark = effectiveAppearance.isDark
+            look.box.radius = RedesignTokens.Radius.control
+            look.box.fill = Themed.color(light: \.card, 1, dark: \.surfaceRaised, 1)
+            look.box.border = RedesignTokens.Surface.rim(dark: dark)
+            look.box.shadows = [RedesignTokens.Shadow.resting.box]
+            if state.hoverOrPressed { look.icon = Themed.color(\.contrastForeground); look.text = look.icon }
+        }
         if joinedSides.leading || joinedSides.trailing {
             var corners = BoxStyle.Corners.all
             if joinedSides.leading { corners.subtract(.leading) }

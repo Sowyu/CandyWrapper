@@ -48,6 +48,14 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     public let worktreeSetup = ThreadWorktreeSetupView()
     private var setupHeight: CGFloat = 0
     private let pill = ButtonView("Scroll to end", icon: .chevronDown, variant: .glass, size: .xs)
+    /// Whether Scroll to end is due: away from the end, after the 150ms wait.
+    public private(set) var wantsScrollToEnd = false {
+        didSet { if wantsScrollToEnd != oldValue { pill.isHidden = !wantsScrollToEnd || hostsScrollToEnd; onScrollToEndChange?() } }
+    }
+    /// Redesign draws Scroll to end as a pill in the row above the composer, so this view's own stays hidden.
+    public var hostsScrollToEnd = false { didSet { pill.isHidden = !wantsScrollToEnd || hostsScrollToEnd } }
+    /// Called when `wantsScrollToEnd` changes.
+    public var onScrollToEndChange: (() -> Void)?
 
     private(set) var items: [TimelineItem] = []
     private var heights: [CGFloat] = []
@@ -1066,13 +1074,13 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     private func updatePill() {
         pillWork?.cancel()
         if followsEnd || items.isEmpty {
-            pill.isHidden = true
+            wantsScrollToEnd = false
             return
         }
-        guard pill.isHidden else { return }
+        guard !wantsScrollToEnd else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.followsEnd else { return }
-            self.pill.isHidden = false
+            self.wantsScrollToEnd = true
             self.layoutPill()
         }
         pillWork = work
@@ -1155,7 +1163,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     func view(forRow id: String) -> TimelineRowView? { visible[id] }
     var liveViewCount: Int { visible.count }
-    var isPillVisible: Bool { !pill.isHidden }
+    var isPillVisible: Bool { wantsScrollToEnd }
     var documentHeight: CGFloat { contentHeight }
 }
 

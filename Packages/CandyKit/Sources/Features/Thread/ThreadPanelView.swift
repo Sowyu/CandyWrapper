@@ -576,6 +576,13 @@ public final class ThreadPanelView: DSView {
     public let lazySubagentPanel = LazyView { SubagentStripPanelView() }
     /// Redesign, on a delegated task thread: "Back to <parent>" at the left of the pill row. Nil hides it.
     public let lazyParentPill = LazyView { DitherParentPillView() }
+    /// Redesign's Scroll to end, a pill in the row above the composer (the user, 2026-11-21: "just move it over here
+    /// and make it a pill like the rest"). The default themes keep the timeline's own.
+    let lazyScrollToEndPill = LazyView { () -> ComposerStashBadgeView in
+        let pill = ComposerStashBadgeView(icon: .chevronDown, title: "Scroll to end", describe: { _ in "Scroll to end" })
+        pill.showsCount = false
+        return pill
+    }
     public var parentPillTitle: String? { didSet { if parentPillTitle != oldValue { needsLayout = true } } }
     public var onOpenParentPill: (() -> Void)?
     public var showsSubagentStrip = false { didSet { if showsSubagentStrip != oldValue { needsLayout = true } } }
@@ -869,6 +876,7 @@ public final class ThreadPanelView: DSView {
         layer?.addSublayer(fade)
         timeline.context.model = model
         timeline.onFocusLost = { [weak self] in self?.composer.focus() }
+        timeline.onScrollToEndChange = { [weak self] in if self?.timeline.hostsScrollToEnd == true { self?.needsLayout = true } }
         model.onChange = { [weak self] change in
             guard let self else { return }
             self.timeline.setItems(self.model.items, change: change)
@@ -1640,6 +1648,8 @@ public final class ThreadPanelView: DSView {
         lazySubagentPill.loaded?.isHidden = true
         lazySubagentPanel.loaded?.isHidden = true
         lazyParentPill.loaded?.isHidden = true
+        lazyScrollToEndPill.loaded?.isHidden = true
+        timeline.hostsScrollToEnd = false
         watchSubagentPanel(false)
         if composer.contextWindowMeter.superview !== composer {
             composer.addSubview(composer.contextWindowMeter)
@@ -2047,6 +2057,25 @@ public final class ThreadPanelView: DSView {
             shown.append(view)
         }
 
+        // Scroll to end leads the right cluster, so the pills beside it never move when it comes and goes. It takes
+        // what room the row has left, drops its label to the chevron when short, and stays away when even that won't
+        // fit. It sits over the timeline, which is away from its end whenever it shows, so it adds no inset.
+        timeline.hostsScrollToEnd = true
+        if docked && timeline.wantsScrollToEnd {
+            let pill = lazyScrollToEndPill.view
+            pill.onToggleMenu = { [weak self] in self?.timeline.scrollToEnd(animated: true) }
+            pill.placement = .floating
+            let floor = shown.filter { $0.frame.minY == rowY && $0.frame.maxX <= right + 1 }.map { $0.frame.maxX + spacing }.max() ?? px
+            pill.showsTitle = pill.width(showingTitle: true) <= right - floor
+            let w = pill.width(showingTitle: pill.showsTitle)
+            if w <= right - floor {
+                if pill.superview !== self { addSubview(pill, positioned: .above, relativeTo: queue) }
+                pill.frame = NSRect(x: right - w, y: rowY, width: w, height: pillH)
+                shown.append(pill)
+            }
+        }
+        if let pill = lazyScrollToEndPill.loaded, !shown.contains(where: { $0 === pill }) { pill.isHidden = true }
+
 
         let approvalsHeight = placeChildApprovals(shown: docked && visible, x: x, width: width, bottom: top)
         if approvalsHeight > 0 { top -= approvalsHeight }
@@ -2084,6 +2113,7 @@ public final class ThreadPanelView: DSView {
             if on && view.superview !== self { addSubview(view, positioned: .above, relativeTo: queue) }
             view.isHidden = !on
         }
+        if let pill = lazyScrollToEndPill.loaded, shown.contains(where: { $0 === pill }) { pill.isHidden = false }
 
         // The menus float as panels: `/` above the composer, the stash list above its pill.
         commandMenu.isHidden = !menuShown
