@@ -70,6 +70,8 @@ public struct ClientSettings: Equatable, Sendable {
         "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, or accent dots with no picture
         "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient background moves on the new-thread page
         "redesignTintFromPicture": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's surfaces lean toward the picture's color
+        "redesignInk": SettingSpec(.literals(["auto", "accent", "custom"]), .string("auto")),  // CandyWrapper only: where Redesign's Picture takes its two inks
+        "redesignInkColor": SettingSpec(.string(maxLength: 9), .string("#86cdff")),  // CandyWrapper only: Picture's light ink when Ink is Custom, #rrggbb
         "redesignStackedPicker": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's docked model picker as one column
         "redesignPickerAccount": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's account and limits card in the model picker
         "appIcon": SettingSpec(.literals(["sticker", "pink", "grape", "mint", "lemon", "orange", "classic"]), .string("sticker")),  // CandyWrapper only: the Dock icon (AppIconChoice)

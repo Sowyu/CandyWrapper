@@ -61,7 +61,7 @@ Measured with the sandbox's thread open in dark on 2026-11-21: 24 `BackdropBlurV
 
 ## Backgrounds
 
-Three choices, the client setting `redesignBackground`: `dither` (labelled Picture, the default), `blur` and `gradient`.
+Three choices, the client setting `redesignBackground`: `dither` (labelled Picture, the default), `blur` and `gradient`. Picture's own setting is Ink, Blur's is Background dim, Gradient's is Animate gradient.
 
 Gradient is the user's "a dither option without an image like capy does here" and "capys plain dither isnt just static" (capy-dither-no-image.mov). No picture. Measured frame by frame from the recording (AVAssetImageGenerator, zero tolerance, 2.75 s to 12.5 s on the new-thread page): Capy's cells are binary, one navy (about #26314b) or off, on a fixed grid of 6px at 2x (3pt). They never shift or change size; the field under them changes. A 40px patch differs by under 2 levels from frame to frame, where a moving grid would differ by about 10. Soft lobes along the top drift and swell: one moves about 37pt a second to the right, the left one rises and fades, and one at the right grows from nothing to the brightest in about 5 s. The field stays in the top 25 to 30% (its centroid) and fades out by about 45% down. It did not repeat or settle in the 9.75 s on screen.
 
@@ -73,7 +73,23 @@ Cost, measured on the M2 Pro with `top` over interleaved 6 s windows, the new-th
 
 The user chose, after seeing a glass card behind the conversation on 2026-11-21: "no glass card either full blur or full dither". Nothing sits behind the conversation in either mode. The setting is the client setting `redesignBackground`, `dither` by default.
 
-Dither is 1.15.1's background: the picture in 2pt ordered-dither dots in the main panel only, under the "Background dim" scrim and the faint veil behind the chat lane, with the sidebar and the tab band flat. Its readability rules are unchanged: muted text keeps 4.6:1 over the brightest (dark) or darkest (light) dot behind the lane.
+Picture (the setting value `dither`) was rebuilt on 2026-11-21 after the user called 1.15.2's "so non premium" (r3-picture-dither-cheap.png: a washed photo under a grey dim with dots in a few bands). They chose B1 from the mockups ("i like b1", "i like 2 ink") and no motion ("ok yeah no motion its horrid"). It lives in `PictureInk`:
+
+1. The picture covers the panel at one sample per 3pt cell, on Gradient's lattice (top left of the panel, `PictureInk.cell` = `DitherArt.gradientUnit`).
+2. Tone is gamma-encoded luma, auto levels from the 1st to the 99th percentile (a flat picture keeps its own lightness), half an S-curve, then gamma 1.15.
+3. A dark picture is lifted: a gamma (never under 0.5) takes the median tone up to 0.34. The mockups left Big Sur Dark's coastline and Sonoma's hills almost empty; the lift fills them, and a bright picture is untouched.
+4. An 8 by 8 Bayer threshold picks between neighbouring levels only: ground, deep ink, light ink in dark; ground, light ink, deep ink in light, where the dark parts of the picture take ink. Ink covers at most 85% of a level, so a bright sky keeps a pattern.
+5. Nothing of the photo shows through and no scrim or veil lies over a new thread or a thread.
+
+The Ink setting (`redesignInk`, `redesignInkColor`) picks the inks. Auto is the mockup's rule: the picture's OKLCH hues in 24 bins scored by chroma squared (so a vivid patch beats a big dull one), ignoring pixels under chroma 0.035 or outside L 0.12 to 0.96; the best bin and its neighbours give the hue. Under 20% chromatic pixels takes Capy's navy hue; 75 to 115 degrees, which turns mustard, rotates to 130. The deep ink is L 0.52 C 0.10 and the light ink L 0.82 C 0.11 at the hue plus 12, chroma reduced into sRGB. Golden Gate gives #95572d and #f6b576, Radial Sky Blue #077396 and #86cdff, Sonoma Horizon #557432 and #9bd694, the mockup's own values. Accent makes the accent the light ink, Custom a color from the well; either way the deep ink is that hue at L 0.52 and at most C 0.10.
+
+The new-thread page passes its composer's frame (`DitherArtView.setComposer`) and the dots thin around it and toward the sides and the foot (`PictureInk.heroDensity`, the mockup's fall-off). A thread passes its reading column (`setColumn`). Behind it the dots drop to 40% and to the near ink only, and that ink is moved toward the ground in linear light until body text keeps 7:1 and muted text 4.5:1 against it (`PictureInk.textBound`). Over 120pt beside the column the art comes back to full, so the margins and the top keep the picture. Measured at the worst cell behind the column in a 1384 by 900 panel: body 10.0:1 and muted 4.7:1 in dark for all five test pictures. In light the floor leaves the column close to white, since the light theme's muted #737373 needs a cell of luminance 0.94 or more.
+
+Settings and other pages keep their heavy scrims (0.8 and 0.92). Reduce Transparency and Increase Contrast keep theirs on every page. "Background dim" now dims only Blur, and its row is inert outside Blur; Picture keeps the theme's muted text, since its render enforces the floor itself.
+
+Picture renders once per canvas size, picture, appearance, ink, ground and page shape on a utility queue. The tone (one byte a cell) is cached for the last picture and size, so a page or ink change only re-thresholds it. Measured on the M2 Pro: decoding and toning a picture for a 1384 by 900 panel takes 34 to 170 ms, a threshold 2 ms. It holds the 462 by 300 RGBA image (554 KB) and the tone (139 KB), 693 KB in all, against 1.25 MB for 1.15.2's 2pt dots in the same panel. A miniaturized or ordered-out window drops both. The new-thread reveal is gone, so Picture runs no animation at all.
+
+While the panel's size differs from the shown canvas (a window resize or a sidebar drag), `placeArt` scales the cached image to cover the panel, centred as the picture is, so the window server scales it each frame and no band of ground shows. The sharp render follows 0.15 s after the size stops changing, or at once when a live resize ends (the user, 2026-11-21: "i need to release my mouse before it pops in"). Gradient's canvas stretches over its reach the same way. This holds for all three Backgrounds.
 
 Blur draws the same picture behind the whole window, the sidebar and the tab band included, with no edge between the sidebar and the panel. `DitherArt.render` blurs the picture once per size, appearance and picture on a worker thread: close to a Gaussian of sigma 32pt (two vImage tent passes) over a canvas of 8pt pixels, which the layer scales up smoothly. At that sigma text- and icon-sized detail in the picture is gone while its colors and window-sized shapes still read. I compared 16, 32 and 64 over Sonoma: at 16 the ripple stripes in its green still read as detail, and at 64 the red wave runs into the sky. The cached image is a sixteenth of the dots' memory: 81 KB for a 1440 by 900 window, against 1 MB for Dither's dots in the panel. Then the same fade and reach as the dots apply without the steps, so no pixel strays further from the background than the brightest dot does, and the dim, scrim and veil are Dither's. Nothing redraws while a thread scrolls or streams. The sidebar's text, muted text and icons take the same 4.6:1 floor, since they sit on the picture too. The new-thread reveal does not play in Blur.
 
@@ -122,16 +138,16 @@ One curve, `cubic-bezier(0.23, 1, 0.32, 1)` (`Motion.curve`). Hover and press ta
 
 ## Measured contrast
 
-Measured on 2026-11-21 from the rendered art at the default 35% dim, against the worst pixel behind the lane (x 500 to 1200 of a 1400 by 900 window, under the scrim and veil) and, in Blur, behind the sidebar (x 0 to 280, no veil): the brightest in dark, the darkest in light. Pictures: iMac Silver (brightest), Radial Sky Blue (darkest) and Sonoma (busy), from /System/Library/Desktop Pictures. The worst of the three:
+Blur measured on 2026-11-21 from the rendered art at the default 35% dim, against the worst pixel behind the lane (x 500 to 1200 of a 1400 by 900 window, under the scrim and veil) and, in Blur, behind the sidebar (x 0 to 280, no veil): the brightest in dark, the darkest in light. Pictures: iMac Silver (brightest), Radial Sky Blue (darkest) and Sonoma (busy), from /System/Library/Desktop Pictures. The worst of the three:
 
 | Mode | Appearance | Lane body | Lane muted | Sidebar text | Sidebar muted |
 |---|---|---|---|---|---|
-| Dither | Dark | 8.0:1 | 4.6:1 | flat, unchanged | flat, unchanged |
-| Dither | Light | 13.3:1 | 5.5:1 | flat, unchanged | flat, unchanged |
+| Picture | Dark | 10.0:1 | 4.7:1 | flat, unchanged | flat, unchanged |
+| Picture | Light | 7.0:1 or more | 4.5:1 or more | flat, unchanged | flat, unchanged |
 | Blur | Dark | 8.2:1 | 4.8:1 | 7.2:1 | 4.7:1 |
 | Blur | Light | 13.4:1 | 5.5:1 | 13.1:1 | 5.3:1 |
 
-The sidebar's icons measure 4.7:1 in both appearances. Blur never goes under Dither, since the blur averages the dots and the reach caps both. Body text stays far above 4.5:1, so Blur needs no stronger dim or veil.
+The sidebar's icons measure 4.7:1 in both appearances over Blur. Body text stays far above 4.5:1 there, so Blur needs no stronger dim or veil. Picture's rows are its own floor, measured at the worst cell behind the column (`PictureInkTests.textKeepsItsFloorsBehindTheColumn`).
 
 ## Glass
 

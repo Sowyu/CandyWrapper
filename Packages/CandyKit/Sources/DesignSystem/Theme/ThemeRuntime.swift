@@ -60,6 +60,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherGradientAnimates = true
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
+    /// Picture's "Ink": where its two inks come from (`DitherInk`).
+    public var ditherInk = DitherInk.auto
     /// "Ignore Reduce Transparency": Redesign and Glass draw as if macOS's Reduce Transparency were off.
     public var ignoreReduceTransparency = false
     /// Redesign's "Tint from picture": its neutral surfaces lean toward `pictureTint` (`PictureTint`) under Picture
@@ -95,6 +97,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var ditherGradient = false
     /// Gradient's "Animate" setting.
     nonisolated(unsafe) public private(set) static var ditherGradientAnimates = true
+    /// Picture's "Ink" setting.
+    nonisolated(unsafe) public private(set) static var ditherInk = DitherInk.auto
     /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
     nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
@@ -155,6 +159,10 @@ public enum ThemeRuntime {
         if next.ditherGradient != old.ditherGradient || next.ditherGradientAnimates != old.ditherGradientAnimates {
             ditherGradient = next.ditherGradient
             ditherGradientAnimates = next.ditherGradientAnimates
+            changed = true
+        }
+        if next.ditherInk != old.ditherInk {
+            ditherInk = next.ditherInk
             changed = true
         }
         if next.ditherAccent != old.ditherAccent {
@@ -275,8 +283,11 @@ public enum ThemeRuntime {
             // opaque, as do the sidebar and the panel's own background.
             // Its muted text keeps 4.5:1 over the brightest dot behind the chat column, in any theme's colors.
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
+                // Picture lays no dim, so its muted text keeps the colors of the default 35%; "Background dim"
+                // changes nothing there. Its render holds the text's floor behind the column (`PictureInk.textBound`).
+                let picture = !input.ditherBlur && !input.ditherGradient
                 let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
-                                                                         dim: Double(min(max(input.ditherDim, 0), 90)) / 100))
+                                                                         dim: picture ? DitherArt.defaultDim : Double(min(max(input.ditherDim, 0), 90)) / 100))
                 let members = palette.members
                 let readable = Palette(members: { i in
                     let c = members[i]
@@ -352,3 +363,22 @@ public extension ThemeCSSColor {
 public protocol ThemeRedrawingLayer: CALayer {}
 extension BoxDecorationLayer: ThemeRedrawingLayer {}
 extension PopupShadowLayer: ThemeRedrawingLayer {}
+
+/// Where Redesign's Picture takes its two inks: the picture's own hue (Auto), the accent, or a color the user picked,
+/// which becomes the light ink (`PictureInk.inks(light:)`).
+public enum DitherInk: Hashable, Sendable {
+    case auto, accent
+    case custom(SIMD3<Double>)
+
+    /// From the client settings `redesignInk` and `redesignInkColor` (#rrggbb). A Custom with no readable color is Auto.
+    public init(mode: String, color: String) {
+        switch mode {
+        case "accent": self = .accent
+        case "custom":
+            let hex = color.hasPrefix("#") ? String(color.dropFirst()) : color
+            guard hex.count == 6, let v = Int(hex, radix: 16) else { self = .auto; return }
+            self = .custom(SIMD3(Double((v >> 16) & 255), Double((v >> 8) & 255), Double(v & 255)) / 255)
+        default: self = .auto
+        }
+    }
+}
