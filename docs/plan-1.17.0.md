@@ -86,7 +86,10 @@ The full report is `~/CandyWrapper-research/sandbox/relcheck-1.16.0/REPORT.md`, 
 - Holding ⌘⇧ should hide a tooltip so screenshots do not catch it. Built, never verified, because the key tool cannot hold modifiers.
 - Blur, Gradient and Flower were not walked in Redesign light.
 - The Flower page uses 126 MB against 57 MB for a thread in light. That is the pre-drawn bloom and idle frames. Find out why it is more than the 5 MB the agent reported and bring it down.
-- Trackpad haptics have never been felt by a person. Segmented controls such as Reasoning have none, because they change only by a plain click. The user has not asked for more.
+- Trackpad haptics, first feedback from the user, about the message rail: "scrolling through this doesnt feel like subtly dialing something its a bit strong and clicking should have no effect lol". Fix both:
+  - Too strong. `ThreadMinimapView.swift:175` fires `Haptics.tap(.alignment)` each time the hovered message changes, capped at 12 a second (`Haptics.minimumInterval`). `NSHapticFeedbackManager` has no strength setting, only three patterns (`.generic`, `.alignment`, `.levelChange`), so make it feel lighter another way: try `.generic`, a lower cap (about 5 or 6 a second), a tick only every few messages on a long thread, or a tick only while the pointer moves slowly. The user has to feel each one, so build a Debug switch that cycles the variants and ask them to pick.
+  - A click on the rail must give no haptic. The click itself is the feedback. Check every other call site for the same thing (`HapticsCallSiteTests` lists them): a haptic belongs to a snap, a detent or a drop, never to a plain click.
+  - The other haptics (dividers, zoom stops, drags, sliders) have still not been felt. Ask the user about each after the rail is right. Segmented controls such as Reasoning have none, because they change only by a plain click.
 - `MarkdownBackgroundLayoutTests.viewLaysOutInBackground(modern: false)` fails when it runs beside `ModelPickerShrinkTests`, because the picker test sets the theme globally. It is not in the fast lane.
 
 ### 5. Settled without project groups
