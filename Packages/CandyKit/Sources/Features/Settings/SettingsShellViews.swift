@@ -754,7 +754,9 @@ public final class SettingsPageView: DSView {
     public let header = SettingsHeaderView()
     public let toasts = ToastViewport()
     private let document = PageDocument()
-    private let scroll: ScrollAreaView
+    let scroll: ScrollAreaView
+    /// Redesign's card: a hairline under the fixed top row, shown only once the page has scrolled under it.
+    let rowRule = CALayer()
     /// Dither (after Capy's settings): the page's own large title at the top of the column, in place of the breadcrumb.
     let ditherTitle = LabelView("", font: DSFont.ui(22, weight: .medium), color: Themed.color(\.foreground))
     /// Capy's line under the title (`text-sm text-muted-foreground`), for a Redesign section.
@@ -763,8 +765,8 @@ public final class SettingsPageView: DSView {
     public var ditherHeading: (title: String, subtitle: String)? { didSet { needsLayout = true } }
     /// Escape goes back (`useEscapeToGoBack`).
     public var onEscape: (() -> Void)?
-    /// Redesign's route modal holds the page in a rounded card (`AppRouteModalView.pageCard`): no header bar, the close
-    /// and Restore buttons float at the card's top right over the page.
+    /// Redesign's route modal holds the page in a rounded card (`AppRouteModalView.pageCard`): no header bar, a fixed
+    /// 40pt top row with the close and Restore buttons at its right, and the page scrolling below that row.
     public var inCard = false { didSet { if inCard != oldValue { header.floating = inCard; needsLayout = true } } }
     /// `WorkspacePageContainer` width: `max-w-4xl` (readable), `max-w-5xl` (wide), `max-w-6xl` (expanded).
     public var containerWidth: CGFloat = 896 { didSet { needsLayout = true } }
@@ -792,6 +794,22 @@ public final class SettingsPageView: DSView {
         ditherSubtitle.isHidden = true
         document.addSubview(ditherSubtitle)
         toasts.layer?.zPosition = 3
+        rowRule.actions = ["position": NSNull(), "bounds": NSNull(), "hidden": NSNull(), "backgroundColor": NSNull()]
+        rowRule.isHidden = true
+        layer?.addSublayer(rowRule)
+        // Selector observers are removed automatically when the view is deallocated.
+        NotificationCenter.default.addObserver(self, selector: #selector(pageScrolled), name: NSView.boundsDidChangeNotification,
+                                               object: scroll.scrollView.contentView)
+    }
+
+    /// The card's top row scrolls the page as the bar-less card did before it had a row.
+    public override func scrollWheel(with event: NSEvent) {
+        if inCard { scroll.scrollView.scrollWheel(with: event) } else { super.scrollWheel(with: event) }
+    }
+
+    @objc private func pageScrolled() {
+        let under = inCard && scroll.scrollView.contentView.bounds.minY > 0
+        if rowRule.isHidden == under { rowRule.isHidden = !under }
     }
 
     public override var acceptsFirstResponder: Bool { true }
@@ -837,8 +855,8 @@ public final class SettingsPageView: DSView {
     public override func layout() {
         super.layout()
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: inCard ? SettingsHeaderView.floatingHeight : header.barHeight)
-        let bar = inCard ? 0 : header.barHeight
+        let bar = inCard ? SettingsHeaderView.floatingHeight : header.barHeight
+        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: bar)
         scroll.frame = NSRect(x: 0, y: bar, width: bounds.width, height: max(0, bounds.height - bar))
         let gutter: CGFloat = 6
         let inner = max(0, bounds.width - 2 * gutter)
@@ -853,23 +871,36 @@ public final class SettingsPageView: DSView {
         ditherSubtitle.isHidden = ditherTitle.isHidden || ditherHeading == nil
         // Capy's title (`text-xl font-medium`) and its description, then 28pt to the first section.
         let subtitleHeight: CGFloat = ditherSubtitle.isHidden ? 0 : 2 + 20
-        // In the card the title keeps clear of the floating close and Restore: beside them while it fits, else a
-        // 32pt row above it holds them.
+        // In the card the title sits in the fixed top row, centred on close and Restore, while it fits beside them;
+        // else it heads the scrolling page right under the row. The page scrolls only below the row, so no row ever
+        // runs under the buttons.
         let titleX = (x + 16).rounded()
         var titleWidth = max(0, contentWidth - 32)
         var titleTop: CGFloat = 8
+        var inRow = false
         if inCard {
             header.layoutSubtreeIfNeeded()
             let room = header.controlsMinX - 8 - titleX
-            if ceil(ditherTitle.textWidth) + 1 > room { titleTop += SettingsHeaderView.floatingHeight - 8 } else { titleWidth = min(titleWidth, room) }
-            titleTop = max(titleTop, 16)
+            inRow = ceil(ditherTitle.textWidth) + 1 <= room
+            if inRow { titleWidth = min(titleWidth, room) }
+            // In the row: the title's 28pt line centred in it, in document space (above the scroll's top).
+            titleTop = inRow ? (bar - 28) / 2 - bar : 0
         }
-        let top: CGFloat = dither ? titleTop + 28 + subtitleHeight + 28 : 24
-        ditherTitle.frame = NSRect(x: titleX, y: titleTop, width: titleWidth, height: 28)
-        ditherSubtitle.frame = NSRect(x: titleX, y: titleTop + 28 + 2, width: max(0, contentWidth - 32), height: 20)
+        let titleHost: NSView = inRow ? self : document
+        if ditherTitle.superview !== titleHost { titleHost.addSubview(ditherTitle) }
+        let subtitleTop = max(0, titleTop + 28 + 2)
+        let top: CGFloat = dither ? (ditherSubtitle.isHidden ? titleTop + 28 : subtitleTop + 20) + 28 : 24
+        ditherTitle.frame = NSRect(x: titleX, y: inRow ? titleTop + bar : titleTop, width: titleWidth, height: 28)
+        ditherSubtitle.frame = NSRect(x: titleX, y: subtitleTop, width: max(0, contentWidth - 32), height: 20)
         document.frame = NSRect(x: 0, y: 0, width: scroll.bounds.width, height: max(scroll.bounds.height, top + pageHeight + 48))
         page?.frame = NSRect(x: x.rounded(), y: top, width: contentWidth, height: pageHeight)
         toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        rowRule.frame = NSRect(x: 0, y: bar - 1, width: bounds.width, height: 1)
+        rowRule.backgroundColor = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
+        CATransaction.commit()
+        pageScrolled()
     }
 
     final class PageDocument: DSView {}
@@ -882,9 +913,9 @@ public final class SettingsHeaderView: TopbarDragView {
     public var isRouteModal = false { didSet { close.isHidden = !isRouteModal; needsLayout = true; needsDisplay = true } }
     public var barHeight: CGFloat { isRouteModal ? 48 : Self.height }
     public let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconSm)
-    /// Redesign's page card: no bar or hairline, only the close and Restore buttons at the card's top right.
+    /// Redesign's page card: no bar, only the close and Restore buttons at the right of the card's fixed top row.
     public var floating = false { didSet { if floating != oldValue { needsLayout = true; needsDisplay = true } } }
-    /// The floating row: 8pt in from the card's top and right, a 24pt close button.
+    /// The card's top row: the page scrolls below it; a 24pt close button 8pt in from the card's top and right.
     static let floatingHeight: CGFloat = 40
     /// The left edge of the floating buttons, for the page title to keep clear of.
     var controlsMinX: CGFloat { restore.isHidden ? close.frame.minX : restore.frame.minX }
@@ -919,7 +950,7 @@ public final class SettingsHeaderView: TopbarDragView {
 
     public override var mouseDownCanMoveWindow: Bool { !isRouteModal }
     public override func mouseDown(with event: NSEvent) { if !isRouteModal { super.mouseDown(with: event) } }
-    /// Floating over the page, only the buttons take the pointer; the page scrolls and clicks under the rest.
+    /// In the card's top row only the buttons take the pointer; a scroll over the rest of the row reaches the page.
     public override func hitTest(_ point: NSPoint) -> NSView? {
         let hit = super.hitTest(point)
         return floating && hit === self ? nil : hit
