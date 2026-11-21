@@ -103,17 +103,29 @@ public enum DitherFill {
         }
 
         /// A shape's outline in `layer`: every inside cell with the cell above it, or beside it, outside the shape.
-        /// It follows the staircase, risers included, and leaves the foot open.
-        public mutating func edge(tops: [Int], layer: UInt8) {
+        /// It follows the staircase, risers included, and leaves the foot open. Cells `hidden` returns true for stay
+        /// as they are: a shape in front covers the outline of one behind it.
+        public mutating func edge(tops: [Int], layer: UInt8, hidden: ((Int, Int) -> Bool)? = nil) {
             let n = min(width, tops.count)
             for x in 0..<n where tops[x] < height {
                 for y in tops[x]..<height {
                     // The plot's own left and right borders draw no edge.
                     let left = x == 0 || inside(tops, x - 1, y), right = x == n - 1 || inside(tops, x + 1, y)
                     if inside(tops, x, y - 1) && left && right { break }
+                    if hidden?(x, y) == true { continue }
                     self[x, y] = layer
                 }
             }
+        }
+
+        /// Whether the cell is inside the shape or in the one-cell margin `fill(gap: true)` clears around it.
+        public func covers(_ tops: [Int], _ x: Int, _ y: Int) -> Bool {
+            guard y < height else { return false }
+            if inside(tops, x, y) { return true }
+            for c in (x - 1)...(x + 1) where c >= 0 && c < min(width, tops.count) && tops[c] < height - 1 {
+                if y >= tops[c] - 1 { return true }
+            }
+            return false
         }
 
         /// The grid with every column from `columns` on cleared, for an entrance that builds left to right.
