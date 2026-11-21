@@ -163,10 +163,10 @@ public final class TerminalDrawerView: DSView {
         syncEmpty()
         // The first responder lives deep in SwiftTerm, whose focus methods this module cannot override; the window
         // reports every change instead. Only the card shows focus.
-        responderObservation = window.map { window in
-            window.observe(\.firstResponder, options: [.new]) { [weak self] _, _ in
-                MainActor.assumeIsolated { self?.syncKeyFocus() }
-            }
+        responderObservation = window?.observe(\.firstResponder, options: [.new]) { [weak self] _, _ in
+            // AppKit changes the first responder on the main thread, so the observer already runs there.
+            nonisolated(unsafe) let view = self
+            MainActor.assumeIsolated { view?.syncKeyFocus() }
         }
         syncKeyFocus()
     }
