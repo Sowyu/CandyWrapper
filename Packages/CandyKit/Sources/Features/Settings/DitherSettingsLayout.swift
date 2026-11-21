@@ -8,7 +8,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
     case project, general, appearance, notifications, keyboard
     case models, threads, scheduledTasks
     case projects, git, tools
-    case machines, advanced, redesign, experimental, about
+    case machines, advanced, redesign, labs, about
 
     public var label: String {
         switch self {
@@ -26,7 +26,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .machines: "Machines and connections"
         case .advanced: "Advanced"
         case .redesign: "Redesign"
-        case .experimental: "Experimental"
+        case .labs: "Labs"
         case .about: "About"
         }
     }
@@ -48,7 +48,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .machines: "This machine, your other machines, and the clients paired with them."
         case .advanced: "Background work, storage cleanup, diagnostics and legacy features."
         case .redesign: "The switch for this look, its picture and accent, and its model picker."
-        case .experimental: "Features still being built. They may change or go away."
+        case .labs: "Features still being built. They may change or go away."
         case .about: "Version, updates and licenses."
         }
     }
@@ -69,7 +69,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .machines: .server
         case .advanced: .slidersHorizontal
         case .redesign: .paintbrush
-        case .experimental: .flaskConical
+        case .labs: .flaskConical
         case .about: .info
         }
     }
@@ -79,7 +79,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         (nil, [.general, .appearance, .notifications, .keyboard]),
         ("Agents", [.models, .threads, .scheduledTasks]),
         ("Workspace", [.project, .projects, .git, .tools]),
-        ("System", [.machines, .advanced, .redesign, .experimental, .about]),
+        ("System", [.machines, .advanced, .redesign, .labs, .about]),
     ]
 
     /// The content column: the two-pane pages keep T3's wide container.
@@ -116,9 +116,9 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
             .init(.archive),
         ]
         case .scheduledTasks: return [.init(.scheduledTasks, scope: true)]
-        // T3's Beta page joins CandyWrapper's own experiments.
         case .redesign: return [.init(.redesign)]
-        case .experimental: return [.init(.experimental), .init(.beta)]
+        // T3's Labs page, which holds CandyWrapper's own experiments too.
+        case .labs: return [.init(.beta)]
         case .projects: return [
             .init(.general, scope: true, [G("project-defaults", "New threads", rows: ["new-threads", "worktree-submodules"]),
                                           G("projects-and-threads", "Projects", rows: ["start-from-origin", "add-project-starts-in"])]),
@@ -135,8 +135,8 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
                              G("storage-cleanup", nil, also: ["storage-delete-now", "storage-cleanup-last-run"]), G("storage-artifacts", nil)]),
         ]
         case .about: return [
-            .init(.general, [G("about", "Version and updates", also: ["app-version", "update-track", "privacy-policy", "nightly-mobile-beta", "cli-command"]),
-                             G("Diagnostics", "Licenses", rows: ["open-source-licenses"])]),
+            .init(.general, [G("about", "Version and updates", also: ["app-version", "update-track", "privacy-policy", "open-source-licenses",
+                                                                      "nightly-mobile-beta", "cli-command"])]),
         ]
         }
     }
@@ -164,7 +164,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .connections: .machines
         case .archive: .threads
         case .redesign: .redesign
-        case .experimental, .beta: .experimental
+        case .beta: .labs
         case .diagnostics, .licenses: nil
         }
     }

@@ -2,11 +2,33 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
+/// One of CandyWrapper's own experimental features. Each keeps its switch in its own store, under the key it always had.
+@MainActor
+public struct ExperimentalToggle {
+    /// The search anchor, `SettingsSearchItem.id`.
+    public let id: String
+    public let title: String
+    public let detail: String
+    /// Works only in Redesign: while Redesign is off the switch is disabled and says so.
+    public var needsRedesign = false
+    public let isOn: () -> Bool
+    public let set: (Bool) -> Void
+    /// Calls back when the stored value changes elsewhere, such as a sync from another device. Returns the unsubscribe.
+    public let observe: (@escaping @MainActor () -> Void) -> () -> Void
+}
+
 /// Settings > Beta (BetaSettingsPanel.tsx at 3669, LabsSettingsPanel.tsx at 4928): features still settling in, each off
-/// until turned on here.
+/// until turned on here. T3's rows come first; CandyWrapper's own experiments follow in a group of their own, which
+/// replaced the separate Experimental page in round 3.
 /// Working section moved here from General; Guest links is new. Signed out of T3 Connect, Guest links offers
 /// Sign in in place of its switch (`GuestLinksRowWithSignIn`), but only once the account has loaded.
 public final class BetaSettingsView: SettingsPageBase {
+    /// CandyWrapper's own experiments, one entry each. Redesign has its own page.
+    public static let candyToggles: [ExperimentalToggle] = [
+        ExperimentalToggle(id: "thread-tabs", title: "Tabs", detail: "A tab strip at the top of the window for open threads and other pages. Cmd-click a thread to open it in a new tab.", needsRedesign: true, isOn: { ThreadTabsSetting.isOn }, set: { ThreadTabsSetting.set($0) }, observe: { ThreadTabsSetting.observe($0) }),
+    ]
+    private var unsubscribe: [() -> Void] = []
+
     static let guestDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Sharing & access. Turning it off stops every guest link."
     static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While off, nothing new starts over a link; running tasks finish."
     static let guestSignedOutDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Sign in to T3 Connect to use guest links."
@@ -63,7 +85,27 @@ public final class BetaSettingsView: SettingsPageBase {
             suggestions.isHidden = !self.context.scope.allStore("promptSuggestionsEnabled")
         }
         // #33131 removed the Legacy features section: plan mode and the context window indicator.
-        items = [section("beta", "Beta", [folders, multiline, guest, linked, suggestions])]
+        items = [section("beta", "Beta", [folders, multiline, guest, linked, suggestions]), candySection()]
         binder.refresh()
+    }
+
+    isolated deinit { unsubscribe.forEach { $0() } }
+
+    private func candySection() -> SettingsSectionView {
+        let rows = Self.candyToggles.map { toggle in
+            let sw = SwitchView(isOn: toggle.isOn())
+            sw.setAccessibilityLabel(toggle.title)
+            sw.onChange = { on in toggle.set(on) }
+            let r = row(toggle.id, title: toggle.title, detail: toggle.detail, control: sw)
+            binder.add { [weak sw, weak r] in
+                sw?.isOn = toggle.isOn()
+                let blocked = toggle.needsRedesign && !ThemeLibrary.shared.isRedesignOn
+                sw?.isEnabled = !blocked
+                r?.detail = blocked ? "\(toggle.detail) Needs Redesign." : toggle.detail
+            }
+            unsubscribe.append(toggle.observe { [weak self] in self?.refresh() })
+            return r
+        }
+        return section("candywrapper-experiments", "CandyWrapper experiments", rows)
     }
 }

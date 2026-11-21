@@ -12,16 +12,25 @@ struct SettingsConcernTests {
         }
         #expect(SettingsSection.fromPath("/settings/labs") == .beta)
         #expect(SettingsSection.fromPath("/settings/beta") == .beta)
+        #expect(SettingsSection.fromPath("/settings/experimental") == .beta)
         #expect(SettingsSection.fromPath("/settings/storage") == .maintenance)
         #expect(SettingsSection.fromPath("/settings/integrations") == .browser)
         #expect(SettingsSection.fromPath("/settings/open-source-licenses") == .licenses)
         #expect(SettingsSection.fromPath("/threads") == nil)
     }
 
-    /// 4928 adds Voice and names source control "Source control & issues" (settingsSearch.ts:96-178). CandyWrapper's Redesign and
-    /// Experimental tabs close the list.
-    @Test func pageNamesAndOrderFollow4928WithExperimentalLast() {
-        #expect(SettingsSection.navSections.map(\.label) == ["General", "Appearance", "Chat", "Diffs & pull requests", "Keybindings", "Voice", "SnapShots", "Providers", "Threads", "Browser", "Devices", "Scheduled tasks", "Projects", "Source control & issues", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About", "Archive", "Redesign", "Experimental"])
+    /// 4928 adds Voice and names source control "Source control & issues" (settingsSearch.ts:96-178). CandyWrapper's Redesign
+    /// tab closes the list.
+    @Test func pageNamesAndOrderFollow4928WithRedesignLast() {
+        #expect(SettingsSection.navSections.map(\.label) == ["General", "Appearance", "Chat", "Diffs & pull requests", "Keybindings", "Voice", "SnapShots", "Providers", "Threads", "Browser", "Devices", "Scheduled tasks", "Projects", "Source control & issues", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About", "Archive", "Redesign"])
+    }
+
+    /// Round 3: Redesign's own order, every group labelled, About last, and the same pages as the default nav.
+    @Test func redesignNavGroupsEveryPageWithLabels() {
+        let groups = SettingsSection.navGroups(dither: true)
+        #expect(groups.map(\.label) == ["App", "Agents", "Code", "Connections", "System"])
+        #expect(SettingsSection.navSections(dither: true).map(\.label) == ["General", "Appearance", "Redesign", "Keybindings", "Chat", "Voice", "SnapShots", "Providers", "Threads", "Archive", "Scheduled tasks", "Browser", "Devices", "Projects", "Source control & issues", "Diffs & pull requests", "Worktrees", "Environments", "Sharing & access", "Maintenance", "Labs", "About"])
+        #expect(Set(SettingsSection.navSections(dither: true)) == Set(SettingsSection.navSections(dither: false)))
     }
 
     @Test func movedRowsKeepTheirSearchAnchorsAndDestinations() {
@@ -63,10 +72,13 @@ struct SettingsConcernTests {
         }
     }
 
-    /// #33131 removed Labs' Legacy features; Tool calls in chat sits in Chat's Activity group.
-    @Test func labsHasOnlyBetaAndChatShowsToolCalls() {
+    /// #33131 removed Labs' Legacy features; Tool calls in chat sits in Chat's Activity group. CandyWrapper's own
+    /// experiments follow T3's Beta group.
+    @Test func labsHasBetaThenCandyExperimentsAndChatShowsToolCalls() {
         let page = BetaSettingsView(context: SettingsPageContext())
-        #expect(page.items.compactMap { ($0 as? SettingsSectionView)?.title } == ["Beta"])
+        #expect(page.items.compactMap { ($0 as? SettingsSectionView)?.title } == ["Beta", "CandyWrapper experiments"])
+        #expect(page.anchor("thread-tabs") != nil)
+        #expect(SettingsSearch.items.first { $0.id == "thread-tabs" }?.to == .beta)
         #expect(page.anchor("boring-sidebar") != nil)
         #expect(page.anchor("legacy-plan-mode") == nil)
         let chat = ConcernSettingsView(context: SettingsPageContext(), section: .chat)

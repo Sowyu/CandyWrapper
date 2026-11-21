@@ -305,9 +305,9 @@ public final class ThemeLibrary {
         remove(ids)
     }
 
-    // MARK: The Redesign switch (Settings > Experimental)
+    // MARK: The Redesign switch (Settings > Redesign)
 
-    /// The theme in use before the Experimental tab's Redesign switch turned on: `{preference, light?, dark?}`.
+    /// The theme in use before the Redesign tab's switch turned on: `{preference, light?, dark?}`.
     static let preRedesignKey = "theme.preRedesign"
 
     /// Redesign paints either appearance, whether the switch or the theme picker chose it.

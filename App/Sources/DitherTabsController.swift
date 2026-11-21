@@ -7,7 +7,7 @@ import T3Store
 /// Dither's tab strip and history buttons (after Capy). Each tab shows one route from the window's `RouteHistory`: a
 /// thread, the new-thread draft, Pull requests or Issues; Settings and Usage float over the tab's route.
 /// Like Capy and a browser, navigating shows the new route in the current tab; + and Cmd-click open a new one, and a route already open in another tab switches there.
-/// Back and forward step through the history. Tabs last for this run only. The Experimental Tabs switch hides them
+/// Back and forward step through the history. Tabs last for this run only. The Tabs switch in Labs hides them
 /// and their entry points; while it is off the list stands still, so turning it on brings back the same tabs.
 @MainActor
 final class DitherTabsController {

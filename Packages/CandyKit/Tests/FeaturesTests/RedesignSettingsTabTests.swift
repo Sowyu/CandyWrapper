@@ -79,7 +79,7 @@ import T3Protocol
         func rowTitles(_ view: NSView) -> [String] {
             ((view as? SettingsRowView).map { [$0.title] } ?? []) + view.subviews.flatMap(rowTitles)
         }
-        for page in [AppearanceSettingsView(context: context), GeneralSettingsView(context: context), ExperimentalSettingsView(context: context)] as [SettingsPageBase] {
+        for page in [AppearanceSettingsView(context: context), GeneralSettingsView(context: context), BetaSettingsView(context: context)] as [SettingsPageBase] {
             page.frame = NSRect(x: 0, y: 0, width: 800, height: page.height(forWidth: 800))
             page.layoutSubtreeIfNeeded()
             let found = rowTitles(page)

@@ -170,7 +170,7 @@ extension SettingsController {
         case .machines: .connections
         case .advanced: .maintenance
         case .redesign: .redesign
-        case .experimental: .experimental
+        case .labs: .beta
         case .about: .about
         }
         show(destination)
@@ -254,7 +254,6 @@ extension SettingsController {
         case .licenses: SettingsOpenSourceLicensesView(context: c)
         case .voice: VoiceSettingsView(context: c)
         case .scheduledTasks: ScheduledTasksSettingsView(context: c)
-        case .experimental: ExperimentalSettingsView(context: c)
         case .redesign: RedesignSettingsView(context: c)
         case .beta: BetaSettingsView(context: c)
         default: SnapShotSettingsView(context: c)

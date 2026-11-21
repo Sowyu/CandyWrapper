@@ -580,7 +580,11 @@ public final class GeneralSettingsView: SettingsPageBase {
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
         let privacy = row("privacy-policy", detail: "How we handle your data, including the anonymous usage data T3 Code collects.", control: policy)
         let mobile = row("nightly-mobile-beta", title: "Mobile app", detail: "Nightly needs the beta app. The App Store and Google Play versions cannot connect.", control: NightlyMobileBetaView())
-        return section("about", "About", [versionRow, runtimeRow, trackRow, mobile, privacy])
+        // T3's Legal card holds the privacy policy and the licenses (SettingsPanels.tsx:2507-2537 at 4928).
+        let lic = ButtonView("View licenses", variant: .outline, size: .sm)
+        lic.action = { [weak self] in self?.context.openSection?(.licenses) }
+        let licenses = row("open-source-licenses", detail: "Notices for dependencies, assets, and optional tools used by T3 Code.", control: lic)
+        return section("about", "About", [versionRow, runtimeRow, trackRow, mobile, privacy, licenses])
     }
 
     private func diagnosticsSection() -> SettingsSectionView {
@@ -592,10 +596,7 @@ public final class GeneralSettingsView: SettingsPageBase {
             diagnostics?.detail = self.context.scope.isEnvironmentScope ? "Inspect processes, resource use, and logs on this environment."
                 : "Inspect processes, resource use, and logs on one environment at a time."
         }
-        let lic = ButtonView("View licenses", variant: .outline, size: .sm)
-        lic.action = { [weak self] in self?.context.openSection?(.licenses) }
-        let licenses = row("open-source-licenses", detail: "Notices for dependencies, assets, and optional tools used by T3 Code.", control: lic)
-        return section(nil, "Diagnostics", [diagnostics, licenses])
+        return section(nil, "Diagnostics", [diagnostics])
     }
 
 }

@@ -124,7 +124,7 @@ public final class ConcernSettingsView: SettingsPageBase {
         ]
         case .about: return [
             .init(.general, [G("about", "App", rows: ["app-version", "update-track"])]),
-            .init(.general, [G("about", "Legal", rows: ["privacy-policy"]), G("Diagnostics", "Licenses", rows: ["open-source-licenses"])])
+            .init(.general, [G("about", "Legal", rows: ["privacy-policy", "open-source-licenses"])])
         ]
         case .providers:
             if ThemeRuntime.framesPanes(dark: false) || ThemeRuntime.framesPanes(dark: true) {
