@@ -462,7 +462,10 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         if let shortcutProvider { shortcut = shortcutProvider() } else if let textProvider { text = textProvider() }
         guard !text.isEmpty || content != nil, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
         if dither, host.popups.contains(where: { $0.trigger === view && !$0.isPassive }) { return }
-        let tip = content?() ?? TooltipView(text, variant: variant, shortcut: shortcut)
+        // Redesign draws a T3-style "Action (⌘J)" as the action and key caps; the default themes keep T3's text.
+        var words = text, keys = shortcut
+        if dither, keys == nil, let split = Self.splitShortcut(text) { (words, keys) = split }
+        let tip = content?() ?? TooltipView(words, variant: variant, shortcut: keys)
         // Redesign puts tooltips under their control, flipping above when the window has no room.
         var place = placement
         if dither, content == nil, place.side == .top { place.side = .bottom }
@@ -479,6 +482,16 @@ public final class TooltipController: NSResponder, HoverSyncClient {
             card.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                                 owner: self, userInfo: ["popup": true]))
         }
+    }
+
+    /// "Toggle terminal (⌘J)" is ("Toggle terminal", "⌘J"): a trailing shortcut in parentheses, nil for other text.
+    static func splitShortcut(_ text: String) -> (String, String)? {
+        guard text.hasSuffix(")"), let open = text.range(of: " (", options: .backwards) else { return nil }
+        let keys = String(text[open.upperBound..<text.index(before: text.endIndex)])
+        let named: Set<String> = ["Esc", "Return", "Tab", "Space", "Delete", "Enter"]
+        let modified = keys.first.map { "⌃⌥⇧⌘".contains($0) } ?? false
+        guard named.contains(keys) || (modified && keys.count <= 8 && !keys.contains(" ")) else { return nil }
+        return (String(text[..<open.lowerBound]), keys)
     }
 
     public func hide() {
