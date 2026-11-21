@@ -57,7 +57,10 @@ struct SettingsConcernTests {
             for id in absent { #expect(page.anchor(id) == nil, "\(id) outside \(section)") }
         }
         // Screen pass 3, items 7 and 8: both rows the app draws are searchable and land where they are.
-        for (id, section) in [("screen-reader-window-title", SettingsSection.chat), ("boring-sidebar-multiline", .beta), ("snooze-options", SettingsSection.threads), ("git-fetch-interval", .maintenance), ("network-access", .access), ("tool-call-visibility", .chat)] {
+        // Release check 1.16.0, m1: the image cache row had no id, so "image cache" found nothing.
+        for query in ["image cache", "clear image cache"] { #expect(SettingsSearch.search(query).first?.id == "image-cache", "\(query)") }
+        #expect(ConcernSettingsView(context: context, section: .maintenance).anchor("image-cache") != nil)
+        for (id, section) in [("image-cache", SettingsSection.maintenance), ("screen-reader-window-title", SettingsSection.chat), ("boring-sidebar-multiline", .beta), ("snooze-options", SettingsSection.threads), ("git-fetch-interval", .maintenance), ("network-access", .access), ("tool-call-visibility", .chat)] {
             #expect(SettingsSearch.items.first { $0.id == id }?.to == section)
         }
     }

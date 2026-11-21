@@ -613,7 +613,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         }
         // CandyWrapper's own: reply images kept on this Mac (`MediaDiskCache`); T3 leaves them to the browser cache.
         let clear = ButtonView("Clear image cache", variant: .outline, size: .sm)
-        let images = row(nil, title: "Image cache", detail: "Pictures from replies, kept so they show without downloading again.", control: clear)
+        let images = row("image-cache", title: "Image cache", detail: "Pictures from replies, kept so they show without downloading again.", control: clear)
         let describe: @MainActor (Int64?) -> Void = { [weak images] bytes in
             let size = bytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
             images?.detail = "Pictures from replies, kept so they show without downloading again." + (size.map { " Using \($0)." } ?? "")

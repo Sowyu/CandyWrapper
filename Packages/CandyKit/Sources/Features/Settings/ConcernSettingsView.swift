@@ -134,7 +134,7 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, scope: true, [G("behavior", "Updates", rows: ["provider-update-checks", "continue-threads-after-server-update"])]),
             .init(.general, [G("behavior", "Background activity", rows: ["background-activity"])]),
             .init(.storage, [G("storage-notice", nil), G("storage-artifacts", nil), G("storage-cleanup", nil), G("storage-database", nil)]),
-            .init(.general, [G("Diagnostics", nil, rows: ["diagnostics"])])
+            .init(.general, [G("Diagnostics", nil, rows: ["diagnostics", "image-cache"])])
         ]
         case .about: return [
             .init(.general, [G("about", "App", rows: ["app-version", "update-track"])]),
