@@ -246,14 +246,19 @@ public enum PictureInk {
     /// touches a cell with no tone, so black stays black.
     nonisolated static let calmJitter = 0.16
 
-    /// The cap's weight at `x` for a thread's reading column: 1 across the column, then
-    /// `calmFalloff` of the way to the panel's edge on that side, so a narrow margin (a small window, a right panel)
-    /// gets the whole curve squeezed into it and never ends in a step.
+    /// The shortest distance, in points, the cap gets to let go over. A margin narrower than this ends with the cap
+    /// still partly on, so a small window's margin stays dark-ish to the edge. Squeezing the whole fade into a 35pt
+    /// margin at 1100pt brought the picture back at full strength in a bright strip along both edges.
+    nonisolated static let calmReach = 160.0
+
+    /// The cap's weight at `x` for a thread's reading column: 1 across the column, then `calmFalloff` of the way out
+    /// over the margin on that side or `calmReach`, whichever is longer. A margin at least `calmReach` wide gets the
+    /// whole curve and ends at 0; a narrower one is cut off partway, so its edge keeps some of the cap.
     nonisolated static func columnCalm(_ x: Double, column c: [Double], panelWidth: Double) -> Double {
         let left = c[0], right = c[0] + c[2]
         if x >= left, x <= right { return 1 }
         let (d, margin) = x < left ? (left - x, left) : (x - right, panelWidth - right)
-        return calmFalloff(margin < 1 ? 1 : d / margin)
+        return calmFalloff(d / max(margin, calmReach))
     }
 
     /// The cap's weight at `t` of the way from the column's edge (0) to the panel's edge (1): 1 to 0 on a smoothstep of

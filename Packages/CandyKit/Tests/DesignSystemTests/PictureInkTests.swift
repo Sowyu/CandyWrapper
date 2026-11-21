@@ -162,6 +162,35 @@ struct PictureInkTests {
         #expect(PictureInk.columnCalm(column[0] + column[2] + 120, column: column, panelWidth: panel) > 0)
     }
 
+    /// A narrow margin keeps part of the cap all the way to the panel's edge instead of squeezing the whole fade into
+    /// a few points; from `calmReach` up the edge reaches 0, and the edge's weight moves smoothly as the margin grows.
+    @Test func aNarrowMarginStaysPartlyCappedToTheEdge() {
+        let reach = PictureInk.calmReach
+        func edge(_ margin: Double) -> Double {
+            PictureInk.columnCalm(0, column: [margin, 0, 700, 800], panelWidth: margin * 2 + 700)
+        }
+        // The 1100pt window's 35pt margin: most of the cap is still on at the edge.
+        #expect(edge(35) > 0.8)
+        #expect(PictureInk.cellCap(column: 0.0165, falloff: edge(35), dark: true) < 0.05)
+        // Wide margins are what they were: the whole curve, gone at the edge.
+        #expect(edge(reach) == 0 && edge(reach + 200) == 0)
+        #expect(PictureInk.columnCalm(reach, column: [reach + 100, 0, 700, 800], panelWidth: 2000)
+                    == PictureInk.calmFalloff(100 / (reach + 100)))
+        // Continuous in the margin: no jump as the window resizes across `calmReach`.
+        var last = edge(1)
+        for m in stride(from: 1.5, through: reach + 40, by: 0.5) {
+            let v = edge(m)
+            #expect(v <= last + 1e-12 && last - v < 0.02, "margin \(m): \(last) to \(v)")
+            last = v
+        }
+        // Across a narrow margin it still never rises toward the edge.
+        var prev = 1.0
+        for x in stride(from: 35.0, through: 0, by: -0.5) {
+            let v = PictureInk.columnCalm(x, column: [35, 0, 700, 800], panelWidth: 770)
+            #expect(v <= prev + 1e-12); prev = v
+        }
+    }
+
     /// The fall-off curve: full at the column's edge, none at the panel's, never rising, and flat at both ends so the
     /// fade has no visible start or end.
     @Test func theFalloffCurveIsFlatAtBothEnds() {
