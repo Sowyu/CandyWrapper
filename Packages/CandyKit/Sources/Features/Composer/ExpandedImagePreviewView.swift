@@ -267,12 +267,11 @@ public final class ExpandedImagePreviewView: DSView {
         let clamped = min(8, max(1, next))
         guard clamped != zoom else { return }
         let old = viewport(zoom: zoom)
-        let local = point.map { CGPoint(x: $0.x - old.minX, y: $0.y - old.minY) } ?? CGPoint(x: old.width / 2, y: old.height / 2)
-        let anchor = CGPoint(x: (scroll.x + local.x) / zoom, y: (scroll.y + local.y) / zoom)
-        let client = CGPoint(x: old.minX + local.x, y: old.minY + local.y)
+        let client = point ?? CGPoint(x: old.midX, y: old.midY)
+        let origin = ImageZoom.anchored(origin: CGPoint(x: old.minX - scroll.x, y: old.minY - scroll.y), scale: zoom, to: clamped, about: client)
         zoom = clamped
         let new = viewport(zoom: zoom)
-        scroll = CGPoint(x: anchor.x * zoom - (client.x - new.minX), y: anchor.y * zoom - (client.y - new.minY))
+        scroll = CGPoint(x: new.minX - origin.x, y: new.minY - origin.y)
         needsLayout = true
         window?.invalidateCursorRects(for: self)
     }

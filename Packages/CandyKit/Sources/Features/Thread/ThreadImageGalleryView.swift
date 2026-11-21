@@ -55,6 +55,8 @@ public final class ThreadImageGalleryView: DSView {
     private lazy var scroll = ScrollAreaView(documentView: grid, scrollFade: true)
     private let empty = TextBlockView("No images yet", font: DSFont.ui(12), lineHeight: 17, color: Themed.color(\.mutedForeground))
     let picture = AsyncImageView()
+    /// The large picture's zoom, inside the picture's own frame: the card keeps its size.
+    private(set) lazy var zoom = ZoomableImageView(picture: picture)
     private let detail = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let openInThread = ButtonView("Open in thread", icon: .arrowUpRight, variant: .ghost, size: .xs)
     private let reveal = ButtonView("Reveal in Finder", icon: .folderOpen, variant: .ghost, size: .xs)
@@ -72,8 +74,10 @@ public final class ThreadImageGalleryView: DSView {
         picture.layer?.cornerRadius = RedesignTokens.Radius.control
         picture.layer?.cornerCurve = .continuous
         picture.onLoad = { [weak self] in self?.pictureMeasured() }
+        zoom.layer?.cornerRadius = RedesignTokens.Radius.control
+        zoom.layer?.cornerCurve = .continuous
         detail.truncation = .middle
-        for view in [title, count, back, expand, previous, next, scroll, empty, picture, detail, openInThread, reveal] as [NSView] { addSubview(view) }
+        for view in [title, count, back, expand, previous, next, scroll, empty, zoom, detail, openInThread, reveal] as [NSView] { addSubview(view) }
         scroll.scrollsHorizontally = false
         grid.widthHint = Self.size.width
         grid.makeLoader = { [weak self] image in
@@ -140,6 +144,9 @@ public final class ThreadImageGalleryView: DSView {
         }
     }
 
+    /// A pinch over the grid stays in the card rather than reaching the page under it.
+    public override func magnify(with event: NSEvent) {}
+
     private func step(_ delta: Int) {
         guard let large, !images.isEmpty else { return }
         self.large = (large + delta + images.count) % images.count
@@ -171,7 +178,8 @@ public final class ThreadImageGalleryView: DSView {
         empty.isHidden = !gridShown || !images.isEmpty
         title.isHidden = !gridShown
         expand.isHidden = images.isEmpty
-        for view in [back, previous, next, picture, detail, openInThread] as [NSView] { view.isHidden = gridShown }
+        for view in [back, previous, next, zoom, detail, openInThread] as [NSView] { view.isHidden = gridShown }
+        if picture.key != image?.pixelKey { zoom.reset() }
         previous.isHidden = gridShown || images.count < 2
         next.isHidden = previous.isHidden
         reveal.isHidden = image.map { !(canReveal?($0) ?? false) } ?? true
@@ -219,8 +227,7 @@ public final class ThreadImageGalleryView: DSView {
         let room = NSRect(x: i, y: body.minY, width: w - 2 * i, height: max(1, body.height - footer))
         let size = pictureSize
         let fitted = NSSize(width: min(size.width, room.width), height: min(size.height, room.height))
-        picture.frame = NSRect(x: (room.midX - fitted.width / 2).rounded(), y: (room.midY - fitted.height / 2).rounded(), width: fitted.width, height: fitted.height)
-        picture.requestedSide = Int((max(fitted.width, fitted.height) * (window?.backingScaleFactor ?? 2)).rounded(.up))
+        zoom.frame = NSRect(x: (room.midX - fitted.width / 2).rounded(), y: (room.midY - fitted.height / 2).rounded(), width: fitted.width, height: fitted.height)
         let buttonsY = bounds.height - footer + (footer - 24) / 2
         var x = w - i
         for button in [reveal, openInThread] where !button.isHidden {
