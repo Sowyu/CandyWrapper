@@ -92,12 +92,13 @@ struct ThreadImageGalleryTests {
 
     // MARK: Images that outlive their files
 
-    /// The server's stored copy first, then our kept copy, then the file itself. A reply's URL has only itself.
-    @Test func loadOrderPrefersTheServerThenOurCopyThenTheFile() {
+    /// Our kept copy first, since it is on this Mac, then the server's stored copy, then the file itself. A reply's URL
+    /// has only itself.
+    @Test func loadOrderPrefersOurCopyThenTheServerThenTheFile() {
         var image = GalleryImage(source: .file("/tmp/shot.png"), threadId: "t", agent: "Main", entryId: "a", at: "2026-10-23T10:00:00Z", itemId: "a")
         #expect(image.attempts == [.kept(thread: "t", item: "a"), .source])
         image.stored = ToolOutputImage(threadId: "t", itemId: "a", index: 0)
-        #expect(image.attempts == [.stored(ToolOutputImage(threadId: "t", itemId: "a", index: 0)), .kept(thread: "t", item: "a"), .source])
+        #expect(image.attempts == [.kept(thread: "t", item: "a"), .stored(ToolOutputImage(threadId: "t", itemId: "a", index: 0)), .source])
         let url = GalleryImage(source: .url("https://x.test/c.png"), threadId: "t", agent: "Main", entryId: "m", at: "2026-10-23T10:00:00Z")
         #expect(url.attempts == [.source])
     }

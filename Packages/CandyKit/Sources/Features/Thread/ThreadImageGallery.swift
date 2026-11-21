@@ -46,18 +46,18 @@ public struct GalleryImage: Hashable, Sendable {
 
     /// Where the gallery tries to load it, in order.
     public enum Attempt: Equatable, Sendable {
+        /// Our copy, kept while the file still existed. It is on this Mac, so it goes first.
+        case kept(thread: ThreadId, item: TurnItemId)
         /// The server's copy (`tool-output-image`), which outlives the file.
         case stored(ToolOutputImage)
-        /// Our copy, kept while the file still existed.
-        case kept(thread: ThreadId, item: TurnItemId)
         /// The file, URL or tool output itself.
         case source
     }
 
     public var attempts: [Attempt] {
         var out: [Attempt] = []
-        if let stored { out.append(.stored(stored)) }
         if case .file = source, let itemId { out.append(.kept(thread: threadId, item: itemId)) }
+        if let stored { out.append(.stored(stored)) }
         out.append(.source)
         return out
     }

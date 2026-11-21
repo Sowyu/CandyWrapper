@@ -270,7 +270,7 @@ public final class ThreadImageGalleryView: DSView {
         }
     }
 
-    /// Tries the image's sources in order (`GalleryImage.attempts`): the server's stored copy, our kept copy, then the
+    /// Tries the image's sources in order (`GalleryImage.attempts`): our kept copy, the server's stored copy, then the
     /// file or URL itself. Host files and tool outputs sign through `assets.createUrl` on their own thread
     /// (`useAssetUrlState`, apps/web/src/assets/assetUrls.ts:20-41), with the timeline's loaders.
     /// `onHash` gets the SHA-256 of bytes it downloads, once, so identical pictures merge into one tile.

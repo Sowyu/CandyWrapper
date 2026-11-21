@@ -26,6 +26,8 @@ public actor AgentImageCache {
     let root: URL
     let capBytes: Int64
     private(set) var index = Index()
+    /// Remote copies on their way, by item key.
+    private var keeping: [String: Task<Entry?, Never>] = [:]
     private let now: @Sendable () -> Double
 
     // ponytail: 500 MB cap, least recently viewed first; a setting if people keep long screenshot sessions
@@ -46,8 +48,10 @@ public actor AgentImageCache {
 
     public func entry(env: String, thread: String, item: String) -> Entry? { index.items[Self.itemKey(env, thread, item)] }
 
-    /// The kept copy, marked as just viewed. Nil when there is none or its file went missing.
-    public func url(env: String, thread: String, item: String) -> URL? {
+    /// The kept copy, marked as just viewed. Nil when there is none or its file went missing. A remote copy on its
+    /// way is waited for, so its file downloads once.
+    public func url(env: String, thread: String, item: String) async -> URL? {
+        if entry(env: env, thread: thread, item: item) == nil, let running = keeping[Self.itemKey(env, thread, item)] { _ = await running.value }
         guard let entry = entry(env: env, thread: thread, item: item) else { return nil }
         let key = fileKey(env, entry)
         let url = url(of: key)
@@ -150,13 +154,24 @@ public actor AgentImageCache {
 }
 
 extension AgentImageCache {
-    /// A remote environment's file, fetched once through the same signed asset URL the gallery loads it with.
+    /// A remote environment's file, fetched once through the same signed asset URL the gallery loads it with. The
+    /// gallery's tile for the same file shares the transfer (`MarkdownImages.assetDownload`), and a kept-copy lookup
+    /// for the item waits for it.
     public func keepRemote(env: String, thread: String, item: String, resource: JSONValue) async -> Entry? {
         if let kept = entry(env: env, thread: thread, item: item) { return kept }
-        guard let asset = await MarkdownImages.signedURL(resource: resource),
-              let file = await MarkdownImageDownload.fetch(asset.url) else { return nil }
-        let data = withExtendedLifetime(file) { try? Data(contentsOf: file.url) }
-        guard let data, !data.isEmpty, data.count <= 50 << 20 else { return nil }
-        return store(env: env, thread: thread, item: item, data: data, ext: Self.imageExtension(data))
+        let itemKey = Self.itemKey(env, thread, item)
+        if let running = keeping[itemKey] { return await running.value }
+        // Keyed like the gallery tile, so a tile on screen moves this copy ahead in the fetch queue too.
+        let key = resource["path"]?.stringValue.map { "media-file:" + $0 } ?? ""
+        let task = Task { () -> Entry? in
+            let file = await MarkdownImages.assetDownload(key: key, resource: resource).value()
+            let data = file.flatMap { file in withExtendedLifetime(file) { try? Data(contentsOf: file.url) } }
+            guard let data, !data.isEmpty, data.count <= 50 << 20 else { return nil }
+            return self.store(env: env, thread: thread, item: item, data: data, ext: Self.imageExtension(data))
+        }
+        keeping[itemKey] = task
+        let entry = await task.value
+        keeping[itemKey] = nil
+        return entry
     }
 }

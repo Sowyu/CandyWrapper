@@ -237,6 +237,20 @@ public enum MarkdownImages {
         }
     }
 
+    /// Signs a tool output or host file for `assetDownload`. Tests replace it, and `transfer`, instead of the shared
+    /// `resourceURL` other suites stub at the same time.
+    nonisolated(unsafe) static var signAsset: @Sendable (JSONValue) async -> SignedAsset? = { await signedURL(resource: $0) }
+    /// Fetches a signed asset URL to a file. Tests replace it to count transfers.
+    nonisolated(unsafe) static var transfer: @Sendable (URL) async -> ImageDownloadFile? = { await MarkdownImageDownload.fetch($0) }
+
+    /// `transfer` behind `MediaFetchQueue`, in `MediaPriority` order for `key`.
+    nonisolated static func queuedTransfer(key: String, url: URL) async -> ImageDownloadFile? {
+        guard await MediaFetchQueue.shared.acquire(key) else { return nil }
+        let file = await transfer(url)
+        await MediaFetchQueue.shared.release()
+        return file
+    }
+
     private final class WeakDownload: @unchecked Sendable { weak var value: MarkdownImageDownload? }
     nonisolated private static let downloadsLock = NSLock()
     nonisolated(unsafe) private static var downloads: [String: WeakDownload] = [:]
@@ -316,21 +330,37 @@ public enum MarkdownImages {
 
     /// A tool output loader keeps the same signed resource and downloaded file across size changes.
     /// `onFile` sees the downloaded bytes once, while the file still exists (the gallery hashes them).
+    /// The 2 s grace lets a tile rebuilt while it scrolls or the list changes pick its transfer up where it was.
     nonisolated static func assetLoader(key: String, resource: JSONValue, onFile: (@Sendable (URL) async -> Void)? = nil) -> AsyncImageView.Loader {
-        let download = MarkdownImageDownload {
-            guard let asset = await signedURL(resource: resource) else { return nil }
-            if let size = asset.size { await record(size, for: key) }
-            let file = await MarkdownImageDownload.fetch(asset.url)
-            if let file, let onFile { await onFile(file.url) }
-            return file
-        }
+        let download = assetDownload(key: key, resource: resource)
+        let seen = OnceFlag()
         return { side in
             guard let file = await download.value() else { return nil }
             defer { withExtendedLifetime(file) {} }
+            if let onFile, seen.first() { await onFile(file.url) }
             guard let decoded = await decodeFile(file.url, side: side), !Task.isCancelled else { return nil }
             await record(decoded.natural, for: key)
             return decoded.image
         }
+    }
+
+    /// One download per signed resource while anything holds it: the gallery's tile, the timeline's and a remote kept
+    /// copy (`AgentImageCache.keepRemote`) of the same file share its transfer.
+    nonisolated static func assetDownload(key: String, resource: JSONValue) -> MarkdownImageDownload {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        let id = "asset|" + ((try? encoder.encode(resource)).map { String(decoding: $0, as: UTF8.self) } ?? key)
+        return sharedDownload(id) { MarkdownImageDownload(grace: .seconds(2)) {
+            guard let asset = await signAsset(resource) else { return nil }
+            if let size = asset.size { await record(size, for: key) }
+            return await queuedTransfer(key: key, url: asset.url)
+        } }
+    }
+
+    private final class OnceFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+        func first() -> Bool { lock.withLock { defer { done = true }; return !done } }
     }
 
     /// Takes no turn of `AssetURLLimit`: the app's `assetURL` signs through `signedURL(resource:)`, which takes it.
