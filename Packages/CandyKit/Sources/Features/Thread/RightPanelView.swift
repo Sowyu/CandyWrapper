@@ -112,6 +112,7 @@ final class RightPanelView: DSView {
         super.init(frame: frameRect)
         add.iconSize = 14
         add.setAccessibilityLabel("Add panel surface")
+        TooltipController.redesign(add, "Add to panel") { ActiveKeymap.label(for: "rightPanel.new") }
         add.action = { [weak self] in self?.showAddMenu() }
         border.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(border)
@@ -723,6 +724,7 @@ final class LauncherRow: DSView {
     private lazy var chooser: ButtonView = {
         let b = ButtonView(icon: .chevronDown, variant: .ghostMuted, size: .iconXs)
         b.setAccessibilityLabel("Open browser in a profile")
+        TooltipController.redesign(b, "Open browser in a profile")
         b.action = { [weak self] in self?.showProfiles() }
         return b
     }()

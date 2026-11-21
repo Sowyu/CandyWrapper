@@ -170,3 +170,27 @@ extension RedesignStatesTests {
         #expect(counter.calls == 2)
     }
 }
+
+extension RedesignStatesTests {
+    /// Icon-only buttons name their action and shortcut in a Redesign tooltip, which is also their accessibility
+    /// label there; the default themes keep T3's label and show no tooltip.
+    @Test func redesignTooltipsNameTheActionAndShortcut() {
+        let header = ThreadHeaderView()
+        let terminal = header.toggles[1]
+        var shortcut: String? = "⌘J"
+        let b = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
+        b.setAccessibilityLabel("Close find")
+        TooltipController.redesign(b, "Close find") { shortcut }
+        TooltipController.redesign(b, "Close find") { shortcut } // again, as a row update does: one controller
+        Self.withRedesign(true) {
+            #expect(b.accessibilityLabel() == "Close find (⌘J)")
+            shortcut = nil
+            #expect(b.accessibilityLabel() == "Close find")
+            #expect(terminal.accessibilityLabel()?.hasPrefix("Toggle terminal") == true)
+        }
+        Self.withRedesign(false) {
+            #expect(terminal.accessibilityLabel() == "Toggle terminal drawer")
+            #expect(TooltipController.text(for: b) == nil)
+        }
+    }
+}

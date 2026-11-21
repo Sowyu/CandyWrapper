@@ -117,6 +117,7 @@ public final class ComposerFileListView: DSView {
             detail.text = row.detail
             retry.setAccessibilityLabel("Retry upload for \(row.name)")
             remove.setAccessibilityLabel("Remove \(row.name)")
+            TooltipController.redesign(remove, "Remove \(row.name)")
             if case .failed(let reason) = row.status {
                 retry.isHidden = false
                 retryTip.text = reason

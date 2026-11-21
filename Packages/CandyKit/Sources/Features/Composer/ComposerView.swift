@@ -454,6 +454,7 @@ public final class ComposerView: DSView {
         questionPill.action = { [weak self] in self?.onQuestionAdvance?() }
         previousCompact.iconSize = 14
         previousCompact.setAccessibilityLabel("Previous question")
+        TooltipController.redesign(previousCompact, "Previous question")
         for button in [previousFull, previousCompact] {
             button.smoothsFont = false
             button.action = { [weak self] in self?.onQuestionPrevious?() }

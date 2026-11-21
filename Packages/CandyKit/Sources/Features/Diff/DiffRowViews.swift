@@ -94,6 +94,8 @@ final class DiffFileHeaderView: DiffRowView {
         chevron.setAccessibilityLabel("\(collapsed ? "Expand" : "Collapse") \(file.path)")
         chevron.setAccessibilityValue(collapsed ? 0 : 1)
         copy.setAccessibilityLabel("Copy path")
+        TooltipController.redesign(copy, "Copy path")
+        TooltipController.redesign(chevron, collapsed ? "Expand file" : "Collapse file")
         needsLayout = true
     }
 
