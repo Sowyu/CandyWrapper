@@ -145,7 +145,7 @@ CandyWrapper is built on two Macs. Check which one you're on with `id -un`: `mrm
 - Passwordless sudo works. Use it only for what your task needs. `scripts/run-app` runs the app in the console user's GUI session, `sudo launchctl asuser 501 sudo -u administrator` here.
 - Screen Recording and Accessibility are granted to the live T3 runtime, `~/.t3/runtime/versions/0.1.11-nightly.20261119.4928/t3`, and not to anything else yet.
 - xcodebuild once raised a login Keychain dialog while it resolved Sparkle and waited on it, so `scripts/build-test-app` uses system git. If a build sits at 0% CPU, run `sample <pid> 1` and look for `SecKeychain` before you wait longer.
-- `.git/info/secret-patterns` is missing, so the push hook refuses to run until the user supplies it.
+- Crash dialogs are off for this user (`defaults write com.apple.CrashReporter DialogType none`, set 2026-11-21 at the user's request), so a crashed build tool or test app shows no "quit unexpectedly" window. Crash reports still land in `~/Library/Logs/DiagnosticReports`. Undo with `defaults delete com.apple.CrashReporter DialogType`.
 
 ### The remote Mac mini M4 (user mrm)
 
