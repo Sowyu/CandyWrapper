@@ -36,7 +36,8 @@ struct SettingsConcernTests {
     @Test func movedRowsKeepTheirSearchAnchorsAndDestinations() {
         let context = SettingsPagesFidelityTests.context()
         let cases: [(SettingsSection, [String], [String])] = [
-            (.general, ["thread-notifications", "project-grouping", "working-shelf", "quit-confirmation"], ["send-shortcut", "app-version"]),
+            // General matches T3's references, so CandyWrapper's own rows sit in About.
+            (.general, ["thread-notifications", "project-grouping", "working-shelf", "quit-confirmation"], ["send-shortcut", "app-version", "tooltips", "trackpad-haptics"]),
             (.chat, ["composer-rich-text", "send-shortcut", "follow-up-behavior", "screen-reader-window-title"], ["thread-notifications", "diff-layout"]),
             (.diffs, ["diff-layout", "diff-color-scheme", "proactive-panels", "pull-request-links-open-in-app"], ["browser-link-target"]),
             (.threads, ["default-model", "new-threads", "response-streaming", "text-generation-model"], ["compact-idle-threads", "worktree-submodules"]),
@@ -45,7 +46,7 @@ struct SettingsConcernTests {
             (.devices, ["device-hosts"], ["browser-profiles"]),
             (.worktrees, ["worktree-submodules", "start-from-origin", "worktree-branch-naming", "storage-worktree-keep-when"], ["source-control-writing-style"]),
             (.maintenance, ["provider-update-checks", "background-activity", "diagnostics"], ["app-version"]),
-            (.about, ["app-version", "privacy-policy", "open-source-licenses"], ["diagnostics"]),
+            (.about, ["app-version", "privacy-policy", "open-source-licenses", "tooltips", "trackpad-haptics"], ["diagnostics"]),
             // Screen pass 3, item 4: the routed page dropped the Issue trackers section.
             (.sourceControl, ["source-control", "issue-trackers"], ["default-model"]),
         ]

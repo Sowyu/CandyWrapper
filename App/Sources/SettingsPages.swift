@@ -212,14 +212,16 @@ extension SettingsController {
 
     /// A search result: open its page, then scroll its anchor into view and pulse it.
     func jump(to item: SettingsSearchItem) {
-        show(item.to.isAvailable ? item.to : section)
-        guard item.to.isAvailable else { return }
-        let target: NSView? = switch item.to {
+        // The default themes keep CandyWrapper's own rows in About (ConcernSettingsView.candyWrapperRows).
+        let to = !isDither && ConcernSettingsView.candyWrapperRows.contains(item.id) ? .about : item.to
+        show(to.isAvailable ? to : section)
+        guard to.isAvailable else { return }
+        let target: NSView? = switch to {
         case .general: general?.anchor(item.anchor)
         case .appearance: appearance?.anchor(item.anchor)
         case .keybindings: keybindingsPage?.anchor(item.anchor)
         case .connections, .access: connectionsPage.searchAnchor(item.anchor)
-        default: extraPages[item.to]?.anchor(item.anchor)
+        default: extraPages[to]?.anchor(item.anchor)
         }
         page.pageChanged()
         if let target { page.reveal(target) }
