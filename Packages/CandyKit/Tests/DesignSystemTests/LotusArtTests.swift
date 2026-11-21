@@ -16,7 +16,8 @@ struct LotusArtTests {
         return (x0, x1, y0, y1, cells)
     }
 
-    private let place = LotusArt.Placement(width: 120, height: 90, centreX: 60, centreY: 46, radius: 44)
+    /// The opening's bloom view, the camera every frame used before the flower became a background.
+    private let place = LotusArt.Placement(width: 120, height: 90, centreX: 60, centreY: 46, radius: 44, view: LotusArt.bloomView)
 
     @Test func geometryIsDeterministic() {
         let a = LotusArt.mesh(bloom: 0.6, breath: 0.3), b = LotusArt.mesh(bloom: 0.6, breath: 0.3)
@@ -104,46 +105,25 @@ struct LotusArtTests {
     }
 }
 
-/// Stage 2: where the flower sits, measured from real page geometry, for a table of windows.
+/// Where the flower sits: composition 2, "Low and cropped", for a table of windows, and what the canvas holds.
 struct LotusPlacementTests {
-    /// A Redesign window as the thread panel reports it to the art, in the art's top-left space: the band at the top,
-    /// the content area left of the right panel card, the 736pt lane centred in it, the composer and its pills.
+    /// A Redesign window's content area as the thread panel reports it: from the window's top, left of the right panel.
     struct Window: CustomStringConvertible {
         var name: String
         var width: CGFloat, height: CGFloat
         var sidebar: CGFloat = 240
         var rightPanel: CGFloat = 0
         var description: String { name }
-
-        var main: CGSize { CGSize(width: width - sidebar, height: height) }
         var content: CGRect {
-            CGRect(x: 0, y: 52, width: main.width - (rightPanel > 0 ? rightPanel + 8 : 0), height: height - 52)
-        }
-        var lane: CGRect {
-            let pad: CGFloat = width < 640 ? 12 : 48
-            let w = min(736, content.width - 2 * pad)
-            return CGRect(x: ((content.width - w) / 2).rounded(), y: content.minY, width: w, height: content.height)
-        }
-        /// The header pill, in the band at the right.
-        var pill: CGRect { CGRect(x: main.width - 12 - 150, y: 12, width: 150, height: 28) }
-        /// The new thread: the composer centred down the content area, the project chips 8pt above it.
-        var heroKeepOut: [CGRect] {
-            let composer = CGRect(x: lane.minX, y: (content.minY + (content.height - 132 - 20) / 2).rounded(), width: lane.width, height: 132)
-            let chips = CGRect(x: lane.minX + 6, y: composer.minY - 8 - 26, width: 220, height: 26)
-            return [composer, chips, pill]
-        }
-        /// A thread: the reading column down the whole content area, the composer docked at its foot.
-        var threadKeepOut: [CGRect] {
-            [lane, CGRect(x: lane.minX, y: content.maxY - 20 - 34 - 110, width: lane.width, height: 110), pill]
+            CGRect(x: 0, y: 0, width: width - sidebar - (rightPanel > 0 ? rightPanel + 8 : 0), height: height)
         }
     }
 
     static let windows: [Window] = [
-        Window(name: "default", width: 1400, height: 900),
+        Window(name: "default", width: 1440, height: 900),
         Window(name: "sidebar collapsed", width: 1400, height: 900, sidebar: 0),
-        Window(name: "sidebar wide", width: 1400, height: 900, sidebar: 380),
         Window(name: "right panel", width: 1600, height: 900, rightPanel: 420),
-        Window(name: "small", width: 900, height: 640),
+        Window(name: "small", width: 1000, height: 700),
         Window(name: "cramped", width: 820, height: 560),
         Window(name: "wide", width: 2200, height: 1000),
         Window(name: "tall", width: 1100, height: 1300),
@@ -151,80 +131,138 @@ struct LotusPlacementTests {
         Window(name: "tiny", width: 560, height: 420),
     ]
 
-    private func clear(_ spot: LotusArt.Spot, of keepOut: [CGRect], in content: CGRect) -> Bool {
-        let box = spot.box
-        let gap = LotusArt.clearance - 0.01
-        return content.insetBy(dx: gap, dy: gap).contains(box) && keepOut.allSatisfy { !$0.insetBy(dx: -gap, dy: -gap).intersects(box) }
+    /// Centred across, its centre just under the bottom edge, wider than the area, at every size: it never hides.
+    @Test(arguments: windows) func flowerRisesFromTheBottomEdge(_ w: Window) throws {
+        let c = w.content
+        let spot = try #require(LotusArt.spot(in: c))
+        #expect(abs(spot.centre.x - c.midX) < 0.01)
+        #expect(abs(spot.centre.y - (c.minY + 1.02 * c.height)) < 0.01)
+        // It scales like a picture filling the area: by the width, or by the height on a narrow area.
+        #expect(abs(spot.radius - 0.66 * max(c.width, c.height * LotusArt.referenceAspect)) < 0.01)
+        // The open flower spans more than the area's width.
+        let reach = (LotusArt.reach.left + LotusArt.reach.right) * Double(spot.radius)
+        #expect(reach > Double(c.width), "\(w)")
     }
 
-    @Test(arguments: windows) func newThreadFlowerIsCentredAndClear(_ w: Window) {
-        let stage = LotusArt.Stage(kind: .hero, content: w.content, keepOut: w.heroKeepOut)
-        guard let spot = LotusArt.spot(for: stage) else {
-            // Only a window too small for a flower at the minimum radius hides it.
-            #expect(["tiny", "short", "cramped"].contains(w.name), "\(w)")
-            return
-        }
-        #expect(clear(spot, of: w.heroKeepOut, in: w.content), "\(w): \(spot.box)")
-        // Centred across the content area, not the window.
-        #expect(abs(spot.box.midX - w.content.midX) < 0.5, "\(w)")
-        // Centred down the free space between the band and the pills above the composer.
-        let above = w.heroKeepOut[1].minY - LotusArt.clearance, below = w.content.minY + LotusArt.clearance
-        #expect(abs(spot.box.midY - (above + below) / 2) < 1 || spot.radius == LotusArt.heroMaxRadius, "\(w)")
-        #expect(spot.radius >= LotusArt.minRadius && spot.radius <= LotusArt.heroMaxRadius)
+    /// The canvas covers only cells of the content area, only what any frame reaches, on the art's lattice, and the
+    /// whole upper half of the flower is in it.
+    @Test(arguments: windows) func canvasIsClippedToTheContentArea(_ w: Window) throws {
+        var c = w.content
+        c.origin.x = 31
+        let p = try #require(LotusArt.canvas(content: c))
+        #expect(p.originX >= Int((c.minX / 3).rounded(.down)) && p.originX + p.width <= Int((c.maxX / 3).rounded(.up)))
+        #expect(p.originY >= 0 && p.originY + p.height <= Int((c.maxY / 3).rounded(.up)))
+        // It runs off both sides and the bottom, so the canvas is the area's full width and reaches its bottom.
+        #expect(p.originX == Int((c.minX / 3).rounded(.down)) && p.width == Int((c.maxX / 3).rounded(.up)) - p.originX)
+        #expect(p.originY + p.height == Int((c.maxY / 3).rounded(.up)))
+        // The flower's top stays in the area: the empty top of the page holds no cells.
+        #expect(p.originY > 0, "\(w)")
+        #expect(abs((Double(p.originY) + p.centreY) * 3 - (c.minY + 1.02 * c.height)) < 0.01)
     }
 
-    @Test(arguments: windows) func threadFlowerSitsInTheMarginOrHides(_ w: Window) {
-        let stage = LotusArt.Stage(kind: .thread, content: w.content, keepOut: w.threadKeepOut)
-        let margin = w.content.maxX - w.lane.maxX - 2 * LotusArt.clearance
-        let needed = LotusArt.minRadius * (LotusArt.extent.left + LotusArt.extent.right)
-        guard let spot = LotusArt.spot(for: stage) else {
-            #expect(margin < needed, "\(w) hid with a \(margin)pt margin")
-            return
-        }
-        #expect(margin >= needed - 1, "\(w)")
-        #expect(clear(spot, of: w.threadKeepOut, in: w.content), "\(w): \(spot.box)")
-        // Never behind the column, and at the top of the content area.
-        #expect(spot.box.minX >= w.lane.maxX + LotusArt.clearance - 0.01)
-        #expect(abs(spot.box.minY - (w.content.minY + LotusArt.clearance)) < 0.01)
-        #expect(spot.radius <= LotusArt.threadMaxRadius)
-    }
-
-    @Test func expectedWindowsShowAFlower() {
-        let shown = Self.windows.filter { LotusArt.spot(for: .init(kind: .hero, content: $0.content, keepOut: $0.heroKeepOut)) != nil }.map(\.name)
-        #expect(Set(shown).isSuperset(of: ["default", "sidebar collapsed", "sidebar wide", "right panel", "small", "wide", "tall"]))
-        let thread = Self.windows.filter { LotusArt.spot(for: .init(kind: .thread, content: $0.content, keepOut: $0.threadKeepOut)) != nil }.map(\.name)
-        #expect(Set(thread).isSuperset(of: ["sidebar collapsed", "wide"]))
-        #expect(!thread.contains("small") && !thread.contains("tiny") && !thread.contains("cramped"))
-    }
-
-    /// A drag across every width lands on a couple of dozen radii at most, each at or under the spot's radius and
-    /// within 8% of it.
-    @Test func radiiAreBucketed() {
-        var buckets = Set<Int>()
-        for r in stride(from: LotusArt.minRadius, through: LotusArt.heroMaxRadius, by: 0.5) {
-            let b = LotusArt.bucket(r)
-            buckets.insert(b)
-            #expect(CGFloat(b) * 3 <= r + 0.001)
-            #expect(CGFloat(b) * 3 >= r / 1.08 - 3)
-        }
-        #expect(buckets.count <= 24)
-        // The largest set stays near the 6 MB ceiling.
-        let p = LotusArt.canvas(radius: LotusArt.bucket(LotusArt.heroMaxRadius))
-        let frames = LotusArt.bloomPoses().count + LotusArt.idlePoses().count + 1
-        #expect(frames * p.width * p.height < 6 * 1_048_576)
-    }
-
-    /// One canvas serves any position: the open flower's coverage stays inside it, centred on its centre cell.
-    @Test func canvasHoldsTheFlowerAndThinsTowardTheComposer() {
-        let p = LotusArt.canvas(radius: 24)
+    /// The bottom of the open flower fills the area's bottom edge across most of its width.
+    @Test func openFlowerFillsTheBottomEdge() throws {
+        let c = CGRect(x: 0, y: 0, width: 600, height: 375)
+        let p = try #require(LotusArt.canvas(content: c))
         let shot = LotusArt.render(LotusArt.openPose, placement: p, samples: 1)
-        var x0 = Int.max, x1 = 0, y0 = Int.max, y1 = 0
-        for y in 0..<p.height { for x in 0..<p.width where shot.cover[y * p.width + x] > 0 {
-            x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
-        } }
-        #expect(x0 > 0 && y0 > 0 && x1 < p.width - 1 && y1 < p.height - 1)
-        let d = LotusArt.heroDensity(p)
-        #expect(d[Int(p.centreY) * p.width] == 1)
-        #expect(d[(p.height - 1) * p.width] < 0.45)
+        let row = p.height - 1
+        let covered = (0..<p.width).filter { shot.cover[row * p.width + $0] > 0 }.count
+        #expect(Double(covered) > 0.8 * Double(p.width))
+        // And the top fifth of the area is empty.
+        let topRows = Int(c.height / 3 / 5) - p.originY
+        if topRows > 0 { #expect((0..<(topRows * p.width)).allSatisfy { shot.cover[$0] == 0 }) }
+    }
+
+    /// The fixed reach holds every bloom and idle frame, for both views, with at most a few cells to spare.
+    @Test func reachCoversEveryFrame() {
+        for (view, fixed) in [(LotusArt.rest, LotusArt.reach), (LotusArt.bloomView, LotusArt.bloomReach)] {
+            let m = LotusArt.measureReach(view)
+            for (a, b) in [(m.left, fixed.left), (m.right, fixed.right), (m.up, fixed.up), (m.down, fixed.down)] {
+                #expect(a <= b + 0.001 && b - a < 0.05, "\(view): measured \(m), fixed \(fixed)")
+            }
+        }
+    }
+
+    /// The field: Gradient's dots from the area's top edge down, thinning toward the bottom, moving with the loop; composed under
+    /// the flower, a covered cell (a petal with no dot there) hides it, so the lotus is solid.
+    @Test func fieldSitsBehindASolidFlower() throws {
+        let full = try #require(LotusArt.fullCanvas(content: CGRect(x: 0, y: 0, width: 600, height: 375)))
+        let field = LotusArt.field(full, t: 0)
+        #expect(Set(field).isSubset(of: [0, 1]))
+        func dots(_ rows: Range<Int>) -> Int { field[(full.width * rows.lowerBound)..<(full.width * rows.upperBound)].filter { $0 == 1 }.count }
+        // Strongest along the very top edge, with no empty rows there, and thinner at the bottom.
+        #expect(dots(0..<1) > 0 && dots(1..<2) > 0)
+        #expect(dots(0..<8) > dots((full.height - 8)..<full.height))
+        #expect(LotusArt.field(full, t: 0.25) != field)
+        // A flower canvas inside it, every cell covered with no dot: no field shows there.
+        var flower = full
+        flower.width = 20; flower.height = 10; flower.originX = full.originX + 30; flower.originY = full.originY + 2
+        let covered = [UInt8](repeating: LotusArt.Code.covered, count: 200)
+        let shown = LotusArt.compose(codes: covered, flower: flower, full: full, field: [UInt8](repeating: 1, count: field.count), fieldAlpha: 90)
+        for y in 2..<12 { for x in 30..<50 { #expect(shown[y * full.width + x] == 0) } }
+        #expect(shown[0] == 90)
+    }
+
+    /// The idle loop packs into a quarter of the bytes and unpacks exactly.
+    @Test func packingIsLossless() {
+        let p = LotusArt.Placement(width: 61, height: 23, centreX: 30, centreY: 22, radius: 20)
+        let shot = LotusArt.render(LotusArt.openPose, placement: p, samples: 1)
+        let codes = shot.light.withUnsafeBufferPointer { l in shot.cover.withUnsafeBufferPointer { c in
+            LotusArt.codes(light: l, cover: c, placement: p, dark: true) } }
+        #expect(Set(codes).isSuperset(of: [LotusArt.Code.covered, LotusArt.Code.ink]))
+        let packed = LotusArt.pack(codes)
+        #expect(packed.count == (61 * 23 + 3) / 4)
+        #expect(LotusArt.unpack(packed, count: codes.count) == codes)
+    }
+
+    /// A 1440 x 900 window's new-thread flower stays well under 10 MB at rest: the open still, the packed idle loop and
+    /// one expanded frame. The bloom (rendered per opening, dropped after) is the only larger part.
+    @Test func restingFlowerStaysUnderTheBudget() throws {
+        let p = try #require(LotusArt.canvas(content: CGRect(x: 0, y: 0, width: 1182, height: 900)))
+        let cells = p.width * p.height
+        let resting = cells + LotusArt.idlePoses().count * (cells + 3) / 4 + cells
+        #expect(resting < 6 * 1_048_576)
+        #expect(LotusArt.bloomPoses().count * cells < 5 * 1_048_576)
+    }
+}
+
+/// Behind a thread's reading column: the still mask's falloff and the text floors it keeps.
+struct LotusColumnTests {
+    let ground = SIMD3<Double>(0.04, 0.04, 0.04), ink = SIMD3<Double>(0.545, 0.486, 0.965)
+    let text = SIMD3<Double>(0.93, 0.93, 0.93), muted = SIMD3<Double>(0.62, 0.62, 0.62)
+
+    @Test func capKeepsTheDarkTextFloors() {
+        let cap = LotusArt.columnCap(ground: ground, ink: ink, text: text, muted: muted, opacity: 1, dark: true)
+        #expect(cap > 0.1 && cap < 0.6)
+        let worst = PictureInk.luminance(ground + (ink - ground) * Double(cap))
+        #expect(PictureInk.contrast(worst, PictureInk.luminance(text)) >= 12)
+        #expect(PictureInk.contrast(worst, PictureInk.luminance(muted)) >= 6)
+    }
+
+    /// Full far from the column, the cap and a third of the dots over it, and no step anywhere between.
+    @Test func maskEasesWithNoEdge() {
+        let p = LotusArt.Placement(width: 400, height: 40, centreX: 200, centreY: 60, radius: 200)
+        let cap: Float = 0.3
+        let m = LotusArt.columnMask(p, column: 450...750, cap: cap, dark: true)
+        func row(_ x: Int) -> (kept: Double, level: UInt8) {
+            let col = (0..<p.height).map { m[$0 * p.width + x] }
+            return (Double(col.filter { $0 > 0 }.count) / Double(p.height), col.max() ?? 0)
+        }
+        #expect(row(200).level == UInt8((cap * 255).rounded()))
+        #expect(row(0).level == 255 && row(0).kept == 1)
+        var last = Int(row(0).level)
+        for x in 1..<200 {
+            let level = Int(row(x).level)
+            #expect(abs(level - last) <= 4, "a step at x \(x)")
+            last = level
+        }
+        let middle = (0..<p.height).flatMap { y in (190..<210).map { m[y * p.width + $0] } }
+        let kept = Double(middle.filter { $0 > 0 }.count) / Double(middle.count)
+        #expect(abs(kept - Double(LotusArt.columnKeep)) < 0.1)
+    }
+
+    /// Light's falloff runs far wider than dark's.
+    @Test func lightFalloffIsWide() {
+        #expect(LotusArt.columnReach(dark: false) >= 2 * LotusArt.columnReach(dark: true))
     }
 }

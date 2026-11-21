@@ -410,7 +410,7 @@ struct PictureInkTests {
         DitherArtView.setEmphasis(.hero, from: page)
         defer { DitherArtView.setEmphasis(nil, from: page); DitherArtView.setComposer(nil, from: page) }
         let hero = try #require(art.requestForTesting)
-        #expect(hero.tint == nil && !hero.blur)
+        #expect(!hero.blur)
         guard case .hero(composer: _?) = hero.shape else { Issue.record("no composer in \(hero.shape)"); return }
         #expect(art.contentsForTesting != nil)
         #expect(animations().isEmpty)
@@ -434,7 +434,6 @@ struct PictureInkTests {
         #expect(art.scrimAlphaForTesting == 0)
         DitherArtView.setEmphasis(.hero, from: page)
         #expect(animations().isEmpty)
-        #expect(!art.gradientAnimatingForTesting)
 
         // A drag: twenty sizes, no render until the drag pauses, and the cached image always covers the panel.
         art.rendersInlineForTesting = false

@@ -6,8 +6,8 @@ import os
 /// The Dither theme's art (CandyWrapper's own, after Capy's desktop app). Picture: the chosen or desktop picture as a
 /// two-ink Bayer dither on 3pt cells (`PictureInk`), thinning around the new thread's composer and behind a thread's
 /// reading column so text keeps its floors, with no dim layer. Blur: the picture blurred behind the whole window.
-/// Gradient: accent cells with no picture. Settings and other pages lay a heavy scrim of the background over it. It
-/// renders once per size, picture, appearance, ink and page shape off the main thread and never moves in Picture
+/// Flower: a lotus over a field of accent cells, with no picture (`LotusArt`). Settings and other pages lay a heavy
+/// scrim of the background over the picture. It renders once per size, picture, appearance, ink and page shape off the main thread and never moves in Picture
 /// (the user, 2026-11-21: "no motion its horrid"). A live resize scales the cached image with the panel on the GPU and
 /// renders once when the size settles.
 public final class DitherArtView: NSView {
@@ -26,34 +26,64 @@ public final class DitherArtView: NSView {
     private var loggedScrim: CGFloat?
     /// macOS's Reduce Transparency, replaceable in tests.
     var systemReducesTransparency: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
-    /// Gradient: the accent color through the current frame's mask, one cell per mask pixel.
-    private let gradientMask = CALayer()
-    /// Gradient's loop, held only while the new-thread page shows (`DitherArt.gradientFrames`).
-    private var gradientFrames: [CGImage] = []
     /// Whether the window is visible, unminiaturized, not covered and key; tests set it.
     var windowIsActiveOverride: Bool?
-    /// Flower: the ink color through the current frame's mask (`LotusArt`), its own layer so it moves and scales
-    /// without touching the art.
+    /// Flower: the ink color through the current frame's mask (`LotusArt`), inside `flowerHost`, which carries the
+    /// reading column's still mask in a thread and light's faintness, and moves and scales without touching the art.
+    let flowerHost = CALayer()
     let flower = CALayer()
     let flowerMask = CALayer()
-    /// The frames on screen, filled in as they render: the open still, then the bloom, then the idle loop.
+    /// The column's mask on `flowerHost`, and what it was built from.
+    let columnLayer = CALayer()
+    var columnKey: ColumnKey?
+    /// The flower blurred, for the surfaces that float over it (`FlowerGlassView`), and what it was built from.
+    var glowImage: CGImage?
+    /// The glow's brightest pixel, 0...1, so the surfaces can cap it for their text.
+    var glowPeak: Float = 0
+    var glowKey: ColumnKey?
+    /// The frames on screen: the open still, the bloom while it plays, and the new thread's packed idle loop.
     var flowerSet: FlowerSet?
-    /// A set rendering while another shows, until it can take over.
-    var flowerIncoming: FlowerSet?
     /// The set being rendered, and the job rendering it.
     var flowerWanted: FlowerKey?
     var flowerJob: FlowerJob?
-    /// Where the flower sits now, and on which page.
-    var flowerSpot: LotusArt.Spot?
+    /// The content area the flower fills, in the art's top-left space, and the page.
+    var flowerContent: CGRect?
     var flowerKind: LotusArt.Kind?
     /// When the last geometry change came, to tell a drag from a single change, and the settle after a drag.
     var flowerMovedAt: CFTimeInterval = 0
     var flowerSettle: DispatchWorkItem?
     /// When a thread or the new-thread page last opened (`flowerOpened`), until the bloom plays or goes stale.
     var bloomRequestedAt: CFTimeInterval?
-    /// Layer time the playing bloom ends at.
+    /// Layer time the playing bloom ends at, and the work that drops its frames after.
     var bloomEnds: CFTimeInterval = 0
+    var bloomDone: DispatchWorkItem?
     var flowerShownOnce = false
+    /// The new thread's turn: a timer at `LotusArt.idleFPS` that expands one packed frame at a time, only while it
+    /// turns. `turnStart` is the time frame 0 showed.
+    var turnTimer: Timer?
+    var turnStart: CFTimeInterval = 0
+    var turnIndex = 0
+    /// The field shows alone while an opening waits for its frames.
+    var fieldOnly = false
+    /// Where the field's loop stands, 0...1, on `DitherArt.gradientFPS` steps; it moves only with the turn.
+    var fieldT: Double = 0
+    var fieldStart: CFTimeInterval = 0
+    /// The top of what floats over the new thread's flower, in this view's top-left space.
+    var flowerFloorTop: CGFloat?
+    /// The new thread's opening for the current area (`LotusArt.opening`), whether it is playing, and the move's start.
+    var flowerOpening: LotusArt.Opening?
+    var openingPlaying = false
+    var openingFly: DispatchWorkItem?
+    var openingLand: DispatchWorkItem?
+    /// When the new-thread page last stopped showing the flower, so a quick return shows it at rest.
+    var heroLeftAt: CFTimeInterval?
+    /// The opening the running job renders frames for.
+    var flowerJobOpening: LotusArt.Opening?
+    /// The canvas the current area wants, and the frames the running job makes.
+    var flowerTarget: FlowerKey?
+    var flowerJobParts: FlowerParts = []
+    /// A resize or drag is in progress: the shown frame scales and nothing renders until it settles.
+    var flowerResizing = false
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -65,21 +95,19 @@ public final class DitherArtView: NSView {
         // exactly `dot` and every dot is the same whole number of device pixels.
         art.contentsGravity = .resize
         art.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull(), "mask": NSNull()]
-        gradientMask.contentsGravity = .resize
-        gradientMask.magnificationFilter = .nearest
-        gradientMask.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         scrim.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull(), "locations": NSNull()]
         scrim.startPoint = CGPoint(x: 0, y: 0.5)
         scrim.endPoint = CGPoint(x: 1, y: 0.5)
         layer?.masksToBounds = true
         layer?.addSublayer(art)
+        let still: [String: CAAction] = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull(), "opacity": NSNull(),
+                                         "hidden": NSNull(), "contents": NSNull(), "path": NSNull(), "fillColor": NSNull(), "mask": NSNull()]
         flower.mask = flowerMask
-        flower.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull(), "opacity": NSNull(), "hidden": NSNull()]
-        flowerMask.contentsGravity = .resize
-        flowerMask.magnificationFilter = .nearest
-        flowerMask.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        flower.isHidden = true
-        layer?.addSublayer(flower)
+        for l in [flowerHost, flower, flowerMask, columnLayer] { l.actions = still }
+        for l in [flowerMask, columnLayer] { l.contentsGravity = .resize; l.magnificationFilter = .nearest }
+        flowerHost.addSublayer(flower)
+        flowerHost.isHidden = true
+        layer?.addSublayer(flowerHost)
         layer?.addSublayer(scrim)
         blend.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull()]
         layer?.addSublayer(blend)
@@ -142,8 +170,7 @@ public final class DitherArtView: NSView {
     @MainActor
     public static func setEmphasis(_ emphasis: Emphasis?, from source: NSView) {
         if let emphasis { sources.setObject(EmphasisBox(emphasis: emphasis), forKey: source) } else { sources.removeObject(forKey: source) }
-        // Gradient renders only for the new-thread page and Picture's shape follows the page, so a page change may
-        // render again.
+        // The Flower and Picture's shape follow the page, so a page change may render again.
         for art in arts.allObjects { art.refresh() }
     }
 
@@ -172,11 +199,12 @@ public final class DitherArtView: NSView {
         art(behind: source)?.refresh()
     }
 
-    /// A thread page calls this from its layout with where the Flower background may sit, in its own coordinates
-    /// (`LotusArt.Stage`): its content area and what the flower keeps clear of. Pass nil when it shows no flower.
+    /// A thread page calls this from its layout with where the Flower background sits, in its own coordinates: its
+    /// content area, which the flower fills (`LotusArt.spot(in:)`), and the top of what floats over the new thread's
+    /// flower (the composer and the chips above it), which the opening bloom sits above.
     @MainActor
-    public static func setFlowerStage(kind: LotusArt.Kind, content: NSRect, keepOut: [NSRect], from source: NSView) {
-        let box = FlowerStageBox(kind: kind, content: content, keepOut: keepOut)
+    public static func setFlowerStage(kind: LotusArt.Kind, content: NSRect, floorTop: CGFloat? = nil, from source: NSView) {
+        let box = FlowerStageBox(kind: kind, content: content, floorTop: floorTop)
         guard stages.object(forKey: source) != box else { return }
         stages.setObject(box, forKey: source)
         guard ThemeRuntime.ditherFlower else { return }
@@ -268,7 +296,6 @@ public final class DitherArtView: NSView {
             debounce?.cancel()
             shown = nil; pending = nil
             art.contents = nil
-            dropGradient()
             dropFlower()
             PictureInk.dropCache()
         } else if shown == nil {
@@ -279,53 +306,22 @@ public final class DitherArtView: NSView {
 
     @objc private func keyChanged(_ note: Notification) { syncMotion() }
 
+    static let launchedInBackground = CommandLine.arguments.contains("--background")
+
     /// Whether the window shows and has the user's attention: visible, not miniaturized or covered, and key.
     private var windowIsActive: Bool {
         if let windowIsActiveOverride { return windowIsActiveOverride }
         guard let window else { return false }
+        // A test app launched behind the other windows (`scripts/run-app --background`) never becomes key or uncovered;
+        // it counts as active so agents can record the motion from behind.
+        if Self.launchedInBackground { return window.isVisible && !window.isMiniaturized }
         return window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible) && window.isKeyWindow
     }
 
-    /// Gradient moves only while it can be seen and wanted: the new-thread page in Gradient with Animate on, the
-    /// window active and Reduce Motion off. Anything else removes the animation, holding the frame it was on, so
-    /// nothing runs while idle (the user, 2026-11-21: "capys plain dither isnt just static").
+    /// The Flower moves only while it can be seen and wanted (`syncFlowerMotion`); nothing else here moves.
     func syncMotion() {
         syncFlowerMotion()
-        let on = ThemeRuntime.ditherGradient && ThemeRuntime.ditherGradientAnimates && !Motion.reduced && windowIsActive
-            && page == .hero && !art.isHidden && gradientFrames.count > 1 && art.mask === gradientMask
-        let running = gradientMask.animation(forKey: "drift") != nil
-        guard on != running else { return }
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        if on {
-            let drift = CAKeyframeAnimation(keyPath: "contents")
-            drift.values = gradientFrames
-            drift.calculationMode = .discrete
-            drift.keyTimes = (0...gradientFrames.count).map { NSNumber(value: Double($0) / Double(gradientFrames.count)) }
-            drift.duration = DitherArt.gradientPeriod
-            drift.repeatCount = .infinity
-            // Start from the frame it holds, so resuming never jumps.
-            if let held = gradientMask.contents, let i = gradientFrames.firstIndex(where: { $0 === (held as AnyObject) }) {
-                drift.timeOffset = DitherArt.gradientPeriod * Double(i) / Double(gradientFrames.count)
-            }
-            // Only `syncMotion` takes it off, never Core Animation (an offscreen window counts it finished at once).
-            drift.isRemovedOnCompletion = false
-            gradientMask.add(drift, forKey: "drift")
-        } else {
-            // Hold the frame on screen now.
-            if let current = gradientMask.presentation()?.contents { gradientMask.contents = current }
-            gradientMask.removeAnimation(forKey: "drift")
-        }
-        CATransaction.commit()
     }
-
-    /// Gradient's frames go when its page or window does; they render again when it shows.
-    private func dropGradient() {
-        gradientMask.removeAnimation(forKey: "drift")
-        gradientMask.contents = nil
-        gradientFrames = []
-    }
-
-    var gradientAnimatingForTesting: Bool { gradientMask.animation(forKey: "drift") != nil }
 
     /// Moving between the main panel (Dither) and the window (Blur): the old art never shows at the new place.
     public override func viewDidMoveToSuperview() {
@@ -356,21 +352,15 @@ public final class DitherArtView: NSView {
         let target = canvasSize(for: shown)
         if target == (shown.width, shown.height) {
             art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
-        } else if shown.tint != nil {
-            // Gradient covers the panel's width and the top of its height: stretch it there.
-            let gh = bounds.height * DitherArt.gradientReach.height
-            art.frame = CGRect(x: 0, y: bounds.height - gh, width: bounds.width, height: gh)
         } else {
             let k = max(bounds.width / w, bounds.height / h)
             art.frame = CGRect(x: (bounds.width - w * k) / 2, y: (bounds.height - h * k) / 2, width: w * k, height: h * k)
         }
-        gradientMask.frame = art.bounds
     }
 
     /// The canvas size, in cells, a render for this panel's size would have in `request`'s mode.
     private func canvasSize(for request: DitherArt.Request) -> (width: Int, height: Int) {
-        let reach = request.tint != nil ? DitherArt.gradientReach : CGSize(width: 1, height: 1)
-        return (Int((artRect.width * reach.width / request.unit).rounded(.up)), Int((artRect.height * reach.height / request.unit).rounded(.up)))
+        (Int((artRect.width / request.unit).rounded(.up)), Int((artRect.height / request.unit).rounded(.up)))
     }
 
     /// How many renders reached the screen, for tests.
@@ -379,6 +369,7 @@ public final class DitherArtView: NSView {
     /// The drag or window resize ended: render the sharp art now instead of after the pause.
     public override func viewDidEndLiveResize() {
         super.viewDidEndLiveResize()
+        if flowerResizing { settleFlower() }
         guard let work = debounce, !work.isCancelled else { return }
         work.cancel()
         debounce = nil
@@ -430,14 +421,12 @@ public final class DitherArtView: NSView {
         let duration = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 0.2
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
-        // Gradient: the dots show on a new thread only, with no scrim; every other page is the plain ground.
         // Flower: the lotus on a new thread and beside a thread's column, the plain ground everywhere else.
         let flowerOn = ThemeRuntime.ditherFlower
-        let gradient = ThemeRuntime.ditherGradient
-        let artHidden = (gradient && page != .hero) || flowerOn
+        let artHidden = flowerOn
         if art.isHidden != artHidden { art.isHidden = artHidden }
-        let picture = !gradient && !flowerOn && !ThemeRuntime.ditherBlur
-        let alpha = gradient || flowerOn ? 0 : DitherArt.scrim(page, display, light: !dark, picture: picture)
+        let picture = !flowerOn && !ThemeRuntime.ditherBlur
+        let alpha = flowerOn ? 0 : DitherArt.scrim(page, display, light: !dark, picture: picture)
         if loggedScrim != alpha {
             DitherArt.log.notice("scrim \(alpha) on \(String(describing: page), privacy: .public): reduce transparency \(display.reduceTransparency), increase contrast \(display.increaseContrast), dark \(dark)")
         }
@@ -446,7 +435,7 @@ public final class DitherArtView: NSView {
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // The veil follows the column through a live resize, so it never animates.
-        let veil = gradient || flowerOn || picture ? 0 : DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
+        let veil = flowerOn || picture ? 0 : DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
         if veil > 0, bounds.width >= 1, let front, let column = Self.columns.object(forKey: front)?.rectValue {
             let lane = convert(column, from: front)
             let xs = (0...64).map { bounds.width * CGFloat($0) / 64 }
@@ -455,8 +444,8 @@ public final class DitherArtView: NSView {
         } else {
             scrim.colors = nil
         }
-        // Blur runs under the band too, so the band shows the picture and needs no blend.
-        blend.isHidden = ThemeRuntime.ditherBlur
+        // Blur runs under the band too, so the band shows the picture and needs no blend; Flower's dots run to the top.
+        blend.isHidden = ThemeRuntime.ditherBlur || ThemeRuntime.ditherFlower
         let band = DitherChrome.bandColor(in: self)
         // Bottom (no band) to top (all band).
         let ts = (0...10).reversed().map { Double($0) / 10 }
@@ -484,28 +473,12 @@ public final class DitherArtView: NSView {
             debounce?.cancel()
             shown = nil; pending = nil
             art.contents = nil; art.mask = nil
-            dropGradient()
             refreshFlower(palette: palette, dark: dark)
             return
         }
-        if flowerSet != nil || flowerWanted != nil || !flower.isHidden { flowerSpot = nil; dropFlower() }
+        if flowerSet != nil || flowerWanted != nil || !flowerHost.isHidden { flowerContent = nil; dropFlower() }
         let request: DitherArt.Request
-        if ThemeRuntime.ditherGradient {
-            // Only the new-thread page shows it, so no other page holds its frames.
-            guard page == .hero else {
-                debounce?.cancel()
-                shown = nil; pending = nil
-                dropGradient()
-                return
-            }
-            // No picture: the canvas covers the top of the panel, where the cells are; the ground shows below it.
-            let accent = palette.primary
-            request = DitherArt.Request(url: nil, width: Int((rect.width * DitherArt.gradientReach.width / DitherArt.gradientUnit).rounded(.up)),
-                                        height: Int((rect.height * DitherArt.gradientReach.height / DitherArt.gradientUnit).rounded(.up)),
-                                        background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
-                                        tint: [accent.srgb.x, accent.srgb.y, accent.srgb.z], dark: dark,
-                                        frames: ThemeRuntime.ditherGradientAnimates ? Int(DitherArt.gradientPeriod * DitherArt.gradientFPS) : 1)
-        } else {
+        do {
             let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
             let fallbacks = [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url }
             PictureTint.sync([url].compactMap { $0 } + fallbacks)
@@ -531,15 +504,14 @@ public final class DitherArtView: NSView {
         debounce?.cancel()
         // A live resize lands here every frame; the last size renders, the old art scales with the panel meanwhile.
         if rendersInlineForTesting {
-            let (image, frames) = Self.render(request)
-            show(request, image: image, frames: frames)
+            show(request, image: Self.render(request))
             return
         }
         let work = DispatchWorkItem { [weak self] in
             DispatchQueue.global(qos: .utility).async {
-                let (image, frames) = Self.render(request)
+                let image = Self.render(request)
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.show(request, image: image, frames: frames) }
+                    MainActor.assumeIsolated { self?.show(request, image: image) }
                 }
             }
         }
@@ -576,32 +548,21 @@ public final class DitherArtView: NSView {
     /// Tests render on the main thread, so they never wait with theme globals applied.
     var rendersInlineForTesting = false
 
-    /// The picture's art, or Gradient's frames and the first of them. Runs on any thread.
-    private nonisolated static func render(_ request: DitherArt.Request) -> (DitherArtImage, DitherArtFrames) {
-        let frames = DitherArtFrames(images: request.tint == nil ? []
-            : DitherArt.gradientFrames(width: request.width, height: request.height, frames: request.frames))
-        return (DitherArtImage(image: request.tint == nil ? DitherArt.render(request) : frames.images.first), frames)
+    /// The picture's art. Runs on any thread.
+    private nonisolated static func render(_ request: DitherArt.Request) -> DitherArtImage {
+        DitherArtImage(image: DitherArt.render(request))
     }
 
-    private func show(_ request: DitherArt.Request, image: DitherArtImage, frames: DitherArtFrames) {
+    private func show(_ request: DitherArt.Request, image: DitherArtImage) {
         guard pending == request else { return }
         pending = nil
         rendersForTesting += 1
         // A render that failed isn't remembered, so the next refresh tries again.
         shown = image.image == nil ? nil : request
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        dropGradient()
-        if let tint = request.tint {
-            art.contents = nil
-            art.backgroundColor = DitherArt.gradientColor(tint: tint, background: request.background, dark: request.dark)
-            gradientFrames = frames.images
-            gradientMask.contents = image.image
-            art.mask = gradientMask
-        } else {
-            art.mask = nil
-            art.backgroundColor = nil
-            art.contents = image.image
-        }
+        art.mask = nil
+        art.backgroundColor = nil
+        art.contents = image.image
         placeArt()
         CATransaction.commit()
         syncMotion()
@@ -614,23 +575,47 @@ public final class DitherArtView: NSView {
 
 // MARK: Flower
 
-/// One flower frame set's identity: radius in cells, appearance, page (the new thread thins toward the composer), and
-/// whether it moves (one still when Animate is off).
+/// One flower frame set's identity: its canvas (the content area's cells and the flower on them) and the appearance.
 struct FlowerKey: Hashable, Sendable {
-    var radius: Int
+    /// The flower's resting canvas, and the content area's whole canvas, which the field covers and the layer shows.
+    var placement: LotusArt.Placement
+    var full: LotusArt.Placement
     var dark: Bool
-    var kind: LotusArt.Kind
-    var animates: Bool
 }
 
-/// A flower's frames as they arrive: the open still first, so the flower shows at once, then the 28 bloom masks,
-/// then the idle loop.
+/// What the column mask and the glow were built from.
+struct ColumnKey: Equatable {
+    var placement: LotusArt.Placement
+    var column: ClosedRange<CGFloat>?
+    var cap: Float
+    var dark: Bool
+}
+
+/// Which frames a render makes.
+struct FlowerParts: OptionSet, Sendable {
+    let rawValue: Int
+    static let open = FlowerParts(rawValue: 1), bloom = FlowerParts(rawValue: 2), idle = FlowerParts(rawValue: 4)
+    static let opening = FlowerParts(rawValue: 8), flight = FlowerParts(rawValue: 16)
+}
+
+/// A flower's frames. Only `open` stays while the flower rests: the bloom renders for an opening and goes once it has
+/// played, and the new thread's idle loop is held packed, two bits a cell, one frame expanded at a time.
 struct FlowerSet: @unchecked Sendable {
     var key: FlowerKey
+    /// The open flower over the field, as shown (the whole canvas), and the flower alone as codes.
     var open: CGImage
+    var openCodes: [UInt8] = []
     var bloom: [CGImage] = []
-    var idle: [CGImage] = []
-    var bytes: Int { ([open] + bloom + idle).reduce(0) { $0 + $1.bytesPerRow * $1.height } }
+    var idle: [[UInt8]] = []
+    /// The new thread's opening: its bloom above the composer and the move down, on the content area's full canvas,
+    /// held only from the opening until the flower lands.
+    var opening: LotusArt.Opening?
+    var openingBloom: [CGImage] = []
+    var flight: [CGImage] = []
+    var bytes: Int {
+        (([open] + bloom + openingBloom + flight).reduce(0) { $0 + $1.bytesPerRow * $1.height }) + idle.reduce(0) { $0 + $1.count }
+            + openCodes.count
+    }
 }
 
 /// A render in flight, cancelled when a newer one starts.
@@ -642,378 +627,681 @@ final class FlowerJob: @unchecked Sendable {
 }
 
 final class FlowerStageBox: Equatable {
-    let kind: LotusArt.Kind, content: NSRect, keepOut: [NSRect]
-    init(kind: LotusArt.Kind, content: NSRect, keepOut: [NSRect]) { self.kind = kind; self.content = content; self.keepOut = keepOut }
-    static func == (a: FlowerStageBox, b: FlowerStageBox) -> Bool { a.kind == b.kind && a.content == b.content && a.keepOut == b.keepOut }
+    let kind: LotusArt.Kind, content: NSRect, floorTop: CGFloat?
+    init(kind: LotusArt.Kind, content: NSRect, floorTop: CGFloat?) { self.kind = kind; self.content = content; self.floorTop = floorTop }
+    static func == (a: FlowerStageBox, b: FlowerStageBox) -> Bool { a.kind == b.kind && a.content == b.content && a.floorTop == b.floorTop }
 }
 
 extension DitherArtView {
     /// How long an opening waits for its bloom frames before it gives up and shows the open flower.
-    static let bloomPatience: CFTimeInterval = 4
-    /// A geometry change this soon after the last one is part of a drag: it follows at once, scaled, and the sharp
-    /// set renders after `settleDelay` of quiet.
+    /// Tests on a loaded machine raise it, since a debug render can take that long.
+    nonisolated(unsafe) static var bloomPatience: CFTimeInterval = 4
+    /// A geometry change this soon after the last one is part of a drag: the shown frame scales with it, and the new
+    /// set renders after `settleDelay` of quiet. A live window resize renders when it ends.
     static let dragGap: CFTimeInterval = 0.25
     static let settleDelay: CFTimeInterval = 0.15
+    /// Light's flower: much fainter, so it reads as a texture on the pale ground and the column's falloff shows no
+    /// shape (the mock at full strength looked cut out around a pale blob).
+    static func flowerOpacity(dark: Bool) -> Float { dark ? 1 : 0.4 }
 
     func requestBloom() {
+        // Back on the new-thread page soon after leaving it: the flower shows at rest, no replay.
+        if page == .hero, let left = heroLeftAt, CACurrentMediaTime() - left < LotusArt.replayInterval {
+            bloomRequestedAt = nil
+            syncFlowerMotion()
+            return
+        }
         bloomRequestedAt = CACurrentMediaTime()
-        // The open flower that was showing goes at once; the bloom fades the bud in.
-        if flowerMotionAllowed, flowerSpot != nil {
+        // The open flower that was showing goes at once; the field stays while the bud's frames render.
+        if flowerMotionAllowed, flowerSet != nil {
             CATransaction.begin(); CATransaction.setDisableActions(true)
-            flowerMask.removeAnimation(forKey: "bloom"); flowerMask.removeAnimation(forKey: "idle")
-            flower.removeAnimation(forKey: "fade")
-            flower.opacity = 0
+            flowerMask.removeAnimation(forKey: "bloom")
             CATransaction.commit()
+            stopTurn()
+            showFieldOnly()
         }
         syncFlowerMotion()
         // If the bloom's frames never land, the open flower shows when the wait runs out.
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.bloomPatience + 0.05) { [weak self] in self?.syncFlowerMotion() }
     }
 
-    /// The flower's ink: the accent in dark, its hue at a deep lightness in light so the dots read on the off-white
-    /// ground. Deep cells show it at `LotusArt.deepAlpha` over the ground, the second ink.
-    static func flowerInk(_ palette: Palette, dark: Bool) -> CGColor {
+    /// The flower's ink as sRGB: the accent in dark, its hue at a deep lightness in light so the dots read on the
+    /// off-white ground. Deep cells show it at `LotusArt.deepAlpha` over the ground, the second ink.
+    static func flowerInkRGB(_ palette: Palette, dark: Bool) -> SIMD3<Double> {
         let a = palette.primary.srgb
-        guard !dark else { return CGColor(srgbRed: a.x, green: a.y, blue: a.z, alpha: 1) }
+        guard !dark else { return SIMD3(a.x, a.y, a.z) }
         let o = PictureInk.oklch(srgb: SIMD3(a.x, a.y, a.z))
-        let c = PictureInk.srgb(oklch: LotusArt.lightInk.l, min(o.c, LotusArt.lightInk.c), o.h)
+        return PictureInk.srgb(oklch: LotusArt.lightInk.l, min(o.c, LotusArt.lightInk.c), o.h)
+    }
+
+    static func flowerInk(_ palette: Palette, dark: Bool) -> CGColor {
+        let c = flowerInkRGB(palette, dark: dark)
         return CGColor(srgbRed: c.x, green: c.y, blue: c.z, alpha: 1)
     }
 
-    /// The front page's stage in this view's top-left space, if it reported one.
-    private func flowerStage(_ page: DitherArt.Page, _ front: NSView?) -> LotusArt.Stage? {
+    /// The front page's stage: its content area, and the floor's top, in this view's top-left space.
+    private func flowerStage(_ page: DitherArt.Page, _ front: NSView?) -> (kind: LotusArt.Kind, content: CGRect, floorTop: CGFloat?)? {
         guard page == .hero || page == .thread, let front, let box = Self.stages.object(forKey: front) else { return nil }
-        func topLeft(_ r: NSRect) -> CGRect {
-            let l = convert(r, from: front)
-            return CGRect(x: l.minX, y: bounds.height - l.maxY, width: l.width, height: l.height)
-        }
-        return LotusArt.Stage(kind: box.kind, content: topLeft(box.content), keepOut: box.keepOut.map(topLeft))
+        let l = convert(box.content, from: front)
+        let floor = box.floorTop.map { bounds.height - convert(NSPoint(x: 0, y: $0), from: front).y }
+        // The page starts under the window's band, but the panel, and the art, run to the window's top: the flower and
+        // its field fill the panel from there (the user, 2026-11-21: "it should fully commit even at the top").
+        return (box.kind, CGRect(x: l.minX, y: 0, width: l.width, height: bounds.height - l.minY), floor)
     }
 
     func refreshFlower(palette: Palette, dark: Bool) {
         let (page, front) = self.front
-        guard let stage = flowerStage(page, front), let spot = LotusArt.spot(for: stage) else {
-            flowerSpot = nil
+        guard let stage = flowerStage(page, front),
+              let target = LotusArt.canvas(content: stage.content, cell: DitherArt.gradientUnit) else {
+            flowerContent = nil
             dropFlower()
             return
         }
         if !flowerShownOnce { flowerShownOnce = true; bloomRequestedAt = bloomRequestedAt ?? CACurrentMediaTime() }
+        let now = CACurrentMediaTime()
+        if flowerKind == .hero, stage.kind != .hero { heroLeftAt = now }
+        let moved = flowerContent != nil && stage.content != flowerContent
+        // While the area changes size the shown frame scales with it; the sharp set renders when it settles.
+        let resizing = moved && flowerSet?.key.dark == dark && (window?.inLiveResize == true || now - flowerMovedAt < Self.dragGap)
+        if moved { flowerMovedAt = now }
+        // A resize or the page turning into a thread mid-opening jumps to the flower at rest.
+        if openingPlaying, moved || stage.kind != .hero { cancelOpening() }
+        flowerContent = stage.content
+        flowerKind = stage.kind
+        flowerOpening = stage.kind == .hero ? stage.floorTop.flatMap { LotusArt.opening(content: stage.content, floorTop: $0, cell: DitherArt.gradientUnit) } : nil
+        guard let full = LotusArt.fullCanvas(content: stage.content, cell: DitherArt.gradientUnit) else { dropFlower(); return }
+        flowerTarget = FlowerKey(placement: target, full: full, dark: dark)
+        flowerFloorTop = stage.floorTop
+        flowerResizing = resizing
         CATransaction.begin(); CATransaction.setDisableActions(true)
         flower.backgroundColor = Self.flowerInk(palette, dark: dark)
+        flowerHost.opacity = Self.flowerOpacity(dark: dark)
+        flowerHost.isHidden = false
         CATransaction.commit()
-        let key = FlowerKey(radius: LotusArt.bucket(spot.radius, cell: DitherArt.gradientUnit), dark: dark, kind: stage.kind,
-                            animates: ThemeRuntime.ditherGradientAnimates)
-        let now = CACurrentMediaTime()
-        let moved = spot != flowerSpot || stage.kind != flowerKind
-        // A page change (new thread to thread) or a single change moves with the motion tokens; a drag follows at once.
-        let drag = moved && flowerKind == stage.kind && flowerSpot != nil && now - flowerMovedAt < Self.dragGap
-        let pageChanged = flowerKind != nil && flowerKind != stage.kind
-        if moved { flowerMovedAt = now }
-        let wasHidden = flower.isHidden
-        flowerSpot = spot
-        flowerKind = stage.kind
-        if wasHidden {
-            CATransaction.begin(); CATransaction.setDisableActions(true)
-            flower.isHidden = false
-            CATransaction.commit()
-        }
-        if drag {
-            placeFlower(settled: false, animated: false)
+        if resizing, window?.inLiveResize != true {
             flowerSettle?.cancel()
             let settle = DispatchWorkItem { [weak self] in self?.settleFlower() }
             flowerSettle = settle
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.settleDelay, execute: settle)
-        } else if moved || wasHidden {
-            placeFlower(settled: true, animated: !wasHidden && (pageChanged || flowerSet != nil) && !Motion.reduced)
         }
-        if !drag, flowerSet?.key != key, flowerWanted != key { renderFlower(key) }
+        placeFlower()
+        updateFlowerOverlays(palette: palette, dark: dark)
+        ensureFlowerFrames()
+        syncFlowerMotion()
     }
 
-    /// The drag ended: the flower eases to its bucket's radius and that set renders if it isn't the one showing.
-    private func settleFlower() {
+    /// The drag or resize ended: the set for the new area renders.
+    func settleFlower() {
+        flowerSettle?.cancel()
         flowerSettle = nil
-        guard ThemeRuntime.ditherFlower, flowerSpot != nil else { return }
+        guard flowerResizing else { return }
+        flowerResizing = false
+        flowerMovedAt = 0
         refresh()
-        placeFlower(settled: true, animated: !Motion.reduced)
-        if let spot = flowerSpot, let kind = flowerKind {
-            let key = FlowerKey(radius: LotusArt.bucket(spot.radius, cell: DitherArt.gradientUnit), dark: effectiveAppearance.isDark, kind: kind,
-                                animates: ThemeRuntime.ditherGradientAnimates)
-            if flowerSet?.key != key, flowerWanted != key { renderFlower(key) }
-        }
     }
 
-    /// The flower layer's frame for the spot, in this view's (unflipped) space. Settled, the flower shows at its
-    /// bucket's radius with every dot exactly one cell, its centre on the cell lattice; mid-drag at the spot's own
-    /// radius, the shown set scaled on the GPU.
-    func flowerFrame(settled: Bool) -> CGRect? {
-        guard let spot = flowerSpot else { return nil }
-        let cell = DitherArt.gradientUnit
-        let target = LotusArt.bucket(spot.radius, cell: cell)
-        let radius = flowerSet?.key.radius ?? flowerWanted?.radius ?? target
-        let canvas = LotusArt.canvas(radius: radius)
-        let shownRadius = settled ? CGFloat(target) * cell : spot.radius
-        let k = shownRadius / (CGFloat(radius) * cell)
-        var cx = spot.centre.x, cy = spot.centre.y
-        if settled { cx = (cx / cell).rounded() * cell; cy = (cy / cell).rounded() * cell }
-        let w = CGFloat(canvas.width) * cell * k, h = CGFloat(canvas.height) * cell * k
-        let x = cx - CGFloat(canvas.centreX) * cell * k, y = cy - CGFloat(canvas.centreY) * cell * k
-        return CGRect(x: x, y: bounds.height - y - h, width: w, height: h)
+    /// The flower's frame in this view's (unflipped) space. With the set for the current area, every dot is exactly one
+    /// cell on the art's lattice; while another area's set shows (a resize in progress), it scales to the flower's new
+    /// centre and radius.
+    func flowerFrame() -> CGRect? {
+        guard let set = flowerSet else { return nil }
+        // A resize in progress stretches the shown canvas over the new area until its own set lands.
+        let p = flowerTarget?.full ?? set.key.full, cell = DitherArt.gradientUnit
+        return CGRect(x: CGFloat(p.originX) * cell, y: bounds.height - CGFloat(p.originY + p.height) * cell,
+                      width: CGFloat(p.width) * cell, height: CGFloat(p.height) * cell)
     }
 
-    func placeFlower(settled: Bool, animated: Bool) {
-        guard let frame = flowerFrame(settled: settled) else { return }
-        let from = flower.presentation() ?? flower
-        let old = (position: from.position, bounds: from.bounds)
+    func placeFlower() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        flower.removeAnimation(forKey: "position"); flower.removeAnimation(forKey: "bounds")
-        flower.frame = frame
-        flowerMask.frame = flower.bounds
-        flowerMask.removeAnimation(forKey: "bounds"); flowerMask.removeAnimation(forKey: "position")
-        if animated, old.bounds.width > 0 {
-            for (key, value, layer) in [("position", NSValue(point: old.position), flower),
-                                        ("bounds", NSValue(rect: old.bounds), flower),
-                                        ("bounds", NSValue(rect: CGRect(origin: .zero, size: old.bounds.size)), flowerMask),
-                                        ("position", NSValue(point: CGPoint(x: old.bounds.width / 2, y: old.bounds.height / 2)), flowerMask)] {
-                let a = CABasicAnimation(keyPath: key)
-                a.fromValue = value
-                a.duration = RedesignTokens.Motion.large
-                a.timingFunction = RedesignTokens.Motion.curve
-                layer.add(a, forKey: key)
-            }
+        defer { CATransaction.commit() }
+        if let frame = flowerFrame() {
+            flowerHost.frame = frame
+            for l in [flower, flowerMask, columnLayer] { l.frame = flowerHost.bounds }
         }
-        CATransaction.commit()
+        syncGlow()
     }
 
-    /// Renders `key`'s frames off the main thread, across the cores: the open still, then the bloom, then the idle loop,
-    /// each handed over as it lands.
-    private func renderFlower(_ key: FlowerKey) {
-        flowerJob?.cancel()
-        flowerIncoming = nil
-        let job = FlowerJob()
-        flowerJob = job
-        flowerWanted = key
-        let deliver: @Sendable (FlowerPhase) -> Void = { [weak self] phase in
-            if self == nil { return }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.receiveFlower(phase, key: key, job: job) } }
+    /// The column's still mask over the flower in a thread, and the blurred flower under the floating surfaces, from
+    /// the open frame. Both build on the main thread in about a millisecond, and only when what they show changed.
+    func updateFlowerOverlays(palette: Palette, dark: Bool) {
+        guard let set = flowerSet else { return }
+        let p = set.key.full, cell = DitherArt.gradientUnit
+        var column: ClosedRange<CGFloat>?
+        if flowerKind == .thread, let front = front.view, let lane = Self.columns.object(forKey: front)?.rectValue {
+            let l = convert(lane, from: front)
+            column = (l.minX / cell).rounded() * cell...(l.maxX / cell).rounded() * cell
         }
-        if rendersInlineForTesting {
-            for phase in Self.flowerPhases(key, job: job) { receiveFlower(phase, key: key, job: job) }
+        let text = palette.foreground.srgb, muted = palette.mutedForeground.srgb, ground = palette.background.srgb
+        let cap = column == nil ? 1 : LotusArt.columnCap(ground: SIMD3(ground.x, ground.y, ground.z), ink: Self.flowerInkRGB(palette, dark: dark),
+                                                         text: SIMD3(text.x, text.y, text.z), muted: SIMD3(muted.x, muted.y, muted.z),
+                                                         opacity: Double(Self.flowerOpacity(dark: dark)), dark: dark)
+        let key = ColumnKey(placement: p, column: column, cap: cap, dark: dark)
+        let glass = RedesignTokens.FlowerGlass.isOn(dark: dark)
+        guard key != columnKey || (glass && glowKey != key) || (!glass && glowKey != nil) else { return }
+        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: cap, dark: dark, cell: cell) }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        if key != columnKey {
+            columnKey = key
+            columnLayer.contents = mask.flatMap { LotusArt.image($0, width: p.width, height: p.height) }
+            flowerHost.mask = mask == nil ? nil : columnLayer
+        }
+        if glass {
+            glowKey = key
+            // A quarter-size copy: the blur is wide, so the detail lost costs nothing, and it builds in about a millisecond.
+            let g = LotusArt.glow(Self.bytes(set.open, width: p.width, height: p.height), over: mask, placement: p,
+                                  radius: RedesignTokens.FlowerGlass.blur, scale: LotusArt.glowScale, cell: cell)
+            glowImage = LotusArt.image(g.pixels, width: g.width, height: g.height)
+            glowPeak = Float(g.pixels.max() ?? 0) / 255
+        } else {
+            glowKey = nil
+            glowImage = nil
+        }
+        syncGlow()
+    }
+
+    /// Publishes the glow to the surfaces over the flower (`FlowerGlassView`): shown once the flower is open, not
+    /// during a bloom, so the surfaces never show a full flower's glow over a bud.
+    func syncGlow() {
+        guard let window else { return }
+        guard let image = glowImage, flowerSet != nil, !flowerHost.isHidden, let frame = flowerFrame() else {
+            if FlowerGlassView.sources.object(forKey: window) != nil { FlowerGlassView.publish(nil, in: window) }
             return
         }
-        DispatchQueue.global(qos: .userInitiated).async {
-            var phases = Self.flowerPhasesLazy(key, job: job)
-            while let phase = phases.next() { deliver(phase) }
-        }
+        let now = flowerMask.convertTime(CACurrentMediaTime(), from: nil)
+        let blooming = (flowerMask.animation(forKey: "bloom") != nil && now < bloomEnds) || fieldOnly || openingPlaying
+        let source = FlowerGlassView.Source(image: image, frame: convert(frame, to: nil), ink: flower.backgroundColor ?? .black,
+                                            opacity: flowerHost.opacity, peak: glowPeak, shown: !blooming)
+        if let old = FlowerGlassView.sources.object(forKey: window)?.source, old.image === source.image, old.frame == source.frame,
+           old.shown == source.shown, old.opacity == source.opacity, old.ink == source.ink { return }
+        FlowerGlassView.publish(source, in: window)
     }
 
-    enum FlowerPhase: @unchecked Sendable { case open(CGImage), bloom([CGImage]), idle([CGImage]) }
-
-    nonisolated static func flowerPhases(_ key: FlowerKey, job: FlowerJob) -> [FlowerPhase] {
-        var out: [FlowerPhase] = []
-        var phases = flowerPhasesLazy(key, job: job)
-        while let p = phases.next() { out.append(p) }
+    /// A one-byte-a-pixel image's rows, packed.
+    static func bytes(_ image: CGImage, width w: Int, height h: Int) -> [UInt8] {
+        guard let data = image.dataProvider?.data, let base = CFDataGetBytePtr(data), image.bitsPerPixel == 8 else {
+            return [UInt8](repeating: 0, count: w * h)
+        }
+        var out = [UInt8](repeating: 0, count: w * h)
+        for y in 0..<h { for x in 0..<w { out[y * w + x] = base[y * image.bytesPerRow + x] } }
         return out
     }
 
-    /// The phases one at a time, so each reaches the screen before the next renders.
+    /// What the flower needs now that it doesn't have: the open still for the current area, the bloom while an opening
+    /// waits for it, and the new thread's idle loop while it may turn.
+    func neededFlowerParts() -> FlowerParts {
+        guard let target = flowerTarget, !flowerResizing else { return [] }
+        let have = flowerSet?.key == target ? flowerSet : nil
+        var need: FlowerParts = have == nil ? [.open] : []
+        if flowerMotionAllowed {
+            if bloomRequestedAt != nil, bloomPending, let o = flowerOpening {
+                if have?.opening != o || have?.openingBloom.isEmpty ?? true { need.insert(.opening) }
+                if have?.opening != o || have?.flight.isEmpty ?? true { need.insert(.flight) }
+            } else if bloomRequestedAt != nil, bloomPending, have?.bloom.isEmpty ?? true { need.insert(.bloom) }
+            if flowerKind == .hero, have?.idle.isEmpty ?? true { need.insert(.idle) }
+        }
+        return need
+    }
+
+    func ensureFlowerFrames() {
+        guard let target = flowerTarget else { return }
+        let need = neededFlowerParts()
+        guard !need.isEmpty else { return }
+        if flowerWanted == target, flowerJobParts.isSuperset(of: need), flowerJobOpening == flowerOpening || !need.contains(.opening) { return }
+        renderFlower(target, need.union(flowerWanted == target ? flowerJobParts : []), opening: flowerOpening)
+    }
+
+    /// Renders `parts` of `key` off the main thread, across the cores, each handed over as it lands.
+    private func renderFlower(_ key: FlowerKey, _ parts: FlowerParts, opening: LotusArt.Opening? = nil) {
+        flowerJob?.cancel()
+        let job = FlowerJob()
+        flowerJob = job
+        flowerWanted = key
+        let parts = opening == nil ? parts.subtracting([.opening, .flight]) : parts
+        flowerJobParts = parts
+        flowerJobOpening = opening
+        if rendersInlineForTesting {
+            var phases = Self.flowerPhases(key, parts, opening: opening, fieldT: fieldT, job: job)
+            while let phase = phases.next() { receiveFlower(phase, key: key, job: job) }
+            receiveFlower(.done, key: key, job: job)
+            return
+        }
+        let deliver: @Sendable (FlowerPhase) -> Void = { [weak self] phase in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.receiveFlower(phase, key: key, job: job) } }
+        }
+        let fieldT = fieldT
+        DispatchQueue.global(qos: .userInitiated).async {
+            var phases = Self.flowerPhases(key, parts, opening: opening, fieldT: fieldT, job: job)
+            while let phase = phases.next() { deliver(phase) }
+            deliver(.done)
+        }
+    }
+
+    enum FlowerPhase: @unchecked Sendable {
+        case open(CGImage, [UInt8]), bloom([CGImage]), idle([[UInt8]]), opening(LotusArt.Opening, [CGImage]), flight(LotusArt.Opening, [CGImage]), done
+    }
+
     /// Samples a cell side, 2; tests that render inline take 1, since a debug build renders about 60 times slower.
     @TaskLocal static var flowerSamples = 2
 
-    nonisolated static func flowerPhasesLazy(_ key: FlowerKey, job: FlowerJob) -> AnyIterator<FlowerPhase> {
-        let p = LotusArt.canvas(radius: key.radius)
-        let samples = flowerSamples
-        let density = key.kind == .hero ? LotusArt.heroDensity(p) : nil
-        func masks(_ poses: [LotusArt.Pose]) -> [CGImage]? {
-            job.cancelled ? nil : LotusArt.masks(poses, placement: p, dark: key.dark, inks: 2, density: density, samples: samples)
+    /// The phases one at a time, so each reaches the screen before the next renders.
+    nonisolated static func flowerPhases(_ key: FlowerKey, _ parts: FlowerParts, opening: LotusArt.Opening? = nil, fieldT: Double = 0,
+                                         job: FlowerJob) -> AnyIterator<FlowerPhase> {
+        let p = key.placement, samples = flowerSamples, full = key.full
+        // Every frame shows over the field as it stands when the job starts; the field holds still while they play.
+        let field = LotusArt.field(full, t: fieldT), alpha = LotusArt.fieldAlpha(dark: key.dark)
+        let composed: @Sendable ([UInt8], LotusArt.Placement) -> CGImage? = { codes, on in
+            LotusArt.image(LotusArt.compose(codes: codes, flower: on, full: full, field: field, fieldAlpha: alpha), width: full.width, height: full.height)
         }
+        let stop: @Sendable () -> Bool = { job.cancelled }
         var step = 0
         return AnyIterator {
-            defer { step += 1 }
-            let t0 = DispatchTime.now().uptimeNanoseconds
-            let phase: FlowerPhase?
-            switch step {
-            case 0: phase = masks([LotusArt.openPose]).flatMap(\.first).map(FlowerPhase.open)
-            case 1 where key.animates: phase = masks(LotusArt.bloomPoses()).map(FlowerPhase.bloom)
-            case 2 where key.animates: phase = masks(LotusArt.idlePoses()).map(FlowerPhase.idle)
-            default: return nil
+            // The open still first, then the opening's bloom and move (the bloom plays while the move renders), then
+            // a thread's bloom, then the loop.
+            let order = [0, 3, 4, 1, 2]
+            while step < order.count {
+                defer { step += 1 }
+                guard !job.cancelled else { return nil }
+                let t0 = DispatchTime.now().uptimeNanoseconds
+                let phase: FlowerPhase?
+                switch order[step] {
+                case 3 where parts.contains(.opening):
+                    guard let o = opening else { continue }
+                    let poses = LotusArt.openingBloomPoses()
+                    let density = LotusArt.openingDensity(o, share: 1)
+                    phase = LotusArt.frames(poses.map { ($0, o.bloom) }, dark: key.dark, density: { _ in density }, samples: samples,
+                                            stop: stop, finish: composed).map { FlowerPhase.opening(o, $0) }
+                case 4 where parts.contains(.flight):
+                    guard let o = opening else { continue }
+                    let frames = LotusArt.flightFrames(o)
+                    phase = LotusArt.frames(frames.map { ($0.pose, $0.placement) }, dark: key.dark,
+                                            density: { LotusArt.openingDensity(o, share: frames[$0].thinning) }, samples: samples,
+                                            stop: stop, finish: composed).map { FlowerPhase.flight(o, $0) }
+                case 0 where parts.contains(.open):
+                    let c = LotusArt.cells(LotusArt.openPose, placement: p, samples: samples)
+                    let codes = LotusArt.codes(light: UnsafeBufferPointer(c.light.buffer), cover: UnsafeBufferPointer(c.cover.buffer),
+                                               placement: p, dark: key.dark)
+                    phase = composed(codes, p).map { FlowerPhase.open($0, codes) }
+                case 1 where parts.contains(.bloom):
+                    phase = LotusArt.frames(LotusArt.bloomPoses().map { ($0, p) }, dark: key.dark, density: { _ in nil }, samples: samples,
+                                            stop: stop, finish: composed).map(FlowerPhase.bloom)
+                case 2 where parts.contains(.idle):
+                    phase = LotusArt.packedMasks(LotusArt.idlePoses(), placement: p, dark: key.dark, samples: samples, stop: stop).map(FlowerPhase.idle)
+                default: continue
+                }
+                let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
+                DitherArt.log.notice("flower \(p.width) x \(p.height) cells, part \(order[step]): \(ms, format: .fixed(precision: 1)) ms")
+                if let phase { return phase }
             }
-            let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
-            DitherArt.log.notice("flower \(key.radius) cells, phase \(step): \(p.width) x \(p.height) in \(ms, format: .fixed(precision: 1)) ms")
-            return phase
+            return nil
         }
     }
 
     private func receiveFlower(_ phase: FlowerPhase, key: FlowerKey, job: FlowerJob) {
         guard flowerJob === job, !job.cancelled, ThemeRuntime.ditherFlower else { return }
-        rendersForTesting += 1
         switch phase {
-        case let .open(image): flowerIncoming = FlowerSet(key: key, open: image)
-        case let .bloom(images): flowerIncoming?.bloom = images
-        case let .idle(images): flowerIncoming?.idle = images
+        case let .open(image, codes):
+            rendersForTesting += 1
+            stopTurn()
+            turnIndex = 0
+            flowerSet = FlowerSet(key: key, open: image, openCodes: codes)
+            columnKey = nil; glowKey = nil
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            flowerMask.removeAnimation(forKey: "bloom")
+            flowerMask.contents = image
+            CATransaction.commit()
+            placeFlower()
+            let dark = effectiveAppearance.isDark
+            updateFlowerOverlays(palette: ThemeRuntime.palettes.palette(dark: dark, sidebar: false), dark: dark)
+        case let .bloom(images):
+            rendersForTesting += 1
+            // An opening that gave up waiting keeps no frames it won't play.
+            if flowerSet?.key == key, bloomRequestedAt != nil { flowerSet?.bloom = images }
+        case let .idle(frames):
+            rendersForTesting += 1
+            if flowerSet?.key == key, flowerKind == .hero { flowerSet?.idle = frames }
+        case let .opening(o, frames):
+            rendersForTesting += 1
+            if flowerSet?.key == key, bloomRequestedAt != nil, o == flowerOpening {
+                if flowerSet?.opening != o { flowerSet?.flight = [] }
+                flowerSet?.opening = o
+                flowerSet?.openingBloom = frames
+            }
+        case let .flight(o, frames):
+            rendersForTesting += 1
+            if flowerSet?.key == key, flowerSet?.opening == o, bloomRequestedAt != nil || openingPlaying { flowerSet?.flight = frames }
+            if openingPlaying, openingFly == nil { fly() }
+        case .done:
+            flowerJob = nil; flowerWanted = nil; flowerJobParts = []; flowerJobOpening = nil
+            if let set = flowerSet { DitherArt.log.notice("flower set \(set.key.placement.width) x \(set.key.placement.height) cells: \(set.bytes / 1024) KB") }
         }
-        guard let incoming = flowerIncoming else { return }
-        let done = !key.animates || !incoming.idle.isEmpty
-        if done { flowerWanted = nil; flowerJob = nil; flowerIncoming = nil }
-        // A set already turning keeps turning until the new idle loop is ready, then hands over on the same frame, so
-        // a settled resize never jumps the flower's turn. A first set, an opening and a still show at once.
-        let turning = flowerSet != nil && flowerMask.animation(forKey: "idle") != nil
-        guard flowerSet?.key != key else {
-            flowerSet = incoming
-            syncFlowerMotion()
-            return
-        }
-        // A bloom in progress carries over to the new set's frames at the same moment, once they are here.
-        let now = flowerMask.convertTime(CACurrentMediaTime(), from: nil)
-        let midBloom = flowerMask.animation(forKey: "bloom") != nil && now < bloomEnds
-        // The other appearance's masks read wrong under the new ink, so they hand over at once too.
-        let appearance = flowerSet?.key.dark != key.dark
-        guard done || !turning || bloomPending || appearance || (midBloom && !incoming.bloom.isEmpty) else { return }
-        let index = flowerSet.flatMap { old in
-            flowerMask.presentation()?.contents.flatMap { held in old.idle.firstIndex { $0 === (held as AnyObject) } }
-        }
-        flowerSet = incoming
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        flowerMask.removeAnimation(forKey: "bloom"); flowerMask.removeAnimation(forKey: "idle")
-        flowerMask.contents = index.flatMap { incoming.idle.indices.contains($0) ? incoming.idle[$0] : nil } ?? incoming.open
-        if midBloom, !incoming.bloom.isEmpty { addBloom(incoming, ends: bloomEnds) }
-        CATransaction.commit()
-        // The new canvas differs in size: the frame follows, at the same size on screen.
-        placeFlower(settled: flowerSettle == nil, animated: false)
-        if !bloomPending { showOpenFlower() }
-        if done { DitherArt.log.notice("flower set \(key.radius) cells: \(incoming.bytes / 1024) KB") }
         syncFlowerMotion()
     }
 
-    /// Whether a fresh opening still waits for its bloom: while its frames render, or for `bloomPatience` after.
+    /// Whether a fresh opening still waits for its bloom.
     var bloomPending: Bool {
         guard let at = bloomRequestedAt else { return false }
-        return flowerJob != nil || CACurrentMediaTime() - at < Self.bloomPatience
+        return CACurrentMediaTime() - at < Self.bloomPatience
     }
 
     var flowerMotionAllowed: Bool {
         ThemeRuntime.ditherFlower && ThemeRuntime.ditherGradientAnimates && !Motion.reduced && windowIsActive
-            && flowerSpot != nil && !flower.isHidden
+            && flowerContent != nil && !flowerHost.isHidden
     }
 
-    private func showOpenFlower() {
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        flower.removeAnimation(forKey: "fade")
-        flower.opacity = 1
-        if let open = flowerSet?.open, flowerMask.animationKeys()?.isEmpty ?? true { flowerMask.contents = open }
-        CATransaction.commit()
-    }
-
-    /// The flower moves only while it can be seen and wanted, as Gradient does: Flower with Animate on, the window
-    /// active, Reduce Motion off, the flower on its page. An opening plays the bloom once, bud to open, and the idle
-    /// loop follows from the open flower, the bloom's last frame. Anything else removes the animations and holds the
-    /// open flower (not the bud), so nothing runs while idle.
+    /// The flower moves only while it can be seen and wanted: Flower with Animate on, the window active, Reduce Motion
+    /// off. An opening plays the bloom once, bud to open; then a thread holds the open flower still (turning dots
+    /// flicker behind text) and the new thread turns slowly. Anything else stops and holds the open flower or the turn's
+    /// frame, so nothing runs while the flower rests.
     func syncFlowerMotion() {
-        guard let set = flowerSet else { return }
+        guard let set = flowerSet, flowerContent != nil else { stopTurn(); return }
         let now = flowerMask.convertTime(CACurrentMediaTime(), from: nil)
         let blooming = flowerMask.animation(forKey: "bloom") != nil && now < bloomEnds
-        let idling = flowerMask.animation(forKey: "idle") != nil
+        defer { syncGlow() }
         guard flowerMotionAllowed else {
             bloomRequestedAt = nil
-            guard blooming || idling || flower.opacity < 1 || flowerMask.animation(forKey: "bloom") != nil else { return }
-            CATransaction.begin(); CATransaction.setDisableActions(true)
-            // Hold what shows: the idle frame on screen, or the open flower over a bloom cut short.
-            let held = !blooming && idling ? flowerMask.presentation()?.contents : nil
-            flowerMask.removeAnimation(forKey: "bloom"); flowerMask.removeAnimation(forKey: "idle")
-            flowerMask.contents = held ?? set.open
-            flower.removeAnimation(forKey: "fade")
-            flower.opacity = 1
-            CATransaction.commit()
-            return
-        }
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        defer { CATransaction.commit() }
-        if bloomPending, !set.bloom.isEmpty {
-            bloomRequestedAt = nil
-            flowerMask.removeAnimation(forKey: "idle")
-            flowerMask.contents = set.open
-            addBloom(set, ends: now + Self.bloomDuration(set))
-            // The bud's first frames are a few scattered dots: they fade in rather than pop.
-            let fade = CABasicAnimation(keyPath: "opacity")
-            fade.fromValue = 0
-            fade.toValue = 1
-            fade.duration = LotusArt.bloomFadeIn
-            fade.beginTime = flower.convertTime(CACurrentMediaTime(), from: nil)
-            fade.fillMode = .backwards
-            flower.opacity = 1
-            flower.add(fade, forKey: "fade")
-        } else if bloomPending {
-            // Waiting for the bloom's frames: the flower stays out until they land, or the wait runs out.
-            if !blooming, flower.opacity != 0 { flower.opacity = 0 }
-            return
-        } else if flower.opacity < 1, !blooming {
-            flower.opacity = 1
-        }
-        guard flowerMask.animation(forKey: "idle") == nil, set.idle.count > 1 else { return }
-        let idle = CAKeyframeAnimation(keyPath: "contents")
-        idle.values = set.idle
-        idle.calculationMode = .discrete
-        idle.keyTimes = (0...set.idle.count).map { NSNumber(value: Double($0) / Double(set.idle.count)) }
-        idle.duration = LotusArt.idlePeriod
-        idle.repeatCount = .infinity
-        idle.isRemovedOnCompletion = false
-        if flowerMask.animation(forKey: "bloom") != nil, now < bloomEnds {
-            // Straight after the bloom, from the open flower it ends on.
-            idle.beginTime = bloomEnds
-        } else {
-            flowerMask.removeAnimation(forKey: "bloom")
-            idle.beginTime = now
-            // Resume from the frame it holds, so starting again never jumps.
-            if let held = flowerMask.contents, let i = set.idle.firstIndex(where: { $0 === (held as AnyObject) }) {
-                idle.timeOffset = LotusArt.idlePeriod * Double(i) / Double(set.idle.count)
+            stopTurn()
+            if openingPlaying || !set.openingBloom.isEmpty || !set.flight.isEmpty { cancelOpening() }
+            if flowerMask.animation(forKey: "bloom") != nil || fieldOnly || !set.bloom.isEmpty { endBloom() }
+            // Animate off and Reduce Motion show the open flower and hold no loop. A window in the background keeps
+            // the turn's frame and the packed loop, so coming back resumes where it stopped.
+            if !ThemeRuntime.ditherGradientAnimates || Motion.reduced || flowerKind != .hero {
+                flowerSet?.idle = []
+                turnIndex = 0
+                if flowerMask.contents as AnyObject? !== flowerSet?.open {
+                    recomposeOpen()
+                    CATransaction.begin(); CATransaction.setDisableActions(true); flowerMask.contents = flowerSet?.open; CATransaction.commit()
+                }
             }
+            return
         }
-        flowerMask.add(idle, forKey: "idle")
+        if bloomRequestedAt != nil, bloomPending, let o = flowerOpening, flowerKind == .hero {
+            guard set.opening == o, !set.openingBloom.isEmpty else {
+                if !openingPlaying { showFieldOnly() }
+                ensureFlowerFrames()
+                return
+            }
+            bloomRequestedAt = nil
+            startOpening(set)
+            ensureFlowerFrames()
+            return
+        } else if bloomRequestedAt != nil, bloomPending {
+            guard !set.bloom.isEmpty else {
+                // Waiting for the bloom's frames: the field alone shows until they land, or the wait runs out.
+                if !blooming { showFieldOnly() }
+                ensureFlowerFrames()
+                return
+            }
+            bloomRequestedAt = nil
+            startBloom(set)
+        } else if openingPlaying {
+            return
+        } else if bloomRequestedAt != nil || fieldOnly {
+            // The wait ran out: the open flower.
+            bloomRequestedAt = nil
+            fieldOnly = false
+            CATransaction.begin(); CATransaction.setDisableActions(true); flowerMask.contents = set.open; CATransaction.commit()
+        }
+        guard flowerKind == .hero else {
+            stopTurn()
+            if !set.idle.isEmpty { flowerSet?.idle = [] }
+            return
+        }
+        ensureFlowerFrames()
+        guard !openingPlaying, let idle = flowerSet?.idle, idle.count > 1, turnTimer == nil else { return }
+        let nowBloom = flowerMask.animation(forKey: "bloom") != nil && now < bloomEnds
+        startTurn(after: nowBloom ? bloomEnds - now : 0, frames: idle.count)
     }
 
     static func bloomDuration(_ set: FlowerSet) -> CFTimeInterval { Double(set.bloom.count + 1) / LotusArt.bloomFPS }
 
-    /// The bloom's frames then the open flower, held, ending at `ends` in the mask's time.
-    private func addBloom(_ set: FlowerSet, ends: CFTimeInterval) {
+    /// The bloom's frames then the open flower, held, fading the bud in; the frames go once it has played.
+    private func startBloom(_ set: FlowerSet) {
+        let now = flowerMask.convertTime(CACurrentMediaTime(), from: nil)
         let values = set.bloom + [set.open]
+        let duration = Self.bloomDuration(set)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        stopTurn()
+        turnIndex = 0
+        flowerMask.contents = set.open
         let bloom = CAKeyframeAnimation(keyPath: "contents")
         bloom.values = values
         bloom.calculationMode = .discrete
         bloom.keyTimes = (0...values.count).map { NSNumber(value: Double($0) / Double(values.count)) }
-        bloom.duration = Self.bloomDuration(set)
-        bloom.beginTime = ends - bloom.duration
+        bloom.duration = duration
+        bloom.beginTime = now
         bloom.fillMode = .forwards
         bloom.isRemovedOnCompletion = false
         flowerMask.add(bloom, forKey: "bloom")
-        bloomEnds = ends
+        bloomEnds = now + duration
+        // The field stays put under the bud, so the layer never fades; the bud starts a little open instead.
+        fieldOnly = false
+        CATransaction.commit()
+        bloomDone?.cancel()
+        let done = DispatchWorkItem { [weak self] in self?.endBloom() }
+        bloomDone = done
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.05, execute: done)
     }
 
-    /// The flower's frames go when its page, its spot or the window does; they render again when it shows.
+    /// The bloom is over or cut short: the open flower (or the turn's frame) shows and the bloom's frames go.
+    func endBloom() {
+        fieldOnly = false
+        bloomDone?.cancel()
+        bloomDone = nil
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        flowerMask.removeAnimation(forKey: "bloom")
+        flower.removeAnimation(forKey: "fade")
+        flower.opacity = 1
+        if turnTimer == nil, let open = flowerSet?.open { flowerMask.contents = open }
+        CATransaction.commit()
+        flowerSet?.bloom = []
+        syncGlow()
+    }
+
+    /// The opening's first beat: the bloom above the composer on the full canvas, the bud fading in. The move follows
+    /// after `LotusArt.flight.hold`, or as soon as its frames land after that.
+    private func startOpening(_ set: FlowerSet) {
+        guard set.opening != nil else { return }
+        openingPlaying = true
+        stopTurn()
+        turnIndex = 0
+        let now = flowerMask.convertTime(CACurrentMediaTime(), from: nil)
+        let values = set.openingBloom
+        let duration = Double(values.count) / LotusArt.bloomFPS
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        placeFlower()
+        flowerMask.removeAnimation(forKey: "flight")
+        flowerMask.contents = values.last
+        let bloom = CAKeyframeAnimation(keyPath: "contents")
+        bloom.values = values
+        bloom.calculationMode = .discrete
+        bloom.keyTimes = (0...values.count).map { NSNumber(value: Double($0) / Double(values.count)) }
+        bloom.duration = duration
+        bloom.beginTime = now
+        bloom.fillMode = .forwards
+        bloom.isRemovedOnCompletion = false
+        flowerMask.add(bloom, forKey: "bloom")
+        bloomEnds = now + duration
+        fieldOnly = false
+        CATransaction.commit()
+        openingFly?.cancel()
+        let fly = DispatchWorkItem { [weak self] in self?.openingFly = nil; self?.fly() }
+        openingFly = fly
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + LotusArt.flight.hold, execute: fly)
+        syncGlow()
+    }
+
+    /// The second beat, once the hold is over and the move's frames are here; until then the open bloom holds.
+    func fly() {
+        guard openingPlaying, openingFly == nil, let set = flowerSet, !set.flight.isEmpty,
+              flowerMask.convertTime(CACurrentMediaTime(), from: nil) >= bloomEnds + LotusArt.flight.hold - 0.02 else { return }
+        let values = set.flight
+        let duration = LotusArt.flight.duration
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let move = CAKeyframeAnimation(keyPath: "contents")
+        // The frames sit between the bloom's last and the resting one, which the landing shows.
+        move.values = values
+        move.calculationMode = .discrete
+        move.keyTimes = (0...values.count).map { NSNumber(value: Double($0) / Double(values.count)) }
+        move.duration = duration
+        move.beginTime = flowerMask.convertTime(CACurrentMediaTime(), from: nil)
+        move.fillMode = .forwards
+        move.isRemovedOnCompletion = false
+        flowerMask.removeAnimation(forKey: "bloom")
+        flowerMask.add(move, forKey: "flight")
+        flowerSet?.openingBloom = []
+        CATransaction.commit()
+        openingLand?.cancel()
+        let land = DispatchWorkItem { [weak self] in self?.openingLand = nil; self?.land() }
+        openingLand = land
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: land)
+    }
+
+    /// The move's end: the resting canvas and frame in one transaction (the move's last frame is the step before it),
+    /// the opening's frames freed, the turn started.
+    func land() {
+        guard openingPlaying else { return }
+        openingPlaying = false
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        flowerMask.removeAnimation(forKey: "flight")
+        flowerMask.removeAnimation(forKey: "bloom")
+        if let open = flowerSet?.open { flowerMask.contents = open }
+        flowerSet?.flight = []
+        flowerSet?.openingBloom = []
+        flowerSet?.opening = nil
+        placeFlower()
+        CATransaction.commit()
+        if let set = flowerSet { DitherArt.log.notice("flower landed: \(set.bytes / 1024) KB held") }
+        syncFlowerMotion()
+    }
+
+    /// The opening stops where it is and the flower shows at rest: a resize, the page leaving or turning into a thread,
+    /// Reduce Motion or the window going.
+    func cancelOpening() {
+        fieldOnly = false
+        openingFly?.cancel(); openingFly = nil
+        openingLand?.cancel(); openingLand = nil
+        let was = openingPlaying
+        openingPlaying = false
+        flowerSet?.flight = []
+        flowerSet?.openingBloom = []
+        flowerSet?.opening = nil
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        flowerMask.removeAnimation(forKey: "flight")
+        flowerMask.removeAnimation(forKey: "bloom")
+        flower.removeAnimation(forKey: "fade")
+        flower.opacity = 1
+        if was, let open = flowerSet?.open { flowerMask.contents = open }
+        CATransaction.commit()
+        if was { placeFlower() }
+    }
+
+    /// The field with no flower, while an opening waits for its bud: the ground is already there when the bloom starts.
+    func showFieldOnly() {
+        guard let set = flowerSet, !fieldOnly else { return }
+        let full = set.key.full
+        let shown = LotusArt.compose(codes: nil, flower: set.key.placement, full: full, field: LotusArt.field(full, t: fieldT),
+                                     fieldAlpha: LotusArt.fieldAlpha(dark: set.key.dark))
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        flowerMask.contents = LotusArt.image(shown, width: full.width, height: full.height)
+        flower.opacity = 1
+        CATransaction.commit()
+        fieldOnly = true
+    }
+
+    /// Turns from the frame it holds, `delay` seconds from now.
+    private func startTurn(after delay: CFTimeInterval, frames n: Int) {
+        let step = LotusArt.idlePeriod / Double(n)
+        turnStart = CACurrentMediaTime() + delay - Double(turnIndex) * step
+        fieldStart = CACurrentMediaTime() + delay - fieldT * DitherArt.gradientPeriod
+        let timer = Timer(fire: Date(timeIntervalSinceNow: delay), interval: step, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.turnTick() }
+        }
+        timer.tolerance = step / 10
+        RunLoop.main.add(timer, forMode: .common)
+        turnTimer = timer
+    }
+
+    /// One step of the new thread's motion: the flower's turn and the field's drift, composed into one frame, only when
+    /// either moved on a step.
+    private func turnTick() {
+        guard let set = flowerSet, !set.idle.isEmpty else { stopTurn(); return }
+        let n = set.idle.count, now = CACurrentMediaTime()
+        let i = (Int(((now - turnStart) / LotusArt.idlePeriod * Double(n)).rounded(.down)) % n + n) % n
+        let steps = DitherArt.gradientPeriod * DitherArt.gradientFPS
+        let ft = ((((now - fieldStart) / DitherArt.gradientPeriod * steps).rounded(.down)).truncatingRemainder(dividingBy: steps) + steps)
+            .truncatingRemainder(dividingBy: steps) / steps
+        let animates = ThemeRuntime.ditherGradientAnimates
+        guard i != turnIndex || ft != fieldT || flowerMask.animation(forKey: "bloom") != nil else { return }
+        turnIndex = i
+        if animates { fieldT = ft }
+        let p = set.key.placement, full = set.key.full
+        let codes = LotusArt.unpack(set.idle[i], count: p.width * p.height)
+        let shown = LotusArt.compose(codes: codes, flower: p, full: full, field: LotusArt.field(full, t: fieldT),
+                                     fieldAlpha: LotusArt.fieldAlpha(dark: set.key.dark))
+        guard let image = LotusArt.image(shown, width: full.width, height: full.height) else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        flowerMask.removeAnimation(forKey: "bloom")
+        flowerMask.contents = image
+        CATransaction.commit()
+    }
+
+    /// The open flower over the field where it stands now, as `open`.
+    func recomposeOpen() {
+        guard let set = flowerSet, !set.openCodes.isEmpty else { return }
+        let full = set.key.full
+        let shown = LotusArt.compose(codes: set.openCodes, flower: set.key.placement, full: full, field: LotusArt.field(full, t: fieldT),
+                                     fieldAlpha: LotusArt.fieldAlpha(dark: set.key.dark))
+        if let image = LotusArt.image(shown, width: full.width, height: full.height) { flowerSet?.open = image }
+    }
+
+    func stopTurn() {
+        turnTimer?.invalidate()
+        turnTimer = nil
+    }
+
+    /// The flower's frames go when its page or the window does; they render again when it shows.
     func dropFlower() {
+        fieldOnly = false
+        if flowerKind == .hero { heroLeftAt = CACurrentMediaTime() }
+        openingFly?.cancel(); openingFly = nil
+        openingLand?.cancel(); openingLand = nil
+        openingPlaying = false
         flowerJob?.cancel()
         flowerJob = nil
         flowerWanted = nil
-        flowerIncoming = nil
+        flowerJobParts = []
         flowerSettle?.cancel()
         flowerSettle = nil
+        bloomDone?.cancel()
+        bloomDone = nil
+        stopTurn()
         flowerSet = nil
         flowerKind = nil
+        flowerTarget = nil
+        flowerResizing = false
+        columnKey = nil
+        glowKey = nil
         CATransaction.begin(); CATransaction.setDisableActions(true)
         flowerMask.removeAllAnimations()
         flower.removeAllAnimations()
         flowerMask.contents = nil
+        columnLayer.contents = nil
+        glowImage = nil
+        flowerHost.mask = nil
         flower.opacity = 1
-        flower.isHidden = true
+        flowerHost.isHidden = true
         CATransaction.commit()
+        if let window { FlowerGlassView.publish(nil, in: window) }
     }
 
     var flowerBloomingForTesting: Bool { flowerMask.animation(forKey: "bloom") != nil }
-    var flowerIdlingForTesting: Bool { flowerMask.animation(forKey: "idle") != nil }
+    var flowerIdlingForTesting: Bool { turnTimer != nil }
     var flowerContentsForTesting: CGImage? { flowerMask.contents.map { $0 as! CGImage } }
 }
 
 private struct DitherArtImage: @unchecked Sendable { let image: CGImage? }
 private final class EmphasisBox { let emphasis: DitherArtView.Emphasis; init(emphasis: DitherArtView.Emphasis) { self.emphasis = emphasis } }
-private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 
 /// The art's rendering. Touches no AppKit view, so it runs on any thread.
 public enum DitherArt {
@@ -1117,12 +1405,7 @@ public enum DitherArt {
         var fallbacks: [URL] = []
         /// Blurred and smooth instead of dithered (`ThemeRuntime.ditherBlur`); the canvas is in `blurPixel`s.
         var blur = false
-        /// Gradient (`ThemeRuntime.ditherGradient`): no picture, halftone dots in this sRGB accent over the top left;
-        /// the canvas is in `gradientUnit`s and covers `gradientReach` of the panel.
-        var tint: [Double]?
         var dark = true
-        /// Gradient's frame count: the loop, or 1 when Animate is off.
-        var frames = 1
         /// Picture: where the two inks come from, the page's shape over the dots, and the body and muted text colors
         /// (sRGB, six values) whose floors hold behind a thread's column.
         var ink = PictureInk.Choice.auto
@@ -1132,7 +1415,7 @@ public enum DitherArt {
         var dot: CGFloat = DitherDotSize.medium.points(scale: 2)
 
         /// Points per canvas pixel.
-        var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : blur ? DitherArt.blurPixel : dot }
+        var unit: CGFloat { blur ? DitherArt.blurPixel : dot }
     }
 
     /// Gradient's cell, in points: Capy's binary dither cells measured 6px at 2x in the user's recording.
@@ -1166,43 +1449,6 @@ public enum DitherArt {
             f += a * exp(-d * d)
         }
         return min(1, f)
-    }
-
-    /// Gradient's frames: one alpha mask per frame, a cell per pixel, on where the field beats the cell's Bayer
-    /// threshold, the way Capy's cells switch on and off on a fixed grid. One frame when `frames` is 1. The field is a
-    /// row profile times a linear falloff down the canvas, so a frame costs one multiply per cell.
-    nonisolated static func gradientFrames(width w: Int, height h: Int, frames: Int) -> [CGImage] {
-        guard w > 0, h > 0, frames > 0 else { return [] }
-        let fall = (0..<h).map { y -> Double in 1 - (Double(y) + 0.5) / Double(h) }
-        var out: [CGImage] = []
-        out.reserveCapacity(frames)
-        var row = [Double](repeating: 0, count: w)
-        for i in 0..<frames {
-            let t = Double(i) / Double(frames)
-            for x in 0..<w { row[x] = gradientField((Double(x) + 0.5) / Double(w), t) }
-            guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
-                                      bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
-                  let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h) else { return [] }
-            // Row 0 of the buffer is the top of the canvas.
-            for y in 0..<h {
-                let b = (y & 7) * 8, f = fall[y]
-                for x in 0..<w {
-                    data[y * w + x] = row[x] * f > (Double(bayer[b + (x & 7)]) + 0.5) / 64 ? 255 : 0
-                }
-            }
-            guard let image = ctx.makeImage() else { return [] }
-            out.append(image)
-        }
-        return out
-    }
-
-    /// Gradient's one cell color: the accent mixed into the ground, dim like Capy's navy (#26314b at most). Light
-    /// takes 0.32: at 0.22 teal on the off-white ground was #c3dedb, under 1.3:1, and the field barely showed. At
-    /// 0.32 it is #abd3cf, 1.5:1, close to the 1.7:1 step that dark's 0.36 makes.
-    nonisolated static func gradientColor(tint: [Double], background: [Double], dark: Bool) -> CGColor {
-        let share = dark ? 0.36 : 0.32
-        let c = (0..<3).map { background[$0] + (tint[$0] - background[$0]) * share }
-        return CGColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: 1)
     }
 
     nonisolated static func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double {
@@ -1244,7 +1490,6 @@ public enum DitherArt {
     nonisolated static func render(_ request: Request) -> CGImage? {
         let w = request.width, h = request.height
         guard w > 0, h > 0 else { log.error("no art: the canvas is \(w) x \(h) dots"); return nil }
-        if request.tint != nil { return gradientFrames(width: w, height: h, frames: 1).first }
         if request.url == nil { log.notice("no chosen or desktop picture") }
         if !request.blur { return renderInk(request) }
         for url in [request.url].compactMap({ $0 }) + request.fallbacks {

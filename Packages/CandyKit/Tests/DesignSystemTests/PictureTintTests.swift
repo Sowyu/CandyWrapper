@@ -40,13 +40,13 @@ struct PictureTintTests {
         off.pictureTint = PictureTint.tint(of: Self.solid(1, 0.5, 0))
         off.ditherTintFromPicture = false
         #expect(Self.same(ThemeRuntime.resolve(off), today))
-        // Gradient has no picture, so it takes no tint.
-        var gradient = off
-        gradient.ditherTintFromPicture = true
-        gradient.ditherGradient = true
-        var gradientToday = Self.redesign(blur: blur)
-        gradientToday.ditherGradient = true
-        #expect(Self.same(ThemeRuntime.resolve(gradient), ThemeRuntime.resolve(gradientToday)))
+        // Flower has no picture, so it takes no tint.
+        var flower = off
+        flower.ditherTintFromPicture = true
+        flower.ditherFlower = true
+        var flowerToday = Self.redesign(blur: blur)
+        flowerToday.ditherFlower = true
+        #expect(Self.same(ThemeRuntime.resolve(flower), ThemeRuntime.resolve(flowerToday)))
         // On, it changes the palette; the default themes never take it.
         var on = off
         on.ditherTintFromPicture = true

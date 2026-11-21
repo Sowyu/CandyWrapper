@@ -50,11 +50,9 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherDim = 35
     /// Redesign's "Background": the picture blurred behind the whole window instead of dithered in the main panel.
     public var ditherBlur = false
-    /// Redesign's "Background" is Gradient: no picture, a halftone in the accent at the top left of a new thread.
-    public var ditherGradient = false
-    /// Redesign's "Background" is Flower: no picture, a dithered lotus on a new thread and beside a thread's column.
+    /// Redesign's "Background" is Flower: no picture, a dithered lotus over a field of accent dots.
     public var ditherFlower = false
-    /// Gradient's dots and Flower's lotus move (the "Animate background" setting, stored as `redesignGradientAnimate`).
+    /// Flower's lotus and field move (the "Animate background" setting, stored as `redesignGradientAnimate`).
     public var ditherGradientAnimates = true
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
@@ -95,11 +93,10 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var ditherDim: CGFloat = 0.35
     /// Redesign's "Background" is Blur: the picture blurred behind the whole window (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherBlur = false
-    /// Redesign's "Background" is Gradient: accent dots on a new thread, plain ground everywhere else (`DitherArtView`).
-    nonisolated(unsafe) public private(set) static var ditherGradient = false
-    /// Redesign's "Background" is Flower: a dithered lotus on a new thread and beside a thread's column (`DitherArtView`).
+    /// Redesign's "Background" is Flower: a large dithered lotus rising from the bottom of the page over a field of
+    /// accent dots, thinned behind the reading column (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherFlower = false
-    /// The "Animate background" setting, for Gradient and Flower.
+    /// The "Animate background" setting, for Flower.
     nonisolated(unsafe) public private(set) static var ditherGradientAnimates = true
     /// Picture's "Ink" setting.
     nonisolated(unsafe) public private(set) static var ditherInk = DitherInk.auto
@@ -135,7 +132,7 @@ public enum ThemeRuntime {
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
             || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
-            || ((next.ditherBlur != old.ditherBlur || next.ditherGradient != old.ditherGradient || next.ditherFlower != old.ditherFlower
+            || ((next.ditherBlur != old.ditherBlur || next.ditherFlower != old.ditherFlower
                  || next.ditherTintFromPicture != old.ditherTintFromPicture || next.pictureTint != old.pictureTint)
                 && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
@@ -156,9 +153,7 @@ public enum ThemeRuntime {
             ditherBlur = next.ditherBlur
             changed = true
         }
-        if next.ditherGradient != old.ditherGradient || next.ditherGradientAnimates != old.ditherGradientAnimates
-            || next.ditherFlower != old.ditherFlower {
-            ditherGradient = next.ditherGradient
+        if next.ditherGradientAnimates != old.ditherGradientAnimates || next.ditherFlower != old.ditherFlower {
             ditherFlower = next.ditherFlower
             ditherGradientAnimates = next.ditherGradientAnimates
             changed = true
@@ -295,8 +290,10 @@ public enum ThemeRuntime {
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
                 // Picture lays no dim, so its muted text keeps the colors of the default 35%; "Background dim"
                 // changes nothing there. Its render holds the text's floor behind the column (`PictureInk.textBound`).
-                // Flower counts as Picture here: it never sits behind text (`LotusArt.spot`).
-                let picture = !input.ditherBlur && !input.ditherGradient
+                // Flower counts as Picture here: it does sit behind a thread's text, but a still mask thins and dims it
+                // behind the reading column so body text keeps 12:1 and muted 6:1 in dark, 4.5:1 in light
+                // (`LotusArt.columnCap`, `LotusArt.columnMask`).
+                let picture = !input.ditherBlur
                 let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
                                                                          dim: picture ? DitherArt.defaultDim : Double(min(max(input.ditherDim, 0), 90)) / 100))
                 let members = palette.members
@@ -309,9 +306,9 @@ public enum ThemeRuntime {
             }
             return palette
         }
-        // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Gradient and Flower have no picture.
+        // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Flower has no picture.
         func tinted(_ palette: Palette, dark: Bool) -> Palette {
-            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherGradient, !input.ditherFlower,
+            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherFlower,
                   dark ? input.ditherDark : input.ditherLight else { return palette }
             return PictureTint.apply(tint, to: palette)
         }
