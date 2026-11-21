@@ -1322,6 +1322,8 @@ final class ThreadController {
         if !opened, dither, gallery.isOpen { readSubagentCosts() }
         if opened || projection == nil { syncGalleryChildren() }
         var next: ThreadCostEstimate.Breakdown?
+        // Redesign's model picker prices "a turn for you" from these.
+        if dither, let projection { ModelTurnCosts.shared.record(projection) }
         if dither, let projection, let id {
             let byParent = subagentShellsByParent()
             next = ThreadCostEstimate.breakdown(projection, id: id) { [subagentCosts, readingSubagentCosts] parent in

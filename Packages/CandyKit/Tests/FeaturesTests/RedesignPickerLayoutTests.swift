@@ -6,9 +6,15 @@ import T3Store
 @testable import Features
 
 /// Redesign's docked model picker as one 335pt column (the user's layout, 2026-11-20): provider tabs, search, the list,
-/// the Reasoning section with its levels in one segmented line, and the footer.
-@MainActor @Suite struct RedesignPickerLayoutTests {
+/// the Reasoning section with its levels in one segmented line, and the footer. Settings > Redesign > Stacked model
+/// picker turns it on; ModelPickerDetailTests covers the default details layout.
+@MainActor @Suite(.serialized) struct RedesignPickerLayoutTests {
+    /// Redesign with the stacked picker on, put back after.
     static func withRedesign(_ body: () throws -> Void) rethrows {
+        try RedesignPickerSettings.$stackedOverride.withValue(true) { try withTheme(body) }
+    }
+
+    static func withTheme(_ body: () throws -> Void) rethrows {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         var input = previous
@@ -263,11 +269,9 @@ import T3Store
 
     /// Settings > Redesign's two picker switches, set for `body` and put back after.
     static func withPicker(stacked: Bool, account: Bool, _ body: () throws -> Void) rethrows {
-        let store = ClientSettingsStore.shared
-        let before = ["redesignStackedPicker": store.current["redesignStackedPicker"], "redesignPickerAccount": store.current["redesignPickerAccount"]]
-        defer { store.update(before) }
-        store.update(["redesignStackedPicker": .bool(stacked), "redesignPickerAccount": .bool(account)])
-        try RedesignPickerLayoutTests.withRedesign(body)
+        try RedesignPickerSettings.$stackedOverride.withValue(stacked) {
+            try RedesignPickerSettings.$accountOverride.withValue(account) { try RedesignPickerLayoutTests.withTheme(body) }
+        }
     }
 
     private static func cards(_ view: NSView) -> [DitherProviderCardView] {
@@ -280,13 +284,16 @@ import T3Store
             let dock = RedesignPickerLayoutTests.dock(models: 4)
             RedesignPickerLayoutTests.lay(dock)
             let picker = dock.picker
-            #expect(dock.stacked == stacked && dock.column.stacked == stacked && dock.footer.stacked == stacked)
+            // Both layouts put Reasoning under the list as a segmented track and wrap the footer.
+            #expect(dock.stacked == stacked && dock.detailed == !stacked && dock.column.stacked && dock.footer.stacked)
             if stacked {
                 #expect(dock.bounds.width == 335 && dock.column.frame.minY == picker.frame.maxY)
             } else {
-                // Two columns: the list and Reasoning side by side over the footer.
-                #expect(dock.bounds.width == picker.frame.width + ComposerEffortColumnView.width)
-                #expect(dock.column.frame.minX == picker.frame.maxX && dock.column.frame.minY == 0)
+                // The list and the details pane side by side over Reasoning and the footer; the card tops the pane.
+                #expect(dock.bounds.width == picker.frame.width + dock.pane.frame.width && dock.pane.frame.minX == picker.frame.maxX)
+                #expect(dock.column.frame.minY == picker.frame.maxY && dock.column.frame.minX == 0)
+                #expect(Self.cards(picker).isEmpty && (Self.cards(dock.pane).first != nil) == account)
+                return
             }
             let card = Self.cards(picker).first
             #expect((card != nil) == account)

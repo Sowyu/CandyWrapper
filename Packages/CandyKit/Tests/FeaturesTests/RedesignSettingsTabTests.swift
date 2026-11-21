@@ -38,10 +38,30 @@ import T3Protocol
         #expect(!lib.isRedesignOn && lib.preference == "ocean" && !page.master.isOn)
     }
 
+    @Test func theOldStackedDefaultMovesOnceAndAChosenOffStays() throws {
+        let suite = "picker-move-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        func store(_ stacked: Bool) throws -> ClientSettingsStore {
+            defaults.removePersistentDomain(forName: suite)
+            let doc = JSONValue.object(["redesignStackedPicker": .bool(stacked), "chatWidth": .string("wide")])
+            defaults.set(try JSONEncoder().encode(doc), forKey: ClientSettingsStore.defaultsKey)
+            return ClientSettingsStore(defaults: defaults)
+        }
+        // A stored true is the old default as far as anyone can tell, so it takes the new one, and the rest stays.
+        let moved = try store(true)
+        #expect(!moved.current.bool("redesignStackedPicker") && moved.current.string("chatWidth") == "wide")
+        // Once: turning it back on afterwards survives the next launch.
+        moved.update(["redesignStackedPicker": .bool(true)])
+        #expect(ClientSettingsStore(defaults: defaults).current.bool("redesignStackedPicker"))
+        // A stored false was chosen and stays.
+        #expect(!(try store(false)).current.bool("redesignStackedPicker"))
+    }
+
     @Test func pickerDefaultsForAnUpgrade() {
-        // A stored document from a build without the keys: stacked on, account card off.
+        // A stored document from a build without the keys: the details layout (stacked off), account card off.
         let old = ClientSettings(decoding: .object(["glassOpacity": .number(60)]))
-        #expect(old.bool("redesignStackedPicker"))
+        #expect(!old.bool("redesignStackedPicker"))
         #expect(!old.bool("redesignPickerAccount"))
         // Background is Dither, as 1.15.1 drew it, and Blur reaches the theme runtime.
         #expect(old.string("redesignBackground") == "dither")
