@@ -870,6 +870,8 @@ final class ModelRowView: DSView {
     /// Redesign docked (stacked or detail layout): the check right after the name and the jump key always at the right.
     private let stacked: Bool
     private var check: IconView?
+    /// The stacked layout's NEW badge fits beside the name and the jump key.
+    private var badgeFits = false
 
     init(picker: ModelPickerView, row: ModelPickerRow, index: Int, jumpLabel: String? = nil) {
         self.picker = picker
@@ -1064,6 +1066,7 @@ final class ModelRowView: DSView {
         }
         let checkW: CGFloat = check == nil ? 0 : 8 + 14
         let fixed = checkW + Self.newBadgeWidth(newBadge, name: name.textWidth, room: right - x - checkW)
+        badgeFits = newBadge.map { !$0.isHidden } ?? false
         let nameW = max(0, min(ceil(name.textWidth), right - x - fixed))
         name.frame = NSRect(x: x, y: mid - 19.25 / 2, width: nameW, height: 19.25)
         x += nameW
@@ -1137,10 +1140,9 @@ final class ModelRowView: DSView {
             kbd.frame = NSRect(x: right - w, y: mid - 10, width: w, height: 20)
             right = kbd.frame.minX - 4
         }
-        if let star {
-            star.frame = NSRect(x: right - 24, y: mid - 12, width: 24, height: 24)
-            right = star.frame.minX - 4
-        }
+        // The star shows only on the highlighted row, so the name and badge may use its room; on that row the
+        // badge hides where the star covers it (`updateColors`).
+        if let star { star.frame = NSRect(x: right - 24, y: mid - 12, width: 24, height: 24) }
         if let chevron {
             chevron.frame = NSRect(x: right - 16, y: mid - 8, width: 16, height: 16)
             right = chevron.frame.minX - 6
@@ -1155,6 +1157,7 @@ final class ModelRowView: DSView {
         }
         let checkW: CGFloat = check == nil ? 0 : 8 + 14
         let fixed = checkW + Self.newBadgeWidth(newBadge, name: name.textWidth, room: right - x - checkW)
+        badgeFits = newBadge.map { !$0.isHidden } ?? false
         let nameW = max(0, min(ceil(name.textWidth), right - x - fixed))
         name.frame = NSRect(x: x, y: mid - 10, width: nameW, height: 20)
         x += nameW
@@ -1163,6 +1166,7 @@ final class ModelRowView: DSView {
             let s = newBadge.intrinsicContentSize
             newBadge.frame = NSRect(x: x + 8, y: mid - s.height / 2, width: s.width, height: s.height)
         }
+        updateColors()
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -1184,6 +1188,9 @@ final class ModelRowView: DSView {
             check?.strokeColor = Themed.color(\.contrastForeground)
             star?.isHidden = !highlighted && !(star?.state.hovered ?? false)
             kbd?.isHidden = !highlighted && !stacked
+            if stacked, let newBadge, let star {
+                newBadge.isHidden = !badgeFits || !star.isHidden && newBadge.frame.maxX > star.frame.minX - 4
+            }
             return
         }
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
@@ -1280,6 +1287,7 @@ final class StarButtonView: ControlView {
     }
 
     override func updateLayer() {
+        fill.cornerRadius = DesignGeometry.controlRadius(8, in: self)
         fill.backgroundColor = state.hovered ? Themed.color(\.accent).cgColor(in: self) : nil
         let color = favorite ? Themed.color(\.warning) : (state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground))
         icon.strokeColor = color
