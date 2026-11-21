@@ -41,7 +41,7 @@ The rules that came out of it are in `docs/research/redesign-system.md`:
 
 ## Work for 1.17.0
 
-Suggested order. Items 1 to 7 need no answer from the user.
+Suggested order. Items 1 to 8 need no answer from the user.
 
 ### 1. Video and GIFs in replies
 
@@ -110,27 +110,43 @@ Today (`DitherArtView.swift`, `LotusArt.swift`, placement tested in `LotusPlacem
 What to build:
 
 - The flower fills the content area like a picture would. It is large, it can run off the edges, and the composer, the pills and the conversation sit on top of it. It shows on a thread at every window size.
-- Text still has to read. Behind the reading column, thin and dim the dots the way Picture does (`PictureInk.textBound`, the column rule), or give the column a plain ground if item 8 is a yes. Measure the worst cell.
+- Text still has to read. Behind the reading column, thin and dim the dots the way Picture does (`PictureInk.textBound`, the column rule), or give the column a plain ground if item 9 is a yes. Measure the worst cell.
 - Keep the bloom on opening a thread and the slow idle turn, the stop conditions, the "Animate background" switch and Reduce Motion.
 - A larger flower means larger frames. The release walk already measured 126 MB on the Flower page (item 4). Render at a coarser cell size or fewer frames, and report the footprint. Idle cost with motion stopped must stay at zero.
 - Mock it first: three or four compositions (centred and oversized, low and cropped by the bottom edge, off to one side, a top-down view) on the new-thread page and on a thread, dark and light, as PNG sheets. The user picks before anything is wired in. The standalone renderer tools are in `~/CandyWrapper-research/sandbox/lotus-2026-11-21/tools/`.
 
-### 7. Thin scrollbars and one focus ring
+### 7. Picture dither for dark photos
+
+The user's own wallpaper looks bad in 1.16.0. It is a night photo of three street lamps in fog: almost all black, with bright lamp heads and soft cones of light. Dithered, the whole window is covered in scattered single dots and the lamps are lost. Their words: "wait my one aint look that good??? this is the og photo". Both pictures are in `~/CandyWrapper-research/sandbox/redesign-user-notes/` as `r7-user-wallpaper-streetlamps-original.png` and `-dithered.png`.
+
+Why, in `PictureInk.swift`: the tone map stretches levels from the 1st to the 99th percentile, then lifts any dark picture with a gamma until its median reaches `medianFloor` 0.34 (`lift(median:)`, line 119). That lift was added so dark landscapes did not come out empty. On a photo that is meant to be black it turns sensor noise and faint fog into dots everywhere, and the 3pt grid cannot hold the thin lamp heads.
+
+What to build, with this photo as the test case next to the five from the mockups:
+
+- Tell a low-key photo from an underexposed one. If most of the frame is near black and a small part is bright (look at the histogram: a tall spike at the bottom, a small highlight tail), do not lift the median. Leave black as black.
+- A black point: tones under a small threshold draw no dots at all, so noise cannot speckle the ground.
+- Smooth before thresholding (a small blur at about the cell size) so grain does not flip single cells, while keeping edges of bright shapes.
+- Keep small bright shapes: the lamp heads should come out as solid light-ink cells and the cones of light as a dither gradient that fades into black.
+- Consider one user control in Settings > Redesign beside Ink, only if the automatic choice cannot serve both kinds of photo: "Detail" or "Brightness", with Auto as the default. The old "Background dim" row is inert in Picture today.
+- The agent that collected wallpapers on 2026-11-21 wrote down which photos dither well (`~/CandyWrapper-research/sandbox/wallpapers-2026-11-21/`). Use its rejects as more test cases.
+- Mock the before and after on the user's photo first and show them.
+
+### 8. Thin scrollbars and one focus ring
 
 Approved by the user as part of "what else can make this app more premium". Thin overlay scrollbars everywhere in Redesign and one focus ring style. Small.
 
-### 8. Clean reading column in dark. Ask first.
+### 9. Clean reading column in dark. Ask first.
 
 In Redesign dark with a Picture background, conversation text sits on a thinned dither. It measures 10:1 but reads busy. Light mode already has a plain column with the picture only in the margins (`PictureInk`, `lightColumnIsClean`). The orchestrator recommended the same for dark. **The user has not answered.** Ask before building.
 
-### 9. Inset card layout for threads. Ask first.
+### 10. Inset card layout for threads. Ask first.
 
 The largest job. The thread becomes a bordered card with its tab row inside it, like Capy, behind a switch in Settings > Redesign.
 
 - The user saw the mock (`~/CandyWrapper-research/sandbox/redesign-user-notes/inset-card-mock.html`) and said "as yes thats what i was thinking about indeed" and "also make it a toggle".
 - **Two answers are still owed:** do Diff and Terminal become tabs inside the card or stay as the separate right and bottom cards built in 1.16.0, and is the switch on or off by default. The orchestrator suggested tabs inside and on by default.
 - Reuse `DesignSystem/Components/CardTopRow.swift`. It was built for the right panel's top row with this in mind.
-- If item 8 is a yes, it belongs in the same change.
+- If item 9 is a yes, it belongs in the same change.
 
 Do this last. It touches everything.
 
