@@ -69,6 +69,8 @@ public final class SettingsPageContext {
     public var applySettings: ((String, JSONValue) -> Void)?
     /// `requestConfirmDialog(message, {variant})`: the app's alert dialog; the closure runs on Confirm.
     public var confirm: ((_ message: String, _ destructive: Bool, _ onConfirm: @escaping @MainActor () -> Void) -> Void)?
+    /// Redesign's delete confirm: T3's message, a destructive button named `confirmTitle`, and Cancel focused.
+    public var confirmDelete: ((_ message: String, _ confirmTitle: String, _ onConfirm: @escaping @MainActor () -> Void) -> Void)?
     /// Each environment's server config (providers, keybindings), by id.
     public var configs: [String: ServerProviderConfig] = [:]
     /// An environment's model favorites and `providerModelPreferences`: the server's from 2994 on,
@@ -94,7 +96,8 @@ public final class SettingsPageContext {
     public var chooseIconFile: ((_ environmentId: String, _ cwd: String, _ projectName: String, _ external: Bool,
                                  _ onSelect: @escaping (String) -> Void) -> Void)?
     /// `projects.mutate project.delete {force: true}` for each member; `leave` returns to the thread view.
-    public var deleteProjects: ((_ members: [SettingsScopeProject.Member], _ leave: Bool) -> Void)?
+    /// `done` gets true when every member is gone, false after the first failure (already reported).
+    public var deleteProjects: ((_ members: [SettingsScopeProject.Member], _ leave: Bool, _ done: (@MainActor (Bool) -> Void)?) -> Void)?
     /// Active threads of a project on an environment (environment id, project id), for the removal prompt.
     public var threadCount: ((String, String) -> Int)?
     /// Listed, unarchived threads of an environment, for a scheduled task's Destination (4928 #31379).

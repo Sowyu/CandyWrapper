@@ -173,6 +173,10 @@ public final class ModalHost: DSView {
     func trapFocus() {
         let views = focusableViews
         for (i, v) in views.enumerated() { v.nextKeyView = views[(i + 1) % views.count] }
+        if let target = panel.initialFocus, views.contains(where: { $0 === target }) {
+            window?.makeFirstResponder(target)
+            return
+        }
         // ConfirmDialogHost.tsx (#18187): a confirmation opens on its primary action, the last footer button.
         // ponytail: other dialogs focus the first focusable view in reading order; T3 can name a target with `initialFocus`, add that when a dialog sets it
         if panel.kind == .alertDialog, let primary = panel.footerButtons.last, views.contains(where: { $0 === primary }) {

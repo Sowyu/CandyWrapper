@@ -84,6 +84,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
             let entries = SettingsProjectList.entries(scope)
             if let list = scopeNotice as? SettingsProjectListView { list.reload(entries, select: select); return }
             let list = SettingsProjectListView(entries: entries, select: select)
+            list.onDelete = { [weak self] key in self?.confirmListDelete(key) }
             scopeNotice = list
             body = [list]
             return
@@ -437,6 +438,19 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         return SettingsSectionView(title: "Danger", rows: [r])
     }
 
+    /// Redesign's list: the same removal as the Danger section, Cancel focused, then "Deleted <name>". No
+    /// undo, because the server deletes the threads (ProjectService.ts:518-549) and has no restore.
+    private func confirmListDelete(_ key: String) {
+        let scope = context.scope
+        guard let plan = SettingsProjectList.deletion(key: key, scope: scope, threadCount: { [context] in context.threadCount?($0, $1) ?? 0 })
+        else { return }
+        context.confirmDelete?(plan.message, plan.confirmTitle) { [weak self] in
+            self?.context.deleteProjects?(plan.members, false) { ok in
+                if ok { self?.context.toast?("Deleted \(plan.name)", nil, .success) }
+            }
+        }
+    }
+
     /// `removeMembers`: the native confirm with T3's lines, then `project.delete {force}` per member.
     private func confirmRemove(_ chosen: [SettingsScopeProject.Member]) {
         guard let group, !chosen.isEmpty else { return }
@@ -445,12 +459,18 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         let message = ProjectRemoval.message(members: chosen, allMembers: members, hasOtherMembers: hasOtherMembers, groupName: group.displayName,
                                              threadCount: threads)
         let leave = chosen.count == members.count && !hasOtherMembers
-        context.confirm?(message, true) { [weak self] in self?.context.deleteProjects?(chosen, leave) }
+        context.confirm?(message, true) { [weak self] in self?.context.deleteProjects?(chosen, leave, nil) }
     }
 }
 
 /// The removal prompt (ProjectSettingsPanel.tsx `removeMembers`).
 public enum ProjectRemoval {
+    /// `deleteProject({projectId, force: true})` (ProjectSettingsPanel.tsx:391-397) as `projects.mutate` takes it
+    /// (contracts project.ts:220-225). Force deletes the threads; without it the server refuses a project with any.
+    public static func command(projectId: String, commandId: String) -> JSONValue {
+        .object(["type": .string("project.delete"), "commandId": .string(commandId), "projectId": .string(projectId), "force": .bool(true)])
+    }
+
     public static func message(members: [SettingsScopeProject.Member], allMembers: [SettingsScopeProject.Member], hasOtherMembers: Bool,
                                groupName: String, threadCount: Int) -> String {
         let isWholeGroup = members.count == allMembers.count

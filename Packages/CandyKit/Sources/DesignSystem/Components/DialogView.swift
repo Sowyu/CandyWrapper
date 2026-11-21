@@ -23,6 +23,9 @@ open class DialogView: DSView {
         didSet { oldValue.forEach { $0.removeFromSuperview() }; panelContent.forEach(addSubview); changed() }
     }
     /// Footer buttons, left to right as in the markup; the row is aligned to the end.
+    /// The view that takes focus when the dialog opens, in place of the primary action. A delete whose
+    /// loss is large puts it on Cancel so Return doesn't confirm.
+    public weak var initialFocus: NSView?
     public var footerButtons: [NSView] = [] {
         didSet { oldValue.forEach { $0.removeFromSuperview() }; footerButtons.forEach(addSubview); changed() }
     }
