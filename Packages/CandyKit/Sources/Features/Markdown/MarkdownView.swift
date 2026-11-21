@@ -348,11 +348,14 @@ public final class MarkdownView: DSView {
         let token = jobs
         nonisolated(unsafe) let appearance = effectiveAppearance
         let design = ThreadDesign.uses3814(dark: appearance.isDark)
+        // A scoped design (layout tests, always nil in the app) must reach the layout this view makes again when the
+        // theme changed meanwhile, which runs below, outside the caller's task.
+        let scoped = ThreadDesign.layoutUses3814
         running = (width, token)
         DispatchQueue.global(qos: .userInitiated).async {
             let made = ThreadDesign.layout(in: appearance, design: design, make)
             DispatchQueue.main.async { [weak self] in
-                MainActor.assumeIsolated {
+                MainActor.assumeIsolated { ThreadDesign.$layoutUses3814.withValue(scoped) {
                     // Whoever drops it last, the layout is freed in the background, even if this view went meanwhile.
                     Self.release([made])
                     guard let self else { return }
@@ -372,7 +375,7 @@ public final class MarkdownView: DSView {
                     self.needsLayout = true
                     self.needsDisplay = true
                     self.onHeightChange?()
-                }
+                } }
             }
         }
     }

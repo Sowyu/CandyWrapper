@@ -101,11 +101,18 @@ extension GlobalThemeSuites {
                 view.document = document
                 #expect(view.height(forWidth: 680) == 1234)
                 #expect(view.isPending(forWidth: 680))
+                // A theme change while it runs, as other suites make: the view lays out again outside this task, and must
+                // keep this test's design. Project avatars change nothing the stock themes draw.
+                let theme = ThemeRuntime.input
+                var sprites = theme
+                sprites.projectSprites.toggle()
+                ThemeRuntime.apply(sprites)
+                ThemeRuntime.apply(theme)
                 let deadline = Date().addingTimeInterval(Self.backgroundWait)
                 while view.isPending(forWidth: 680), Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
                 #expect(!view.isPending(forWidth: 680))
                 #expect(changes == 1)
-                #expect(landed != nil && landed?.got == landed?.expected)
+                #expect(landed != nil && landed?.got == landed?.expected, "first difference: \(landed.map { l in zip(l.got, l.expected).first { $0 != $1 }.map { "\($0.0) | \($0.1)" } ?? "lengths \(l.got.count) \(l.expected.count)" } ?? "nil")")
             }
         }
 
@@ -126,7 +133,8 @@ extension GlobalThemeSuites {
                 if !view.isPending(forWidth: 680), !shown().isEmpty { break }
                 try await Task.sleep(for: .milliseconds(5))
             }
-            #expect(Self.signature(view.layout(forWidth: 680)) == Self.signature(MarkdownLayout(document: b, width: 680)))
+            let g = Self.signature(view.layout(forWidth: 680)), e = Self.signature(MarkdownLayout(document: b, width: 680))
+            #expect(g == e, "first difference: \(zip(g, e).first { $0 != $1 }.map { "\($0.0) | \($0.1)" } ?? "lengths \(g.count) \(e.count)")")
         }
 
         /// Long settled text parses off the main thread; the timeline's context hands the key back when it lands.
