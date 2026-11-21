@@ -59,11 +59,4 @@ struct SmallGapsTests {
         #expect(repo.git == .repository(remoteKey: "k", name: "o/n"))
         #expect(OnboardingProjectImport.key("e", "/p") == #"["e","/p"]"#)
     }
-
-    @Test func restingImagesShowThreeThenACount() {
-        #expect(ComposerRestingImagesView.width(count: 0) == 0)
-        #expect(ComposerRestingImagesView.width(count: 1) == CGFloat(32))
-        #expect(ComposerRestingImagesView.width(count: 3) == CGFloat(96))
-        #expect(ComposerRestingImagesView.width(count: 7) == CGFloat(128))
-    }
 }

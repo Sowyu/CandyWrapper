@@ -94,8 +94,19 @@ import T3Protocol
         #expect(stored.objectValue?["redesignBackground"] == .string("flower"))
     }
 
+    /// A settings file from before the Collapse composer on scroll row went away still loads, and the key drops.
+    @Test func aSavedCollapseOnScrollIsIgnored() throws {
+        let defaults = try #require(UserDefaults(suiteName: "cw.collapse-gone.\(UUID().uuidString)"))
+        defaults.set(Data(#"{"composerCollapseOnScroll":false,"ditherAccent":"violet"}"#.utf8), forKey: ClientSettingsStore.defaultsKey)
+        let store = ClientSettingsStore(defaults: defaults)
+        #expect(!store.readFailed)
+        #expect(store.current.string("ditherAccent") == "violet")
+        #expect(ClientSettings.fields["composerCollapseOnScroll"] == nil)
+        #expect(SettingsSearch.item("composer-collapse") == nil)
+    }
+
     @Test func searchFindsTheTabAndEveryRow() {
-        let ids = ["redesign", "redesign-picture", "background-dim", "accent-color", "ignore-reduce-transparency", "composer-collapse",
+        let ids = ["redesign", "redesign-picture", "background-dim", "accent-color", "ignore-reduce-transparency",
                    "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate", "redesign-tint"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
         for word in ["flower", "lotus"] {
@@ -119,7 +130,7 @@ import T3Protocol
         input.ditherLight = true; input.ditherDark = true
         ThemeRuntime.apply(input)
         let context = SettingsPagesFidelityTests.context()
-        let titles = ["Redesign picture", "Background dim", "Accent color", "Ignore Reduce Transparency", "Collapse composer on scroll", "Redesign"]
+        let titles = ["Redesign picture", "Background dim", "Accent color", "Ignore Reduce Transparency", "Redesign"]
         func rowTitles(_ view: NSView) -> [String] {
             ((view as? SettingsRowView).map { [$0.title] } ?? []) + view.subviews.flatMap(rowTitles)
         }

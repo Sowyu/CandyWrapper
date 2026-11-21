@@ -43,7 +43,6 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// Asked on Return; true when it handled the key as a send.
     var onSubmitKey: ((ComposerLogic.Key) -> Bool)?
     var onOpenChip: ((String) -> Bool)?
-    var onInteract: (() -> Void)?
     var onTextChange: (() -> Void)?
     /// Plain ArrowUp (true) or ArrowDown (false); true when it handled the key (prompt history).
     var onHistoryKey: ((Bool) -> Bool)?
@@ -982,7 +981,6 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     override func keyDown(with event: NSEvent) {
-        onInteract?()
         if let onMenuKey, !hasMarkedText() {
             let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
             let key: MenuKey? = switch event.keyCode {
@@ -1120,7 +1118,6 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     override func mouseDown(with event: NSEvent) {
-        onInteract?()
         let point = convert(event.locationInWindow, from: nil)
         let index = characterIndexForInsertion(at: point)
         if event.clickCount == 2, editCitation(near: index) { return }

@@ -48,7 +48,7 @@ struct ThreadResponsivenessAuditRegressions {
             timeline.historyLoading = reducer.history.loading
         }
         // Invoke the same focused callback as an upward wheel, without a shared screen.
-        timeline.scrollView.onGesture?(-60, false, false)
+        timeline.scrollView.onWheelUp?()
         #expect(requests == 1)
         reducer.failHistoryLoad(requestCursor: "audit-page", message: "Audit timeout")
         #expect(!reducer.history.loading && reducer.history.error != nil)
@@ -56,13 +56,13 @@ struct ThreadResponsivenessAuditRegressions {
         timeline.historyCursor = reducer.history.historyCursor
         timeline.historyLoading = reducer.history.loading
         timeline.historyFailed = reducer.history.error != nil
-        timeline.scrollView.onGesture?(-60, false, false)
+        timeline.scrollView.onWheelUp?()
         #expect(requests == 2, "a failed request must not permanently consume paging demand")
         // A cancelled request (shell replacement) leaves the same cursor and no error.
         reducer.cancelHistoryLoad(requestCursor: "audit-page")
         timeline.historyLoading = reducer.history.loading
         timeline.historyFailed = reducer.history.error != nil
-        timeline.scrollView.onGesture?(-60, false, false)
+        timeline.scrollView.onWheelUp?()
         #expect(requests == 3, "a cancelled request must not consume paging demand either")
     }
 }

@@ -40,9 +40,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     enum Kind: Hashable { case approval, user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, linkRequest, htmlRender, mcpApp, viewedImages }
 
     let context = TimelineContext()
-    let scrollView = ComposerTimelineScrollView()
-    public var overflowsComposerViewport: Bool { (scrollView.documentView?.bounds.height ?? 0) > scrollView.contentView.bounds.height + 1 }
-    public var onComposerScrollGesture: ((CGFloat, Bool, Bool) -> Void)?
+    let scrollView = TimelineScrollView()
     private let document = DSView()
     private let minimap = ThreadMinimapView()
     public let worktreeSetup = ThreadWorktreeSetupView()
@@ -312,10 +310,9 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         let headings = NSAccessibilityCustomRotor(rotorType: .heading, itemSearchDelegate: self)
         headings.itemLoadingDelegate = self
         setAccessibilityCustomRotors([headings])
-        scrollView.onGesture = { [weak self] delta, canScroll, towardEnd in
-            self?.onComposerScrollGesture?(delta, canScroll, towardEnd)
-            // An upward wheel still asks for history when a small folded window fits.
-            if delta < 0 { self?.requestEarlierIfNearTop() }
+        scrollView.onWheelUp = { [weak self] in
+            // An upward wheel asks for history when a small folded window fits.
+            self?.requestEarlierIfNearTop()
         }
         parked.isHidden = true
         addSubview(parked)
@@ -1173,4 +1170,13 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 /// A timeline footer whose height follows the lane's width, such as one holding a guest's waiting messages.
 @MainActor protocol TimelineSizedFooter: NSView {
     func height(forWidth width: CGFloat) -> CGFloat
+}
+
+/// Reports a genuine upward wheel on the timeline, never a programmatic scroll.
+final class TimelineScrollView: NSScrollView {
+    var onWheelUp: (() -> Void)?
+    override func scrollWheel(with event: NSEvent) {
+        if !event.modifierFlags.contains(.control), event.scrollingDeltaY > 0 { onWheelUp?() }
+        super.scrollWheel(with: event)
+    }
 }

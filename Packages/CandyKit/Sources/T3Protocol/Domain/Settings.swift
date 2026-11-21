@@ -91,7 +91,6 @@ public struct ClientSettings: Equatable, Sendable {
         "persistComposerContextStrip": SettingSpec(.bool, .bool(false)),
         "planModeEnabled": SettingSpec(.bool, .bool(false)),
         "contextWindowMeterEnabled": SettingSpec(.bool, .bool(false)),
-        "composerCollapseOnScroll": SettingSpec(.bool, .bool(true)),
         "composerRichTextEnabled": SettingSpec(.bool, .bool(true)),
         "sendShortcut": SettingSpec(.literals(["enter", "mod-enter-multiline", "mod-enter"]), .string("enter")),
         "followUpBehavior": SettingSpec(.literals(["queue", "steer"]), .string("steer")),
