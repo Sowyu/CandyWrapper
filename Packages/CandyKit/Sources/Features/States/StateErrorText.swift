@@ -81,7 +81,9 @@ public enum StateErrorText {
     }
 
     static func compact(_ v: JSONValue) -> String {
-        (try? JSONEncoder().encode(v)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return (try? encoder.encode(v)).flatMap { String(data: $0, encoding: .utf8) } ?? "?"
     }
 
     public static func isTypeName(_ s: String) -> Bool { StateCopy.isTypeName(s) }

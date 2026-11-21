@@ -153,8 +153,17 @@ plumbing first (native file preview, timeline web rows, Settings add-project).
 search catalog left out). Most name T3's server or T3 Connect, which is correct. The ones in CandyWrapper's own state
 copy, not renamed in this task:
 
+- The right panel's browser tab reads "T3 Code (Beta)" when it shows T3's own page (seen on screen 2026-11-21)
 - `Settings/FirstRunRecoveryView.swift:22` "T3 Code could not confirm this workspace." (default themes; Redesign's copy avoids it)
 - `Settings/ConnectionDiagnosis.swift:124` "Connect this device to the internet. T3 Code reconnects on its own." and 13 more lines in that file
 - `Issues/IssuesPageView.swift:182` "Update this environment's T3 Code server to browse issues." (names the server, fine)
 - `App/Sources/ServerController.swift` (6), `Settings/WelcomePageView.swift` (3), `Settings/StorageSettingsView.swift` (3),
   `Settings/GeneralSettingsView.swift` (3), `Settings/DesktopManagedDialogs.swift` (3), `App/Sources/SettingsHostAccess.swift` (3)
+
+## Checked on screen
+
+Sandbox 47392 (Nightly 4928), Redesign dark, 2026-11-21: the Diff panel on "Image stuck missing" showed "Git could not
+start" with the checkout's real path where it showed `VcsProcessSpawnError` before; Retry put up the diff skeleton and
+asked again; Details showed the tag and the server's cause (`ENOENT` on a removed worktree). The same thread showed both
+image failure sizes. Opening a cached thread drew its rows in the first frame, so no skeleton showed, as intended.
+Pictures: `~/CandyWrapper-research/sandbox/states-2026-11-21/onscreen-*.png`.
