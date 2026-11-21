@@ -265,13 +265,17 @@ final class ComposerEffortColumnView: DSView {
     /// Redesign puts the section under the model list in both its layouts: the levels as one segmented track, then the
     /// option rows (the user's layouts, 2026-11-20 and 2026-11-21). Only Redesign docks a capy column.
     var stacked: Bool { capy }
-    /// The detail layout puts "Reasoning" on the track's line, so the row is one 28pt track tall (the user found
-    /// the mock's 36pt track under its own heading too big, 2026-11-21).
-    var inlineHeading = false { didSet { if inlineHeading != oldValue { buildSegments(); needsLayout = true } } }
+    /// The detail layout's one bottom row (the user's option A1, 2026-11-21): the levels as one track sized to its labels,
+    /// with no heading, on the line the dock's speed and Ultracode controls share at the right.
+    var oneRow = false { didSet { if oneRow != oldValue { buildSegments(); needsLayout = true } } }
+    /// One row: the footer has controls on the line, so the line stays even when this model has no levels.
+    var reservesLine = false
+    /// One row: the line's top in the section, under the ultrathink note when it shows.
+    var lineTop: CGFloat { note.text.isEmpty ? 0 : note.layout(forWidth: max(0, layoutWidth - 12)).height + 6 }
+    /// One row: the level track's width.
+    var trackWidth: CGFloat { levelLines.first?.naturalWidth ?? 0 }
     /// The section's width, which the level lines wrap in.
     var layoutWidth: CGFloat = ModelPickerView.stackedWidth { didSet { if layoutWidth != oldValue { buildSegments(); needsLayout = true } } }
-    /// The heading's width when it shares the track's line.
-    private var inlineHeadingWidth: CGFloat { inlineHeading ? ceil(heading.textWidth) + 12 : 0 }
     /// The level segments in the stacked layout, keyed by their index in `rows`; their rows stay hidden.
     private(set) var segments: [Int: ComposerFooterSegmentView] = [:]
     private(set) var levelLines: [ComposerFooterGroupView] = []
@@ -323,8 +327,6 @@ final class ComposerEffortColumnView: DSView {
         let locked = locked && controls.effort?.id == primary
         heading.text = controls.effort?.label ?? (controls.others.isEmpty ? "Effort" : "Options")
         modelLabel.text = model
-        // Inline, the model's name moves to the heading's tooltip and VoiceOver label.
-        heading.setTooltip(inlineHeading ? "\(heading.text) for \(model)" : nil)
         heading.setAccessibilityLabel("\(heading.text) for \(model)")
         note.text = locked ? "Your prompt contains \"ultrathink\" in the text. Remove it to change this option." : ""
         let previousFocus = focusIndex
@@ -383,15 +385,22 @@ final class ComposerEffortColumnView: DSView {
     /// Stacked: each level becomes a segment that acts through its hidden row, packed into full-width lines. Levels that
     /// don't fit on one line wrap to the next.
     private func buildSegments() {
+        // The pick slides from where it was when the same levels come back with another one checked.
+        let previous = levelLines.count == 1 ? levelLines[0] : nil
+        let previousTitles = previous?.segments.map(\.title)
+        let previousPick = previous?.segments.first(where: \.checked)?.frame
         levelLines.forEach { $0.removeFromSuperview() }
         levelLines = []; segments = [:]
         guard stacked else { return }
         var line: [ComposerFooterSegmentView] = [], lineWidth: CGFloat = 4
-        let available = layoutWidth - 16 - inlineHeadingWidth
+        // One row never wraps; the dock widens the popup instead.
+        let available = oneRow ? .infinity : layoutWidth - 16
         func flush() {
             guard !line.isEmpty else { return }
             let group = ComposerFooterGroupView(line)
-            group.fills = true
+            group.fills = !oneRow
+            // The track names the levels for VoiceOver now that no heading shows.
+            if oneRow { group.setAccessibilityElement(true); group.setAccessibilityRole(.radioGroup); group.setAccessibilityLabel(heading.accessibilityLabel()) }
             addSubview(group); levelLines.append(group)
             line = []; lineWidth = 4
         }
@@ -410,6 +419,9 @@ final class ComposerEffortColumnView: DSView {
             line.append(s); lineWidth += s.naturalWidth
         }
         flush()
+        if levelLines.count == 1, let previousPick, previousTitles == levelLines[0].segments.map(\.title) {
+            levelLines[0].slideFrom = previousPick
+        }
     }
 
     func activate(_ i: Int) {
@@ -540,6 +552,7 @@ final class ComposerEffortColumnView: DSView {
     /// the option rows. Returns the height.
     @discardableResult
     private func placeStacked(width w: CGFloat, apply: Bool) -> CGFloat {
+        if oneRow { return placeOneRow(width: w, apply: apply) }
         // A model with no effort levels or options has no section at all, so the popup shrinks instead of keeping a hole.
         if apply {
             for v in [heading, modelLabel, empty] as [NSView] { v.isHidden = rows.isEmpty }
@@ -547,18 +560,16 @@ final class ComposerEffortColumnView: DSView {
             leftRule.isHidden = rows.isEmpty
         }
         if rows.isEmpty { return 0 }
-        // The ultrathink note needs the heading above it, so the heading goes back up while it shows.
-        let inline = inlineHeading && !levelLines.isEmpty && note.text.isEmpty
         if apply {
             leftRule.frame = CGRect(x: 0, y: 0, width: w, height: 1)
             headerRule.isHidden = true; optionsRule.isHidden = true
             let headingW = min(ceil(heading.textWidth), w - 24)
-            heading.frame = NSRect(x: 12, y: inline ? 12 : 10, width: headingW, height: 20)
+            heading.frame = NSRect(x: 12, y: 10, width: headingW, height: 20)
             let modelX = 12 + headingW + 8
-            modelLabel.isHidden = inline
+            modelLabel.isHidden = false
             modelLabel.frame = NSRect(x: modelX, y: 12, width: max(0, w - 12 - modelX), height: 16)
         }
-        var y: CGFloat = inline ? 8 : 36, bottom = y
+        var y: CGFloat = 36, bottom = y
         if !note.text.isEmpty {
             let h = note.layout(forWidth: w - 24).height
             if apply { note.frame = NSRect(x: 12, y: y, width: w - 24, height: h) }
@@ -566,7 +577,7 @@ final class ComposerEffortColumnView: DSView {
         } else if apply {
             note.frame = .zero
         }
-        let trackX = inline ? 12 + inlineHeadingWidth : 8
+        let trackX: CGFloat = 8
         for line in levelLines {
             // The track runs nearly edge to edge, 8pt in, as the user's picture has it.
             if apply { line.frame = NSRect(x: trackX, y: y, width: w - 8 - trackX, height: 28); line.needsLayout = true }
@@ -579,7 +590,33 @@ final class ComposerEffortColumnView: DSView {
             bottom = y + row.height
             y += row.height + 2
         }
-        return bottom + (inline ? 8 : 12)
+        return bottom + 12
+    }
+
+    /// One row, 6pt in from the popup's edges: the ultrathink note, the line with the track at its left, the option rows,
+    /// then 6pt to the popup's bottom. No hairline: the gap under the cards separates it (card option 2, 2026-11-21).
+    @discardableResult
+    private func placeOneRow(width w: CGFloat, apply: Bool) -> CGFloat {
+        if apply {
+            for v in [heading, modelLabel, empty] as [NSView] { v.isHidden = true }
+            for l in [leftRule, headerRule, optionsRule] { l.isHidden = true }
+        }
+        let options = rows.indices.filter { !isLevel($0) }
+        let hasLine = !levelLines.isEmpty || reservesLine
+        guard hasLine || !options.isEmpty else { return 0 }
+        let top = lineTop
+        if apply { note.frame = note.text.isEmpty ? .zero : NSRect(x: 6, y: 0, width: w - 12, height: top - 6) }
+        var y = top
+        if let track = levelLines.first, apply {
+            track.frame = NSRect(x: 6, y: y, width: track.naturalWidth, height: 28); track.needsLayout = true
+        }
+        if hasLine { y += 28 }
+        for i in options {
+            if hasLine || i != options.first { y += 4 }
+            if apply { rows[i].frame = NSRect(x: 6, y: y, width: w - 12, height: rows[i].height) }
+            y += rows[i].height
+        }
+        return y + 6
     }
 
     override func layout() {
@@ -635,13 +672,17 @@ final class ComposerEffortColumnView: DSView {
 /// A footer segment (`FOOTER_SEGMENT`, :564-565): `h-6 px-2 text-xs gap-1`, checked on `bg-input/72`.
 final class ComposerFooterSegmentView: ControlView {
     let checked: Bool
+    let title: String
     private let label: LabelView
     private let glyph: NSView?
     var first = true, last = true
     /// Keyboard focus held by the dock while the search keeps first responder (Redesign's stacked picker).
     var focused = false { didSet { if focused != oldValue { needsDisplay = true } } }
+    /// The track's sliding fill stands in for this segment's own while it moves here.
+    var fillSuppressed = false { didSet { if fillSuppressed != oldValue { needsDisplay = true } } }
     init(title: String, checked: Bool, glyph: NSView? = nil) {
         self.checked = checked
+        self.title = title
         label = LabelView(title, font: DSFont.ui(12))
         self.glyph = glyph
         super.init(frame: .zero)
@@ -665,38 +706,50 @@ final class ComposerFooterSegmentView: ControlView {
     /// The fill's radius: concentric with the track, its radius less the inset between them, never under 2pt.
     static let radius = max(2, ComposerFooterGroupView.radius - ComposerFooterGroupView.inset)
     override func updateLayer() {
-        layer?.cornerRadius = Self.radius
         // T3 rounds only the track's outer corners (`first:rounded-l-md last:rounded-r-md`, ComposerModelEffort.tsx:565); Redesign rounds every
         // segment, so a middle pick sits on a rounded fill too (the user, 2026-11-21).
-        var corners: CACornerMask = [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
-        if !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            corners = []
-            if first { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
-            if last { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
+        if let layer {
+            Self.paint(layer, in: self, checked: checked && !fillSuppressed, hovered: state.hovered, focused: state.focusVisible || focused,
+                       first: first, last: last)
         }
-        layer?.maskedCorners = corners
-        let lightRedesign = RedesignTokens.Segment.light(in: self)
-        if lightRedesign {
-            // Redesign light: the pick is a white card with the rim and the resting shadow on a quiet track.
-            layer?.backgroundColor = checked ? RedesignTokens.Segment.selectedFill.cgColor(in: self)
-                : state.hovered ? RedesignTokens.Segment.hoverFill.cgColor(in: self) : nil
-            if let layer {
-                RedesignTokens.Shadow.resting.apply(to: layer, path: CGPath(rect: .zero, transform: nil), dark: false)
-                // The shadow follows the rounded fill as the segment resizes.
-                layer.shadowPath = nil
-                if !checked { layer.shadowOpacity = 0 }
-            }
-        } else {
-            layer?.backgroundColor = checked ? Themed.color(\.input, 0.72).cgColor(in: self) : nil
-            layer?.shadowOpacity = 0
-        }
-        layer?.borderWidth = state.focusVisible || focused ? 2 : lightRedesign && checked ? 1 : 0
-        layer?.borderColor = (state.focusVisible || focused ? Themed.color(\.ring) : RedesignTokens.Segment.selectedRim).cgColor(in: self)
         alphaValue = state.enabled ? 1 : 0.64
         let color = checked || state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground)
         label.color = color
         (glyph as? ComposerFastGlyphView)?.color = color
         (glyph as? IconView)?.strokeColor = color
+    }
+}
+
+extension ComposerFooterSegmentView {
+    /// A segment's fill, shared by every segmented control in the pickers (the reasoning levels, speed, Permissions): in
+    /// Redesign its own rounded rectangle at the nested radius on all four corners, in the default themes T3's fill with
+    /// only the track's outer corners rounded.
+    static func paint(_ layer: CALayer, in view: NSView, checked: Bool, hovered: Bool, focused: Bool, first: Bool, last: Bool) {
+        layer.cornerRadius = radius
+        layer.cornerCurve = .continuous
+        var corners: CACornerMask = [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+        if !ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark) {
+            corners = []
+            if first { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
+            if last { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
+            layer.cornerCurve = .circular
+        }
+        layer.maskedCorners = corners
+        let lightRedesign = RedesignTokens.Segment.light(in: view)
+        if lightRedesign {
+            // Redesign light: the pick is a white card with the rim and the resting shadow on a quiet track.
+            layer.backgroundColor = checked ? RedesignTokens.Segment.selectedFill.cgColor(in: view)
+                : hovered ? RedesignTokens.Segment.hoverFill.cgColor(in: view) : nil
+            RedesignTokens.Shadow.resting.apply(to: layer, path: CGPath(rect: .zero, transform: nil), dark: false)
+            // The shadow follows the rounded fill as the segment resizes.
+            layer.shadowPath = nil
+            if !checked { layer.shadowOpacity = 0 }
+        } else {
+            layer.backgroundColor = checked ? Themed.color(\.input, 0.72).cgColor(in: view) : nil
+            layer.shadowOpacity = 0
+        }
+        layer.borderWidth = focused ? 2 : lightRedesign && checked ? 1 : 0
+        layer.borderColor = (focused ? Themed.color(\.ring) : RedesignTokens.Segment.selectedRim).cgColor(in: view)
     }
 }
 
@@ -712,6 +765,10 @@ final class ComposerFooterGroupView: DSView {
     var naturalWidth: CGFloat { segments.map(\.naturalWidth).reduce(0, +) + 4 }
     /// Spreads the track's spare width evenly over the segments (Redesign's stacked levels).
     var fills = false
+    /// Redesign: where the previous track's pick sat, in track coordinates. The next layout slides the fill from there
+    /// to the new pick, then the segment draws its own fill again, so the motion ends on the resting pixels.
+    var slideFrom: CGRect?
+    private var slider: CALayer?
     override func layout() {
         super.layout()
         let extra = fills && !segments.isEmpty ? max(0, bounds.width - naturalWidth) / CGFloat(segments.count) : 0
@@ -721,6 +778,38 @@ final class ComposerFooterGroupView: DSView {
             let next = exact.rounded()
             s.frame = NSRect(x: x, y: Self.inset, width: next - x, height: 24); x = next
         }
+        if let from = slideFrom, bounds.width > 0 {
+            slideFrom = nil
+            slide(from: from)
+        }
+    }
+
+    private func slide(from: CGRect) {
+        guard ThemeRuntime.isDither(dark: effectiveAppearance.isDark), !Motion.reduced, window != nil,
+              let target = segments.first(where: \.checked), target.frame != from, let layer else { return }
+        let fill = slider ?? CALayer()
+        if slider == nil { layer.insertSublayer(fill, at: 0); slider = fill }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        ComposerFooterSegmentView.paint(fill, in: self, checked: true, hovered: false, focused: false, first: true, last: true)
+        fill.isHidden = false
+        fill.frame = target.frame
+        target.fillSuppressed = true
+        CATransaction.commit()
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak target, weak fill] in
+            fill?.isHidden = true
+            target?.fillSuppressed = false
+        }
+        for (key, a, b) in [("position", NSValue(point: NSPoint(x: from.midX, y: from.midY)), NSValue(point: NSPoint(x: target.frame.midX, y: target.frame.midY))),
+                            ("bounds", NSValue(rect: CGRect(origin: .zero, size: from.size)), NSValue(rect: CGRect(origin: .zero, size: target.frame.size)))] {
+            let anim = CABasicAnimation(keyPath: key)
+            anim.fromValue = a; anim.toValue = b
+            anim.duration = RedesignTokens.Motion.fast
+            anim.timingFunction = RedesignTokens.Motion.curve
+            fill.add(anim, forKey: key)
+        }
+        CATransaction.commit()
     }
     override func updateLayer() {
         layer?.cornerRadius = Self.radius
@@ -781,8 +870,22 @@ final class ComposerPickerFooterView: DSView {
     var onSelect: ((ProviderOptionDescriptor, String) -> Void)?
     var onBoolean: ((String, Bool) -> Void)?
     var onPermissions: ((NSView) -> Void)?
-    /// Redesign's pickers: the controls wrap to a second line when they don't fit (335pt stacked, wider in the detail layout).
+    /// Redesign's pickers: the controls wrap to a second line when they don't fit (335pt stacked).
     var stacked: Bool { capy }
+    /// The detail layout's one bottom row: the controls side by side at the line's right, no rule and no fill; the dock
+    /// sizes the footer to `inlineWidth` and places it on the reasoning track's line.
+    var oneRow = false { didSet { if oneRow != oldValue { needsLayout = true; needsDisplay = true } } }
+    private var inlineParts: [(NSView, CGFloat)] {
+        permissions?.showsChevron = false
+        permissions?.inset = 6
+        for group in [speed, ultracode].compactMap({ $0 }) { group.segments.forEach { $0.inset = 6 } }
+        return [speed, ultracode].compactMap { $0 }.map { ($0, $0.naturalWidth) } + [permissions].compactMap { $0 }.map { ($0, $0.naturalWidth) }
+    }
+    /// One row: the controls' width, 6pt apart.
+    var inlineWidth: CGFloat {
+        let parts = inlineParts
+        return parts.map(\.1).reduce(0, +) + CGFloat(max(0, parts.count - 1)) * 6
+    }
     var onSizeChange: (() -> Void)?
     /// Keyboard focus among the segments and the permissions trigger, in reading order (stacked only).
     private(set) var focusIndex: Int? { didSet { showFocus() } }
@@ -862,10 +965,15 @@ final class ComposerPickerFooterView: DSView {
             s.action = { [weak self] in self?.onBoolean?(toggle.id, !on) }
             ultracode = ComposerFooterGroupView([s])
         }
-        let trigger = ComposerPermissionsTriggerView(mode: runtimeMode, unrestricted: unrestricted)
-        trigger.opensPopupOnPress = true
-        trigger.action = { [weak self, weak trigger] in if let trigger { self?.onPermissions?(trigger) } }
-        permissions = trigger
+        // The detail layout leaves access to the composer's own chip, which Redesign then always shows (the user, 2026-11-21).
+        if !oneRow {
+            let trigger = ComposerPermissionsTriggerView(mode: runtimeMode, unrestricted: unrestricted)
+            trigger.opensPopupOnPress = true
+            trigger.action = { [weak self, weak trigger] in if let trigger { self?.onPermissions?(trigger) } }
+            permissions = trigger
+        } else {
+            permissions = nil
+        }
         for v in [speed, ultracode, permissions].compactMap({ $0 as NSView? }) { addSubview(v) }
         if let f = focusIndex { focusIndex = min(f, items.count - 1) }
         needsLayout = true
@@ -897,6 +1005,12 @@ final class ComposerPickerFooterView: DSView {
     override func layout() {
         super.layout()
         rule.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 1)
+        rule.isHidden = oneRow
+        if oneRow {
+            var x: CGFloat = 0
+            for (view, width) in inlineParts { view.frame = NSRect(x: x, y: 0, width: width, height: 28); x += width + 6 }
+            return
+        }
         if stacked { placeStacked(width: bounds.width, apply: true); return }
         var x: CGFloat = 12
         for group in [speed, ultracode].compactMap({ $0 }) {
@@ -912,7 +1026,7 @@ final class ComposerPickerFooterView: DSView {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 
     override func updateLayer() {
-        layer?.backgroundColor = capy ? nil : Themed.color(\.muted, 0.4).cgColor(in: self)
+        layer?.backgroundColor = capy || oneRow ? nil : Themed.color(\.muted, 0.4).cgColor(in: self)
         rule.backgroundColor = (capy ? Themed.color(\.contrastForeground, 0.08) : Themed.color(\.border, 0.7)).cgColor(in: self)
     }
 }
@@ -948,12 +1062,20 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
 
     /// Redesign: one 335pt column, the list over the Reasoning section over the footer (the user's layout, 2026-11-20).
     var stacked: Bool { picker.stacked }
-    /// Redesign's detail layout: the rail and list with the detail pane at their right, then the Reasoning row and the
-    /// footer across both (the user's layout 2, 2026-11-21).
+    /// Redesign's detail layout: the rail and the list card with the details card at their right, then one bottom row
+    /// with the levels at the left and speed and Ultracode at the right (the user's layout 2 with option A1 and card
+    /// option 2, 2026-11-21). The cards sit on the darker ground 6pt apart and 6pt from every edge.
     var detailed: Bool { picker.detailed }
     /// Either Redesign layout: the sections take keyboard focus in turn.
     private var sectioned: Bool { stacked || detailed }
     let pane = ModelDetailPaneView()
+    let paneHandle = ModelDetailPaneResizeHandle()
+    /// The gap between the cards, the rail, the bottom row and the popup's edges.
+    static let gap: CGFloat = 6
+    /// The list card stays at least this wide when the details card widens.
+    static let minListWidth: CGFloat = 200
+    /// The details card's width while a drag runs, before it is saved.
+    private var livePaneWidth: CGFloat?
     /// The model the pane shows: the highlighted one, kept while the pointer crosses to the pane.
     private var paneKey: String?
     /// The top area's floor, so a one-model provider is not a strip, and its ceiling, so the popup fits above the
@@ -972,14 +1094,47 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         footer.onSizeChange = { [weak self] in self?.contentChanged() }
         if picker.detailed {
             addSubview(pane)
-            column.inlineHeading = true
+            addSubview(paneHandle)
+            column.oneRow = true
+            footer.oneRow = true
             column.layoutWidth = Self.detailWidth
             picker.onHighlightChange = { [weak self] in self?.syncPane() }
+            paneHandle.currentWidth = { [weak self] in self?.paneWidth ?? 0 }
+            paneHandle.limits = { [weak self] in self?.paneLimits ?? 0...0 }
+            paneHandle.onResize = { [weak self] w in self?.livePaneWidth = w; self?.needsLayout = true }
+            paneHandle.onCommit = { [weak self] in
+                guard let self, let w = self.livePaneWidth else { return }
+                self.livePaneWidth = nil
+                RedesignPickerSettings.paneWidth = w == ModelDetailPaneView.width ? nil : w
+                self.needsLayout = true
+            }
+            paneHandle.onReset = { [weak self] in
+                self?.livePaneWidth = nil
+                RedesignPickerSettings.paneWidth = nil
+                self?.needsLayout = true
+            }
             syncPane()
         }
     }
 
-    static var detailWidth: CGFloat { ModelPickerView.detailListWidth + ModelDetailPaneView.width }
+    /// The popup's width in the detail layout: the list card's default width and the details card's, with the gaps.
+    /// The bottom row widens it when its controls need more (they never wrap or shrink).
+    static var detailWidth: CGFloat { ModelPickerView.detailListWidth + ModelDetailPaneView.width + 2 * gap }
+    private var popupWidth: CGFloat {
+        let row = column.trackWidth + footer.inlineWidth + (column.trackWidth > 0 && footer.inlineWidth > 0 ? 12 : 0) + 2 * Self.gap
+        return max(Self.detailWidth, ceil(row))
+    }
+    /// The details card's width: the live drag, the saved width, or the default, kept inside `paneLimits`.
+    var paneWidth: CGFloat {
+        let l = paneLimits
+        return min(l.upperBound, max(l.lowerBound, livePaneWidth ?? RedesignPickerSettings.paneWidth ?? ModelDetailPaneView.width))
+    }
+    /// From the narrowest card that shows its content unclipped to the widest that leaves the list card 200pt.
+    var paneLimits: ClosedRange<CGFloat> {
+        let w = bounds.width > 0 ? bounds.width : popupWidth
+        let most = w - 3 * Self.gap - picker.detailListLeft - Self.minListWidth
+        return ModelDetailPaneView.minWidth...max(ModelDetailPaneView.minWidth, most)
+    }
 
     /// Shows the highlighted model in the pane. Off the rows (the pointer on its way to the pane, or on Show more) it keeps
     /// the model it showed while that is still listed, else the selected model, else the first.
@@ -1006,10 +1161,12 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         let keys = items.map(\.key) + [picker.activeModel, picker.rail == .favorites ? "*" : ""]
         // While searching the height stays where it was when typing started, as the list's own does.
         if let topCache, topCache.keys == keys || picker.searching { return topCache.height }
+        // Measured at the narrowest card, so dragging the card's edge never changes the popup's height.
+        let narrow = ModelDetailPaneView.minWidth
         let tallestPane = items.prefix(40).map { item in
-            pane.height(for: ModelDetailContent.make(item), card: cardInfo(item))
-        }.max() ?? pane.height(for: nil, card: nil)
-        let height = min(Self.detailMaxHeight, max(Self.detailMinHeight, picker.naturalSize.height, tallestPane))
+            pane.height(for: ModelDetailContent.make(item), card: cardInfo(item), width: narrow)
+        }.max() ?? pane.height(for: nil, card: nil, width: narrow)
+        let height = min(Self.detailMaxHeight, max(Self.detailMinHeight, picker.naturalSize.height, tallestPane + Self.gap))
         topCache = (keys, height)
         return height
     }
@@ -1020,11 +1177,22 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         picker.resizePopup()
     }
 
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+
+    override func updateLayer() {
+        guard detailed else { layer?.backgroundColor = nil; return }
+        // The Settings window's ground under its page card (AppRouteModalView.updateLayer), inside the popup's rim.
+        layer?.backgroundColor = Themed.color(\.sidebar).cgColor(in: self)
+        layer?.cornerRadius = RedesignTokens.Radius.nested(in: RedesignTokens.Radius.card, inset: 1)
+        layer?.cornerCurve = .continuous
+    }
+
     var naturalSize: CGSize {
         let list = picker.naturalSize
         if detailed {
-            let w = Self.detailWidth
-            return CGSize(width: w, height: detailTopHeight + column.stackedHeight(width: w) + footer.stackedHeight(width: w))
+            let w = popupWidth
+            column.reservesLine = !footer.items.isEmpty
+            return CGSize(width: w, height: detailTopHeight + Self.gap + column.stackedHeight(width: w))
         }
         if stacked {
             let w = ModelPickerView.stackedWidth
@@ -1148,15 +1316,21 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
     override func layout() {
         super.layout()
         if detailed {
-            // The host caps the height; the list and the pane give up the space, and the list scrolls.
-            let w = bounds.width
-            let footerH = footer.stackedHeight(width: w), columnH = column.stackedHeight(width: w)
-            let topH = max(0, bounds.height - columnH - footerH)
-            let listW = ModelPickerView.detailListWidth
-            picker.frame = NSRect(x: 0, y: 0, width: listW, height: topH)
-            pane.frame = NSRect(x: listW, y: 0, width: w - listW, height: topH)
-            column.frame = NSRect(x: 0, y: topH, width: w, height: columnH)
-            footer.frame = NSRect(x: 0, y: topH + columnH, width: w, height: footerH)
+            // The host caps the height; the cards give up the space, and the list scrolls.
+            let w = bounds.width, g = Self.gap
+            column.reservesLine = !footer.items.isEmpty
+            let columnH = column.stackedHeight(width: w)
+            let topH = max(0, bounds.height - g - columnH)
+            let paneW = paneWidth, listRight = w - 2 * g - paneW
+            picker.frame = NSRect(x: 0, y: 0, width: listRight, height: topH)
+            pane.frame = NSRect(x: listRight + g, y: g, width: paneW, height: max(0, topH - g))
+            // The 5pt strip sits in the gap between the cards.
+            paneHandle.frame = NSRect(x: listRight + (g - ModelDetailPaneResizeHandle.hitWidth) / 2, y: g,
+                                      width: ModelDetailPaneResizeHandle.hitWidth, height: pane.frame.height)
+            paneHandle.window?.invalidateCursorRects(for: paneHandle)
+            column.frame = NSRect(x: 0, y: topH + g, width: w, height: columnH)
+            let footerW = footer.inlineWidth
+            footer.frame = NSRect(x: w - g - footerW, y: topH + g + column.lineTop, width: footerW, height: footer.items.isEmpty ? 0 : 28)
             return
         }
         if stacked {

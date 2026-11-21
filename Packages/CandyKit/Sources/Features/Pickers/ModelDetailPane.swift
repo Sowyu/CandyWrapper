@@ -52,14 +52,16 @@ struct ModelDetailContent: Equatable {
 /// The pane at the right of Redesign's picker, after the mockup the user chose (r4-picker-chosen-layout2.png) and their
 /// note that the first build was cramped (r4-picker-wip-cramped.png, 2026-11-21): 16pt padding and 16pt between blocks,
 /// 8pt from a label to its rows, rows on a 24pt pitch, all on the 4pt grid. Only the name carries weight.
+/// Redesign's details card at the right of the model list (the user's layout 2, 2026-11-21, card option 2): its own
+/// rounded surface with the rim, the width the reader dragged.
 final class ModelDetailPaneView: DSView {
-    static let width: CGFloat = 288
+    /// The default width, and the drag's limits: the narrowest that keeps the Reads row and the prices unclipped.
+    static let width: CGFloat = 276, minWidth: CGFloat = 240
     static let pad: CGFloat = 16, gap: CGFloat = 16, labelGap: CGFloat = 8, pitch: CGFloat = 24, inputIcon: CGFloat = 16
 
     private(set) var content: ModelDetailContent?
     private var card: DitherProviderCardView?
     private let cardLine = CALayer()
-    private let rule = CALayer()
     private var icon: NSView?
     private let name = LabelView("", font: DSFont.ui(14, weight: .semibold))
     private let provider = LabelView("", font: DSFont.ui(12))
@@ -69,7 +71,6 @@ final class ModelDetailPaneView: DSView {
     private var factRows: [(LabelView, LabelView)] = []
     private var readsLabel: LabelView?
     private var inputIcons: [IconView] = []
-    private var contentWidth: CGFloat { Self.width - 2 * Self.pad }
 
     /// The icon and spoken name for a models.dev input type.
     static func input(_ kind: String) -> (IconName, String)? {
@@ -87,7 +88,8 @@ final class ModelDetailPaneView: DSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         clipsToBounds = true
-        for l in [rule, cardLine] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
+        layer?.cornerCurve = .continuous
+        for l in [cardLine] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
         for l in [name, provider, priceCaption] { l.smoothsFont = false }
         name.lineHeight = 20; provider.lineHeight = 16; priceCaption.lineHeight = 16
         about.font = DSFont.ui(13); about.lineHeight = 20; about.maxLines = 2; about.smoothsFont = false
@@ -157,15 +159,15 @@ final class ModelDetailPaneView: DSView {
         return (l, v)
     }
 
-    /// The pane's height for `content`, as `layout` places it.
-    func height(for content: ModelDetailContent?, card info: DitherProviderCardInfo?) -> CGFloat {
+    /// The pane's height for `content` at `width`, as `layout` places it.
+    func height(for content: ModelDetailContent?, card info: DitherProviderCardInfo?, width: CGFloat = ModelDetailPaneView.width) -> CGFloat {
         var y = info.map { DitherProviderCardView.height($0) + 1 } ?? 0
         guard let content else { return y + Self.pad }
         y += Self.pad + 20 + 16
         if let d = content.description {
             let old = about.text
             about.text = d
-            y += Self.gap + about.height(forWidth: contentWidth)
+            y += Self.gap + about.height(forWidth: width - 2 * Self.pad)
             about.text = old
         }
         y += Self.gap + 16 + Self.labelGap - 2 + CGFloat(max(1, content.prices.count)) * Self.pitch - 2
@@ -177,7 +179,6 @@ final class ModelDetailPaneView: DSView {
     override func layout() {
         super.layout()
         let x = Self.pad, w = bounds.width - 2 * Self.pad
-        rule.frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
         var y: CGFloat = 0
         if let card {
             card.frame = NSRect(x: 4, y: 0, width: bounds.width - 8, height: card.preferredHeight)
@@ -239,8 +240,61 @@ final class ModelDetailPaneView: DSView {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle(); needsDisplay = true }
 
     override func updateLayer() {
-        let line = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
-        rule.backgroundColor = line
-        cardLine.backgroundColor = line
+        cardLine.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
+        // The Settings window's page card: the content ground and the rim (AppRouteModalView.updateLayer).
+        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        layer?.borderWidth = 1
+        layer?.borderColor = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
+        layer?.cornerRadius = RedesignTokens.Radius.control
+    }
+}
+
+/// The details card's left edge: a 5pt strip in the gap before the card, with the resize cursor and nothing drawn.
+/// Dragging left widens the card; a double-click goes back to the default.
+final class ModelDetailPaneResizeHandle: DSView {
+    static let hitWidth: CGFloat = 5
+    var currentWidth: () -> CGFloat = { 0 }
+    var limits: () -> ClosedRange<CGFloat> = { 0...0 }
+    /// The width the drag asks for, already clamped; the owner lays out.
+    var onResize: ((CGFloat) -> Void)?
+    /// The drag ended: the owner saves the width once, not every frame.
+    var onCommit: (() -> Void)?
+    var onReset: (() -> Void)?
+    private var start: (x: CGFloat, width: CGFloat)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.splitter)
+        setAccessibilityLabel("Resize model details")
+    }
+
+    /// The width for a drag from `startX` to `x`: the card grows as its left edge moves left.
+    static func width(from startWidth: CGFloat, startX: CGFloat, to x: CGFloat, in limits: ClosedRange<CGFloat>) -> CGFloat {
+        min(limits.upperBound, max(limits.lowerBound, (startWidth + startX - x).rounded()))
+    }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 { start = nil; onReset?(); return }
+        start = (event.locationInWindow.x, currentWidth())
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let start else { return }
+        onResize?(Self.width(from: start.width, startX: start.x, to: event.locationInWindow.x, in: limits()))
+    }
+    override func mouseUp(with event: NSEvent) {
+        if start != nil { onCommit?() }
+        start = nil
+    }
+    override func accessibilityValue() -> Any? { Int(currentWidth()) }
+    override func accessibilityPerformIncrement() -> Bool { step(16) }
+    override func accessibilityPerformDecrement() -> Bool { step(-16) }
+    private func step(_ delta: CGFloat) -> Bool {
+        let l = limits()
+        onResize?(min(l.upperBound, max(l.lowerBound, currentWidth() + delta)))
+        onCommit?()
+        return true
     }
 }

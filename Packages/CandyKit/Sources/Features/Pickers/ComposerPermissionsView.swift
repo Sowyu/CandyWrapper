@@ -84,21 +84,21 @@ final class ComposerPermissionsView: DSView {
         preview(next); return true
     }
     override func updateLayer() {
-        track.layer?.cornerRadius = 8; track.layer?.backgroundColor = Themed.color(\.input, 0.4).cgColor(in: self)
+        // Redesign's light track is the reasoning levels' quiet fill (ComposerFooterGroupView).
+        let fill = RedesignTokens.Segment.light(in: self) ? RedesignTokens.Segment.trackFill : Themed.color(\.input, 0.4)
+        track.layer?.cornerRadius = ComposerFooterGroupView.radius; track.layer?.backgroundColor = fill.cgColor(in: self)
     }
     override func layout() {
         super.layout()
         let w = bounds.width - 16
         heading.frame = NSRect(x: 8, y: 6, width: w, height: 16)
         track.frame = NSRect(x: 8, y: 28, width: w, height: 28)
-        // No gaps; only the outer ends round (`first:rounded-l-md last:rounded-r-md`, #26514 at 4928).
+        // No gaps; only the outer ends round (`first:rounded-l-md last:rounded-r-md`, #26514 at 4928). Redesign rounds each
+        // fill on its own, as the reasoning levels do.
         let bw = (w - 4) / CGFloat(max(1, buttons.count))
         for (i, button) in buttons.enumerated() {
             button.frame = NSRect(x: 2 + CGFloat(i) * bw, y: 2, width: bw, height: 24)
-            var corners: CACornerMask = []
-            if i == 0 { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
-            if i == buttons.count - 1 { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
-            button.layer?.maskedCorners = corners
+            button.first = i == 0; button.last = i == buttons.count - 1
         }
         title.frame = NSRect(x: 8, y: 62, width: w, height: 20)
         detail.frame = NSRect(x: 8, y: 84, width: w, height: detailHeight)
@@ -109,6 +109,8 @@ final class ComposerPermissionsView: DSView {
 private final class PermissionChoice: ControlView {
     let checked: Bool
     let icon: IconView
+    var first = true { didSet { needsDisplay = true } }
+    var last = true { didSet { needsDisplay = true } }
     var onPreview: ((Bool) -> Void)?
     init(icon: IconDefinition, checked: Bool) {
         self.checked = checked; self.icon = IconView(definition: icon, size: 14)
@@ -117,7 +119,17 @@ private final class PermissionChoice: ControlView {
     }
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); onPreview?(state.hovered || state.focusVisible) }
     override func updateLayer() {
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let layer {
+            ComposerFooterSegmentView.paint(layer, in: self, checked: checked, hovered: state.hoverOrPressed, focused: state.focusVisible, first: first, last: last)
+            icon.strokeColor = Themed.color(checked || state.hovered ? \.contrastForeground : \.contrastMutedForeground)
+            return
+        }
         layer?.cornerRadius = 6
+        layer?.shadowOpacity = 0
+        var corners: CACornerMask = []
+        if first { corners.formUnion([.layerMinXMinYCorner, .layerMinXMaxYCorner]) }
+        if last { corners.formUnion([.layerMaxXMinYCorner, .layerMaxXMaxYCorner]) }
+        layer?.maskedCorners = corners
         layer?.backgroundColor = checked ? Themed.color(\.input, 0.72).cgColor(in: self) : state.hoverOrPressed ? Themed.color(\.accent).cgColor(in: self) : nil
         layer?.borderWidth = state.focusVisible ? 2 : 0; layer?.borderColor = Themed.color(\.ring).cgColor(in: self)
         icon.strokeColor = Themed.color(checked || state.hovered ? \.foreground : \.mutedForeground)

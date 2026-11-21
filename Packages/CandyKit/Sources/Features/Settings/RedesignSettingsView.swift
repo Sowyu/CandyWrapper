@@ -14,6 +14,11 @@ enum RedesignPickerSettings {
     /// The provider's account card at the top of the details pane, or between the search and the list when stacked. Off,
     /// the tabs keep T3's status tooltip.
     static var showsAccount: Bool { accountOverride ?? ClientSettingsStore.shared.current.bool("redesignPickerAccount") }
+    /// The details pane's width the reader dragged, or nil for the default.
+    static var paneWidth: CGFloat? {
+        get { ClientSettingsStore.shared.current["redesignPickerPaneWidth"].doubleValue.map { CGFloat($0) } }
+        set { ClientSettingsStore.shared.update(["redesignPickerPaneWidth": newValue.map { .number(Double($0)) } ?? .null]) }
+    }
 }
 
 /// The Redesign tab, CandyWrapper's own: the switch that turns Redesign on, then every setting only Redesign uses.

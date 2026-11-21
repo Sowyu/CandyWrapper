@@ -2027,12 +2027,13 @@ final class ComposerController {
             supportsProviderHandoff: thread == nil || ComposerLogic.QueueState.supportsProviderHandoff(projection))
         // Shift-click fan-out: a new thread on a server that bootstraps worktrees (ChatView.tsx:11584-11587).
         if case .draft = target { pickers.supportsMultipleModels = serverConfig.capabilities.contains("requiredWorktreeBootstrap") } else { pickers.supportsMultipleModels = false }
-        pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip
-        pickers.workspaceModelsScanning = workspaceSkillsScanning
-        pickers.update(draftKey: draftKey ?? "", context: context)
         let strip = panel.contextStrip
         let modern = !ThemeRuntime.isDither(dark: composer.effectiveAppearance.isDark) && !ThemeRuntime.isGlass(dark: composer.effectiveAppearance.isDark)
         strip.showsPermissions = modern && thread == nil
+        // Redesign's and Glass's strips never hold Permissions, so the composer keeps its chip there.
+        pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip && strip.showsPermissions
+        pickers.workspaceModelsScanning = workspaceSkillsScanning
+        pickers.update(draftKey: draftKey ?? "", context: context)
         updateStripPermissions()
         panel.hero.offersScratch = scratchEnvironment?() != nil
         strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }

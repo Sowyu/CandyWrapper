@@ -189,12 +189,14 @@ public final class ComposerPickers {
             modelButton.maximumLabelWidth = 224
             accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess && !unrestrictedOn ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
             accessButton.iconFollowsLabel = true
-            // The picker's footer always holds Permissions, so the chip shows only off the default
-            // (composerControlsOwnership.ts:1-31).
+            // The picker's footer holds Permissions, so the chip shows only off the default (composerControlsOwnership.ts:1-31),
+            // except in Redesign's detail picker, whose footer leaves it out.
             let defaultMode = context.projectDefaultRuntimeMode ?? context.serverDefaults.defaultRuntimeMode
             controlsView.permissionsIconOnly = false
-            // Unrestricted always shows its chip, so the danger stays visible.
-            controlsView.hidesPermissions = (current.runtimeMode == defaultMode && !unrestrictedOn) || permissionsShownInStrip
+            // Unrestricted always shows its chip, so the danger stays visible. Redesign's detail picker has no Permissions
+            // in its footer, so there the chip shows in every mode.
+            let pickerHasAccess = !ThemeRuntime.isDither(dark: modelButton.effectiveAppearance.isDark) || RedesignPickerSettings.stacked
+            controlsView.hidesPermissions = (pickerHasAccess && current.runtimeMode == defaultMode && !unrestrictedOn) || permissionsShownInStrip
         } else {
             accessButton.iconFollowsLabel = false
             controlsView.permissionsIconOnly = false
