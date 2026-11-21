@@ -25,8 +25,8 @@ import T3Store
 
     /// Claude with four current models and three legacy ones, as the report's picture, plus Codex for a second tab.
     static func catalog(legacy: Int = 3, current: Int = 4, subProviders: Bool = false, codex: Bool = true) -> ProviderCatalog {
-        var models = (1...current).map { ServerProviderModel(slug: "m\($0)", name: "Claude Model \($0)") }
-        models += (0..<legacy).map { ServerProviderModel(slug: "l\($0 + 1)", name: "Claude Legacy \($0 + 1)", isLegacy: true) }
+        var models = (1...current).map { ServerProviderModel(slug: "m\($0)", name: "Claude Model #\($0)") }
+        models += (0..<legacy).map { ServerProviderModel(slug: "l\($0 + 1)", name: "Claude Legacy #\($0 + 1)", isLegacy: true) }
         var claude = ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", displayName: "Claude", models: models)
         if subProviders {
             claude.models = (1...3).map { ServerProviderModel(slug: "a\($0)", name: "Alpha \($0)", subProvider: "Alpha") }
@@ -169,11 +169,18 @@ import T3Store
         }
     }
 
-    /// The selected model is a legacy one, so the group opens expanded; Show less hides it.
+    /// The selected model is a legacy one, so the group opens expanded; Show less hides it. Redesign lists the selected
+    /// model above a closed Older models row instead.
     @Test(arguments: Theme.allCases)
     func collapseWithALegacyModelSelected(_ theme: Theme) throws {
         try Self.withTheme(theme) {
             let rig = Rig(activeModel: "l3")
+            if theme == .redesign {
+                #expect(rig.legacyExpanded == false)
+                #expect(rig.picker.rowViews.contains { if case .model(let item) = $0.row { item.model.slug == "l3" } else { false } })
+                rig.expectConsistent()
+                return
+            }
             #expect(rig.legacyExpanded == true)
             rig.click(try #require(rig.legacyRow))
             #expect(rig.legacyExpanded == false)

@@ -122,13 +122,15 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         self.activeModel = activeModel
         rail = ModelPickerSections.initialRail(active: active, favorites: favorites, catalog: catalog)
         // Opens the legacy group on an active legacy model unless it is a favorite (ModelPickerContent.tsx:433-440).
-        if let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true,
+        // Redesign lists the selected model above its Older models row instead, and the row opens closed.
+        if !ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark),
+           let model = catalog.entry(active)?.model(activeModel), model.isLegacy == true,
            !favorites.contains(ModelFavorite(provider: active, model: activeModel)) { expandedLegacy = [active] }
         // The thread's backend opens expanded, so its models show without a click (ModelPickerContent.tsx:470-476).
         if let sub = catalog.entry(active)?.model(activeModel)?.subProvider { expandedSubProviders = [ModelPickerRow.subProviderKey(active, sub)] }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: "", expandedLegacy: expandedLegacy, preferences: self.preferences,
-                                       expandedSubProviders: expandedSubProviders)
+                                       expandedSubProviders: expandedSubProviders, groupsOlder: ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark))
         favoritesButton = RailButtonView(kind: .favorites)
         super.init(frame: .zero)
         clipsToBounds = true
@@ -184,7 +186,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
         }
         sections = ModelPickerSections(catalog: catalog, active: active, activeModel: activeModel, favorites: favorites,
                                        rail: rail, query: query, expandedLegacy: expandedLegacy, selectedKeys: selectedKeys, preferences: preferences,
-                                       expandedSubProviders: expandedSubProviders)
+                                       expandedSubProviders: expandedSubProviders, groupsOlder: capy)
         if !capy, !searching {
             // T3 3814 ModelPickerContent.tsx:583-610,832-836 fits the tallest eligible tab.
             let tabs: [ModelPickerRail] = [.favorites] + sections.rail.filter { !$0.isDisabled }.map { .instance($0.entry.id) }
@@ -1027,6 +1029,17 @@ final class ModelRowView: DSView {
             case .subProvider:
                 name.font = DSFont.ui(14, weight: .regular)
             }
+        }
+        if capy, case .legacy(_, let count, let expanded) = row {
+            // Redesign's Older models row: the count and a chevron that turns up while the group is open.
+            name.text = "Older models"
+            secondary.text = String(count)
+            secondary.isHidden = false
+            chevron?.removeFromSuperview()
+            let c = IconView(name: expanded ? .chevronUp : .chevronDown, size: 16)
+            addSubview(c)
+            chevron = c
+            setAccessibilityExpanded(expanded)
         }
         restyle()
     }
