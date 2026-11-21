@@ -214,6 +214,7 @@ extension SettingsController {
     func jump(to item: SettingsSearchItem) {
         let to = ConcernSettingsView.located(item, dither: isDither).to
         show(to.isAvailable ? to : section)
+        nav.revealSelected()
         guard to.isAvailable else { return }
         let target: NSView? = switch to {
         case .general: general?.anchor(item.anchor)

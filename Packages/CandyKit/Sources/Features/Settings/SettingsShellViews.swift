@@ -180,6 +180,10 @@ public final class SettingsSidebarView: DSView {
             for (section, item) in concernRows { item.isActive = section == selected }
         }
     }
+    /// A search jump can land on a page whose row sits below the nav's fold: the next layout brings it into view. Only
+    /// a jump asks, so picking a page from the nav, or opening one, leaves the nav where it is, as T3 does.
+    public func revealSelected() { revealsSelected = true; needsLayout = true }
+    private var revealsSelected = false
     /// A project is picked in the scope: the nav lists Project first.
     public var showsProject = false {
         didSet { guard showsProject != oldValue else { return }; needsLayout = true }
@@ -522,6 +526,19 @@ public final class SettingsSidebarView: DSView {
             if !DesignGeometry.usesClassic(self), !group.sections.isEmpty { y -= 4 }
         }
         navDocument.frame.size = NSSize(width: bounds.width, height: y)
+        if revealsSelected, !isSearching, let row: NSView = dither ? concernRows[selected] : items[selected], navScroll.bounds.height > 0 {
+            revealsSelected = false
+            // From the nav's own height, since the inner scroll view takes its new size only on its next layout.
+            let height = navScroll.bounds.height, top = navScroll.scrollView.contentView.bounds.origin.y
+            let rowTop = navDocument.isFlipped ? row.frame.minY : navDocument.bounds.height - row.frame.maxY
+            var y = top
+            if rowTop < top { y = rowTop - 8 } else if rowTop + row.frame.height > top + height { y = rowTop + row.frame.height + 8 - height }
+            if y != top {
+                navScroll.layoutSubtreeIfNeeded()
+                let flippedY = navDocument.isFlipped ? y : navDocument.bounds.height - height - y
+                navScroll.scroll(to: NSPoint(x: 0, y: max(0, min(flippedY, navDocument.bounds.height - height))))
+            }
+        }
     }
 
 }
