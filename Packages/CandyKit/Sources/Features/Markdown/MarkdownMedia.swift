@@ -188,7 +188,11 @@ public enum MarkdownImages {
 
     public static func signedURL(resource: JSONValue) async -> (url: URL, size: CGSize?)? {
         guard let resourceURL, await AssetURLLimit.shared.acquire() else { return nil }
+        let name = resource["path"]?.stringValue.map { ($0 as NSString).lastPathComponent } ?? ""
+        ImageTiming.mark("sign", name)
+        await SlowLink.roundTrip()
         let result = await resourceURL(resource)
+        ImageTiming.mark("signed", name)
         await AssetURLLimit.shared.release()
         return result
     }
@@ -200,10 +204,13 @@ public enum MarkdownImages {
     }
 
     nonisolated static func decodeFile(_ url: URL, side: Int) async -> (image: CGImage, natural: CGSize)? {
-        await ImageDecodeWorker.shared.run {
+        let start = ContinuousClock.now
+        let decoded = await ImageDecodeWorker.shared.run {
             CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
                 .flatMap { decode($0, side: side) }
         }
+        ImageTiming.mark("decoded", "\(url.lastPathComponent) \(side) \(ContinuousClock.now - start)")
+        return decoded
     }
 
     /// A `data:` URL; Foundation reads base64 and percent-encoded payloads.

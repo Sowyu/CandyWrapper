@@ -57,13 +57,11 @@ actor MarkdownImageDownload {
 
     nonisolated static func fetch(_ url: URL) async -> ImageDownloadFile? {
         guard !Task.isCancelled, ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return nil }
-        do {
-            let (file, response) = try await URLSession.shared.download(from: url)
-            // Adopt the temporary file before checking cancellation or HTTP failure, so every exit removes it.
-            let downloaded = ImageDownloadFile(file)
-            guard !Task.isCancelled, let response = response as? HTTPURLResponse,
-                  (200..<300).contains(response.statusCode) else { return nil }
-            return downloaded
-        } catch { return nil }
+        ImageTiming.mark("download", url.lastPathComponent)
+        guard let result = await MediaTransfer.shared.download(url) else { return nil }
+        // Adopt the temporary file before checking cancellation, so every exit removes it.
+        let downloaded = ImageDownloadFile(result.file)
+        ImageTiming.mark("downloaded", "\(url.lastPathComponent) \(result.response.expectedContentLength)")
+        return Task.isCancelled ? nil : downloaded
     }
 }
