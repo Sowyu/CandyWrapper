@@ -300,6 +300,17 @@ private struct Lexer {
     static func isSpace(_ c: UInt16) -> Bool { c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d }
     static let operatorChars: Set<UInt16> = Set("=+-*/%<>!&|^~?".utf16)
     static let punctuationChars: Set<UInt16> = Set("()[]{},;:.".utf16)
+    // Character sets the lexer tests per character. A string literal's `.utf16.contains` walks the literal on every call.
+    static let tomlValueEnd: Set<UInt16> = Set(",]}".utf16)
+    static let shellRedirectTail: Set<UInt16> = Set("<>&12".utf16)
+    static let shellBrackets: Set<UInt16> = Set("<>()[]{}".utf16)
+    static let regexPrefix: Set<UInt16> = Set("=(,:[!&|?{};".utf16)
+    static let attributeNameEnd: Set<UInt16> = Set("=>/\"'".utf16)
+    static let shellSpecialVariable: Set<UInt16> = Set("?#@*!".utf16)
+    static let yamlFlowChars: Set<UInt16> = Set("[]{},".utf16)
+    static let pythonStringPrefix: Set<UInt16> = Set("fFrRbBuU".utf16)
+    static let shellSeparators: Set<UInt16> = Set("|&;".utf16)
+    static let shellWordEnd: Set<UInt16> = Set("|&;<>()$\"'".utf16)
 
     mutating func emit(_ start: Int, _ end: Int, _ kind: CodeTokenKind) {
         guard end > start, kind != .plain else { return }
@@ -359,6 +370,9 @@ private struct Lexer {
 
     mutating func number() {
         let a = i
+        // json() sends a minus sign here. Without consuming it, a "-" not followed by an identifier character, as in
+        // `0-100` or `- 1`, never advanced `i`, and json() looped forever on the main thread.
+        if at() == 0x2d { i += 1 }
         if at() == 0x30, at(1) == 0x78 || at(1) == 0x58 { i += 2 } // 0x
         while i < s.count, Self.isIdent(s[i]) || s[i] == 0x2e && Self.isDigit(at(1)) { i += 1 }
         emit(a, i, .constant)
@@ -411,7 +425,7 @@ private struct Lexer {
             }
             if Self.isIdentStart(c) {
                 // Python string prefixes: f"...", r'...', b"..."
-                if p.family == .python, p.quotes.contains(at(1)), "fFrRbBuU".utf16.contains(c) {
+                if p.family == .python, p.quotes.contains(at(1)), Self.pythonStringPrefix.contains(c) {
                     fString = c == 0x66 || c == 0x46
                     emit(i, i + 1, .storage); i += 1; continue
                 }
@@ -485,7 +499,7 @@ private struct Lexer {
         var j = i - 1
         while j >= 0, Self.isSpace(s[j]) { j -= 1 }
         guard j >= 0 else { return true }
-        return "=(,:[!&|?{};".utf16.contains(s[j])
+        return Self.regexPrefix.contains(s[j])
     }
 
     mutating func regex() {
@@ -519,18 +533,18 @@ private struct Lexer {
             if c == 0x22 { shellString(); commandPosition = false; continue }
             if c == 0x27 { string(quote: c, multiline: true); commandPosition = false; continue }
             if c == 0x24 { variable(); commandPosition = false; continue } // $
-            if "|&;".utf16.contains(c) {
-                let a = i; while i < s.count, "|&;".utf16.contains(s[i]) { i += 1 }
+            if Self.shellSeparators.contains(c) {
+                let a = i; while i < s.count, Self.shellSeparators.contains(s[i]) { i += 1 }
                 emit(a, i, .punctuation); commandPosition = true; continue
             }
-            if "<>()[]{}".utf16.contains(c) || (c == 0x32 && at(1) == 0x3e) {
+            if Self.shellBrackets.contains(c) || (c == 0x32 && at(1) == 0x3e) {
                 if c == 0x5b { commandPosition = false }
                 let a = i; i += 1
-                while i < s.count, "<>&12".utf16.contains(s[i]) { i += 1 }
+                while i < s.count, Self.shellRedirectTail.contains(s[i]) { i += 1 }
                 emit(a, i, .punctuation); continue
             }
             let a = i
-            while i < s.count, !Self.isSpace(s[i]), !"|&;<>()$\"'".utf16.contains(s[i]) { i += 1 }
+            while i < s.count, !Self.isSpace(s[i]), !Self.shellWordEnd.contains(s[i]) { i += 1 }
             if i == a { i += 1; continue }
             let w = word(a, i)
             if s[a] == 0x3d || w.contains("=") && commandPosition, let eq = w.firstIndex(of: "=") { // NAME=value
@@ -573,7 +587,7 @@ private struct Lexer {
             return
         }
         i += 1
-        while i < s.count, Self.isIdent(s[i]) || "?#@*!".utf16.contains(s[i]) && i == a + 1 { i += 1 }
+        while i < s.count, Self.isIdent(s[i]) || Self.shellSpecialVariable.contains(s[i]) && i == a + 1 { i += 1 }
         emit(a, i, .variable)
     }
 
@@ -614,16 +628,24 @@ private struct Lexer {
     }
 
     /// Re-colors a..<b, splitting the tokens it overlaps (a JSON key first lexed as a string, a backtick).
+    /// Only rewrites the tokens from the first one ending after `a`: every caller re-colors text it just lexed, so
+    /// that is a short tail. Rebuilding the whole array made a JSON block quadratic in its keys, and a large one
+    /// held the main thread at 100% on every layout.
     mutating func replace(_ a: Int, _ b: Int, with kind: CodeTokenKind) {
+        var k = tokens.count
+        while k > 0, tokens[k - 1].range.upperBound > a { k -= 1 }
+        // A copy, not a slice: a live slice would make the mutation below copy the whole array again.
+        let tail = Array(tokens[k...])
+        tokens.removeSubrange(k...)
         var out: [CodeToken] = []
-        for t in tokens {
+        for t in tail {
             let lo = t.range.location, hi = t.range.upperBound
             if hi <= a || lo >= b { out.append(t); continue }
             if lo < a { out.append(CodeToken(range: NSRange(location: lo, length: a - lo), kind: t.kind)) }
             if hi > b { out.append(CodeToken(range: NSRange(location: b, length: hi - b), kind: t.kind)) }
         }
         if kind != .plain { out.append(CodeToken(range: NSRange(location: a, length: b - a), kind: kind)) }
-        tokens = out.sorted { $0.range.location < $1.range.location }
+        tokens.append(contentsOf: out.sorted { $0.range.location < $1.range.location })
     }
 
     mutating func keyValue() {
@@ -658,11 +680,11 @@ private struct Lexer {
                 lineStart = false
             }
             if c == 0x22 || c == 0x27 { string(quote: c); continue }
-            if "[]{},".utf16.contains(c) { emit(i, i + 1, .punctuation); i += 1; continue }
+            if Self.yamlFlowChars.contains(c) { emit(i, i + 1, .punctuation); i += 1; continue }
             // A scalar up to the line end, a comma or a bracket.
             let a = i
-            while i < s.count, s[i] != 0x0a, !(yaml && "[]{},".utf16.contains(s[i]) && flowContext(a)), !(s[i] == 0x23 && i > a && s[i - 1] == 0x20) { i += 1 }
-            if !yaml { while i < s.count, s[i] != 0x0a, !",]}".utf16.contains(s[i]) { i += 1 } }
+            while i < s.count, s[i] != 0x0a, !(yaml && Self.yamlFlowChars.contains(s[i]) && flowContext(a)), !(s[i] == 0x23 && i > a && s[i - 1] == 0x20) { i += 1 }
+            if !yaml { while i < s.count, s[i] != 0x0a, !Self.tomlValueEnd.contains(s[i]) { i += 1 } }
             var end = i; while end > a, s[end - 1] == 0x20 { end -= 1 }
             let w = word(a, end)
             if ["true", "false", "null", "~"].contains(w) || Double(w) != nil { emit(a, end, .constant) }
@@ -752,7 +774,7 @@ private struct Lexer {
                     if Self.isSpace(s[i]) { i += 1; continue }
                     if s[i] == 0x22 || s[i] == 0x27 { string(quote: s[i], multiline: true); continue }
                     if s[i] == 0x3d || s[i] == 0x2f { emit(i, i + 1, .punctuation); i += 1; continue }
-                    let b = i; while i < s.count, !Self.isSpace(s[i]), !"=>/\"'".utf16.contains(s[i]) { i += 1 }
+                    let b = i; while i < s.count, !Self.isSpace(s[i]), !Self.attributeNameEnd.contains(s[i]) { i += 1 }
                     if i == b { i += 1 }
                     emit(b, i, .attribute)
                 }
