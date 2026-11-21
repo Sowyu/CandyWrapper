@@ -1,4 +1,4 @@
-// Types text into the frontmost app, then optionally presses Return. Usage: type <text> [--return]
+// Types text into CW_UI_PID in background mode, else into the frontmost app, then optionally presses Return. Usage: type <text> [--return]
 import CoreGraphics
 import Foundation
 let a = CommandLine.arguments
@@ -18,7 +18,7 @@ for scalar in a[1].utf16 {
         // The HID source carries the session's modifier state; after a shortcut it can still say
         // cmd/opt/shift are down, which turns every letter into a shortcut. Plain text has none.
         e.flags = []
-        e.post(tap: .cghidEventTap)
+        send(e)
     }
     usleep(8000)
 }
@@ -31,7 +31,7 @@ if a.contains("--return") {
         let e = CGEvent(keyboardEventSource: src, virtualKey: 36, keyDown: down)!
         e.keyboardSetUnicodeString(stringLength: 1, unicodeString: &cr)
         e.flags = []
-        e.post(tap: .cghidEventTap)
+        send(e)
         usleep(20000)
     }
 }

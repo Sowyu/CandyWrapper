@@ -2,8 +2,9 @@
 // Usage: move <x> <y>, or move <x1> <y1> <x2> <y2> <ms> to glide from one point to the other in 60 Hz steps.
 import CoreGraphics
 import Foundation
+requireScreen("hover")  // AppKit follows the real pointer for this; posted events do nothing in the background
 let a = CommandLine.arguments.dropFirst().compactMap(Double.init)
-func post(_ p: CGPoint) { CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap) }
+func post(_ p: CGPoint) { send(mouseEvent(.mouseMoved, at: p)) }
 switch a.count {
 case 2: post(CGPoint(x: a[0], y: a[1]))
 case 5:

@@ -3,6 +3,7 @@
 // hold-ms waits at the end before the release, so a screenshot can catch the drop line.
 import CoreGraphics
 import Foundation
+requireScreen("drag")  // AppKit follows the real pointer for this; posted events do nothing in the background
 let a = CommandLine.arguments
 guard a.count >= 5, let x1 = Double(a[1]), let y1 = Double(a[2]), let x2 = Double(a[3]), let y2 = Double(a[4]) else {
     print("usage: drag x1 y1 x2 y2 [steps] [hold-ms]"); exit(2)
@@ -10,9 +11,9 @@ guard a.count >= 5, let x1 = Double(a[1]), let y1 = Double(a[2]), let x2 = Doubl
 let steps = a.count > 5 ? max(2, Int(a[5]) ?? 20) : 20
 let hold = a.count > 6 ? UInt32(a[6]) ?? 0 : 0
 func post(_ type: CGEventType, _ p: CGPoint) {
-    let e = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: .left)
+    let e = mouseEvent(type, at: p)
     if type == .leftMouseDown || type == .leftMouseUp { e?.setIntegerValueField(.mouseEventClickState, value: 1) }
-    e?.post(tap: .cghidEventTap)
+    send(e)
 }
 let start = CGPoint(x: x1, y: y1), end = CGPoint(x: x2, y: y2)
 post(.mouseMoved, start); usleep(60_000)
