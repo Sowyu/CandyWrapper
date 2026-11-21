@@ -41,7 +41,7 @@ The rules that came out of it are in `docs/research/redesign-system.md`:
 
 ## Work for 1.17.0
 
-Suggested order. Items 1 to 4 need no answer from the user.
+Suggested order. Items 1 to 6 need no answer from the user.
 
 ### 1. Video and GIFs in replies
 
@@ -89,22 +89,31 @@ The full report is `~/CandyWrapper-research/sandbox/relcheck-1.16.0/REPORT.md`, 
 - Trackpad haptics have never been felt by a person. Segmented controls such as Reasoning have none, because they change only by a plain click. The user has not asked for more.
 - `MarkdownBackgroundLayoutTests.viewLaysOutInBackground(modern: false)` fails when it runs beside `ModelPickerShrinkTests`, because the picker test sets the theme globally. It is not in the fast lane.
 
-### 5. Thin scrollbars and one focus ring
+### 5. Settled without project groups
+
+In 1.16.0 the sidebar's Settled section groups threads under project headers. The user asked for that on 2026-11-21, used it, and then said: "remove group by project bc its dumb". With one or two settled threads per project, every thread gets its own header and the list doubles in height. Their picture is `~/CandyWrapper-research/sandbox/redesign-user-notes/r7-settled-grouped-by-project.png`.
+
+- Remove the project headers inside Settled (`SidebarListModel.swift`, `SidebarListView.swift`, `SidebarSettledRange.swift`, tests in `SidebarSettledTests`). The list is flat again, newest settled first.
+- Keep the rest of that work: the regular two-line row, the "settled 3h ago" line, the "when" picker and its empty state, paging with "Load older".
+- A flat list loses the project name. Show it on the row instead: the project's avatar at the row's left, or the project name in the second line ("portfolio · anikodev.org · settled 3h ago"). Mock both and let the user pick.
+- Redesign only. The default themes keep T3's Settled section.
+
+### 6. Thin scrollbars and one focus ring
 
 Approved by the user as part of "what else can make this app more premium". Thin overlay scrollbars everywhere in Redesign and one focus ring style. Small.
 
-### 6. Clean reading column in dark. Ask first.
+### 7. Clean reading column in dark. Ask first.
 
 In Redesign dark with a Picture background, conversation text sits on a thinned dither. It measures 10:1 but reads busy. Light mode already has a plain column with the picture only in the margins (`PictureInk`, `lightColumnIsClean`). The orchestrator recommended the same for dark. **The user has not answered.** Ask before building.
 
-### 7. Inset card layout for threads. Ask first.
+### 8. Inset card layout for threads. Ask first.
 
 The largest job. The thread becomes a bordered card with its tab row inside it, like Capy, behind a switch in Settings > Redesign.
 
 - The user saw the mock (`~/CandyWrapper-research/sandbox/redesign-user-notes/inset-card-mock.html`) and said "as yes thats what i was thinking about indeed" and "also make it a toggle".
 - **Two answers are still owed:** do Diff and Terminal become tabs inside the card or stay as the separate right and bottom cards built in 1.16.0, and is the switch on or off by default. The orchestrator suggested tabs inside and on by default.
 - Reuse `DesignSystem/Components/CardTopRow.swift`. It was built for the right panel's top row with this in mind.
-- If item 6 is a yes, it belongs in the same change.
+- If item 7 is a yes, it belongs in the same change.
 
 Do this last. It touches everything.
 
