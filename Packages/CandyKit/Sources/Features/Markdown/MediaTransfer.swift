@@ -27,6 +27,8 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
 
     private let lock = NSLock()
     private var states: [Int: State] = [:]
+    /// Tasks that finished before their caller registered: cancelled between creation and `resume`.
+    private var finishedEarly: Set<Int> = []
     private let queue: OperationQueue = {
         let q = OperationQueue()
         q.name = "MediaTransfer"
@@ -52,8 +54,12 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
         let task = session.dataTask(with: request)
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (done: CheckedContinuation<Result?, Never>) in
-                lock.withLock { states[task.taskIdentifier] = State(file: file, progress: progress, done: done) }
-                task.resume()
+                let early = lock.withLock {
+                    if finishedEarly.remove(task.taskIdentifier) != nil { return true }
+                    states[task.taskIdentifier] = State(file: file, progress: progress, done: done)
+                    return false
+                }
+                if early { done.resume(returning: nil) } else { task.resume() }
             }
         } onCancel: {
             task.cancel()
@@ -90,7 +96,13 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let state = lock.withLock({ states.removeValue(forKey: task.taskIdentifier) }) else { return }
+        guard let state = lock.withLock({ () -> State? in
+            guard let state = states.removeValue(forKey: task.taskIdentifier) else {
+                finishedEarly.insert(task.taskIdentifier)
+                return nil
+            }
+            return state
+        }) else { return }
         try? state.handle?.close()
         if error == nil, let response = state.response {
             state.done.resume(returning: Result(file: state.file, response: response))
