@@ -343,8 +343,13 @@ extension SettingsController {
     /// `useSettingsProjectGroups`: the sidebar's logical projects over every environment, by display name.
     private func projectGroups() -> [SettingsScopeProject] {
         var projects: [ProjectShell] = []
+        var threads: [String: Int] = [:]
         for id in environments.environmentIds {
-            projects += (environments.snapshot(id)?.projects ?? []).map { EnvironmentScope.scope($0, id) }
+            guard let snapshot = environments.snapshot(id) else { continue }
+            projects += snapshot.projects.map { EnvironmentScope.scope($0, id) }
+            // Loaded threads plus the server's counts of older settled ones it left out.
+            for t in snapshot.threads { threads[id + "\u{0}" + t.projectId.rawValue, default: 0] += 1 }
+            for c in snapshot.olderSettled?.counts ?? [] { threads[id + "\u{0}" + c.projectId.rawValue, default: 0] += c.count }
         }
         return SidebarModel.buildProjectGroups(projects, preferredEnvironmentId: environments.primaryId).map { g in
             SettingsScopeProject(key: g.key, displayName: g.label, members: g.members.map { p in
@@ -355,7 +360,10 @@ extension SettingsController {
                     scripts: p.scripts.compactMap(ProjectScript.init),
                     legacy: ProjectSettings.Legacy(defaultModelSelection: p.defaultModelSelection.flatMap { try? JSONValue(encoding: $0) },
                                                    defaultThreadEnvMode: p.defaultThreadEnvMode))
-            }, icon: ProjectIconSource(g.representative))
+            }, icon: ProjectIconSource(g.representative),
+               threadCount: g.members.reduce(0) { $0 + threads[($1.id.environmentId ?? "") + "\u{0}" + EnvironmentScope.localId(of: $1.id.rawValue), default: 0] },
+               pinned: g.members.contains { $0.pinnedAt != nil },
+               isScratch: g.members.contains { composer?.isScratch($0) == true })
         }.sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
     }
 

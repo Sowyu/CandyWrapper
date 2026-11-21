@@ -53,8 +53,16 @@ public struct SettingsScopeProject: Equatable, Sendable {
     public var members: [Member]
     /// The group's favicon, from its representative project (`ProjectFavicon project={group}`).
     public var icon: ProjectIconSource?
-    public init(key: String, displayName: String, members: [Member] = [], icon: ProjectIconSource? = nil) {
+    /// Unarchived threads across the members, for Redesign's project list.
+    public var threadCount: Int
+    /// A member is pinned in the sidebar (`ProjectShell.pinnedAt`).
+    public var pinned: Bool
+    /// The group is an environment's scratch folder, the sidebar's "No project" (`isScratchProject`).
+    public var isScratch: Bool
+    public init(key: String, displayName: String, members: [Member] = [], icon: ProjectIconSource? = nil,
+                threadCount: Int = 0, pinned: Bool = false, isScratch: Bool = false) {
         self.key = key; self.displayName = displayName; self.members = members; self.icon = icon
+        self.threadCount = threadCount; self.pinned = pinned; self.isScratch = isScratch
     }
 }
 
