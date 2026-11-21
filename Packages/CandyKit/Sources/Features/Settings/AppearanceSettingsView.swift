@@ -76,10 +76,20 @@ public final class AppearanceSettingsView: SettingsPageBase {
         buttons.create.action = { [weak self] in self?.createTheme() }
         buttons.add.action = { [weak self] in self?.addTheme() }
         let grid = ThemeCardGridView()
+        // While Redesign is on the cards pick the theme under it; Redesign itself is switched in Settings > Redesign.
+        let redesignNotice = SettingsNoticeView("")
+        let openRedesign = ButtonView("Open Redesign settings", variant: .link, size: .sm)
+        openRedesign.action = { [weak self] in self?.context.openSection?(.redesign) }
+        redesignNotice.button = openRedesign
         var shown: ThemeGridContent?
-        binder.add { [weak self, weak tiles, weak grid] in
+        binder.add { [weak self, weak tiles, weak grid, weak redesignNotice] in
             guard let self else { return }
             let lib = self.themes
+            if let redesignNotice {
+                let message = Self.redesignNotice(lib.redesignAppearances)
+                redesignNotice.isHidden = message == nil
+                if let message, redesignNotice.message != message { redesignNotice.message = message; self.onHeightChange?() }
+            }
             tiles?.mode = lib.appearanceMode
             let colors = ThemeAppearance.allCases.map { a in
                 (lib.ownerCard(a).flatMap { lib.definition($0) }.map(ThemeCardDefinition.init) ?? .standard).colors(a)
@@ -90,7 +100,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             // Rebuilt only when what the cards show changed. The cards are compared as values: a dictionary's
             // description changes order between equal instances, so a string key rebuilt them on every refresh.
             let custom = lib.customThemes + lib.environmentThemes.filter { theme in !lib.customThemes.contains { $0.id == theme.id } }
-            let next = ThemeGridContent(picked: [lib.pickedModes(nil)] + (ThemeDefinition.pickerBuiltIns + custom).map { lib.pickedModes($0.id) },
+            let next = ThemeGridContent(picked: [lib.pickedModes(nil)] + (Self.gridBuiltIns + custom).map { lib.pickedModes($0.id) },
                                         custom: custom.map(ThemeCardDefinition.init), accent: ThemeRuntime.ditherAccent.id)
             guard next != shown, let grid else { return }
             shown = next
@@ -98,13 +108,25 @@ public final class AppearanceSettingsView: SettingsPageBase {
             self.onHeightChange?()
         }
         let s = SettingsPlainSectionView()
-        s.body = [heading, tiles, themeHeading, grid]
+        s.body = [heading, tiles, themeHeading, redesignNotice, grid]
         anchors["appearance"] = s
         anchors["theme"] = themeHeading
         return s
     }
 
     private var themes: ThemeLibrary { ThemeLibrary.shared }
+
+    /// The grid's built-in cards: Redesign has none, since Settings > Redesign turns it on and off.
+    static let gridBuiltIns = ThemeDefinition.pickerBuiltIns.filter { !$0.isDither }
+
+    /// The line under the Theme heading while Redesign paints an appearance; nil while it is off.
+    static func redesignNotice(_ on: Set<ThemeAppearance>) -> String? {
+        switch on.count {
+        case 0: nil
+        case 1: "Redesign is on in \(on.first!.rawValue) mode, so the theme you pick here shows in \(on.first!.other.rawValue) mode and when Redesign is off."
+        default: "Redesign is on, so the theme you pick here shows when Redesign is off."
+        }
+    }
 
     /// What the theme grid shows: each card's picked modes and the saved and published cards.
     struct ThemeGridContent: Equatable {
@@ -119,20 +141,16 @@ public final class AppearanceSettingsView: SettingsPageBase {
         let appearance = lib.resolvedAppearance
         let editor = ThemeEditorController.shared
         var cards = [ThemeLibraryCardView(card: .standard, picked: lib.pickedModes(nil), actions: .init(
-            use: { lib.useStandard() }, useMode: { lib.assignHalf($0, nil) },
+            use: { lib.keepingRedesign { lib.useStandard() } }, useMode: { a in lib.keepingRedesign { lib.assignHalf(a, nil) } },
             duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: nil, seedName: "T3 Code copy", initialAppearance: appearance)) }))]
-        for theme in ThemeDefinition.pickerBuiltIns {
+        for theme in Self.gridBuiltIns {
             cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: .init(
-                use: { [weak self] in
-                    lib.setTheme(theme.id)
-                    // Dither shows the desktop picture until one is chosen, so it asks once.
-                    if theme.isDither, DitherPicture.path == nil { self?.chooseDitherPicture() }
-                }, useMode: { lib.assignHalf($0, theme.id) },
+                use: { lib.keepingRedesign { lib.setTheme(theme.id) } }, useMode: { a in lib.keepingRedesign { lib.assignHalf(a, theme.id) } },
                 duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) })))
         }
         for theme in custom {
             var actions = ThemeLibraryCardView.Actions(
-                use: { lib.use(theme) }, useMode: { lib.assignHalf($0, theme.id) },
+                use: { lib.keepingRedesign { lib.use(theme) } }, useMode: { a in lib.keepingRedesign { lib.assignHalf(a, theme.id) } },
                 duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) },
                 edit: { editor.open(.init(editingThemeId: theme.id, seedThemeId: nil, seedName: nil, initialAppearance: appearance)) },
                 export: { [weak self] in self?.exportTheme(theme) },
@@ -149,7 +167,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
     private func createTheme() {
         let lib = themes
         let appearance = lib.resolvedAppearance
-        let seed = lib.ownerCard(appearance).flatMap { lib.definition($0) }?.id
+        let seed = lib.underlyingOwnerCard(appearance).flatMap { lib.definition($0) }?.id
         ThemeEditorController.shared.open(.init(editingThemeId: nil, seedThemeId: seed, seedName: nil, initialAppearance: appearance))
     }
 
@@ -184,10 +202,10 @@ public final class AppearanceSettingsView: SettingsPageBase {
                 guard data.count <= 512 * 1024 else { throw ThemePalette.FileError(message: "That file is too large to be a theme.") }
                 let theme = try self.themes.install(ThemeVSCodeImport.parseImport(data))
                 if let single = theme.singleAppearance {
-                    self.themes.assignHalf(single, theme.id)
+                    self.themes.keepingRedesign { self.themes.assignHalf(single, theme.id) }
                     self.context.toast?("\(theme.label) added", "It’s now your \(single.rawValue) theme.", .success)
                 } else {
-                    self.themes.setTheme(theme.id)
+                    self.themes.keepingRedesign { self.themes.setTheme(theme.id) }
                     self.context.toast?("\(theme.label) added", "It’s now active.", .success)
                 }
             } catch {
@@ -207,7 +225,8 @@ public final class AppearanceSettingsView: SettingsPageBase {
         cancel.action = { [weak host] in host?.close() }
         remove.action = { [weak self, weak host] in
             host?.close()
-            self?.themes.removeThemes([theme.id])
+            guard let themes = self?.themes else { return }
+            themes.keepingRedesign { themes.removeThemes([theme.id]) }
         }
     }
 
@@ -305,13 +324,6 @@ public final class AppearanceSettingsView: SettingsPageBase {
             r?.needsLayout = true
         })
         return r
-    }
-
-    private func chooseDitherPicture() {
-        DitherPicture.choose(in: window, onError: { [weak self] in self?.context.toast?("Couldn’t use that picture", $0, .error) }) { [weak self] in
-            ThemeLibrary.shared.apply()
-            self?.refresh()
-        }
     }
 
     private func sliderRow(_ id: String, _ detail: String, key: String, range: ClosedRange<Double>, step: Double, reset: String,
