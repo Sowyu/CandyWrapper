@@ -60,6 +60,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherAccent = DitherAccent.teal.id
     /// Picture's "Ink": where its two inks come from (`DitherInk`).
     public var ditherInk = DitherInk.auto
+    /// Picture's "Dot size" (`DitherDotSize`).
+    public var ditherDotSize = DitherDotSize.medium
     /// "Ignore Reduce Transparency": Redesign draws as if macOS's Reduce Transparency were off.
     public var ignoreReduceTransparency = false
     /// Redesign's "Project avatars": pixel sprites (on) or T3's letters.
@@ -101,6 +103,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var ditherGradientAnimates = true
     /// Picture's "Ink" setting.
     nonisolated(unsafe) public private(set) static var ditherInk = DitherInk.auto
+    /// Picture's "Dot size" setting.
+    nonisolated(unsafe) public private(set) static var ditherDotSize = DitherDotSize.medium
     /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
     nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
@@ -161,6 +165,10 @@ public enum ThemeRuntime {
         }
         if next.ditherInk != old.ditherInk {
             ditherInk = next.ditherInk
+            changed = true
+        }
+        if next.ditherDotSize != old.ditherDotSize {
+            ditherDotSize = next.ditherDotSize
             changed = true
         }
         if next.ditherAccent != old.ditherAccent {
@@ -362,6 +370,22 @@ public extension ThemeCSSColor {
 public protocol ThemeRedrawingLayer: CALayer {}
 extension BoxDecorationLayer: ThemeRedrawingLayer {}
 extension PopupShadowLayer: ThemeRedrawingLayer {}
+
+/// The size of Redesign's Picture dots (the user, 2026-11-21, on 3pt dots on a 2x laptop: "i feel like the pixels
+/// might be a bit big"). Each lands on whole device pixels: Fine is 3 pixels at 2x and rounds up to 2pt at 1x, where
+/// 1.5pt would fall between pixels.
+public enum DitherDotSize: String, Hashable, Sendable, CaseIterable {
+    case fine, medium, coarse
+
+    /// The cell in points on a screen of `scale` pixels a point.
+    public func points(scale: CGFloat) -> CGFloat {
+        switch self {
+        case .fine: scale >= 2 ? 1.5 : 2
+        case .medium: 2
+        case .coarse: 3
+        }
+    }
+}
 
 /// Where Redesign's Picture takes its two inks: the picture's own hue (Auto), the accent, or a color the user picked,
 /// which becomes the light ink (`PictureInk.inks(light:)`).

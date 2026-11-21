@@ -509,7 +509,8 @@ public final class DitherArtView: NSView {
             let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
             let fallbacks = [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url }
             PictureTint.sync([url].compactMap { $0 } + fallbacks)
-            let unit = blur ? DitherArt.blurPixel : PictureInk.cell
+            // Picture's cell lands on whole device pixels at this window's scale (`DitherDotSize`).
+            let unit = blur ? DitherArt.blurPixel : ThemeRuntime.ditherDotSize.points(scale: scale)
             var made = DitherArt.Request(url: url, width: Int((rect.width / unit).rounded(.up)),
                                          height: Int((rect.height / unit).rounded(.up)),
                                          background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
@@ -517,7 +518,8 @@ public final class DitherArtView: NSView {
                                          blur: blur, dark: dark)
             if !blur {
                 made.ink = Self.ink(palette: palette)
-                made.shape = pictureShape()
+                made.dot = unit
+                made.shape = pictureShape(cell: unit)
                 made.text = [palette.foreground.srgb, palette.mutedForeground.srgb].flatMap { [$0.x, $0.y, $0.z] }
             }
             request = made
@@ -557,11 +559,11 @@ public final class DitherArtView: NSView {
 
     /// What the front page needs from Picture's dots, in points from the panel's top left, snapped to whole cells so
     /// a sub-point layout change renders nothing.
-    private func pictureShape() -> PictureInk.Shape {
+    private func pictureShape(cell: CGFloat) -> PictureInk.Shape {
         let (page, front) = self.front
         func cells(_ r: NSRect) -> [Double] {
             let local = convert(r, from: front)
-            let snap = { (v: CGFloat) in Double((v / PictureInk.cell).rounded() * PictureInk.cell) }
+            let snap = { (v: CGFloat) in Double((v / cell).rounded() * cell) }
             return [snap(local.minX), snap(bounds.height - local.maxY), snap(local.width), snap(local.height)]
         }
         switch page {
@@ -699,7 +701,7 @@ extension DitherArtView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         flower.backgroundColor = Self.flowerInk(palette, dark: dark)
         CATransaction.commit()
-        let key = FlowerKey(radius: LotusArt.bucket(spot.radius, cell: PictureInk.cell), dark: dark, kind: stage.kind,
+        let key = FlowerKey(radius: LotusArt.bucket(spot.radius, cell: DitherArt.gradientUnit), dark: dark, kind: stage.kind,
                             animates: ThemeRuntime.ditherGradientAnimates)
         let now = CACurrentMediaTime()
         let moved = spot != flowerSpot || stage.kind != flowerKind
@@ -734,7 +736,7 @@ extension DitherArtView {
         refresh()
         placeFlower(settled: true, animated: !Motion.reduced)
         if let spot = flowerSpot, let kind = flowerKind {
-            let key = FlowerKey(radius: LotusArt.bucket(spot.radius, cell: PictureInk.cell), dark: effectiveAppearance.isDark, kind: kind,
+            let key = FlowerKey(radius: LotusArt.bucket(spot.radius, cell: DitherArt.gradientUnit), dark: effectiveAppearance.isDark, kind: kind,
                                 animates: ThemeRuntime.ditherGradientAnimates)
             if flowerSet?.key != key, flowerWanted != key { renderFlower(key) }
         }
@@ -745,7 +747,7 @@ extension DitherArtView {
     /// radius, the shown set scaled on the GPU.
     func flowerFrame(settled: Bool) -> CGRect? {
         guard let spot = flowerSpot else { return nil }
-        let cell = PictureInk.cell
+        let cell = DitherArt.gradientUnit
         let target = LotusArt.bucket(spot.radius, cell: cell)
         let radius = flowerSet?.key.radius ?? flowerWanted?.radius ?? target
         let canvas = LotusArt.canvas(radius: radius)
@@ -1126,9 +1128,11 @@ public enum DitherArt {
         var ink = PictureInk.Choice.auto
         var shape = PictureInk.Shape.plain
         var text: [Double] = []
+        /// Picture's cell in points, from the "Dot size" setting at the window's scale.
+        var dot: CGFloat = DitherDotSize.medium.points(scale: 2)
 
         /// Points per canvas pixel.
-        var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : blur ? DitherArt.blurPixel : PictureInk.cell }
+        var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : blur ? DitherArt.blurPixel : dot }
     }
 
     /// Gradient's cell, in points: Capy's binary dither cells measured 6px at 2x in the user's recording.
@@ -1328,7 +1332,7 @@ public enum DitherArt {
     nonisolated static func renderInk(_ request: Request) -> CGImage? {
         let t0 = DispatchTime.now().uptimeNanoseconds
         let urls = [request.url].compactMap { $0 } + request.fallbacks
-        guard let tone = PictureInk.tone(urls, width: request.width, height: request.height) else { return nil }
+        guard let tone = PictureInk.tone(urls, width: request.width, height: request.height, cell: Double(request.dot)) else { return nil }
         let inks = switch request.ink {
         case .auto: PictureInk.inks(hue: tone.hue)
         case let .color(c): PictureInk.inks(light: c)
@@ -1337,7 +1341,7 @@ public enum DitherArt {
         let text = request.text.count == 6 ? [SIMD3(request.text[0], request.text[1], request.text[2]), SIMD3(request.text[3], request.text[4], request.text[5])] : []
         let art = PictureInk.render(tone, inks: inks, ground: ground, dark: request.dark, shape: request.shape, text: text)
         let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
-        log.notice("picture \(request.width) x \(request.height) cells in \(ms, format: .fixed(precision: 1)) ms, \(request.width * request.height * 5) bytes")
+        log.notice("picture \(request.width) x \(request.height) cells of \(request.dot, format: .fixed(precision: 1)) pt in \(ms, format: .fixed(precision: 1)) ms, \(request.width * request.height * 5) bytes")
         return art
     }
 

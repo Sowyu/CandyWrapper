@@ -113,6 +113,7 @@ CANDY_ITEMS = [
     '        .item(SettingsSearchItem(id: "redesign-picture", title: "Picture", to: .redesign, searchTerms: ["redesign background wallpaper image photo desktop picture art"])),',
     '        .item(SettingsSearchItem(id: "redesign-background", title: "Background", to: .redesign, searchTerms: ["redesign picture wallpaper dither blur gradient flower lotus bloom halftone dots soft backdrop no picture"])),',
     '        .item(SettingsSearchItem(id: "redesign-ink", title: "Ink", to: .redesign, searchTerms: ["redesign picture dither dots ink colour color hue auto accent custom two inks"])),',
+    '        .item(SettingsSearchItem(id: "redesign-dot-size", title: "Dot size", to: .redesign, searchTerms: ["redesign picture dither dots pixels cell size fine medium coarse small big detail"])),',
     '        .item(SettingsSearchItem(id: "redesign-project-avatars", title: "Project avatars", to: .redesign, searchTerms: ["redesign project account avatar icon sprite pixel art monogram letters initials"])),',
     '        .item(SettingsSearchItem(id: "redesign-tint", title: "Tint from picture", to: .redesign, searchTerms: ["redesign picture wallpaper color colour tint hue match surfaces"])),',
     '        .item(SettingsSearchItem(id: "redesign-gradient-animate", title: "Animate background", to: .redesign, searchTerms: ["redesign gradient flower lotus bloom dither dots motion move animate animation drift"])),',

@@ -384,7 +384,7 @@ struct RedesignBaselineTests {
                 art.refresh()
             } else if let art = v as? DitherArtView, let layer = art.layer?.sublayers?.first {
                 let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false), bg = palette.background.srgb
-                let blur = ThemeRuntime.ditherBlur, unit = blur ? DitherArt.blurPixel : PictureInk.cell
+                let blur = ThemeRuntime.ditherBlur, unit = blur ? DitherArt.blurPixel : ThemeRuntime.ditherDotSize.points(scale: 2)
                 layer.magnificationFilter = blur ? .linear : .nearest
                 if ThemeRuntime.ditherGradient {
                     // The loop's first frame, which is also the still look: the cell color through the cell mask.
@@ -403,7 +403,7 @@ struct RedesignBaselineTests {
                     layer.frame = art.bounds
                     layer.contents = DitherArt.render(.init(url: ComposerAttachmentsFidelityTests.fixture,
                         width: Int(ceil(art.bounds.width / unit)), height: Int(ceil(art.bounds.height / unit)),
-                        background: [bg.x, bg.y, bg.z], scale: 2, blur: blur, dark: dark))
+                        background: [bg.x, bg.y, bg.z], scale: 2, blur: blur, dark: dark, dot: unit))
                 }
             }
             if let scroller = v as? ScrollAreaScroller { scroller.isHidden = true }
