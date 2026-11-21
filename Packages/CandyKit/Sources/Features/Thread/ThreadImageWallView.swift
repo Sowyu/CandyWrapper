@@ -265,8 +265,13 @@ final class GalleryTileView: ControlView {
     let caption = LabelView("", font: DSFont.ui(12), color: Themed.white(1))
     private let ring = CALayer()
     var keyFocused = false { didSet { if keyFocused != oldValue { restyle(animated: false) } } }
-    /// Whether the hover strip shows: the pointer is over the tile or the keyboard focus is on it.
-    var showsCaption: Bool { state.hovered || keyFocused || state.focusVisible }
+    /// Whether the hover strip shows: the pointer moved onto the tile or the keyboard focus is on it.
+    var showsCaption: Bool { state.hovered && Self.stillPointer == nil || keyFocused || state.focusVisible }
+    /// Where the pointer rested when the gallery opened, until it moves. A tile that opens under a still pointer gets
+    /// a mouseEntered without any motion; its caption waits for the pointer to move, so no tile shows one at rest.
+    static var stillPointer: NSPoint?
+    static var pointer: () -> NSPoint = { NSEvent.mouseLocation }
+    private var moveArea: NSTrackingArea?
 
     init(radius: CGFloat) {
         super.init(frame: .zero)
@@ -313,6 +318,30 @@ final class GalleryTileView: ControlView {
     override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)
         restyle(animated: true)
+    }
+
+    /// Moves are tracked only inside a tile, and only matter while the gallery waits for the pointer's first move.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let moveArea { removeTrackingArea(moveArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        moveArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        Self.notePointer()
+        super.mouseEntered(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard Self.stillPointer != nil else { return }
+        Self.notePointer()
+        if Self.stillPointer == nil { restyle(animated: true) }
+    }
+
+    private static func notePointer() {
+        if let still = stillPointer, pointer() != still { stillPointer = nil }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -537,6 +566,11 @@ public final class ThreadImageWallView: DSView {
 
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        GalleryTileView.stillPointer = window == nil ? nil : GalleryTileView.pointer()
+    }
 
     public override func layout() {
         super.layout()
