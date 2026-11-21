@@ -292,6 +292,30 @@ struct PopupBehaviourTests {
         #expect(host.popups.isEmpty)
     }
 
+    /// Release check 1.16.0, M2: picking a track opened the Switch dialog while the list was still open, and the
+    /// default themes' blurred backdrop froze the list into it. `onChange` now runs after the list closes, and a
+    /// modal ends the list's exit fade before it takes its snapshot.
+    @Test func selectChangeRunsAfterItsListClosesAndAModalEndsTheFade() throws {
+        let (w, root) = window()
+        let select = SelectView(options: ["Stable", "Nightly"], selected: 0)
+        select.frame = NSRect(x: 200, y: 300, width: 160, height: 28)
+        root.addSubview(select)
+        let host = PopupHost.host(for: w)
+        var openAtChange: Int?
+        var modal: ModalHost?
+        select.onChange = { _ in
+            openAtChange = host.popups.count
+            modal = ModalHost.present(DialogView(kind: .alertDialog, title: "Switch", message: "Checking"), in: w)
+        }
+        select.performAction()
+        host.handleKey(.down)
+        host.handleKey(.enter)
+        #expect(select.selectedIndex == 1)
+        #expect(openAtChange == 0)
+        #expect(!host.subviews.contains { $0 is PopupContainer })
+        modal?.close(animated: false)
+    }
+
     @Test func comboboxFilters() {
         #expect(ComboboxView.filter(["Claude Haiku", "Claude Opus", "GPT"], "cla") == [0, 1])
         #expect(ComboboxView.filter(["Claude Haiku", "Claude Opus", "GPT"], "OPUS") == [1])

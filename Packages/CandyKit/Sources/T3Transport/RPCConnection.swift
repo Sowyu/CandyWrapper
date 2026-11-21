@@ -1,8 +1,9 @@
 import Foundation
 import T3Protocol
 
-/// Why an RPC call failed.
-public enum RPCClientError: Error, Sendable, Equatable, CustomStringConvertible {
+/// Why an RPC call failed. A `LocalizedError`, so `localizedDescription` is `description` and never
+/// "The operation couldn't be completed. (T3Transport.RPCClientError error 0.)".
+public enum RPCClientError: LocalizedError, Sendable, Equatable, CustomStringConvertible {
     /// The server answered with `Exit` `Failure`.
     case failure([RPCCause])
     /// A connection-level `Defect` frame. Every pending call fails with it; the socket stays open.
@@ -23,7 +24,14 @@ public enum RPCClientError: Error, Sendable, Equatable, CustomStringConvertible 
     public var description: String {
         switch self {
         case .failure(let causes):
-            if let e = typedError { return e.message ?? e.tag }
+            if let e = typedError {
+                if let message = e.message { return message }
+                // `ServerNpmReleaseError.message` is built on the client (contracts server.ts:1019-1025).
+                if e.tag == "ServerNpmReleaseError", let reason = e.fields["reason"]?.stringValue {
+                    return "Could not check the configured npm registry: \(reason)"
+                }
+                return e.fields["reason"]?.stringValue ?? e.tag
+            }
             for case .die(let d) in causes { return d.stringValue ?? "Request failed." }
             return "Request was interrupted."
         case .defect(let d): return d.stringValue ?? "Server defect."
@@ -31,6 +39,8 @@ public enum RPCClientError: Error, Sendable, Equatable, CustomStringConvertible 
         case .transport(let t): return t.description
         }
     }
+
+    public var errorDescription: String? { description }
 }
 
 /// One Effect RPC session over one socket (protocol.md 2.3 to 2.6).

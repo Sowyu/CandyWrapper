@@ -14,7 +14,7 @@ public protocol RPCSocket: Sendable {
     func close()
 }
 
-public enum RPCTransportError: Error, Sendable, Equatable, CustomStringConvertible {
+public enum RPCTransportError: LocalizedError, Sendable, Equatable, CustomStringConvertible {
     case openTimedOut
     /// The HTTP upgrade was answered with a status instead of 101 (401 bad ticket, 426 protocol).
     case upgradeRejected(status: Int)
@@ -32,6 +32,7 @@ public enum RPCTransportError: Error, Sendable, Equatable, CustomStringConvertib
         case .invalidFrame(let r): "The server sent a frame this client can't read: \(r)"
         }
     }
+    public var errorDescription: String? { description }
 }
 
 /// URLSessionWebSocketTask behind RPCSocket. One URLSession per socket so the delegate can

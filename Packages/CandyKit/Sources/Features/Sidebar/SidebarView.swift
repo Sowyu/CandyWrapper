@@ -1042,17 +1042,15 @@ public final class SidebarContentView: DSView {
         (((lightsBottom ?? 0) + searchIconTop) / 2).rounded()
     }
 
-    /// The bottom of the window's close button in this view, measured, so the candy follows wherever the
-    /// window places the lights. Nil in full screen or with the buttons hidden. Without a titled window (offscreen
-    /// renders) a windowed sidebar assumes the 14pt lights centred in the 52pt top bar.
+    /// The bottom of the window's close button: the 14pt lights centred in the 52pt top bar, where
+    /// `MainWindow.layoutTrafficLights` puts them. Nil in full screen or with the buttons hidden. Measuring the button
+    /// read the system's spot instead, because the window moves the lights after this view's layout, and the candy
+    /// sat 10pt high (release check 1.16.0, m4).
     private func trafficLightsBottom() -> CGFloat? {
         if window?.styleMask.contains(.fullScreen) == true { return nil }
-        guard let window, let close = window.standardWindowButton(.closeButton) else {
-            return windowedMac ? SidebarMetrics.topbarHeight / 2 + 7 : nil
-        }
-        guard !close.isHiddenOrHasHiddenAncestor, close.window === window else { return nil }
-        let f = convert(close.bounds, from: close)
-        return isFlipped ? f.maxY : bounds.height - f.minY
+        let close = window?.standardWindowButton(.closeButton)
+        if close?.isHiddenOrHasHiddenAncestor == true || (close == nil && !windowedMac) { return nil }
+        return SidebarMetrics.topbarHeight / 2 + 7
     }
 
     private var fullScreenObservers: [NSObjectProtocol] = []

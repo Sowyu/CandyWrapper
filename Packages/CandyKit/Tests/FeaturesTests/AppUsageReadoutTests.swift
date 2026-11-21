@@ -14,6 +14,18 @@ struct AppUsageReadoutTests {
         #expect(L.cpuPercent(from: a, to: a) == 0)
     }
 
+    /// Release check 1.16.0, m3: at the sidebar's minimum width the memory reading showed a bare "1".
+    @Test func aReadingThatDoesNotFitHidesInsteadOfClipping() {
+        let v = AppUsageReadoutView(frame: NSRect(x: 0, y: 0, width: 400, height: 16))
+        v.show(cpu: 0.4, footprint: 182 << 20, animated: false)
+        v.layout()
+        #expect(!v.cpuMeter.isHidden && !v.memoryLabel.isHidden)
+        v.frame.size.width = 60
+        v.layout()
+        #expect(v.cpuMeter.isHidden && !v.cpuLabel.isHidden && v.memoryLabel.isHidden)
+        for label in [v.cpuLabel, v.memoryLabel] where !label.isHidden { #expect(label.frame.maxX <= v.bounds.width) }
+    }
+
     @Test func numbersAreShort() {
         #expect(L.cpuText(0.4) == "0.4%")
         #expect(L.cpuText(12.3) == "12%")

@@ -175,7 +175,11 @@ public final class AppUsageReadoutView: DSView {
             meter.isHidden = !meters
             meter.frame = NSRect(x: x + 12 + 3, y: 0, width: meters ? AppUsageMeterView.width : 0, height: h)
             let lx = meters ? meter.frame.maxX + 3 : x + 12 + 4, w = ceil(label.textWidth)
-            label.frame = NSRect(x: lx, y: (h - 16) / 2, width: min(w, max(0, bounds.width - lx)), height: 16)
+            label.frame = NSRect(x: lx, y: (h - 16) / 2, width: w, height: 16)
+            // Narrower still, a reading that would be cut ("1" of "182 MB") goes with its icon.
+            let fits = lx + w <= bounds.width
+            icon.isHidden = !fits
+            label.isHidden = !fits
             x = lx + w + 8
         }
     }

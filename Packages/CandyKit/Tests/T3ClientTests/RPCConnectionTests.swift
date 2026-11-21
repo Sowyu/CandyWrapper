@@ -5,6 +5,18 @@ import Testing
 import T3Protocol
 
 struct RPCConnectionTests {
+    /// Release check 1.16.0, M2: `localizedDescription` gives the plain sentence, not "(RPCClientError error 0.)".
+    @Test func clientErrorsReadAsSentences() {
+        let interrupted: any Error = RPCClientError.failure([])
+        #expect(interrupted.localizedDescription == "Request was interrupted.")
+        let closed: any Error = RPCClientError.transport(.openTimedOut)
+        #expect(closed.localizedDescription == "The WebSocket did not open in time.")
+        let npm: any Error = RPCClientError.failure([.fail(RPCTypedError(tag: "ServerNpmReleaseError", fields: ["reason": .string("fetch failed")]))])
+        #expect(npm.localizedDescription == "Could not check the configured npm registry: fetch failed")
+        let raw: any Error = RPCTransportError.closed("bye")
+        #expect(raw.localizedDescription == "Disconnected: bye")
+    }
+
     func makeConnection() async -> (RPCConnection, FakeSocket) {
         let socket = FakeSocket()
         let connection = RPCConnection(socket: socket)

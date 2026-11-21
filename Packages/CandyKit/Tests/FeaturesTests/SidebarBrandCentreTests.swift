@@ -3,8 +3,9 @@ import Testing
 @testable import DesignSystem
 @testable import Features
 
-/// Redesign's candy centres between the traffic lights and the search icon, measured from the window's own close
-/// button, and the collapse button shares its centre line (the user, r6-logo-between-lights-and-search.png).
+/// Redesign's candy centres between the traffic lights and the search icon, and the collapse button shares its centre
+/// line (the user, r6-logo-between-lights-and-search.png). The lights' bottom is 33, where `MainWindow` centres them in
+/// the 52pt top bar: the window moves them after the sidebar's layout, so measuring the button read the system's spot.
 @MainActor
 struct SidebarBrandCentreTests {
     private func laidOut(styleMask: NSWindow.StyleMask, width: CGFloat) -> (SidebarContentView, NSWindow) {
@@ -30,11 +31,11 @@ struct SidebarBrandCentreTests {
         ThemeRuntime.apply(dither)
         let (content, window) = laidOut(styleMask: [.titled, .fullSizeContentView, .closable, .miniaturizable, .resizable], width: width)
         defer { window.contentView = nil }
-        let close = try #require(window.standardWindowButton(.closeButton))
-        let lights = content.convert(close.bounds, from: close)
+        _ = try #require(window.standardWindowButton(.closeButton))
         let searchIconTop = content.search.frame.minY + (content.search.frame.height - 16) / 2
         let centre = content.brand.frame.minY + content.brand.markCentreY
-        #expect(abs(centre - (lights.maxY + searchIconTop) / 2) <= 0.5)
+        #expect(abs(centre - (33 + searchIconTop) / 2) <= 0.5)
+        #expect(centre == 64)
         #expect(content.trigger.frame.midY == centre)
         #expect(content.trigger.frame.maxX == width - 10) // its 16pt icon ends 16 in, like the rows' action icons
         #expect(content.brand.frame.minX == 16)

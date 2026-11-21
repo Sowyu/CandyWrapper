@@ -10,7 +10,8 @@ public final class ConcernSettingsView: SettingsPageBase {
     public static let sections: Set<SettingsSection> = [.general, .chat, .diffs, .threads, .browser, .devices,
                                                        .worktrees, .maintenance, .about, .providers, .sourceControl]
 
-    public init(context: SettingsPageContext, section: SettingsSection) {
+    /// `dither` is Redesign in the window's appearance: it moves CandyWrapper's own rows from About to General.
+    public init(context: SettingsPageContext, section: SettingsSection, dither: Bool = false) {
         self.section = section
         if section == .browser, !ThemeRuntime.framesPanes(dark: false), !ThemeRuntime.framesPanes(dark: true) {
             let browser = BrowserSettingsPage(context: context)
@@ -20,7 +21,7 @@ public final class ConcernSettingsView: SettingsPageBase {
             items = sources
             return
         }
-        let slices = Self.slices(section)
+        let slices = Self.slices(section, dither: dither)
         sources = slices.map { slice in
             let groups = slice.groups.map { Set($0.map(\.key)) }
             return switch slice.page {
@@ -72,12 +73,22 @@ public final class ConcernSettingsView: SettingsPageBase {
         }
     }
 
-    /// Rows only CandyWrapper has, shown in About's CandyWrapper group in the default themes.
+    /// Rows only CandyWrapper has: About's CandyWrapper group in the default themes, General's Input group in Redesign.
     public static let candyWrapperRows = ["tooltips", "trackpad-haptics"]
 
-    private static func slices(_ page: SettingsSection) -> [DitherSettingsSlice] {
+    /// A search result pointed at the section that shows its row in this layout.
+    public static func located(_ item: SettingsSearchItem, dither: Bool) -> SettingsSearchItem {
+        guard candyWrapperRows.contains(item.id) else { return item }
+        return SettingsSearchItem(id: item.id, title: item.title, to: dither ? .general : .about, targetId: item.targetId,
+                                  scope: item.scope, searchTerms: item.searchTerms, flags: item.flags)
+    }
+
+    private static func slices(_ page: SettingsSection, dither: Bool) -> [DitherSettingsSlice] {
         typealias G = DitherSettingsSlice.Group
         switch page {
+        case .general where dither: return slices(.general, dither: false)
+            + [.init(.general, [G("behavior", "Input", rows: ["trackpad-haptics", "tooltips"])])]
+        case .about where dither: return Array(slices(.about, dither: false).dropLast())
         case .general: return [
             .init(.general, [G("behavior", "Notifications", rows: ["thread-notifications", "in-app-notifications"])]),
             .init(.general, [G("organization", "Sidebar", rows: ["project-grouping", "project-order", "working-shelf"])]),
@@ -123,13 +134,13 @@ public final class ConcernSettingsView: SettingsPageBase {
             .init(.general, scope: true, [G("behavior", "Updates", rows: ["provider-update-checks", "continue-threads-after-server-update"])]),
             .init(.general, [G("behavior", "Background activity", rows: ["background-activity"])]),
             .init(.storage, [G("storage-notice", nil), G("storage-artifacts", nil), G("storage-cleanup", nil), G("storage-database", nil)]),
-            .init(.general, [G("Diagnostics", nil, rows: ["diagnostics"])])
+            .init(.general, [G("Diagnostics", nil, rows: ["diagnostics", "image-cache"])])
         ]
         case .about: return [
             .init(.general, [G("about", "App", rows: ["app-version", "update-track"])]),
             .init(.general, [G("about", "Legal", rows: ["privacy-policy", "open-source-licenses"])]),
             // CandyWrapper's own rows stay off the pages T3 defines (General is pinned to T3's references), in one
-            // group at the end of About. Redesign shows them under General > Input.
+            // group at the end of About. Redesign shows them under General > Input instead, so this stays last.
             .init(.general, [G("behavior", "CandyWrapper", rows: ConcernSettingsView.candyWrapperRows)])
         ]
         case .providers:

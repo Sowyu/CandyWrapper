@@ -27,7 +27,10 @@ public final class ModalHost: DSView {
     public static func present(_ panel: DialogView, in window: NSWindow, blurBackdrop: Bool = true) -> ModalHost {
         let host = ModalHost(panel: panel)
         host.previousResponder = window.firstResponder
-        if blurBackdrop, let content = window.contentView { host.blurred.contents = Self.blurredSnapshot(of: content) }
+        if blurBackdrop, let content = window.contentView {
+            content.subviews.lazy.compactMap { $0 as? PopupHost }.first?.finishExits()
+            host.blurred.contents = Self.blurredSnapshot(of: content)
+        }
         let container = window.contentView!
         host.parentHost = container.subviews.last { ($0 as? ModalHost)?.isClosing == false } as? ModalHost
         host.frame = container.bounds

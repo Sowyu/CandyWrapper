@@ -162,6 +162,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout one column details pane cost description scroll"])),
         .item(SettingsSearchItem(id: "redesign-picker-account", title: "Account and limits in the model picker", to: .redesign, searchTerms: ["redesign model picker account usage limits manage provider card email plan details pane"])),
         .item(SettingsSearchItem(id: "trackpad-haptics", title: "Trackpad haptics", to: .general, searchTerms: ["force touch trackpad haptic feedback tap vibration feel detent"])),
+        .item(SettingsSearchItem(id: "image-cache", title: "Image cache", to: .maintenance, searchTerms: ["image cache pictures photos reply images disk storage clear delete free space"])),
         .item(SettingsSearchItem(id: "tooltips", title: "Tooltips", to: .general, searchTerms: ["tooltip hover hint help popup delay delayed off disable label shortcut"])),
         .item(SettingsSearchItem(id: "thread-tabs", title: "Tabs", to: .beta, searchTerms: ["experimental tab strip open threads pages cmd click new tab redesign"])),
     ]
