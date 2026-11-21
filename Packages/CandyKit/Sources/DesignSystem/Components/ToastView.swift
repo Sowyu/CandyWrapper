@@ -88,6 +88,11 @@ public final class ToastView: DSView {
         setAccessibilityHelp(messageText.toolTip)
     }
 
+    /// A method, so `details`' observer runs when init sets it.
+    private func showRawDetails(_ raw: String) {
+        details = (expand: "Show details", collapse: "Hide details", items: [.init(title: "Error", detail: raw)])
+    }
+
     /// Opens or closes the details as a click on the description does.
     public func toggleDetailsForTesting() { toggleDetails() }
 
@@ -134,7 +139,9 @@ public final class ToastView: DSView {
         titleText.text = title
         titleText.font = DSFont.ui(14, weight: .medium)
         titleText.lineHeight = 20
-        messageText.text = message ?? ""
+        // Redesign never shows a bare error type or code as the message: a sentence instead, the raw text in details.
+        let rawCode = kind == .error && message.map(StateCopy.isTypeName) == true && ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true)
+        messageText.text = rawCode ? "The request failed without a reason. Open the details to report it." : message ?? ""
         messageText.font = DSFont.ui(14)
         messageText.lineHeight = 20
         addSubview(content)
@@ -148,6 +155,7 @@ public final class ToastView: DSView {
         content.addSubview(chevronOpen)
         addSubview(closeOrb)
         closeOrb.setAccessibilityLabel("Dismiss notification")
+        if rawCode, let message { showRawDetails(message) }
         setAccessibilityRole(.group)
         setAccessibilityRoleDescription("dialog")
         setAccessibilityLabel(title)

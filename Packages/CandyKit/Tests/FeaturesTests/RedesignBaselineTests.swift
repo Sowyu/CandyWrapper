@@ -128,6 +128,20 @@ struct RedesignBaselineTests {
             }
             let toast = ToastView(title: "Permissions have changed for Sandbox", message: "Pair again using a new link with the permissions you need.", actionTitle: "Open Connections", secondaryTitle: "Dismiss")
             try capture("toast", toast, NSSize(width: 360, height: toast.height(forWidth: 360)))
+            // Redesign's state view in its three sizes, and the panels' empty and error states (redesign-states-2026-11-21.md).
+            for (name, size, height) in [("panel", EmptyView.Size.default, 360.0), ("card", .compact, 220), ("inline", .inline, 40)] {
+                let state = EmptyView(title: "", size: size)
+                state.redesign = StateErrorText.describe(RedesignStatesRenderTests.SpawnFailure(), title: "Could not load changes", icon: .fileDiff)
+                state.action = StateAction("Retry", icon: .refreshCw) {}
+                try capture("state-" + name, state, NSSize(width: 460, height: height))
+            }
+            let stateSize = NSSize(width: 460, height: 600)
+            try capture("diff-no-turns", RedesignStatesRenderTests.diffPanel({ "" }, summaries: false), stateSize)
+            let filesError = FilesPanelView(frame: NSRect(origin: .zero, size: stateSize))
+            filesError.errorText = "Reconnect to the environment and try again."
+            try capture("files-error", filesError, stateSize)
+            try capture("terminal-empty", TerminalDrawerView(frame: NSRect(origin: .zero, size: stateSize)), NSSize(width: 460, height: 320))
+            try capture("browser-empty", BrowserEmptyStateView(frame: NSRect(origin: .zero, size: stateSize)), stateSize)
             let wall = ThreadImageWallView(frame: .zero)
             wall.images = Self.wallImages()
             try capture("image-gallery", wall, NSSize(width: 900, height: 640))

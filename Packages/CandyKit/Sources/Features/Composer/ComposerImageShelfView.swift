@@ -38,6 +38,8 @@ public final class AsyncImageView: DSView {
     public var skeleton = false { didSet { if skeleton != oldValue { updateSkeleton() } } }
     private var shimmer: CAGradientLayer?
     private var glyph: IconView?
+    /// Redesign's failure state in place of the fallback text, while `skeleton` is on and the image failed.
+    private(set) var failureState: EmptyView?
     /// The attempted side also records failures, so layout never retries a failed request forever.
     private var attemptedSide = 0
     private(set) var loadedSide = 0
@@ -94,6 +96,7 @@ public final class AsyncImageView: DSView {
     /// A view placed before its frame waits instead of retaining a tiny first decode.
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        if failed { updateFailureState() }
         start()
     }
 
@@ -114,6 +117,7 @@ public final class AsyncImageView: DSView {
     /// while something is on its way.
     private func updateSkeleton() {
         let loading = skeleton && image == nil && !failed && loader != nil && window != nil && !isHiddenOrHasHiddenAncestor
+        updateFailureState()
         if !loading {
             shimmer?.removeFromSuperlayer(); shimmer = nil
             glyph?.removeFromSuperview(); glyph = nil
@@ -137,11 +141,45 @@ public final class AsyncImageView: DSView {
             sweep.fromValue = [-0.6, -0.3, 0]; sweep.toValue = [1, 1.3, 1.6]
             sweep.duration = 1.4; sweep.repeatCount = .infinity
             sweep.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            g.add(sweep, forKey: "sweep")
+            if !Motion.reduced { g.add(sweep, forKey: "sweep") }
             host.insertSublayer(g, at: 0)
             shimmer = g
         }
         needsLayout = true
+    }
+
+    /// "Image unavailable · alt · reason" as the state view: the title, the reason as its sentence, the alt text in
+    /// the tooltip. A small slot gets the inline row.
+    private func updateFailureState() {
+        guard skeleton, failed, image == nil, !failureText.isEmpty else {
+            failureState?.removeFromSuperview(); failureState = nil
+            fallback.isHidden = image != nil
+            return
+        }
+        let copy = Self.failureCopy(failureText)
+        let size: EmptyView.Size = bounds.height >= 120 && bounds.width >= 200 ? .compact : .inline
+        if failureState?.size != size {
+            failureState?.removeFromSuperview()
+            let v = EmptyView(title: copy.title, size: size)
+            addSubview(v)
+            failureState = v
+        }
+        failureState?.redesign = copy
+        fallback.isHidden = true
+        needsLayout = true
+    }
+
+    /// `MarkdownImages.unavailableLabel` split back into its parts.
+    static func failureCopy(_ text: String) -> StateCopy {
+        var parts = text.components(separatedBy: " · ")
+        let title = parts.isEmpty ? text : parts.removeFirst()
+        if title.hasPrefix("Image unavailable. ") {
+            return StateCopy(title: "Image unavailable", detail: String(title.dropFirst("Image unavailable. ".count)), icon: .image)
+        }
+        let reason = parts.count > 1 || parts.first?.hasSuffix(".") == true ? parts.removeLast() : nil
+        let alt = parts.first
+        return StateCopy(title: title, detail: reason ?? "The file may have been moved or deleted.", icon: .image,
+                         details: alt.map { "Alt text: \($0)" })
     }
 
     private func start() {
@@ -197,7 +235,7 @@ public final class AsyncImageView: DSView {
             image.loadedSide = side
             image.attemptedSide = side
             image.show(await loader(side))
-            if image.image == nil { image.failed = true; image.fallback.text = image.failureText }
+            if image.image == nil { image.failed = true; image.fallback.text = image.failureText; image.updateSkeleton() }
             image.onLoad?()
         }
     }
@@ -206,6 +244,10 @@ public final class AsyncImageView: DSView {
         super.layout()
         fallback.frame = NSRect(x: 4, y: (bounds.height - 14) / 2, width: max(0, bounds.width - 8), height: 14)
         glyph?.frame = NSRect(x: (bounds.width - 20) / 2, y: (bounds.height - 20) / 2, width: 20, height: 20)
+        if let failureState {
+            let h = min(bounds.height, failureState.height(forWidth: bounds.width))
+            failureState.frame = NSRect(x: 0, y: ((bounds.height - h) / 2).rounded(), width: bounds.width, height: h)
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shimmer?.frame = bounds
         CATransaction.commit()

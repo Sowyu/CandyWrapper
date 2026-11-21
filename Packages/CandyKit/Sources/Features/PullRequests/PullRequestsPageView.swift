@@ -225,6 +225,7 @@ public final class PullRequestsPageView: DSView {
                 bodyView = PullRequestListGhostView(rows: caption == nil ? 7 : 5, caption: caption)
             case .unavailable(let title, let message, let retry):
                 let empty = EmptyView(title: title, message: message, icon: .gitPullRequestArrow)
+                empty.redesign = StateErrorText.describe(raw: message, title: title, icon: .gitPullRequestArrow)
                 if retry {
                     let b = ButtonView("Retry", icon: .refreshCw, variant: .outline, size: .sm)
                     b.action = { [weak self] in self?.onRetry?() }

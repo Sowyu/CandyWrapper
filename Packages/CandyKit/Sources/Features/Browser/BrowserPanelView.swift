@@ -415,6 +415,7 @@ public final class BrowserEmptyStateView: DSView {
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         [none, scroll].forEach(addSubview)
+        none.redesign = StateCopy(title: "No preview yet", detail: "Type a URL above or run a dev script. Local servers show up here when they start.", icon: .globe)
         apply(recents: [], servers: [])
     }
 

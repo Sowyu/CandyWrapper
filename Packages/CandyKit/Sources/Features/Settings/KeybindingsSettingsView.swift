@@ -43,7 +43,8 @@ public final class KeybindingsSettingsView: SettingsPageBase, RouteModalEscapeHa
         sentence = SettingsScopeSentenceView(context: context)
         let bar = ToolbarRow(search: search, add: addButton, file: fileButton)
         toolbar = SettingsSectionView(title: SettingsSearch.title("keybindings"), rows: [bar])
-        empty = SettingsGroupView(rows: [EmptyMessageRow("No keybindings match your search.")])
+        empty = SettingsGroupView(rows: [EmptyMessageRow("No keybindings match your search.",
+            redesign: StateCopy(title: "No keybindings match", detail: "Search by the command's name or its keys.", icon: .keyboard))])
         super.init(context: context)
         anchors["keybindings"] = toolbar
         search.input.setAccessibilityLabel("Search keybindings")
@@ -162,11 +163,26 @@ public final class KeybindingsSettingsView: SettingsPageBase, RouteModalEscapeHa
     }
 
     /// `px-4 py-12 text-center text-sm text-muted-foreground`.
+    /// T3's centered line in an empty card; under Redesign, the card's state view with `redesign`'s copy.
     final class EmptyMessageRow: DSView, SettingsGroupRow {
         private let label = LabelView("", font: DSFont.ui(14), color: Themed.color(\.mutedForeground))
-        init(_ text: String) { super.init(frame: .zero); label.text = text; label.alignment = .center; label.lineHeight = 20; addSubview(label) }
-        func height(forWidth width: CGFloat) -> CGFloat { 48 + 20 + 48 }
-        override func layout() { super.layout(); label.frame = NSRect(x: 16, y: 48, width: bounds.width - 32, height: 20) }
+        let state = EmptyView(title: "", size: .compact)
+        init(_ text: String, redesign: StateCopy? = nil) {
+            super.init(frame: .zero)
+            label.text = text; label.alignment = .center; label.lineHeight = 20; addSubview(label)
+            state.redesign = redesign ?? StateCopy(title: text)
+            addSubview(state)
+            sync()
+        }
+        private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+        private func sync() { label.isHidden = redesign; state.isHidden = !redesign }
+        override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); sync() }
+        func height(forWidth width: CGFloat) -> CGFloat { redesign ? state.height(forWidth: width) : 48 + 20 + 48 }
+        override func layout() {
+            super.layout()
+            label.frame = NSRect(x: 16, y: 48, width: bounds.width - 32, height: 20)
+            state.frame = bounds
+        }
     }
 }
 

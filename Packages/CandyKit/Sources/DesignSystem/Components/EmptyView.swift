@@ -5,9 +5,15 @@ import QuartzCore
 /// title, description and optional content, centered. Spec: ui-components-b.md section 13.
 /// Padding uses the `md:` value (window 768px and wider).
 /// Title and description wrap with `text-wrap: balance` inside the header's `max-w-sm`.
+///
+/// Under Redesign the same view is CandyWrapper's state view (`EmptyViewRedesign.swift`): a calm icon, one title line,
+/// an optional sentence, an optional action and the raw error behind a Details disclosure, in three sizes: `.default`
+/// for a whole panel, `.compact` for a card and `.inline` for a row. `redesign` and `action` show only there, so the
+/// default themes keep T3's pinned look.
 public final class EmptyView: DSView {
     public enum Size: String, CaseIterable, Sendable {
-        case `default`, compact, hero
+        /// `inline` is CandyWrapper's: one row, the icon beside the text and the action at the right.
+        case `default`, compact, hero, inline
         /// Padding, gap, media bottom margin, title font/line, description font/line, min height.
         var metrics: (padding: CGFloat, gap: CGFloat, mediaGap: CGFloat, title: CGFloat, titleLine: CGFloat,
                       body: CGFloat, bodyLine: CGFloat, minHeight: CGFloat) {
@@ -15,6 +21,7 @@ public final class EmptyView: DSView {
             case .default: (48, 24, 24, 20, 28, 14, 20, 0)
             case .compact: (40, 16, 0, 17, 24, 13, 18, 256)
             case .hero: (48, 24, 24, 30, 36, 14, 20, 0)
+            case .inline: (8, 8, 0, 13, 18, 12, 17, 0)
             }
         }
     }
@@ -40,12 +47,22 @@ public final class EmptyView: DSView {
     public var mediaOutsideHeader = false { didSet { invalidateIntrinsicContentSize(); needsLayout = true } }
     private var mediaSpacing: CGFloat { size.metrics.mediaGap + (mediaOutsideHeader ? size.metrics.gap : 0) }
 
-    private let titleLabel = TextBlockView()
-    private let descriptionLabel = TextBlockView()
-    private let media: MediaView?
+    let titleLabel = TextBlockView()
+    let descriptionLabel = TextBlockView()
+    let media: MediaView?
+    /// T3's copy, put back when Redesign leaves.
+    var stock: (title: String, message: String)
+    /// Redesign's parts, made the first time Redesign draws this view.
+    var redesignParts: RedesignParts?
+
+    /// Redesign's copy for this state, in place of the T3 title and message. Nil keeps T3's copy under Redesign too.
+    public var redesign: StateCopy? { didSet { if redesign != oldValue { restyle(); invalidateIntrinsicContentSize() } } }
+    /// One action under the text, Redesign only, such as Retry.
+    public var action: StateAction? { didSet { redesignParts?.setAction(action, in: self); restyle(); invalidateIntrinsicContentSize() } }
 
     public init(title: String, message: String? = nil, icon: IconName? = nil, size: Size = .default) {
         media = icon.map(MediaView.init)
+        stock = (title, message ?? "")
         super.init(frame: .zero)
         self.size = size
         titleLabel.text = title
@@ -60,13 +77,24 @@ public final class EmptyView: DSView {
         restyle()
     }
 
-    private var hasMessage: Bool { !descriptionLabel.text.isEmpty }
+    var hasMessage: Bool { !descriptionLabel.text.isEmpty }
+
+    /// The title above the description.
+    public var title: String {
+        get { stock.title }
+        set { stock.title = newValue; restyle(); invalidateIntrinsicContentSize() }
+    }
 
     /// The description under the title.
     public var message: String? {
-        get { hasMessage ? descriptionLabel.text : nil }
-        set { descriptionLabel.text = newValue ?? ""; invalidateIntrinsicContentSize(); needsLayout = true }
+        get { stock.message.isEmpty ? nil : stock.message }
+        set { stock.message = newValue ?? ""; restyle(); invalidateIntrinsicContentSize() }
     }
+
+    /// Whether this view draws as Redesign's state view.
+    var isRedesign: Bool { size != .hero && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// Redesign's layout, which the inline row uses in every theme.
+    var usesParts: Bool { size == .inline || isRedesign }
 
     /// Header text width: `max-w-sm` inside the padding. Before the first frame, unbounded.
     private func textWidth(_ width: CGFloat) -> CGFloat {
@@ -85,7 +113,8 @@ public final class EmptyView: DSView {
     }
 
     public func height(forWidth width: CGFloat) -> CGFloat {
-        max(minimumHeight ?? size.metrics.minHeight, stackHeight(width) + 2 * size.metrics.padding)
+        if usesParts { return partsHeight(forWidth: width) }
+        return max(minimumHeight ?? size.metrics.minHeight, stackHeight(width) + 2 * size.metrics.padding)
     }
 
     public override var intrinsicContentSize: NSSize {
@@ -100,6 +129,7 @@ public final class EmptyView: DSView {
 
     public override func layout() {
         super.layout()
+        if usesParts { layoutParts(); return }
         let m = size.metrics
         let width = bounds.width
         var y = ((bounds.height - stackHeight(width)) / 2).rounded()
@@ -131,7 +161,24 @@ public final class EmptyView: DSView {
 
     public override func updateLayer() { restyle() }
 
-    private func restyle() {
+    func restyle() {
+        let redesign = isRedesign
+        let copy = redesign ? self.redesign : nil
+        titleLabel.text = copy?.title ?? stock.title
+        descriptionLabel.text = copy.map { $0.detail ?? "" } ?? stock.message
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel(titleLabel.text)
+        setAccessibilityHelp(descriptionLabel.text.isEmpty ? nil : descriptionLabel.text)
+        if usesParts { restyleParts(); return }
+        redesignParts?.hide()
+        media?.isHidden = false
+        toolTip = nil
+        descriptionLabel.isHidden = false
+        titleLabel.alignment = .center
+        descriptionLabel.alignment = .center
+        titleLabel.maxLines = 0
+        descriptionLabel.maxLines = 0
         let m = size.metrics
         titleLabel.font = DSFont.ui(m.title, weight: .semibold)
         titleLabel.lineHeight = m.titleLine
@@ -148,8 +195,10 @@ public final class EmptyView: DSView {
         private let cards = [BoxDecorationLayer(), BoxDecorationLayer(), BoxDecorationLayer()]
         private let holders = [CALayer(), CALayer()]
         private let iconView: IconView
+        let icon: IconName
 
         init(icon: IconName) {
+            self.icon = icon
             iconView = IconView(name: icon, size: 18)
             super.init(frame: NSRect(x: 0, y: 0, width: 36, height: 36))
             layer?.masksToBounds = false

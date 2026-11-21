@@ -625,6 +625,13 @@ public final class ThreadPanelView: DSView {
         timeline.setStatusFooter(lines.isEmpty ? nil : timelineStatus, height: CGFloat(lines.count) * 28)
     }
     public var showsActivity = false { didSet { if showsActivity != oldValue { needsLayout = true } } }
+    /// Redesign's placeholder while an opened thread's first messages load: only once the delayed "Loading messages"
+    /// status shows (0.4 s), so a thread that loads within that never flashes it, and gone as the first rows land.
+    let loadingSkeleton = StateSkeletonView(shape: .thread)
+    func syncLoadingSkeleton() {
+        loadingSkeleton.isHidden = !(ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded
+            && showsActivity && activityRow.phase == .loading && timeline.items.isEmpty)
+    }
     public let hero = DraftHeroView()
     /// The draft's context strip under the composer, with the "Run on" control.
     public let contextStrip = ComposerContextStripView()
@@ -832,6 +839,9 @@ public final class ThreadPanelView: DSView {
         addSubview(environmentBanner)
         activityRow.isHidden = true
         addSubview(activityRow)
+        loadingSkeleton.isHidden = true
+        addSubview(loadingSkeleton)
+        timeline.onEmptyChanged = { [weak self] in self?.syncLoadingSkeleton() }
         stashBadge.isHidden = true
         addSubview(stashBadge)
         lazyParentPill.configure { [weak self] pill in
@@ -2256,6 +2266,12 @@ public final class ThreadPanelView: DSView {
         let column = ditherHeader && !isDraft && !isEmbedded
         timeline.topClearance = column ? max(chatTop + above, DitherChrome.band) + RedesignTokens.Space.l : chatTop + above
         timeline.frame = NSRect(x: 0, y: -above, width: chat, height: max(0, chatHeight + above))
+        syncLoadingSkeleton()
+        if !loadingSkeleton.isHidden {
+            let lane = min(chat - 2 * RedesignTokens.Space.xl, 720)
+            loadingSkeleton.frame = NSRect(x: ((chat - lane) / 2).rounded(), y: -above + timeline.topClearance,
+                                           width: max(0, lane), height: min(320, max(0, chatHeight - timeline.topClearance)))
+        }
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         let panelX = sheet ? bounds.width - panelWidth : chat + margin
         let panelRight = sheet ? margin : 2 * margin

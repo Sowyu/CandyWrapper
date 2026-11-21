@@ -262,6 +262,8 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// The user scrolled within `nearTop` of the first row. Called once per first row or
     /// history cursor; the visible rows keep their anchor while older items arrive.
     public var onNearTop: (@MainActor () -> Void)?
+    /// The rows went from none to some, or back: the panel's loading skeleton follows.
+    var onEmptyChanged: (@MainActor () -> Void)?
 
     /// Recycled rows and the hidden setup card wait here, outside the scroll document. A document
     /// resize (each line a streaming answer adds) invalidates the visible rect of its whole subtree,
@@ -436,6 +438,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         let anchor = captureAnchor()
         let old = items
         items = new
+        if old.isEmpty != new.isEmpty { onEmptyChanged?() }
         // Text-only patches retain the item index; rebuilding pairs is needed only when message rows change.
         switch change {
         case .rows(let changed):

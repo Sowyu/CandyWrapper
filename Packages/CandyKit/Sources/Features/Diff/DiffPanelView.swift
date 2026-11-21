@@ -120,7 +120,7 @@ public final class DiffPanelView: DSView {
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 self.loadTask = nil
-                self.showMessage("No patch available for this selection.", error: error.localizedDescription)
+                self.showMessage("No patch available for this selection.", error: error.localizedDescription, failure: error)
             }
         }
     }
@@ -373,6 +373,12 @@ public final class DiffPanelView: DSView {
     let message = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.7))
     /// The failed request's message above the empty state (DiffPanel.tsx:1093-1097, `text-2xs text-error/80`).
     let errorLine = LabelView("", font: DSFont.ui(11), color: Themed.color(\.error, 0.8))
+    /// Redesign's state in place of `message` and `errorLine`: an icon, a plain sentence and Retry for a failure, and
+    /// a skeleton while a diff loads. The default themes keep T3's two lines.
+    let stateView = EmptyView(title: "", size: .default)
+    let stateSkeleton = StateSkeletonView(shape: .diff)
+    /// What `message` says, as Redesign shows it.
+    private(set) var redesignState: DiffPanelState = .none
     private let headerBorder = CALayer()
 
     private var summaries: [TurnDiffSummary] = []
@@ -474,7 +480,9 @@ public final class DiffPanelView: DSView {
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
         [treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle, message, errorLine,
-         compareHead, compareArrow, baseRefButton, truncatedNotice, omittedNotice, findWidget].forEach(addSubview)
+         compareHead, compareArrow, baseRefButton, truncatedNotice, omittedNotice, findWidget, stateView, stateSkeleton].forEach(addSubview)
+        stateView.isHidden = true
+        stateSkeleton.isHidden = true
         baseRefButton.trailingIcon = .chevronDown
         baseRefButton.iconSize = 14
         baseRefButton.scalesWhenPressed = false
@@ -611,7 +619,7 @@ public final class DiffPanelView: DSView {
                 guard !Task.isCancelled, let self else { return }
                 let text = (error as? LocalizedError)?.errorDescription ?? ""
                 self.showMessage("No patch available for this selection.",
-                                 error: text.trimmingCharacters(in: .whitespaces).isEmpty ? "The environment request failed." : text)
+                                 error: text.trimmingCharacters(in: .whitespaces).isEmpty ? "The environment request failed." : text, failure: error)
             }
         }
     }
@@ -690,6 +698,7 @@ public final class DiffPanelView: DSView {
             var parsed: UnifiedDiff?
             var source: ReviewDiffPreview.Source?
             var failure: String?
+            var failedWith: Error?
             do {
                 let preview: ReviewDiffPreview
                 if let commitSha, let commitLoader { preview = try await commitLoader(cwd, commitSha, baseRef, whitespace) }
@@ -703,6 +712,7 @@ public final class DiffPanelView: DSView {
             } catch {
                 let text = (error as? LocalizedError)?.errorDescription ?? ""
                 failure = text.trimmingCharacters(in: .whitespaces).isEmpty ? "The environment request failed." : text
+                failedWith = error
             }
             guard !Task.isCancelled, let self, self.gitScope == scope else { return }
             self.loadTask = nil
@@ -712,7 +722,7 @@ public final class DiffPanelView: DSView {
             self.gitResultShown = true
             self.updateScopeLabel()
             if let failure {
-                self.showMessage("No patch available for this selection.", error: failure)
+                self.showMessage("No patch available for this selection.", error: failure, failure: failedWith)
             } else if let source, let parsed {
                 if source.diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     self.showMessage("No net changes in this selection.")
@@ -738,6 +748,8 @@ public final class DiffPanelView: DSView {
         hasDiff = true
         message.isHidden = true
         errorLine.isHidden = true
+        redesignState = .none
+        syncRedesignState()
         // ponytail: a truncated source shows its partial patch; T3 loads each file's patch on demand
         // (useReviewFilePatches) when the server sends complete file stats. Port it if large branches bite.
         let truncated = gitScope != nil && gitSource?.truncated == true
@@ -782,7 +794,7 @@ public final class DiffPanelView: DSView {
         list.loadDiffFiles = { file in try await fileContentsLoader(cwd, source, file) }
     }
 
-    private func showMessage(_ text: String, error: String? = nil) {
+    private func showMessage(_ text: String, error: String? = nil, failure: Error? = nil) {
         recordedScroll.isHidden = true; recordedText.string = ""
         hasDiff = false
         list.setDiff(UnifiedDiff(""))
@@ -798,7 +810,35 @@ public final class DiffPanelView: DSView {
         truncatedBar.isHidden = true
         omittedNotice.isHidden = true
         omittedBar.isHidden = true
+        redesignState = DiffPanelState(message: text, error: error, failure: failure)
+        syncRedesignState()
         needsLayout = true
+    }
+
+    /// Under Redesign, swaps T3's message lines for the state view or the skeleton. Runs on every state change and
+    /// theme change.
+    func syncRedesignState() {
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let state = redesign ? redesignState : .none
+        if redesign, state != .none { message.isHidden = true; errorLine.isHidden = true }
+        else if !redesign, redesignState != .none { message.isHidden = false; errorLine.isHidden = errorLine.text.isEmpty }
+        stateSkeleton.isHidden = state != .loading
+        switch state {
+        case .empty(let copy), .failed(let copy):
+            stateView.redesign = copy
+            stateView.action = state.isFailure ? StateAction("Retry", icon: .refreshCw) { [weak self] in self?.retry() } : nil
+            stateView.isHidden = false
+        case .none, .loading:
+            stateView.isHidden = true
+            stateView.action = nil
+        }
+        needsLayout = true
+    }
+
+    /// Retry from a failed state: the request that failed, again.
+    func retry() {
+        if gitScope != nil { gitResultShown = false }
+        reload()
     }
 
     // MARK: Header
@@ -1038,6 +1078,14 @@ public final class DiffPanelView: DSView {
         errorLine.frame = NSRect(x: 12, y: bodyTop, width: max(0, bounds.width - 24), height: 16.5)
         let messageTop = bodyTop + (errorLine.isHidden ? 0 : 16.5 + 8)
         message.frame = NSRect(x: 20, y: messageTop + (bounds.height - messageTop - 16) / 2, width: max(0, bounds.width - 40), height: 16)
+        let stateFrame = NSRect(x: 0, y: bodyTop, width: max(0, bounds.width - treeWidth), height: max(0, bounds.height - bodyTop))
+        stateView.frame = stateFrame
+        stateSkeleton.frame = stateFrame
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        syncRedesignState()
     }
 
     public override func updateLayer() {
@@ -1048,5 +1096,35 @@ public final class DiffPanelView: DSView {
         truncatedBottom.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
         omittedBar.backgroundColor = truncatedBar.backgroundColor
         omittedBottom.backgroundColor = truncatedBottom.backgroundColor
+    }
+}
+
+/// What the Diff panel's message says, as Redesign draws it.
+enum DiffPanelState: Equatable {
+    case none, loading
+    case empty(StateCopy)
+    case failed(StateCopy)
+
+    var isFailure: Bool { if case .failed = self { return true }; return false }
+
+    /// T3's message text (DiffPanel.tsx) to Redesign's copy. T3's meaning stays; the words say what to do next.
+    init(message: String, error: String?, failure: Error?) {
+        if error != nil || failure != nil {
+            self = .failed(failure.map { StateErrorText.describe($0, title: "Could not load changes", icon: .fileDiff) }
+                ?? StateErrorText.describe(raw: error, title: "Could not load changes", icon: .fileDiff))
+            return
+        }
+        switch message {
+        case "": self = .none
+        case _ where message.hasPrefix("Loading"): self = .loading
+        case "No net changes in this selection.":
+            self = .empty(StateCopy(title: "No net changes", detail: "The edits in this selection cancel each other out.", icon: .fileDiff))
+        case "No completed turns yet.":
+            self = .empty(StateCopy(title: "No completed turns yet", detail: "Changes show here once the agent finishes a turn.", icon: .history))
+        case "No patch available for this selection.":
+            self = .empty(StateCopy(title: "No changes to show", detail: "This selection has no patch. Pick another turn or scope.", icon: .fileDiff))
+        default:
+            self = .empty(StateCopy(title: message, icon: .fileDiff))
+        }
     }
 }

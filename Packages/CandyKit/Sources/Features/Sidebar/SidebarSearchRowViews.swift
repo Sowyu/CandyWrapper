@@ -96,13 +96,18 @@ final class SidebarDividerRowView: SidebarRowBase {
 /// The centered status text. Search: `px-2 py-6 text-center text-xs text-sidebar-muted-foreground`
 /// (Sidebar.tsx:5202-5209). Empty list: `px-2 py-6 text-center text-xs text-muted-foreground/60`
 /// (Sidebar.tsx:5556).
+///
+/// Under Redesign the row is the inline state view instead: an icon for what the text says, then the text.
 final class SidebarEmptyTextRowView: SidebarRowBase {
     private let label = LabelView()
+    let emptyState = EmptyView(title: "", size: .inline)
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         label.font = SB.font(12); label.lineHeight = 16
         label.alignment = .center
         addSubview(label)
+        addSubview(emptyState)
+        emptyState.isHidden = true
         setAccessibilityRole(.staticText)
     }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -111,10 +116,28 @@ final class SidebarEmptyTextRowView: SidebarRowBase {
         label.text = text
         label.color = search ? SB.c(\.sidebarMutedForeground) : SB.c(\.mutedForeground, 0.6)
         setAccessibilityLabel(text)
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        label.isHidden = redesign
+        emptyState.isHidden = !redesign
+        if redesign { emptyState.redesign = Self.copy(text, search: search) }
     }
+
+    /// Redesign's copy for the sidebar's status text (Sidebar.tsx:5202-5209, 5556).
+    static func copy(_ text: String, search: Bool) -> StateCopy {
+        switch text {
+        case "Couldn't search thread messages":
+            return StateCopy(title: "Could not search messages", detail: "Edit the search to try again.", icon: .circleAlert)
+        case "No threads found": return StateCopy(title: "No threads found", detail: "Try other words.", icon: .search)
+        case _ where text.hasPrefix("Searching"): return StateCopy(title: text, icon: .search)
+        default: return StateCopy(title: text, icon: search ? .search : .messageSquare)
+        }
+    }
+
     override func layout() {
         super.layout()
         label.frame = NSRect(x: 8, y: 24, width: max(0, bounds.width - 16), height: 16)
+        let h = emptyState.height(forWidth: bounds.width)
+        emptyState.frame = NSRect(x: 0, y: ((bounds.height - h) / 2).rounded(), width: bounds.width, height: h)
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh() }
 }

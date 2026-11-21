@@ -20,6 +20,8 @@ public final class TerminalDrawerView: DSView {
     private let handle = ResizeHandle()
     private let emptyLabel = LabelView("No terminal sessions for this thread yet.", font: DSFont.ui(14))
     public let emptyButton = ButtonView("New Terminal", variant: .outline, size: .xs)
+    /// Redesign's empty state in place of T3's label and button; its action is `emptyButton`'s.
+    let emptyState = EmptyView(title: "", size: .default)
 
     /// A right panel tab's terminal: no top border, no height handle.
     public var isPanel = false {
@@ -43,8 +45,7 @@ public final class TerminalDrawerView: DSView {
         grid.show(panes, direction: direction, activeId: activeId)
         let empty = panes.isEmpty
         grid.isHidden = empty
-        emptyLabel.isHidden = !empty
-        emptyButton.isHidden = !empty
+        syncEmpty()
         listShown = !empty && model != nil
         if let model { list.apply(model) }
         list.isHidden = !listShown
@@ -62,6 +63,8 @@ public final class TerminalDrawerView: DSView {
         emptyLabel.alignment = .center
         emptyLabel.lineHeight = 20
         addSubview(emptyLabel)
+        addSubview(emptyState)
+        emptyState.isHidden = true
         addSubview(emptyButton)
         grid.isHidden = true
         addSubview(grid)
@@ -105,6 +108,28 @@ public final class TerminalDrawerView: DSView {
         emptyLabel.frame = NSRect(x: 16, y: emptyTop, width: max(0, w - 32), height: labelHeight)
         let bw = emptyButton.intrinsicContentSize.width
         emptyButton.frame = NSRect(x: ((w - bw) / 2).rounded(), y: emptyTop + labelHeight + 12, width: bw, height: buttonHeight)
+        emptyState.frame = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
+    }
+
+    private func syncEmpty() {
+        let empty = panes.isEmpty, redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        emptyLabel.isHidden = !empty || redesign
+        emptyButton.isHidden = !empty || redesign
+        emptyState.isHidden = !empty || !redesign
+        if redesign, emptyState.redesign == nil {
+            emptyState.redesign = StateCopy(title: "No terminals yet", detail: "Open a shell in this thread's folder.", icon: .terminal)
+            emptyState.action = StateAction("New terminal", icon: .plus) { [weak self] in self?.emptyButton.action?() }
+        }
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        syncEmpty()
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        syncEmpty()
     }
 
     public override func updateLayer() {
