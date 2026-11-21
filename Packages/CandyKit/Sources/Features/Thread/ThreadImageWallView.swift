@@ -615,7 +615,9 @@ public final class ThreadImageWallView: DSView {
         let chosen = columns == masonry.maxColumns ? nil : columns
         Self.sessionColumns = chosen
         guard chosen != masonry.fixedColumns else { return }
+        let before = masonry.columnCount
         masonry.setColumns(chosen, keeping: point)
+        if masonry.columnCount != before { Haptics.tap(.alignment) }
         setAccessibilityValue("\(masonry.columnCount) columns")
     }
 

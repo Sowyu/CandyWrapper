@@ -356,6 +356,7 @@ extension SidebarListView: NSDraggingSource {
         if over != s.over {
             s.over = over
             project()
+            if s.target != nil { Haptics.tap(.alignment) } // a valid drop slot, pinned or not
             placeSorted(animated: true)
         }
     }
@@ -542,6 +543,7 @@ extension SidebarListView: NSDraggingSource {
            canSortDrop?(s.id, s.section, target) == true {
             releasedTops = released
             onSortDrop?(s.id, s.section, target)
+            Haptics.tap(.generic)
             // The new order normally arrives within a frame or two; if it does not, glide back.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                 guard let self, let tops = self.releasedTops else { return }

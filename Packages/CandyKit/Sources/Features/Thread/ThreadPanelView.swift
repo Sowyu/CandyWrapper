@@ -2325,7 +2325,9 @@ public final class ThreadPanelView: DSView {
             addSubview(panelResize)
             panelResize.onDrag = { [weak self] delta in
                 guard let self else { return }
-                self.preferredPanelWidth = RightPanelView.width(viewport: self.viewportWidth, container: self.bounds.width, preferred: self.bounds.width - self.panelResize.frame.minX + delta)
+                let proposed = self.bounds.width - self.panelResize.frame.minX + delta, old = self.preferredPanelWidth
+                self.preferredPanelWidth = RightPanelView.width(viewport: self.viewportWidth, container: self.bounds.width, preferred: proposed)
+                if self.preferredPanelWidth != old, self.preferredPanelWidth != proposed { Haptics.tap(.alignment) } // reached min or max
                 UserDefaults.standard.set(Double(self.preferredPanelWidth), forKey: "t3code:preview-panel-width")
                 self.needsLayout = true
             }

@@ -266,6 +266,8 @@ public final class ExpandedImagePreviewView: DSView {
     private func changeZoom(_ next: CGFloat, at point: CGPoint? = nil) {
         let clamped = min(8, max(1, next))
         guard clamped != zoom else { return }
+        let actual = ImageZoom.actual(natural: naturalSize, fitted: fittedSize, backing: window?.backingScaleFactor ?? 2)
+        if Haptics.crosses(from: zoom, to: clamped, [1, actual, 8]) { Haptics.tap(.alignment) } // fit, 100%, the limit
         let old = viewport(zoom: zoom)
         let client = point ?? CGPoint(x: old.midX, y: old.midY)
         let origin = ImageZoom.anchored(origin: CGPoint(x: old.minX - scroll.x, y: old.minY - scroll.y), scale: zoom, to: clamped, about: client)

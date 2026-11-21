@@ -146,6 +146,8 @@ public struct ClientSettings: Equatable, Sendable {
         "loadBalancingWeights": SettingSpec(.any, .object([:])),
         // CandyWrapper only: the menu bar item (Capy's `tray.enabled`, default on), the value stays local.
         "menuBarItemEnabled": SettingSpec(.bool, .bool(true)),
+        // CandyWrapper only: Force Touch trackpad taps on rail ticks, divider limits, zoom levels and drop slots (Haptics).
+        "trackpadHaptics": SettingSpec(.bool, .bool(true)),
     ]
 
     public static let defaults = ClientSettings(values: fields.mapValues(\.defaultValue))

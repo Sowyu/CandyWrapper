@@ -120,6 +120,7 @@ final class ZoomableImageView: DSView {
     func zoom(to target: CGFloat, about point: CGPoint? = nil, animated: Bool = false) {
         let clamped = min(ImageZoom.limits(actual: actual).upperBound, max(1, target))
         guard abs(clamped - scale) > 0.0001 else { return }
+        if Haptics.crosses(from: scale, to: clamped, [1, actual, ImageZoom.limits(actual: actual).upperBound]) { Haptics.tap(.alignment) }
         let p = point ?? CGPoint(x: bounds.midX, y: bounds.midY)
         layoutSubtreeIfNeeded()
         origin = ImageZoom.anchored(origin: picture.frame.origin, scale: scale, to: clamped, about: p)
