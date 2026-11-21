@@ -71,6 +71,8 @@ The user, 2026-11-21: "make it so html previews get rounded (same radius as the 
 11. Fixed. Under Redesign, `ThreadWebFrameView.roundsInRedesign` clips the frame's layer, and so the WKWebView and its cached preview image inside it, to `RedesignTokens.Radius.card` on a continuous corner (`Features/Thread/ThreadWebFrameView.swift`). The HTML render row and the MCP app row set it (`Features/Thread/TimelineWebRows.swift`). An MCP app clears it when it goes full screen and sets it again when it comes back. The expand dialog (`HtmlRenderDialogView`) and the Files panel's HTML file preview keep their own chrome. T3 draws the HTML render square (HtmlRenderFrame.tsx:87) and MCP apps square unless `prefersBorder` (McpAppFrame.tsx:464), so the default themes are unchanged. `HtmlFrameCornerTests` checks both themes.
 12. Left. A Mermaid diagram sits in a transparent box with no visible frame (`MarkdownLayout.diagramBlock`, from MarkdownCodeBlock.tsx:223-232), so it has no corner to round.
 
+The inline web frame clip is checked by `HtmlFrameCornerTests` and an offscreen picture with a solid stand-in. The sandbox has no HTML reply, so I didn't see a live WKWebView clipped on screen.
+
 ## 3. Copy
 
 1. Fixed, Redesign only. Settings > About's update button said "Check for Updates" and "Up to Date" (`Features/Updates/DesktopUpdateState.swift:241`). That is T3's wording (SettingsPanels.tsx:320-323), so the default themes keep it, and Redesign now says "Check for updates" and "Up to date". The macOS menu bar items "Check for Updates..." stay in title case, as the macOS menu convention and T3 both have them.
@@ -83,7 +85,7 @@ The user, 2026-11-21: "make it so html previews get rounded (same radius as the 
    - `GeneralSettingsView.swift:254`, notifications "while T3 Code is open" becomes CandyWrapper. Fixed.
    - `GeneralSettingsView.swift:581`, "the anonymous usage data T3 Code collects": T3's server collects it and the link is T3's policy. It now reads "How T3 handles your data, including the anonymous usage data the T3 Code server collects." Fixed.
    - `GeneralSettingsView.swift:586`, "tools used by T3 Code": the page lists CandyWrapper's bundled notices and the server's. It now reads "used by CandyWrapper and the T3 Code server." Fixed.
-   - `DesktopManagedDialogs.swift:36, 108, 139`, the SSH prompt and the relay client install: this app runs the SSH process and installs the relay client, so they say CandyWrapper. Fixed.
+   - `DesktopManagedDialogs.swift:36, 108, 139`, the SSH prompt and the relay client install: this app runs the SSH process and installs the relay client, so "T3 Code" is wrong here. But `DesktopManagedFidelityTests` pins these dialogs against T3's references (SshPasswordPromptDialog.tsx, RelayClientInstallDialog.tsx), so I left them and list them here. Next: say CandyWrapper under Redesign only, once the dialogs read the theme (about 20 minutes).
    - `StorageSettingsView.swift:151, 186, 200`: these restart the server. Kept.
    - `WelcomePageView.swift:68`, "T3 Code collects anonymous usage data": the server does. Kept. Lines 401 and 907 name T3's phone app. Kept.
    - `ServerController.swift:172-488`: these name the T3 install and its server. Kept.
@@ -107,6 +109,6 @@ I didn't edit the model picker's files. On this branch:
 
 ## Not in this branch
 
-- Re-recorded Redesign baselines. `RedesignBaselineTests` will differ on the Settings pages whose copy or headers changed (About, General, Appearance, Projects list) and anywhere a link or the context pill shows. Another agent is about to change every baseline image for the new Picture background, so I didn't commit new images. Record them after that lands, with `CANDY_RECORD_REDESIGN_BASELINE=1 scripts/test --filter RedesignBaselineTests`.
+- Re-recorded Redesign baselines. `RedesignBaselineTests` differs on `settings-about`, `settings-appearance`, `settings-modal` (Appearance's headers and theme cards), `settings-notifications` (the CandyWrapper wording), `settings-project` and `settings-projects-list` (the blank zero count and the pin), and `13-model-picker` (its "new" badge now takes the accent), in light and dark. Another agent is about to change every baseline image for the new Picture background, so I didn't commit new images. Record them after that lands, with `CANDY_RECORD_REDESIGN_BASELINE=1 scripts/test --filter RedesignBaselineTests`.
 - Type scale and weight cap, sections 2.7 and 2.8.
 - The tooltip sweep, section 3.4.
