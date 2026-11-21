@@ -110,6 +110,33 @@ struct MarkdownTests {
         #expect(CodeHighlighter.tokens("anything", language: "brainfuck").isEmpty)
     }
 
+    /// A minus sign that isn't part of a number used to stop the JSON lexer from advancing, so it never returned.
+    @Test func lexesJSONMinusSignsThatAreNotNumbers() {
+        for code in ["{ \"vibrate\": 0-100, \"live\": true }", "[- 1]", "-", "{\"a\": -}"] {
+            let tokens = CodeHighlighter.tokens(code, language: "json")
+            #expect(tokens.allSatisfy { $0.range.upperBound <= code.utf16.count }, "\(code)")
+        }
+        let u = Array("{\"n\": -12}".utf16)
+        let negative = CodeHighlighter.tokens("{\"n\": -12}", language: "json").first { $0.kind == .constant }
+        #expect(negative.map { String(decoding: u[$0.range.location..<$0.range.upperBound], as: UTF16.self) } == "-12")
+    }
+
+    /// Re-coloring each JSON key rebuilt the whole token list, so this block took tens of seconds and froze the
+    /// app on every layout. Linear, it takes milliseconds.
+    @Test func lexesLargeJSONInLinearTime() {
+        let row = "{\"id\": 12345, \"name\": \"value\", \"ok\": true, \"n\": null},\n"
+        let code = "[\n" + String(repeating: row, count: 20_000) + "]"
+        let clock = ContinuousClock()
+        var tokens: [CodeToken] = []
+        let elapsed = clock.measure { tokens = CodeHighlighter.tokens(code, language: "json") }
+        #expect(elapsed < .seconds(2), "\(elapsed)")
+        let u = Array(code.utf16)
+        let keys = tokens.filter { $0.kind == .tag }.map { String(decoding: u[$0.range.location..<$0.range.upperBound], as: UTF16.self) }
+        #expect(keys.count == 80_000)
+        #expect(Set(keys) == ["\"id\"", "\"name\"", "\"ok\"", "\"n\""])
+        #expect(zip(tokens, tokens.dropFirst()).allSatisfy { $0.range.upperBound <= $1.range.location })
+    }
+
     /// index.css:1869-1881 resets the outer alert's margin, leaving its nested paragraph's margin to collapse.
     @Test(.threadDesign(true)) func trailingAlertKeepsItsParagraphMargin() {
         let alert = MarkdownLayout(document: MarkdownDocument(parsing: "> [!NOTE]\n> A final note."), width: 680)
