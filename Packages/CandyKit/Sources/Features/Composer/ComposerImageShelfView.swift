@@ -40,6 +40,10 @@ public final class AsyncImageView: DSView {
     private var glyph: IconView?
     /// Redesign's failure state in place of the fallback text, while `skeleton` is on and the image failed.
     private(set) var failureState: EmptyView?
+    /// How much of the download has arrived, nil when unknown. A 2px bar along the bottom shows it until pixels arrive,
+    /// and takes over from Redesign's shimmer.
+    public var progress: Double? { didSet { if progress != oldValue { updateSkeleton() } } }
+    private var progressBar: CALayer?
     /// The attempted side also records failures, so layout never retries a failed request forever.
     private var attemptedSide = 0
     private(set) var loadedSide = 0
@@ -70,6 +74,12 @@ public final class AsyncImageView: DSView {
         reset()
         if let preview { show(preview) }
         start()
+    }
+
+    /// Loads again with a new loader under the same key, when the source's bytes changed.
+    public func reload(loader: Loader?) {
+        self.loader = loader
+        reset(); start()
     }
 
     private func reset() {
@@ -116,7 +126,8 @@ public final class AsyncImageView: DSView {
     /// Shows the skeleton while loading and removes it the moment pixels or a failure arrive, so it only ever animates
     /// while something is on its way.
     private func updateSkeleton() {
-        let loading = skeleton && image == nil && !failed && loader != nil && window != nil && !isHiddenOrHasHiddenAncestor
+        updateProgressBar()
+        let loading = skeleton && image == nil && !failed && loader != nil && window != nil && !isHiddenOrHasHiddenAncestor && progress == nil
         updateFailureState()
         if !loading {
             shimmer?.removeFromSuperlayer(); shimmer = nil
@@ -180,6 +191,22 @@ public final class AsyncImageView: DSView {
         let alt = parts.first
         return StateCopy(title: title, detail: reason ?? "The file may have been moved or deleted.", icon: .image,
                          details: alt.map { "Alt text: \($0)" })
+    }
+
+    private func updateProgressBar() {
+        guard let progress, image == nil, !failed, window != nil, let host = layer else {
+            progressBar?.removeFromSuperlayer(); progressBar = nil
+            return
+        }
+        let bar = progressBar ?? CALayer()
+        if progressBar == nil {
+            bar.backgroundColor = Themed.color(\.mutedForeground, 0.6).cgColor(in: self)
+            host.addSublayer(bar)
+            progressBar = bar
+        }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        bar.frame = CGRect(x: 0, y: bounds.height - 2, width: (bounds.width * CGFloat(max(0, min(1, progress)))).rounded(), height: 2)
+        CATransaction.commit()
     }
 
     private func start() {
@@ -251,6 +278,7 @@ public final class AsyncImageView: DSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shimmer?.frame = bounds
         CATransaction.commit()
+        updateProgressBar()
     }
 }
 

@@ -27,21 +27,30 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
 
     private let lock = NSLock()
     private var states: [Int: State] = [:]
-    /// Tasks that finished before their caller registered: cancelled between creation and `resume`.
-    private var finishedEarly: Set<Int> = []
+    /// Tasks that ended before their caller registered: cancelled between creation and `resume`. URLSession may never
+    /// report a task cancelled before it started, so cancellation answers the caller itself; whichever of the two
+    /// removes the task's state resumes it, exactly once.
+    private var endedEarly: Set<Int> = []
+    /// Tasks cancellation already answered, so their late completion is dropped instead of kept in `endedEarly`.
+    private var answered: Set<Int> = []
     private let queue: OperationQueue = {
         let q = OperationQueue()
         q.name = "MediaTransfer"
         q.maxConcurrentOperationCount = 1
         return q
     }()
-    private lazy var session: URLSession = {
+    /// Made once in `init`. A `lazy var` is not thread safe: two first downloads at once built two sessions, whose task
+    /// ids both start at 1, so two transfers shared one entry in `states` and one caller waited forever.
+    private var session: URLSession!
+
+    override init() {
+        super.init()
         let config = URLSessionConfiguration.default
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.httpShouldSetCookies = false
-        return URLSession(configuration: config, delegate: self, delegateQueue: queue)
-    }()
+        session = URLSession(configuration: config, delegate: self, delegateQueue: queue)
+    }
 
     /// The file, or nil on failure, a non-2xx answer or cancellation. The caller owns the file.
     func download(_ url: URL, method: String = "GET", progress: (@Sendable (_ received: Int64, _ expected: Int64) -> Void)? = nil) async -> Result? {
@@ -55,14 +64,16 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (done: CheckedContinuation<Result?, Never>) in
                 let early = lock.withLock {
-                    if finishedEarly.remove(task.taskIdentifier) != nil { return true }
+                    if endedEarly.remove(task.taskIdentifier) != nil { return true }
                     states[task.taskIdentifier] = State(file: file, progress: progress, done: done)
                     return false
                 }
+                ImageTiming.mark("transfer-start", "\(task.taskIdentifier) early \(early) \(url.lastPathComponent)")
                 if early { done.resume(returning: nil) } else { task.resume() }
             }
         } onCancel: {
             task.cancel()
+            end(task.taskIdentifier, error: CancellationError(), cancelling: true)
         }
     }
 
@@ -76,6 +87,7 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
             completionHandler(.cancel)
             return
         }
+        ImageTiming.mark("transfer-response", "\(dataTask.taskIdentifier) \(http.statusCode) \(http.expectedContentLength)")
         state.response = http
         state.handle = handle
         state.expected = http.expectedContentLength
@@ -96,11 +108,17 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        ImageTiming.mark("transfer-end", "\(task.taskIdentifier) \(error.map { "\($0)" } ?? "ok")")
+        end(task.taskIdentifier, error: error, cancelling: false)
+    }
+
+    private func end(_ id: Int, error: Error?, cancelling: Bool) {
         guard let state = lock.withLock({ () -> State? in
-            guard let state = states.removeValue(forKey: task.taskIdentifier) else {
-                finishedEarly.insert(task.taskIdentifier)
+            guard let state = states.removeValue(forKey: id) else {
+                if answered.remove(id) == nil { endedEarly.insert(id) }
                 return nil
             }
+            if cancelling { answered.insert(id) }
             return state
         }) else { return }
         try? state.handle?.close()

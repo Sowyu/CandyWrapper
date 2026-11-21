@@ -15,10 +15,12 @@ import T3Protocol
         MarkdownImages.assetURL = { path in
             await MarkdownImages.signedURL(resource: .object(["_tag": .string("media-file"), "path": .string(path)]))
         }
+        let signed = SignCount()
         MarkdownImages.resourceURL = { resource in
             guard let path = resource["path"]?.stringValue, path.hasPrefix("/image-stuck/") else { return nil }
             try? await Task.sleep(for: .milliseconds(20))
-            return (URL(string: "http://127.0.0.1:1\(path)")!, nil)
+            signed.bump()
+            return (URL(string: "http://127.0.0.1:1\(path)")!, nil, nil)
         }
         let paths = (0..<8).map { "/image-stuck/\($0).png" }
         let signing = Task {
@@ -29,12 +31,26 @@ import T3Protocol
                 return urls
             }
         }
-        // A deadlock ends here: cancelling makes every waiter give up, so the test fails instead of hanging. The fix
-        // signs all eight in milliseconds; the margin is for a full parallel run that starves the cooperative pool.
-        let deadline = Task { try? await Task.sleep(for: .seconds(30)); signing.cancel() }
+        // A deadlock ends here: cancelling makes every waiter give up, so the test fails instead of hanging. The
+        // watchdog runs on the main actor and counts its own turns without a new sign, not seconds: every sign hops
+        // onto the main actor, and in a full parallel run another suite holds the main actor for about 45 s at a time.
+        // A fixed 30 s deadline then raced the stall (6 of 8 signed in 44 s); a deadlock leaves the main actor free,
+        // so 30 idle turns still end it in about 30 s.
+        let watchdog = Task { @MainActor in
+            var last = -1, idle = 0
+            while !Task.isCancelled, idle < 30 {
+                try? await Task.sleep(for: .seconds(1))
+                let now = signed.count
+                if now == last { idle += 1 } else { idle = 0; last = now }
+            }
+            if !Task.isCancelled {
+                signed.note = "stalled at \(signed.count) signed, \(await AssetURLLimit.shared.inFlight) turns in flight, \(await AssetURLLimit.shared.queued) queued"
+                signing.cancel()
+            }
+        }
         let urls = await signing.value
-        deadline.cancel()
-        #expect(urls.compactMap { $0 }.count == 8)
+        watchdog.cancel()
+        #expect(urls.compactMap { $0 }.count == 8, "\(signed.note)")
     }
 
     /// Thousands of random sequences through the app's path: views ask for path images through
@@ -105,11 +121,15 @@ import T3Protocol
         return peak > 6 ? "\(peak) calls reached the server at once" : nil
     }
 
-    /// Waits for `task`; false, and cancels it, when it takes longer than `limit`.
+    /// Waits for `task`; false, and cancels it, when it takes longer than `limit`. The limit counts 100 ms turns of the
+    /// main actor, not seconds, for the reason the eight-image test's watchdog gives: a stall in another suite must not
+    /// read as a request that waited forever.
     private static func finishes<T>(_ task: Task<T, Never>, within limit: Duration) async -> Bool {
-        let late = Task {
-            try? await Task.sleep(for: limit)
-            if Task.isCancelled { return false }
+        let late = Task { @MainActor in
+            for _ in 0..<Int(limit / .milliseconds(100)) {
+                try? await Task.sleep(for: .milliseconds(100))
+                if Task.isCancelled { return false }
+            }
             task.cancel()
             return true
         }
@@ -117,6 +137,15 @@ import T3Protocol
         late.cancel()
         return await late.value == false
     }
+}
+
+private final class SignCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func bump() { lock.withLock { value += 1 } }
+    var count: Int { lock.withLock { value } }
+    private var text = ""
+    var note: String { get { lock.withLock { text } } set { lock.withLock { text = newValue } } }
 }
 
 private let missingFolder = FileManager.default.temporaryDirectory.appending(path: "image-stuck-missing-\(UUID().uuidString)")
@@ -139,17 +168,17 @@ private actor FakeSigner {
         for call in calls.values { call.resume() }
     }
 
-    func sign(_ path: String) async -> (url: URL, size: CGSize?)? {
+    func sign(_ path: String) async -> MarkdownImages.SignedAsset? {
         guard path.hasPrefix("/stress/") else { return nil }
         now += 1
         peak = max(peak, now)
         defer { now -= 1 }
         let url = URL(string: "http://127.0.0.1:1" + path)!
-        if answering { return (url, nil) }
+        if answering { return (url, nil, nil) }
         switch Int.random(in: 0..<10, using: &random) {
         case 0..<5:
             try? await Task.sleep(for: .microseconds(Int.random(in: 0...300, using: &random)))
-            return Task.isCancelled ? nil : (url, nil)
+            return Task.isCancelled ? nil : (url, nil, nil)
         case 5..<7:
             return nil
         default:

@@ -633,6 +633,14 @@ final class ThreadController {
             .appendingPathComponent(Bundle.main.bundleIdentifier ?? "CandyWrapper").appendingPathComponent("agent-images")
         let cache = AgentImageCache.shared ?? AgentImageCache(root: cacheRoot)
         AgentImageCache.shared = cache
+        // Reply images kept across launches, per test app like other storage (`MediaDiskCache`).
+        if MediaDiskCache.shared == nil {
+            let media = MediaDiskCache(root: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(Bundle.main.bundleIdentifier ?? "CandyWrapper").appendingPathComponent("media"))
+            MediaDiskCache.shared = media
+            MarkdownImages.preload(media.launchSizes)
+            Task.detached(priority: .background) { await media.sweep() }
+        }
         MarkdownImages.keptCopy = { [weak self] thread, item in
             guard let env = self?.openThreadId?.environmentId else { return nil }
             return await cache.url(env: env, thread: thread.rawValue, item: item.rawValue)
@@ -1020,7 +1028,7 @@ final class ThreadController {
             let size = reply["imageDimensions"].flatMap { d in
                 d["width"]?.doubleValue.flatMap { w in d["height"]?.doubleValue.map { CGSize(width: w, height: $0) } }
             }
-            return (url, size)
+            return (url, size, reply["fileRevision"]?.stringValue)
         }
         MarkdownImages.openInFileViewer = { [weak self] relative in self?.files.openFile(relative, line: nil) }
         MarkdownImages.onMediaUnavailable = { [weak self] description in
@@ -1196,6 +1204,7 @@ final class ThreadController {
             return
         }
         panel.model.environmentId = id.environmentId
+        MarkdownImages.cacheScope = id.environmentId
         sidebar?.state.activeThreadId = id
         defer { onOpenThreadChange?() }
         UserDefaults.standard.set(id.rawValue, forKey: Self.lastThreadKey)

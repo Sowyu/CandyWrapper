@@ -45,6 +45,12 @@ enum ImageDecodeCache {
             ?? memory.object(forKey: "\(key)|cover" as NSString)?.image
     }
 
+    /// Drops one source's decoded pixels, both fits, when its bytes changed.
+    static func remove(_ key: String) {
+        memory.removeObject(forKey: "\(key)|fit" as NSString)
+        memory.removeObject(forKey: "\(key)|cover" as NSString)
+    }
+
     static func clear() {
         memory.removeAllObjects()
         for request in requests.values.joined() { request.task?.cancel() }
