@@ -64,6 +64,22 @@ struct PictureInkTests {
 
     /// Behind a thread's column, body text keeps 7:1 and muted text 4.5:1 against the worst cell, for the brightest,
     /// the busiest and the most saturated pictures, in dark and in light.
+    /// Light leaves no dot behind the column or in the 16pt gap beside it, and the ink is back past the edge.
+    @Test func lightColumnIsClean() throws {
+        let w = 400, h = 20, ground = SIMD3<Double>(repeating: 0xf8 / 255.0)
+        let column: [Double] = [300, 0, 600, 60]
+        let tone = PictureInk.Tone(width: w, height: h, values: [UInt8](repeating: 0, count: w * h), hue: 0, median: 0.5)
+        let art = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 250), ground: ground, dark: false,
+                                                 shape: .thread(column: column), text: [SIMD3(repeating: 0x17 / 255.0), SIMD3(repeating: 0x5c / 255.0)]))
+        let b = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
+        func inked(_ x: Int) -> Bool { (0..<h).contains { y in b[y * row + x * 4] != 0xf8 || b[y * row + x * 4 + 2] != 0xf8 } }
+        for x in 0..<w {
+            let px = Double(x) * 3 + 1.5
+            if px >= column[0] - 16, px <= column[0] + column[2] + 16 { #expect(!inked(x), "x \(px)") }
+            if px < column[0] - 48 || px > column[0] + column[2] + 48 { #expect(inked(x), "x \(px)") }
+        }
+    }
+
     @Test(arguments: [true, false])
     func textKeepsItsFloorsBehindTheColumn(dark: Bool) throws {
         let w = 400, h = 200

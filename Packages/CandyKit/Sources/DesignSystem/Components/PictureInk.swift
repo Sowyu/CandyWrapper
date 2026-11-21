@@ -139,12 +139,21 @@ public enum PictureInk {
     nonisolated static let columnFeather: Double = 120
     /// The share of the dots left right behind the column.
     nonisolated static let columnDensity = 0.4
+    /// Light's share behind the column: none. Muted text needs a cell of luminance 0.94 or more there, so any dot left
+    /// behind the column is a near-white smudge; light keeps a clean reading column and the ink on the margins.
+    nonisolated static let lightColumnDensity = 0.0
     /// Text floors behind the column, measured against the worst cell: body 7:1, muted 4.5:1.
     nonisolated static let bodyFloor = 7.0, mutedFloor = 4.5
 
-    /// 0 behind the column, easing to 1 `columnFeather` beside it.
-    nonisolated static func columnOpen(_ x: Double, column c: [Double]) -> Double {
+    /// Light's edge beside the column: a 16pt clear gap, then the ink back to full over 32pt. With the column clean,
+    /// dark's 120pt feather left only sparse stray dots in a window's usual 40 to 60pt margins; a short edge gives
+    /// the margins a solid band of the picture on either side of a clean page.
+    nonisolated static let lightColumnGap: Double = 16, lightColumnFeather: Double = 32
+
+    /// 0 behind the column, easing to 1 `columnFeather` beside it (in light, `lightColumnGap` and `lightColumnFeather`).
+    nonisolated static func columnOpen(_ x: Double, column c: [Double], dark: Bool = true) -> Double {
         let d = x < c[0] ? c[0] - x : x > c[0] + c[2] ? x - c[0] - c[2] : 0
+        if !dark { return DitherArt.smoothstep(lightColumnGap, lightColumnGap + lightColumnFeather, d) }
         return DitherArt.smoothstep(0, 1, d / columnFeather)
     }
 
@@ -178,7 +187,7 @@ public enum PictureInk {
         var row = [Double](repeating: 1, count: w)
         var open = [Double](repeating: 1, count: w)
         if case let .thread(column?) = shape, column.count == 4 {
-            for x in 0..<w { open[x] = columnOpen((Double(x) + 0.5) * unit, column: column) }
+            for x in 0..<w { open[x] = columnOpen((Double(x) + 0.5) * unit, column: column, dark: dark) }
         }
         for y in 0..<h {
             let py = (Double(y) + 0.5) * unit
@@ -190,8 +199,8 @@ public enum PictureInk {
                 case let .hero(composer): density = heroDensity(px, py, panel: panel, composer: composer)
                 case .thread:
                     // Behind the column the dots thin and stay on the near level, then come back over the feather.
-                    let z = open[x]
-                    density = columnDensity + (1 - columnDensity) * z
+                    let z = open[x], floor = dark ? columnDensity : lightColumnDensity
+                    density = floor + (1 - floor) * z
                     top = coverage + (2 - coverage) * z
                 }
                 row[x] = min(lut[Int(tone.values[y * w + x])] * coverage * 2 * density, top)

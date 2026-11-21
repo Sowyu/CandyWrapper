@@ -80,23 +80,32 @@ public struct ThemeDefinition: Equatable, Sendable {
         .terminalCursor: "#2b948b", .terminalSelection: "#1f3d3a",
         .update: "#2b948b", .updateForeground: "#2b948b", .updateSurface: "#0f2422",
     ]) { $1 }
-    /// Light departs from Capy where its grays fail WCAG AA over the art: muted text, placeholders and labels reach
-    /// 4.5:1 over the darkest dot the light scrim allows (`DitherArt.lightScrim`), icons and control edges 3:1, the
-    /// accent dark enough for white labels (`DitherAccent.lightAccent`), and dividers show as a line (docs/research/light-mode-readability-2026-10-28.md).
+    /// Light is its own palette, not dark inverted (docs/research/redesign-light-audit-2026-11-21.md). A neutral
+    /// off-white ground (#f8f8f7) with the sidebar and chrome one step darker (#f1f1ef), so the content reads as the
+    /// lit surface, as in Linear's light theme; cards, menus, the composer and inputs real white on it, separated by
+    /// the 0.08 black rim and the light shadow; dividers a quiet #e3e3e0, since they carry no meaning; control
+    /// outlines (`input`) #8a8a87 at 3:1 on the ground. Text #171717 is 16.9:1 on the ground. Muted text,
+    /// placeholders and labels stay at 4.5:1 over the darkest dot the light scrim allows (`DitherArt.lightScrim`),
+    /// 6.3:1 on the ground. The accent is dark enough for white labels (`DitherAccent.lightAccent`).
     static let capyLightColors: [ThemeColorRole: String] = CandyTheme3669.lightColors.merging([
-        .canvas: "#f9f9f9", .chrome: "#ececec", .toolbar: "#ececec", .toolbarBorder: "#c2c2c2", .toolbarControl: "#ffffff",
-        .toolbarControlHover: "#0000000d", .surface: "#ffffff", .surfaceRaised: "#ffffff", .surfaceOverlay: "#ffffff",
-        .text: "#1e1e1e", .textMuted: "#5a5a5a", .border: "#c2c2c2", .input: "#858585", .focus: "#07837a",
-        .accent: "#07837a", .accentForeground: "#ffffff", .secondary: "#0000000d", .secondaryForeground: "#1e1e1e",
-        .muted: "#e1e1e2", .mutedForeground: "#5a5a5a", .placeholder: "#5c5c5c", .secondaryLabel: "#5c5c5c",
-        .iconMuted: "#767676", .accentSurface: "#0000000d", .accentSurfaceForeground: "#1e1e1e",
-        .messageSurface: "#efefef", .messageForeground: "#1e1e1e", .messageAction: "#07837a",
-        .messageActionForeground: "#ffffff", .messageActionHover: "#06736c", .codeBackground: "#f4f4f4",
-        .sidebar: "#ececec", .sidebarForeground: "#1e1e1e", .sidebarMutedForeground: "#5c5c5c",
-        .sidebarControlSurface: "#e4e4e4", .sidebarRowHover: "#0000000a", .sidebarRowActive: "#00000012",
-        .sidebarRowSelected: "#00000012", .sidebarBorder: "#ececec", .warningForeground: "#983d00", .errorForeground: "#a80005",
-        .update: "#07837a", .updateForeground: "#07837a", .updateSurface: "#e1f0ef",
+        .canvas: "#f8f8f7", .chrome: "#f1f1ef", .toolbar: "#f1f1ef", .toolbarBorder: "#e3e3e0", .toolbarControl: "#ffffff",
+        .toolbarControlHover: "#0000000a", .surface: "#ffffff", .surfaceRaised: "#ffffff", .surfaceOverlay: "#ffffff",
+        .text: "#171717", .textMuted: "#5c5c5a", .border: "#e3e3e0", .input: "#8a8a87", .focus: "#07837a",
+        .accent: "#07837a", .accentForeground: "#ffffff", .secondary: "#0000000a", .secondaryForeground: "#171717",
+        .muted: "#efefed", .mutedForeground: "#5c5c5a", .placeholder: "#5c5c5a", .secondaryLabel: "#5c5c5a",
+        .iconMuted: "#737371", .accentSurface: "#0000000a", .accentSurfaceForeground: "#171717",
+        .messageSurface: "#ededeb", .messageForeground: "#171717", .messageAction: "#07837a",
+        .messageActionForeground: "#ffffff", .messageActionHover: "#06736c", .codeBackground: "#f3f3f1",
+        .sidebar: "#f1f1ef", .sidebarForeground: "#171717", .sidebarMutedForeground: "#5c5c5a",
+        .sidebarControlSurface: "#ffffff", .sidebarRowHover: "#0000000a", .sidebarRowActive: "#00000012",
+        .sidebarRowSelected: "#00000012", .sidebarBorder: "#f1f1ef", .warningForeground: "#983d00", .errorForeground: "#a80005",
+        .update: "#07837a", .updateForeground: "#07837a", .updateSurface: "#e1f0ef", .terminalBackground: "#ffffff",
     ]) { $1 }
+
+    /// Redesign light's success, which T3 derives as #00c590: 2:1 on the sidebar, so the "Done" chips glared and
+    /// failed AA. #0e7a50 is 4.7:1 on the sidebar and 5.4:1 on a card. Success is not a palette role, so
+    /// `ThemeRuntime.resolve` swaps it in.
+    static let capyLightSuccess = "#0e7a50"
 
     /// The theme picker's fixed cards: T3's built-ins, then Glass and Dither.
     public static let pickerBuiltIns = builtIns + [glass, dither]

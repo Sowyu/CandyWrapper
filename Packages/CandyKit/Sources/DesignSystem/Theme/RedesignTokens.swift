@@ -130,6 +130,29 @@ public enum RedesignTokens {
         }
     }
 
+    /// Segmented controls in light. T3's track (`bg-input/40`) and selection (`bg-input/72`) are greys of the control
+    /// outline color, which in light gave a #cfcfcd track under a #a3a3a1 selection, the "muddy grey" in the picker.
+    /// Light draws a quiet track in the text color and lifts the selection as a white card with the rim and the
+    /// resting shadow, as Linear and macOS do. Dark keeps T3's fills.
+    public enum Segment {
+        /// The track: the text color at 0.06 over whatever it sits on, #f0f0f0 on a white card, as Linear draws it.
+        public static let track: CGFloat = 0.06
+        /// Hover on an unselected segment: half the hover step, so the white selection stays the strongest thing.
+        public static let hover: CGFloat = 0.04
+        /// True where the light treatment applies: Redesign in a light appearance.
+        @MainActor public static func light(in view: NSView) -> Bool {
+            let dark = view.effectiveAppearance.isDark
+            return !dark && ThemeRuntime.isDither(dark: false)
+        }
+        public nonisolated static var trackFill: NSColor { Themed.black(track) }
+        public nonisolated static var hoverFill: NSColor { Themed.black(hover) }
+        /// The selection's fill: the card white.
+        @MainActor public static var selectedFill: NSColor { Themed.color(\.card) }
+        /// The selection's rim and shadow, for `BoxStyle`.
+        @MainActor public static var selectedRim: NSColor { Surface.rim(dark: false) }
+        @MainActor public static var selectedShadow: BoxShadow { Shadow.resting.box }
+    }
+
     /// Redesign's one motion system (docs/research/redesign-motion-2026-11-21.md). Three durations, one curve in and one
     /// out. Everything that opens (menus, popovers, pills, toasts, modals, the right panel) moves with these; nothing
     /// runs longer than `large`, and no surface waits for its animation before it takes clicks or keys.

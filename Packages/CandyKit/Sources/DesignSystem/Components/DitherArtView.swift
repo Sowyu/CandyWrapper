@@ -587,12 +587,13 @@ public enum DitherArt {
 
     /// Light's floor. Dark text loses more to a dot than light text does, so the art stays within 35% of its reach of
     /// the background: muted text keeps 4.5:1 over the darkest dot. "Background dim" spends the rest in a thread.
+    /// Settings and the other pages cover the art in light: at 0.88 and 0.92 the dots showed as grey speckle between
+    /// white cards, which reads as dirt on a light ground (docs/research/redesign-light-audit-2026-11-21.md).
     nonisolated static func lightScrim(_ page: Page) -> CGFloat {
         switch page {
         case .hero: 0.65
         case .thread: 0.65 + 0.35 * threadScrim
-        case .settings: 0.88
-        case .page: pageScrim
+        case .settings, .page: 1
         }
     }
 
@@ -720,9 +721,11 @@ public enum DitherArt {
         return out
     }
 
-    /// Gradient's one cell color: the accent mixed into the ground, dim like Capy's navy (#26314b at most).
+    /// Gradient's one cell color: the accent mixed into the ground, dim like Capy's navy (#26314b at most). Light
+    /// takes 0.32: at 0.22 teal on the off-white ground was #c3dedb, under 1.3:1, and the field barely showed. At
+    /// 0.32 it is #abd3cf, 1.5:1, close to the 1.7:1 step that dark's 0.36 makes.
     nonisolated static func gradientColor(tint: [Double], background: [Double], dark: Bool) -> CGColor {
-        let share = dark ? 0.36 : 0.22
+        let share = dark ? 0.36 : 0.32
         let c = (0..<3).map { background[$0] + (tint[$0] - background[$0]) * share }
         return CGColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: 1)
     }
