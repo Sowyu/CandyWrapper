@@ -5,7 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
-/// Redesign's Settled: grouped by project, full rows with when each settled, and the "when" filter.
+/// Redesign's Settled: a flat list of full rows with when each settled, and the "when" filter.
 @MainActor
 struct SidebarSettledTests {
     /// Friday 2026-10-09 12:00 UTC.
@@ -64,31 +64,22 @@ struct SidebarSettledTests {
         }
     }
 
-    @Test func groupsByProjectInOrderOfTheLatestSettle() {
+    @Test func listsFlatNewestSettledFirst() {
         let items = Self.settledItems(Self.state())
-        // demo-repo settled last (30m), so it leads; inside each, newest settled first.
-        #expect(Self.outline(items) == ["# demo-repo 2", "a1", "a2", "# candywrapper 2", "b1", "b2"])
-        for case .projectHeader(let h) in items {
-            #expect(h.settled && h.key.hasPrefix(SidebarListBuilder.settledSectionPrefix))
-        }
-        // The main list's own demo-repo header keeps its key, so the two fold apart.
+        #expect(Self.outline(items) == ["a1", "b1", "b2", "a2"])
+        // The main list keeps its project headers; Settled has none.
         let all = SidebarListBuilder.items(snapshot: Self.snapshot(), state: Self.state(), nowMs: Self.nowMs)
-        let keys = all.compactMap { if case .projectHeader(let h) = $0 { h.key } else { nil } }
-        #expect(Set(keys).count == keys.count)
-    }
-
-    @Test func foldsAProjectInsideSettled() throws {
-        let key = try #require(Self.settledItems(Self.state()).compactMap { if case .projectHeader(let h) = $0, h.label == "candywrapper" { h.key } else { nil } }.first)
-        var s = Self.state()
-        s.collapsedProjects = [key]
-        #expect(Self.outline(Self.settledItems(s)) == ["# demo-repo 2", "a1", "a2", "# candywrapper 2"])
+        #expect(all.contains { if case .projectHeader = $0 { true } else { false } })
+        #expect(!items.contains { if case .projectHeader = $0 { true } else { false } })
     }
 
     @Test func rowsAreFullAndSayWhenTheySettled() throws {
         let items = Self.settledItems(Self.state())
         let rows = items.compactMap { if case .row(let r) = $0 { r } else { nil } }
         let a1 = try #require(rows.first { $0.id == "a1" })
-        #expect(a1.variant == .card && a1.inProjectSection && a1.recedes)
+        // Not in a section, so the row leads with its project's avatar, and the time sits in the meta line.
+        #expect(a1.variant == .card && !a1.inProjectSection && a1.recedes && a1.timeInMeta)
+        #expect(a1.projectTitle == "demo-repo")
         #expect(a1.branch == "main")
         #expect(a1.timeLabel == "settled 30m ago")
         #expect(rows.first { $0.id == "b2" }?.timeLabel == "settled 1d ago")
@@ -130,8 +121,8 @@ struct SidebarSettledTests {
 
     @Test func rangeFiltersAndSaysWhenNothingMatches() {
         SettledRange.$calendarOverride.withValue(Self.utc) {
-            #expect(Self.outline(Self.settledItems(Self.state(range: .today))) == ["# demo-repo 1", "a1", "# candywrapper 1", "b1"])
-            #expect(Self.outline(Self.settledItems(Self.state(range: .yesterday))) == ["# candywrapper 1", "b2"])
+            #expect(Self.outline(Self.settledItems(Self.state(range: .today))) == ["a1", "b1"])
+            #expect(Self.outline(Self.settledItems(Self.state(range: .yesterday))) == ["b2"])
             #expect(Self.outline(Self.settledItems(Self.state(range: .older))) == ["empty: No settled threads from before this month"])
             let onlyToday = SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo")], threads: [
                 SidebarPreview.thread("live", "Something active", project: "p1", kind: .read, minutesAgo: 1),

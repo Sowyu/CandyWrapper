@@ -43,6 +43,9 @@ struct HapticsTests {
         #expect(taps(event: .scrollWheel, buttons: 1, at: [0]).isEmpty)
         #expect(taps(event: .appKitDefined, at: [0]).isEmpty)
         #expect(taps(event: .appKitDefined, buttons: 1, at: [0]).count == 1, "a drag session in progress")
+        for type: NSEvent.EventType in [.leftMouseDown, .rightMouseDown, .otherMouseDown] {
+            #expect(taps(event: type, buttons: 1, at: [0]).isEmpty, "a press never taps: \(type)")
+        }
     }
 
     @Test func crossingDetents() {
@@ -75,7 +78,7 @@ struct HapticsTests {
             layout.rail.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
                                                            windowNumber: 0, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!)
         }
-        #expect(reset == [.alignment], "a double click returns to the default width")
+        #expect(reset.isEmpty, "a double click returns to the default width; the click is its own feedback")
     }
 
     @Test func sliderTapsPerStepOnDragNotOnPress() {

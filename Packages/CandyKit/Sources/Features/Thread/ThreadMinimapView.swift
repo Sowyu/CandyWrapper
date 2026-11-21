@@ -172,7 +172,6 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     /// closed from outside (a click anywhere, Escape, another hover card) clears it.
     private var hovered: Int? { didSet {
         guard hovered != oldValue else { return }
-        if hovered != nil { Haptics.tap(.alignment) } // a detent per turn, like a dial
         setTooltip(nil); needsDisplay = true; updateGutter(); showPreview()
     } }
     public override var wantsUpdateLayer: Bool { false }
@@ -222,7 +221,20 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         guard let window else { return }
         let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
         hoveredArrow = [previous, next].first { $0.frame.contains(point) }
+        let old = hovered
         hovered = stripRect.contains(point) ? index(atY: point.y) : nil
+        // Only the pointer moving from one message to another ticks: never entering the rail, a click, a card
+        // closing or a scroll under a still pointer.
+        guard Haptics.currentEvent().type == .mouseMoved, hovered != nil else { hapticPacer.reset(); return }
+        tick(from: old, to: hovered, speed: hapticPacer.sample(y: point.y, at: Haptics.now()))
+    }
+    private var hapticPacer = MessageRailHapticPacer()
+    /// A detent for the hover moving between messages, paced by Settings > General > Message rail ticks.
+    private func tick(from old: Int?, to new: Int?, speed: CGFloat) {
+        guard let old, let new,
+              let pattern = hapticPacer.pattern(MessageRailHaptic.current(), from: old, to: new, count: items.count, speed: speed, at: Haptics.now())
+        else { return }
+        Haptics.tap(pattern)
     }
     private var pointerInside = false
     public override func mouseEntered(with event: NSEvent) { pointerInside = true; trackPointer() }
@@ -242,8 +254,8 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     public override func keyDown(with event: NSEvent) {
         guard !items.isEmpty else { return }
         switch event.keyCode {
-        case 125: hovered = min(items.count - 1, (hovered ?? currentIndex ?? -1) + 1)
-        case 126: hovered = max(0, (hovered ?? currentIndex ?? 1) - 1)
+        case 125: let old = hovered; hovered = min(items.count - 1, (hovered ?? currentIndex ?? -1) + 1); tick(from: old ?? currentIndex, to: hovered, speed: 0)
+        case 126: let old = hovered; hovered = max(0, (hovered ?? currentIndex ?? 1) - 1); tick(from: old ?? currentIndex, to: hovered, speed: 0)
         case 115: hovered = 0
         case 119: hovered = items.count - 1
         case 36, 49: onSelect?(items[min(items.count - 1, max(0, hovered ?? currentIndex ?? 0))].id)

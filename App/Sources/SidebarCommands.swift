@@ -252,11 +252,12 @@ final class SidebarCommands {
             }
             return true
         }
-        // `thread.regenerateTitle`, unbound by default (4928 useThreadLifecycle.tsx, #33987): skipped while one runs.
+        // `thread.regenerateTitle`, unbound by default (4928 useThreadLifecycle.tsx, #33987), runs Rewrite title, which
+        // replaced T3's Regenerate title here: skipped while one runs.
         shortcuts.on("thread.regenerateTitle") { [weak self] call in
             guard let self, self.threads.panel.window != nil else { return false }
             if !call.isRepeat, let id = self.threads.openThreadId, let thread = self.shell(id), thread.titleRegeneration == nil {
-                self.regenerateTitles([id])
+                self.rewriteTitle(id)
             }
             return true
         }
@@ -567,36 +568,6 @@ final class SidebarCommands {
         fail(n < ids.count ? "Failed to archive \(n) thread\(n == 1 ? "" : "s")" : "Failed to archive threads", first)
     }
 
-    // MARK: Title regeneration (#31418)
-
-    /// Requests waiting for the server's `lastTitleRegeneration`, by request id.
-    private var titleRequests: [String: (thread: ThreadId, seenPending: Bool, done: (TitleRegenerationOutcome) -> Void)] = [:]
-    private var observingTitles = false
-
-    /// Regenerates each title, then shows one toast for how they ended (`titleRegenerationToast`,
-    /// threadTitleRegenerationToast.ts at 4928): renamed titles show nothing, kept and failed ones say so.
-    private func regenerateTitles(_ ids: [ThreadId]) {
-        guard !ids.isEmpty else { return }
-        if !observingTitles {
-            observingTitles = true
-            environments.observeShell { [weak self] in self?.settleTitleRequests() }
-        }
-        Task {
-            let requests = ids.map { id in Task { await self.regenerateTitle(id) } }
-            var results: [TitleRegenerationOutcome] = []
-            for request in requests { results.append(await request.value) }
-            guard let toast = TitleRegenerationOutcome.toast(results) else { return }
-            // A kept title can go one step further, on purpose only: a side chat proposes a short title.
-            if ids.count == 1, case .reported("unchanged", _) = results[0], let id = ids.first, let model = self.deeperRenameModel(id) {
-                self.threads.panel.toasts.show(ToastView(
-                    title: toast.title, message: toast.message + " A deeper rename runs one small turn on \(DeeperRename.modelLabel(model.model)).",
-                    kind: toast.kind, actionTitle: "Try a deeper rename", action: { [weak self] in self?.deeperRename(id) }))
-                return
-            }
-            self.toast(toast.title, toast.message, toast.kind)
-        }
-    }
-
     // MARK: Deeper rename
 
     /// Threads renaming through a helper side chat now, and the helpers, so the launch cleanup leaves them alone.
@@ -608,7 +579,13 @@ final class SidebarCommands {
         guard let thread = shell(id), let env = id.environmentId, environments.canOperate(env),
               threads.composer.config(env)?.capabilities.contains(SideChats.capability) == true,
               thread.lineage.sideChat != true, thread.lineage.relationshipToParent != .subagent else { return nil }
-        return DeeperRename.model(for: thread.modelSelection)
+        let chosen = DeeperRename.chosen(ClientSettingsStore.shared.current[DeeperRename.settingKey])
+        return DeeperRename.model(chosen: chosen, parent: thread.modelSelection, providers: threads.composer.providers(env)).selection
+    }
+
+    /// Rewrite title can run on this thread now: the server has side chats and no rewrite runs on it.
+    func canRewriteTitle(_ id: ThreadId) -> Bool {
+        deeperRenameModel(id) != nil && deeperRenames[id] == nil && shell(id)?.titleRegeneration == nil
     }
 
     private func setLocalTitleRegeneration(_ id: ThreadId, _ on: Bool) {
@@ -619,31 +596,71 @@ final class SidebarCommands {
     /// Forks the thread as a side chat titled "Title helper" (as /btw does, without opening its tab), asks it for a
     /// short title with no tools, renames the thread with the normal rename command and deletes the helper. Gives up
     /// after 30 s. Explicit only: the "Title kept" toast and the thread menu.
-    func deeperRename(_ id: ThreadId) {
+    func rewriteTitle(_ id: ThreadId) {
         guard deeperRenames[id] == nil, let env = id.environmentId, let parent = shell(id), let model = deeperRenameModel(id) else { return }
         let helper = ThreadId(UUID().uuidString.lowercased())
         let scoped = helper.scoped(to: env)
         deeperRenames[id] = scoped
         setLocalTitleRegeneration(id, true)
+        let old = parent.title
+        setTitleTyping(id, .thinking(old: old))
         Task { [weak self] in
             guard let self else { return }
             let outcome = await self.runDeeperRename(parent: parent, helper: helper, scoped: scoped, model: model)
             self.deeperRenames[id] = nil
             self.setLocalTitleRegeneration(id, false)
+            // The new title types out; after a failure the old one types back.
+            if case .success(let title) = outcome { self.land(id, old: old, target: title) } else { self.land(id, old: old, target: old) }
             // Deleted whatever happened; a quit before this line leaves it to the next launch's cleanup.
             _ = try? await self.environments.dispatch(scoped, ThreadCommands.delete(helper))
             switch outcome {
-            case .success: break // the new title is the result
-            case .failure(let message): self.toast("Deeper rename failed", message, .error)
+            case .success(let title) where title == old:
+                self.toast("Title unchanged", "The current title already fits this thread.", .info)
+            case .success: break // the typing shows the new title
+            case .failure(let message): self.toast("Could not rewrite the title", message, .error)
             }
         }
     }
 
-    private enum DeeperOutcome { case success, failure(String) }
+    private enum DeeperOutcome { case success(String), failure(String) }
+
+    /// The typing effect's phase on the row and, when it is open, the header.
+    private func setTitleTyping(_ id: ThreadId, _ phase: TitleTyping.Phase?) {
+        sidebar?.state.titleTypings[id] = phase
+        threads.titleTypings[id] = phase
+    }
+    private var typingLandings = 0
+
+    /// Types `target` out, then drops the phase once the effect has had its time (one delayed call, not a timer).
+    private func land(_ id: ThreadId, old: String, target: String) {
+        typingLandings += 1
+        let landing = TitleTyping.Phase.landing(old: old, target: target, id: typingLandings)
+        setTitleTyping(id, landing)
+        DispatchQueue.main.asyncAfter(deadline: .now() + TitleTyping.landingDuration(target) + 0.3) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.sidebar?.state.titleTypings[id] == landing else { return }
+                self.setTitleTyping(id, nil)
+            }
+        }
+    }
 
     private func runDeeperRename(parent: ThreadShell, helper: ThreadId, scoped: ThreadId, model: ModelSelection) async -> DeeperOutcome {
         let id = parent.id
         let start = Date()
+        #if DEBUG
+        // `CANDY_TITLE_REWRITE_FAIL=1` fails every rewrite after two seconds, to see the way back without a broken server.
+        if ProcessInfo.processInfo.environment["CANDY_TITLE_REWRITE_FAIL"] != nil {
+            try? await Task.sleep(for: .seconds(2))
+            return .failure("CANDY_TITLE_REWRITE_FAIL is set.")
+        }
+        // `CANDY_TITLE_REWRITE_STUB=<title>` answers with that title after three seconds, with no helper turn.
+        if let stub = ProcessInfo.processInfo.environment["CANDY_TITLE_REWRITE_STUB"] {
+            try? await Task.sleep(for: .seconds(3))
+            guard stub != shell(id)?.title else { return .success(stub) }
+            do { _ = try await environments.dispatch(id, ThreadCommands.rename(id.localId, title: stub)) } catch { return .failure("Could not rename the thread.") }
+            return .success(stub)
+        }
+        #endif
         func timedOut() -> Bool { Date().timeIntervalSince(start) > DeeperRename.timeout }
         do {
             _ = try await environments.dispatch(id, SideChats.fork(source: id.localId, target: helper, title: DeeperRename.helperTitle))
@@ -680,11 +697,11 @@ final class SidebarCommands {
               let reply = DeeperRename.reply(in: snapshot.projection), let title = DeeperRename.title(fromReply: reply) else {
             return .failure("The title helper gave no title. The title is unchanged.")
         }
-        guard title != shell(id)?.title else { return .success }
+        guard title != shell(id)?.title else { return .success(title) }
         do { _ = try await environments.dispatch(id, ThreadCommands.rename(id.localId, title: title)) } catch {
             return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not rename the thread.")
         }
-        return .success
+        return .success(title)
     }
 
     /// Helpers a quit left behind: side chats titled "Title helper" with no run, never one running now. A /btw side
@@ -698,35 +715,6 @@ final class SidebarCommands {
         }
     }
     private var cleaningHelpers: Set<ThreadId> = []
-
-    private func regenerateTitle(_ id: ThreadId) async -> TitleRegenerationOutcome {
-        let commandId = ThreadCommands.newCommandId()
-        do { try await environments.dispatch(id, ThreadCommands.regenerateTitle(id.localId, commandId: commandId)) } catch {
-            let message = (error as? RPCClientError)?.typedError?.message ?? (error as? LocalizedError)?.errorDescription
-            return .failure(message ?? "An error occurred.")
-        }
-        return await withCheckedContinuation { continuation in
-            titleRequests[commandId] = (id, false, { continuation.resume(returning: $0) })
-            settleTitleRequests()
-            // A server that never reports leaves the request; after two minutes it counts as unreported.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 120) { [weak self] in
-                MainActor.assumeIsolated { self?.titleRequests.removeValue(forKey: commandId)?.done(.unreported) }
-            }
-        }
-    }
-
-    private func settleTitleRequests() {
-        guard !titleRequests.isEmpty else { return }
-        for (requestId, request) in titleRequests {
-            let thread = shell(request.thread)
-            if let outcome = TitleRegenerationOutcome.settled(thread, requestId: requestId, seenPending: request.seenPending) {
-                titleRequests.removeValue(forKey: requestId)
-                request.done(outcome)
-            } else if thread?.titleRegeneration?.requestId == requestId {
-                titleRequests[requestId]?.seenPending = true
-            }
-        }
-    }
 
     private func simple(_ id: ThreadId, _ payload: JSONValue, update: OptimisticThreadUpdate? = nil, failure: String?) {
         Task {
@@ -810,7 +798,7 @@ final class SidebarCommands {
         state.autoSettleEnabled = thread.autoSettleDisabledAt == nil
         state.canSnoozeNow = SidebarModel.canSnooze(presented, nowMs: nowMs)
         state.isRegeneratingTitle = thread.titleRegeneration != nil || deeperRenames[thread.id] != nil
-        state.deeperRenameModel = deeperRenameModel(thread.id).map { DeeperRename.modelLabel($0.model) }
+        state.canRewriteTitle = deeperRenameModel(thread.id) != nil
         state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
         state.snoozePresets = presets
         state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
@@ -861,12 +849,9 @@ final class SidebarCommands {
         case "auto-settle:enabled", "auto-settle:disabled":
             let on = choice == "auto-settle:enabled"
             simple(id, ThreadCommands.setAutoSettle(id.localId, enabled: on), update: .setAutoSettle(on), failure: "Failed to update auto-settle")
-        case "regenerate-title":
+        case "rewrite-title":
             guard thread.titleRegeneration == nil else { return }
-            regenerateTitles([id])
-        case "deeper-rename":
-            guard thread.titleRegeneration == nil else { return }
-            deeperRename(id)
+            rewriteTitle(id)
         case "turn-into-project":
             // Sidebar.tsx and useThreadActionMenu.ts at 4928 (#26767): a toast either way; the shell stream moves the row.
             guard let env = id.environmentId else { return }
@@ -1092,8 +1077,8 @@ final class SidebarCommands {
             let n = archivable.count
             guard ClientSettingsStore.shared.current.bool("confirmThreadArchive") else { return run() }
             confirm("Archive \(n) thread\(n == 1 ? "" : "s")?", then: run)
-        case "regenerate-title":
-            regenerateTitles(regeneratable.map(\.id))
+        case "rewrite-title":
+            for id in regeneratable.map(\.id) { rewriteTitle(id) }
             sidebar?.clearSelection()
         case "mark-unread":
             for id in ids { simple(id, ThreadCommands.markUnread(id.localId), failure: nil) }

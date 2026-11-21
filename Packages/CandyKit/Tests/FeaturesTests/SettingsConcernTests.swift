@@ -6,6 +6,26 @@ import T3Protocol
 
 @MainActor
 struct SettingsConcernTests {
+    /// A search jump to a page whose nav row sits below the nav's fold scrolls that row into view, so the highlighted
+    /// row is the page shown and not off screen (1.17.0 fixes, item 7).
+    @Test func navScrollsToTheSelectedRow() {
+        let nav = SettingsSidebarView(frame: NSRect(x: 0, y: 0, width: 256, height: 360))
+        let window = NSWindow(contentRect: nav.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = nav
+        defer { window.contentView = nil; window.close() }
+        nav.layoutSubtreeIfNeeded()
+        let last = SettingsSection.navSections.last { $0.isAvailable }!
+        let row = nav.items[last]!
+        #expect(!nav.bounds.contains(nav.convert(row.bounds, from: row)), "the last row starts below the fold in a 360pt nav")
+        nav.selected = last
+        nav.layoutSubtreeIfNeeded()
+        #expect(!nav.bounds.contains(nav.convert(row.bounds, from: row)), "picking a page leaves the nav where it is")
+        nav.revealSelected()
+        nav.layoutSubtreeIfNeeded()
+        #expect(nav.bounds.contains(nav.convert(row.bounds, from: row)))
+    }
+
     @Test func routesReachTheNewPagesAndRetainOldAliases() {
         for section in [SettingsSection.chat, .diffs, .threads, .browser, .devices, .worktrees, .access, .maintenance, .about] {
             #expect(SettingsSection.fromPath("/settings/" + section.rawValue) == section)

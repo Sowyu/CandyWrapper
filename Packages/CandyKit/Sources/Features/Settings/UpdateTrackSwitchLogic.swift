@@ -60,9 +60,16 @@ public enum UpdateTrackSwitchLogic {
     /// The Switch dialog's line when the release check fails: the error's own sentence when it has one (RPC errors
     /// do), never a Swift type name, and what to try.
     public static func checkFailed(_ channel: String, error: any Error) -> String {
-        let reason = (error as? LocalizedError)?.errorDescription.map { $0.hasSuffix(".") ? $0 : $0 + "." }
+        var reason = (error as? LocalizedError)?.errorDescription.map { $0.hasSuffix(".") ? $0 : $0 + "." }
             ?? "The server did not answer."
-        return "Could not check \(label(channel)) releases. \(reason) Check that the primary server is connected and try again."
+        // The npm error opens with its own "Could not check", so say it once and let its reason follow.
+        let npm = "Could not check the configured npm registry: "
+        var subject = "\(label(channel)) releases"
+        if reason.hasPrefix(npm) {
+            subject += " on the configured npm registry"
+            reason = reason.dropFirst(npm.count).prefix(1).uppercased() + reason.dropFirst(npm.count + 1)
+        }
+        return "Could not check \(subject). \(reason) Check that the primary server is connected and try again."
     }
 
     /// `desktopUpdateChannelOf` (shared/cliRelease.ts:102-104).

@@ -297,8 +297,9 @@ struct ThreadActionMenuTests {
         var s = ThreadActionMenu.State()
         s.branch = "main"
         s.projectFilter = (label: "demo", isActive: false)
+        s.canRewriteTitle = true
         let items = ThreadActionMenu.items(s)
-        #expect(items.map(\.id) == ["new-thread-on-branch", "pin", "settle", "snooze", "rename", "regenerate-title", "mark-unread",
+        #expect(items.map(\.id) == ["new-thread-on-branch", "pin", "settle", "snooze", "rename", "rewrite-title", "mark-unread",
                                     "filter-by-project", "auto-settle", "copy", "project-settings", "archive", "delete"])
         #expect(items.first { $0.id == "filter-by-project" }?.label == "Filter by demo")
         #expect(items.first { $0.id == "copy" }?.children.map(\.id) == ["copy-path", "copy-branch", "copy-thread", "copy-thread-id"])
@@ -309,10 +310,11 @@ struct ThreadActionMenuTests {
         var s = ThreadActionMenu.State()
         s.isPinned = true; s.isSettled = true; s.isSnoozed = true; s.isRegeneratingTitle = true; s.autoSettleEnabled = false
         s.projectFilter = (label: "demo", isActive: true)
+        s.canRewriteTitle = true
         let items = ThreadActionMenu.items(s)
         let labels = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0.label) })
         #expect(labels["unpin"] == "Unpin thread" && labels["unsettle"] == "Un-settle thread" && labels["unsnooze"] == "Wake thread")
-        #expect(labels["regenerate-title"] == "Regenerating…" && labels["filter-by-project"] == "Show all projects")
+        #expect(labels["rewrite-title"] == "Rewriting title…" && labels["filter-by-project"] == "Show all projects")
         #expect(items.first { $0.id == "auto-settle" }?.children.map(\.checked) == [false, true])
     }
 

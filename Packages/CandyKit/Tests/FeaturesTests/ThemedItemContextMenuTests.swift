@@ -16,12 +16,13 @@ struct ThemedItemContextMenuTests {
         state.branch = "main"
         state.projectFilter = (label: "Sandbox", isActive: false)
         state.isSettled = true
+        state.canRewriteTitle = true
         state.snoozePresets = SnoozePresets.resolve(now: Date(timeIntervalSince1970: 1_800_000_000))
         let source = ThreadActionMenu.items(state)
         var chosen: [String] = []
         let items = ThemedItemContextMenu.items(source) { chosen.append($0) }
         #expect(titles(items) == ["New thread on main", "Pin thread", "Un-settle thread", "Snooze", "—", "Rename thread",
-                                  "Regenerate title", "Mark unread", "Filter by Sandbox", "Auto-settle behavior", "—", "Copy",
+                                  "Rewrite title", "Mark unread", "Filter by Sandbox", "Auto-settle behavior", "—", "Copy",
                                   "Project settings", "—", "Archive thread", "Delete"])
         let rows = items.filter { if case .separator = $0.kind { false } else { true } }
         // Every leaf fires its own id; submenus carry their children.
@@ -48,7 +49,7 @@ struct ThemedItemContextMenuTests {
                                                 titleActionableCount: 10, archivableCount: 10, snoozePresets: [])
         var chosen: [String] = []
         let items = ThemedItemContextMenu.items(source) { chosen.append($0) }
-        #expect(titles(items) == ["Unsettle (10)", "Snooze (10)", "Regenerate titles (10)", "Mark unread (10)", "—", "Archive (10)", "Delete (10)"])
+        #expect(titles(items) == ["Unsettle (10)", "Snooze (10)", "Rewrite titles (10)", "Mark unread (10)", "—", "Archive (10)", "Delete (10)"])
         items.first { $0.title == "Archive (10)" }?.action?()
         items.first { $0.title == "Unsettle (10)" }?.action?()
         #expect(chosen == ["archive", "unsettle"])

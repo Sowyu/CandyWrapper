@@ -26,7 +26,14 @@ final class DitherThreadTitleView: DSView {
         name.text = t
         setAccessibilityValue(p.isEmpty ? t : "\(p) / \(t)")
         needsLayout = true
+        TitleTypingOverlay.sync(&typing, over: name, phase: titleTyping)
     }
+
+    /// Rewrite title's typing effect on the title while it runs.
+    var titleTyping: TitleTyping.Phase? {
+        didSet { if titleTyping != oldValue { TitleTypingOverlay.sync(&typing, over: name, phase: titleTyping) } }
+    }
+    private var typing: TitleTypingOverlay?
 
     var isEmpty: Bool { name.text.isEmpty }
 
@@ -47,5 +54,6 @@ final class DitherThreadTitleView: DSView {
             x += sw + gap
         }
         name.frame = NSRect(x: x, y: 0, width: max(0, min(ceil(name.textWidth) + 1, bounds.width - x)), height: Self.height)
+        typing?.follow()
     }
 }

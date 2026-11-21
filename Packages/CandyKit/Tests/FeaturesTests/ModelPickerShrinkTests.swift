@@ -5,6 +5,7 @@ import T3Protocol
 import T3Store
 @testable import Features
 
+extension GlobalThemeSuites {
 /// The model picker's list shrinking under the pointer or the keyboard highlight: collapsing "Show less", a backend
 /// heading, a tab switch, a search, a catalog refresh or a favorite. v1.15.0 trapped on "Show more" then "Show less"
 /// (picker-crash, 2026-11-21): the highlight kept the clicked row's index from the longer list.
@@ -388,4 +389,5 @@ struct PickerShrinkRandom: RandomNumberGenerator {
         z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
         return z ^ (z >> 31)
     }
+}
 }

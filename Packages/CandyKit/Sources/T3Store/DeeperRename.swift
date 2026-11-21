@@ -32,7 +32,29 @@ public enum DeeperRename {
     /// less than Opus's cache hit; it has the same 1M context. Other providers keep the parent's model.
     public static func model(for parent: ModelSelection) -> ModelSelection {
         guard parent.model.hasPrefix("claude-") else { return parent }
-        return ModelSelection(instanceId: parent.instanceId, model: "claude-haiku-5-5")
+        return ModelSelection(instanceId: parent.instanceId, model: claudeModel)
+    }
+    /// The default on a Claude thread.
+    public static let claudeModel = "claude-haiku-5-5"
+
+    /// The client setting that picks the model Rewrite title runs on (Settings > Title rewrite model); empty is the default.
+    public static let settingKey = "titleRewriteModel"
+
+    /// The model a rewrite runs on: the chosen one while the server still offers it, else `model(for:)`, and whether
+    /// it fell back from a choice the server no longer offers.
+    public static func model(chosen: ModelSelection?, parent: ModelSelection, providers: [ServerProvider]) -> (selection: ModelSelection, fellBack: Bool) {
+        guard let chosen else { return (model(for: parent), false) }
+        return isOffered(chosen, providers) ? (chosen, false) : (model(for: parent), true)
+    }
+
+    /// The setting's stored value as a selection, nil when unset.
+    public static func chosen(_ value: JSONValue) -> ModelSelection? {
+        guard let id = value["instanceId"]?.stringValue, let model = value["model"]?.stringValue else { return nil }
+        return ModelSelection(instanceId: ProviderInstanceId(rawValue: id), model: model)
+    }
+
+    public static func isOffered(_ selection: ModelSelection, _ providers: [ServerProvider]) -> Bool {
+        providers.contains { $0.instanceId == selection.instanceId && $0.enabled && $0.models.contains { $0.slug == selection.model } }
     }
 
     /// "claude-haiku-5-5" reads "Claude Haiku 5.5" in the menu and the toast.

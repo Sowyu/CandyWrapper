@@ -70,6 +70,10 @@ paths = re.search(r"const ICON_PATHS[^=]*= \{(.*?)\n\};", menu, re.S)
 for k in re.findall(r'^\s*"?([a-z0-9-]+)"?: \[', paths.group(1) if paths else "", re.M):
     if k in have: resolved.setdefault(k, k)
 
+# CandyWrapper's own: Rewrite title's icon in the default themes (Redesign draws Tabler's pencil-search for it).
+for k in ["pencil-line"]:
+    if k in have: resolved.setdefault(k, k)
+
 # ---------- shape model ----------
 def num(v):
     f = float(v)

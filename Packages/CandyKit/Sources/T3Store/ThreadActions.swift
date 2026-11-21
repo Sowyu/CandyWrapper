@@ -587,6 +587,8 @@ public struct ThreadMenuItem: Sendable, Equatable {
     public var children: [ThreadMenuItem] = []
     /// One line under the label and as its tooltip, saying what the item does.
     public var detail: String?
+    /// The row's tooltip alone, without the line under the label.
+    public var tooltip: String?
 
     public init(_ id: String, _ label: String, disabled: Bool = false, destructive: Bool = false, separatorBefore: Bool = false,
                 checked: Bool? = nil, children: [ThreadMenuItem] = [], detail: String? = nil) {
@@ -598,6 +600,8 @@ public struct ThreadMenuItem: Sendable, Equatable {
 /// `buildThreadActionMenuItems` (apps/web/src/components/threadActionMenu.logic.ts:122-270). Native on
 /// desktop: Electron builds an NSMenu from these (apps/desktop/src/electron/ElectronMenu.ts:142-190).
 public enum ThreadActionMenu {
+    /// Rewrite title's tooltip, in the menus and as the palette command's subtitle.
+    public static let rewriteTitleTooltip = "Reads the whole thread and writes a new title."
     public struct State: Sendable {
         public var canOperate = true
         public var branch: String?
@@ -609,8 +613,8 @@ public enum ThreadActionMenu {
         public var isSnoozed = false
         public var canSnoozeNow = true
         public var isRegeneratingTitle = false
-        /// The model Deeper rename would run on, shown in its item; nil hides it (no side chats on this server).
-        public var deeperRenameModel: String?
+        /// Rewrite title can run here (the server has side chats); without it there is no title action.
+        public var canRewriteTitle = false
         public var isRunning = false
         public var supportsSettlement = true
         public var supportsAutoSettleOptOut = true
@@ -646,11 +650,12 @@ public enum ThreadActionMenu {
             }
         }
         items.append(.init("rename", "Rename thread", separatorBefore: true))
-        if s.supportsTitleRegeneration {
-            items.append(.init("regenerate-title", s.isRegeneratingTitle ? "Regenerating…" : "Regenerate title", disabled: s.isRegeneratingTitle))
-            if let model = s.deeperRenameModel {
-                items.append(.init("deeper-rename", "Deeper rename with \(model)", disabled: s.isRegeneratingTitle))
-            }
+        // CandyWrapper's Rewrite title in place of T3's Regenerate title, which often kept the same title (the user,
+        // 2026-11-21; docs/decisions.md). The server's regenerate command stays supported, only the item is gone.
+        if s.supportsTitleRegeneration, s.canRewriteTitle {
+            var item = ThreadMenuItem("rewrite-title", s.isRegeneratingTitle ? "Rewriting title…" : "Rewrite title", disabled: s.isRegeneratingTitle)
+            item.tooltip = ThreadActionMenu.rewriteTitleTooltip
+            items.append(item)
         }
         items.append(.init("mark-unread", "Mark unread"))
         if s.canShareWithGuest { items.append(.init("share-guest", "Share with guest")) }
@@ -698,11 +703,13 @@ public enum ThreadActionMenu {
                                children: snoozePresets.map { .init("snooze:\($0.id)", "\($0.label) (\($0.whenLabel))", disabled: !canOperate) }
                                    + [.init("snooze:custom", "Custom…", disabled: !canOperate, separatorBefore: true)]))
         }
-        // `buildBulkTitleRegenerationContextMenuItem`.
+        // `buildBulkTitleRegenerationContextMenuItem`'s place, rewriting instead of regenerating.
         if titleSupportedCount > 0 {
-            items.append(titleActionableCount == 0
-                ? .init("regenerate-title", "Regenerating… (\(titleSupportedCount))", disabled: true)
-                : .init("regenerate-title", "Regenerate titles (\(titleActionableCount))", disabled: !canOperate))
+            var item = titleActionableCount == 0
+                ? ThreadMenuItem("rewrite-title", "Rewriting titles… (\(titleSupportedCount))", disabled: true)
+                : ThreadMenuItem("rewrite-title", "Rewrite titles (\(titleActionableCount))", disabled: !canOperate)
+            item.tooltip = rewriteTitleTooltip
+            items.append(item)
         }
         items.append(.init("mark-unread", "Mark unread (\(count))"))
         // T3 has no bulk Archive (Sidebar.tsx:2236-2286); the user asked for one. Running threads can't archive, so the

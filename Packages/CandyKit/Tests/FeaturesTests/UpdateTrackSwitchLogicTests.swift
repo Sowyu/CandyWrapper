@@ -115,4 +115,12 @@ struct UpdateTrackSwitchLogicTests {
         #expect(generic == "Could not check Nightly releases. The server did not answer. Check that the primary server is connected and try again.")
         #expect(!generic.contains("Mute") && !generic.contains("error 0"))
     }
+
+    /// Release check 1.16.0: "Could not check Stable releases. Could not check the configured npm registry: ...".
+    @Test func checkFailedSaysCouldNotCheckOnce() {
+        struct Npm: LocalizedError { var errorDescription: String? { "Could not check the configured npm registry: fetch failed" } }
+        let said = L.checkFailed("latest", error: Npm())
+        #expect(said == "Could not check Stable releases on the configured npm registry. Fetch failed. Check that the primary server is connected and try again.")
+        #expect(said.components(separatedBy: "Could not check").count == 2)
+    }
 }

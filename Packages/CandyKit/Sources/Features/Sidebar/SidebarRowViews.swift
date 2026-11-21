@@ -428,7 +428,7 @@ class SidebarRowBase: ControlView {
             onBeginSearchDrag(self, r, event)
             return
         }
-        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, !h.settled, let onBeginGroupDrag,
+        if let p = pressPoint, case .projectHeader(let h)? = item, !h.isPinned, !h.folder, let onBeginGroupDrag,
            hypot(event.locationInWindow.x - p.x, event.locationInWindow.y - p.y) >= SidebarListView.dragDistance {
             pressPoint = nil
             var released = state
@@ -602,6 +602,7 @@ final class CapyHoverGroup {
 /// content `px-2.5 py-2`: project line (h-5), title (`mt-1`), branch line (`mt-0.5`).
 final class SidebarCardRowView: SidebarRowBase {
     private var glimmer: SidebarTitleGlimmer?
+    private var typing: TitleTypingOverlay?
     private let surface = CALayer()
     /// The visible card, 2pt below the row's top: the hover card's trigger in T3 (aligned to its top edge).
     var surfaceFrame: CGRect { surface.frame }
@@ -791,12 +792,13 @@ final class SidebarCardRowView: SidebarRowBase {
             title.color = r.recedes ? (hovered ? SB.c(\.foreground) : SB.c(\.foreground, 0.75))
                 : r.status == .failed && !r.isUnread && !r.isWoke ? SB.c(\.foreground, 0.95) : SB.c(\.foreground)
         }
-        if r.isRegeneratingTitle { title.color = SB.c(\.mutedForeground) }
-        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle)
+        if r.isRegeneratingTitle, r.titleTyping == nil { title.color = SB.c(\.mutedForeground) }
+        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle && r.titleTyping == nil)
+        TitleTypingOverlay.sync(&typing, over: title, phase: r.titleTyping)
         let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
         branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
         // Dither sections (after Capy): the time joins the meta line, and the status slot keeps only the status.
-        if capyRow && r.inProjectSection {
+        if capyRow && (r.inProjectSection || r.timeInMeta) {
             branch.text = [branch.text, r.timeLabel].filter { !$0.isEmpty }.joined(separator: " · ")
             if r.topStatus == nil { duration.text = "" }
         }
@@ -878,6 +880,7 @@ final class SidebarCardRowView: SidebarRowBase {
 
     override func layout() {
         super.layout()
+        defer { typing?.follow() }
         let w = bounds.width
         let capy = capyRow
         CATransaction.begin()
@@ -1104,6 +1107,7 @@ final class ProviderStackView: NSView {
 /// The slim row (Sidebar.tsx:1791-1953): `h-9 px-2.5 gap-2.5`, used on the snoozed and settled shelves.
 final class SidebarSlimRowView: SidebarRowBase {
     private var glimmer: SidebarTitleGlimmer?
+    private var typing: TitleTypingOverlay?
     private let surface = CALayer()
     private let monogram = ProjectMonogramView()
     private let title = LabelView()
@@ -1196,8 +1200,9 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isActive || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
-        if r.isRegeneratingTitle { title.color = SB.c(\.mutedForeground) }
-        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle)
+        if r.isRegeneratingTitle, r.titleTyping == nil { title.color = SB.c(\.mutedForeground) }
+        SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle && r.titleTyping == nil)
+        TitleTypingOverlay.sync(&typing, over: title, phase: r.titleTyping)
         pin.isHidden = !showsPin(r)
         configureMeta(r)
         terminal.count = r.terminalProcessCount
@@ -1301,6 +1306,7 @@ final class SidebarSlimRowView: SidebarRowBase {
 
     override func layout() {
         super.layout()
+        defer { typing?.follow() }
         let w = bounds.width, h = bounds.height
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -1406,7 +1412,9 @@ final class SidebarShelfRowView: SidebarRowBase {
     override func prepareForReuse() {
         super.prepareForReuse()
         dragTone = nil
+        shownCount = nil
     }
+    private var shownCount: (shelf: SidebarShelf, count: Int)?
 
     private let countLabel = LabelView("", font: SB.tabular(12), color: SB.c(\.sidebarMutedForeground))
 
@@ -1432,7 +1440,29 @@ final class SidebarShelfRowView: SidebarRowBase {
         let snoozedTone: CollapsibleSectionHeaderView.Tone = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .accent : .info
         header.tone = dragTone ?? (shelf == .snoozed ? snoozedTone : .muted)
         if header.isExpanded != expanded { header.isExpanded = expanded }
+        // A thread snoozed, woken or settled: one wave along the line.
+        if let shown = shownCount, shown.shelf == shelf, shown.count != count { header.playStripWave() }
+        shownCount = (shelf, count)
         var st = header.state; st.focusVisible = isKeyboardFocused; header.previewState(st)
+        header.dropStaleHover()
+    }
+
+    private var resignObserver: NSObjectProtocol?
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver); self.resignObserver = nil }
+        guard let window else { header.dropStaleHover(); return }
+        #if DEBUG
+        // `CANDY_DEBUG_STRIP_WAVE=1` plays the hover wave twice after the row appears, to record it without a pointer.
+        if ProcessInfo.processInfo.environment["CANDY_DEBUG_STRIP_WAVE"] != nil {
+            for delay in [4.0, 7.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in MainActor.assumeIsolated { self?.header.playStripWave() } }
+            }
+        }
+        #endif
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.header.dropStaleHover() }
+        }
     }
 
     override func performAction() { header.performAction() }
@@ -1446,6 +1476,8 @@ final class SidebarShelfRowView: SidebarRowBase {
     override func layout() {
         super.layout()
         header.frame = bounds.insetBy(dx: 2, dy: 0)
+        // A row that moved under a still pointer, or out from under it, keeps no hover it no longer has.
+        header.dropStaleHover()
     }
 }
 
@@ -1565,6 +1597,9 @@ final class TerminalStatusGlyph: DSView {
 /// in the muted 12pt of the "Threads" label, the count a step lighter, and a chevron after the count that shows on
 /// hover or while the section is folded. It sits on the lower part of its 32pt, so sections breathe above.
 final class SidebarProjectHeaderRowView: SidebarRowBase {
+    /// The name's line: the header's bottom 22pt, centred this far from the top of a 32pt header.
+    static let contentRow: CGFloat = 22
+    static var nameCentre: CGFloat { 32 - contentRow / 2 }
     private let icon = ProjectMonogramView()
     private let pinIcon = IconView(name: .pin, size: 16)
     private let label = LabelView("", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
@@ -1658,12 +1693,15 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
             return
         }
         // The content row is the bottom 22pt.
-        let mid = bounds.height - 11
+        let mid = bounds.height - Self.contentRow / 2
         // 16pt, flush with the rows' left edge (8) and centered on the name's line.
         icon.frame = NSRect(x: 8, y: (mid - 8).rounded(), width: 16, height: 16)
         pinIcon.frame = icon.frame
-        let lw = min(ceil(label.textWidth) + 1, max(0, bounds.width - 30 - 60))
-        label.frame = NSRect(x: 30, y: (mid - 8).rounded(), width: lw, height: 16)
+        // Redesign: the label on the nav rows' label edge, the icon's 16pt then `Space.s` (the user, 2026-11-21: "is
+        // it just me or is the spacing here a bit strange"); T3's folder header keeps its 30.
+        let labelX: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 8 + 16 + RedesignTokens.Space.s : 30
+        let lw = min(ceil(label.textWidth) + 1, max(0, bounds.width - labelX - 60))
+        label.frame = NSRect(x: labelX, y: (mid - 8).rounded(), width: lw, height: 16)
         let cw = ceil(count.textWidth) + 1
         count.frame = NSRect(x: label.frame.maxX + 5, y: label.frame.minY, width: cw, height: 16)
         chevron.frame = NSRect(x: count.frame.maxX + 4, y: (mid - 6).rounded(), width: 12, height: 12)

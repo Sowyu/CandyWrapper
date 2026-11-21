@@ -451,6 +451,13 @@ final class PaletteCommands {
                                             self?.threads.composer.openThreadFind()
                                         }, keepOpen: false)))
         }
+        // CandyWrapper's Rewrite title in place of T3's Regenerate title (docs/decisions.md, 2026-11-21).
+        if let id = threads.openThreadId, commands.canRewriteTitle(id) {
+            actions.append(PaletteEntry(value: "action:rewrite-title", searchTerms: ["rewrite title", "regenerate title", "rename", "title", "model"],
+                                        title: "Rewrite title", description: ThreadActionMenu.rewriteTitleTooltip, icon: .pencilLine,
+                                        shortcutCommand: "thread.regenerateTitle",
+                                        action: .run({ [weak self] in self?.commands.rewriteTitle(id) }, keepOpen: false)))
+        }
         if let target = commands.threadReferenceTarget {
             actions.append(PaletteEntry(value: "action:copy-thread-reference", searchTerms: ["copy", "pull request", "pr link", "thread", "thread id", "reference"],
                                         title: "Copy " + target.title.replacingOccurrences(of: " copied", with: "").replacingOccurrences(of: "Thread", with: "thread"), description: target.description,

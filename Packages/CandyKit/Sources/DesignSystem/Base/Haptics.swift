@@ -40,13 +40,15 @@ public enum Haptics {
         return true
     }
 
-    /// A pointer move, drag, press, pinch or key, or any event while a button is held. A scroll is the system's, and
-    /// no event means a model or timer changed the value.
+    /// A pointer move, drag, release, pinch or key, or any other event while a button is held. A press never taps: the
+    /// click is its own feedback (the user, 2026-11-21: "clicking should have no effect"), so taps belong to a snap, a
+    /// detent or a drop. A scroll is the system's, and no event means a model or timer changed the value.
     static func isInteraction(_ context: (type: NSEvent.EventType?, buttons: Int)) -> Bool {
         guard let type = context.type, type != .scrollWheel else { return false }
+        if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type) { return false }
         if context.buttons != 0 { return true }
         switch type {
-        case .mouseMoved, .mouseEntered, .mouseExited, .leftMouseDown, .leftMouseUp, .leftMouseDragged, .rightMouseDragged,
+        case .mouseMoved, .mouseEntered, .mouseExited, .leftMouseUp, .leftMouseDragged, .rightMouseDragged,
              .otherMouseDragged, .magnify, .smartMagnify, .gesture, .beginGesture, .endGesture, .pressure, .keyDown:
             return true
         default:

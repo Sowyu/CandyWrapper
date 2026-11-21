@@ -161,8 +161,14 @@ public final class ThreadHeaderView: TopbarDragView {
             titleHit.setAccessibilityLabel("Thread actions for \(newValue)")
             needsLayout = true
             superview?.needsLayout = true
+            TitleTypingOverlay.sync(&typing, over: title, phase: titleTyping)
         }
     }
+    /// Rewrite title's typing effect on this header's title while it runs.
+    public var titleTyping: TitleTyping.Phase? {
+        didSet { if titleTyping != oldValue { TitleTypingOverlay.sync(&typing, over: title, phase: titleTyping) } }
+    }
+    private var typing: TitleTypingOverlay?
 
     /// The `nav` named "Thread breadcrumb" (ChatHeader.tsx:262-264): the project, then the title button
     /// ("Thread actions for ...", :325-327).
@@ -237,6 +243,7 @@ public final class ThreadHeaderView: TopbarDragView {
 
     public override func layout() {
         super.layout()
+        defer { typing?.follow() }
         let midY = Self.height / 2
         let start = contentStart
         let plain = self.plain
@@ -335,6 +342,11 @@ private final class ThreadTopFadeView: DSView {
 ///   `setDraft(projectTitle:)` for the new-thread page (hero headline, centered composer).
 public final class ThreadPanelView: DSView {
     public let header = ThreadHeaderView()
+    /// Rewrite title's typing effect on the open thread's title, in the header and Redesign's title line.
+    public var titleTyping: TitleTyping.Phase? {
+        get { header.titleTyping }
+        set { header.titleTyping = newValue; threadTitle.titleTyping = newValue }
+    }
     /// Built the first time thread search opens; wire it through `lazyFindBar`.
     public let lazyFindBar = LazyView { ThreadFindBarView() }
     public var findBar: ThreadFindBarView { lazyFindBar.view }
@@ -1970,6 +1982,7 @@ public final class ThreadPanelView: DSView {
         ditherTopFade = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded && chat > 0
             && readingLane.width > 0
         threadTitle.set(project: header.projectTitle, title: header.threadTitle)
+        threadTitle.titleTyping = header.titleTyping
         let pill = header.pill
         let pillLeft = pill.isHidden || pill.window == nil ? chat : convert(pill.frame, from: pill.superview).minX
         let x = readingLane.minX

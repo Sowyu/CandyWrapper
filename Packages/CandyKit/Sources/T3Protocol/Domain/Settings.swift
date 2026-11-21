@@ -150,6 +150,10 @@ public struct ClientSettings: Equatable, Sendable {
         "menuBarItemEnabled": SettingSpec(.bool, .bool(true)),
         // CandyWrapper only: Force Touch trackpad taps on rail ticks, divider limits, zoom levels and drop slots (Haptics).
         "trackpadHaptics": SettingSpec(.bool, .bool(true)),
+        // CandyWrapper only: the model Rewrite title runs on, {instanceId, model}; empty uses DeeperRename.model(for:).
+        "titleRewriteModel": SettingSpec(.any, .object([:])),
+        // CandyWrapper only: how the message rail ticks as the pointer moves along it (MessageRailHaptic).
+        "messageRailHaptic": SettingSpec(.literals(["off", "light", "medium", "strong"]), .string("light")),
         // CandyWrapper only: when the in-app tooltips open (Tooltips.mode).
         "tooltips": SettingSpec(.literals(["on", "delayed", "off"]), .string("on")),
     ]
