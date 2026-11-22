@@ -4,25 +4,26 @@ import T3Protocol
 import T3Store
 
 /// The subagent strip (after Capy's activity strip, docs/research/capy-subagents.md): a pill in the row above the
-/// composer with the status glyph, "Waiting on" while the thread waits, one provider icon per live subagent and a
-/// chevron, which opens `SubagentStripPanelView` over the timeline. T3 has no such pill: its nearest is the background
-/// work banner, "Waiting on 2 subagents" in words (ThreadActivityBanners.tsx:245-262, threadExecution.ts:674-695).
+/// composer with the status glyph, "Waiting on" while the thread waits, each live provider's icon and subagent count
+/// ("✳ 11 ◎ 1", the user, 2026-11-22) and a chevron, which opens `SubagentStripPanelView` over the timeline. T3 has
+/// no such pill: its nearest is the background work banner, "Waiting on 2 subagents" in words
+/// (ThreadActivityBanners.tsx:245-262, threadExecution.ts:674-695).
 public final class SubagentStripPillView: ComposerBannerView {
     public var onToggle: (() -> Void)?
     public var expanded = false { didSet { if expanded != oldValue { restyle() } } }
     public private(set) var strip = SubagentStrip()
-    /// The live subagents in icon order.
-    public private(set) var agents: [SubagentStrip.Row] = []
-    /// The most room the pill gets. It drops "Waiting on" first, then icons from the end into "+N".
+    /// The live providers in picker order, with their counts.
+    public private(set) var groups: [SubagentStrip.PillGroup] = []
+    /// The most room the pill gets. It drops "Waiting on" first, then groups from the end into "+N".
     public var maxWidth: CGFloat = .greatestFiniteMagnitude { didSet { if maxWidth != oldValue { needsLayout = true } } }
 
     private let row = BannerRowButton()
     private var glyph: NSView = NSView()
     private var glyphStatus: SubagentStrip.Status?
     private let words = glassLabel("Waiting on", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
-    private let more = glassLabel("", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
-    private let probe = glassLabel("", font: DSFont.ui(12, weight: .medium), color: .clear, lineHeight: 16)
-    private var icons: [String: NSView] = [:]
+    private let more = glassLabel("", font: SB.tabular(12, .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
+    private let probe = glassLabel("", font: SB.tabular(12, .medium), color: .clear, lineHeight: 16)
+    private var groupViews: [String: (icon: NSView, count: LabelView)] = [:]
     private var animateIcons = false
     /// Up while closed, down while open (Capy's `rotate-180`), as two glyphs: rotating a layer-backed view's layer
     /// moved it off its frame.
@@ -30,33 +31,31 @@ public final class SubagentStripPillView: ComposerBannerView {
     private let chevronDown = IconView(name: .chevronDown, size: 12, strokeColor: Themed.color(\.mutedForeground))
 
     static let padX: CGFloat = 6, glyphColumn: CGFloat = 24, chevron: CGFloat = 12, gap: CGFloat = 4
-    static let icon: CGFloat = 12
-    /// Space between icons; the picture test also draws them overlapped with a negative gap.
-    static var iconGap: CGFloat = 4
-    // ponytail: 8 icons at most, the rest as "+N"; raise it if threads often wait on more and the row has room
-    static let maxIcons = 8
+    static let icon: CGFloat = 12, iconToCount: CGFloat = 3, groupGap: CGFloat = 8
 
-    /// What the pill shows at a width: the words or not, how many icons, and the "+N" count.
+    /// What the pill shows at a width: the words or not, how many groups, and the subagents the "+N" slot counts.
     struct Fit: Equatable { var words: Bool; var shown: Int; var more: Int }
 
-    static func width(_ fit: Fit, wordsWidth: CGFloat, moreWidth: (Int) -> CGFloat) -> CGFloat {
-        let icons = CGFloat(fit.shown) * icon + CGFloat(max(0, fit.shown - 1)) * iconGap
-        return 2 * padX + glyphColumn + (fit.words ? wordsWidth + gap : 0) + icons
-            + (fit.more > 0 ? gap + moreWidth(fit.more) : 0) + gap + chevron + 6
+    /// `counts`: each group's subagents. `textWidth` measures a count or "+N" in the tabular digits.
+    static func width(_ fit: Fit, counts: [Int], wordsWidth: CGFloat, textWidth: (String) -> CGFloat) -> CGFloat {
+        var slots = counts.prefix(fit.shown).map { icon + iconToCount + textWidth("\($0)") }
+        if fit.more > 0 { slots.append(textWidth("+\(fit.more)")) }
+        let content = slots.reduce(0, +) + CGFloat(max(0, slots.count - 1)) * groupGap
+        return 2 * padX + glyphColumn + (fit.words ? wordsWidth + gap : 0) + content + gap + chevron + 6
     }
 
-    /// The widest fit within `maxWidth`: up to `maxIcons` with the words, then without them, then fewer icons,
-    /// down to one.
-    static func fit(count: Int, waiting: Bool, maxWidth: CGFloat, wordsWidth: CGFloat, moreWidth: (Int) -> CGFloat) -> Fit {
-        var shown = min(count, maxIcons)
-        if waiting {
-            let f = Fit(words: true, shown: shown, more: count - shown)
-            if width(f, wordsWidth: wordsWidth, moreWidth: moreWidth) <= maxWidth { return f }
+    /// The widest fit within `maxWidth`: every group with the words, then without them, then groups folding from
+    /// the end into "+N", down to one group.
+    static func fit(counts: [Int], waiting: Bool, maxWidth: CGFloat, wordsWidth: CGFloat, textWidth: (String) -> CGFloat) -> Fit {
+        func make(_ words: Bool, _ shown: Int) -> Fit { Fit(words: words, shown: shown, more: counts.dropFirst(shown).reduce(0, +)) }
+        var shown = counts.count
+        if waiting, width(make(true, shown), counts: counts, wordsWidth: wordsWidth, textWidth: textWidth) <= maxWidth {
+            return make(true, shown)
         }
-        while shown > 1, width(Fit(words: false, shown: shown, more: count - shown), wordsWidth: wordsWidth, moreWidth: moreWidth) > maxWidth {
+        while shown > 1, width(make(false, shown), counts: counts, wordsWidth: wordsWidth, textWidth: textWidth) > maxWidth {
             shown -= 1
         }
-        return Fit(words: false, shown: shown, more: count - shown)
+        return make(false, shown)
     }
 
     public init() {
@@ -72,13 +71,13 @@ public final class SubagentStripPillView: ComposerBannerView {
         restyle()
     }
 
-    /// `providers`: the model picker's instances in rail order, which sets the icons' order and names them.
+    /// `providers`: the model picker's instances in rail order, which sets the groups' order and names them.
     public func configure(_ strip: SubagentStrip, providers: [SubagentStrip.Provider] = []) {
-        let agents = strip.pillAgents(order: providers)
-        guard strip != self.strip || agents.map(\.key) != self.agents.map(\.key) else { return }
-        let old = Set(self.agents.map(\.key))
+        let groups = strip.pillGroups(order: providers)
+        guard strip != self.strip || groups != self.groups else { return }
+        let old = self.groups
         self.strip = strip
-        self.agents = agents
+        self.groups = groups
         // The pill spins while anything runs; waiting or asking alone shows that glyph instead.
         let status: SubagentStrip.Status = strip.rows.contains { $0.status == .running } ? .running
             : strip.rows.first { !$0.finished }?.status ?? .running
@@ -88,18 +87,25 @@ public final class SubagentStripPillView: ComposerBannerView {
             glyph = SubagentStripGlyph.make(status, size: 12)
             row.addSubview(glyph)
         }
-        var kept: [String: NSView] = [:]
-        for agent in agents {
-            if let v = icons.removeValue(forKey: agent.key) { kept[agent.key] = v; continue }
-            let v = Self.icon(agent, providers: providers)
-            row.addSubview(v)
-            kept[agent.key] = v
+        var kept: [String: (icon: NSView, count: LabelView)] = [:]
+        for g in groups {
+            let views = groupViews.removeValue(forKey: g.instanceId) ?? {
+                let icon = Self.icon(g, providers: providers)
+                let count = glassLabel("", font: SB.tabular(12, .medium), color: words.color, lineHeight: 16)
+                row.addSubview(icon)
+                row.addSubview(count)
+                return (icon, count)
+            }()
+            views.count.text = "\(g.count)"
+            kept[g.instanceId] = views
         }
-        icons.values.forEach { $0.removeFromSuperview() }
-        icons = kept
-        // Under Redesign the icons left behind close up when one finishes; a new one just appears.
+        groupViews.values.forEach { $0.icon.removeFromSuperview(); $0.count.removeFromSuperview() }
+        groupViews = kept
+        // Under Redesign the pill's width animates when a group leaves or a count gains or loses a digit; a count
+        // that keeps its digits changes in place, and a new group just appears.
+        func shape(_ g: [SubagentStrip.PillGroup]) -> [String] { g.map { "\($0.instanceId):\(String($0.count).count)" } }
         animateIcons = window != nil && !Motion.reduced && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-            && !old.isEmpty && Set(agents.map(\.key)).isSubset(of: old)
+            && !old.isEmpty && shape(old) != shape(groups) && Set(groups.map(\.instanceId)).isSubset(of: old.map(\.instanceId))
         let description = strip.pillDescription(order: providers, driverName: SidebarProviderUpdatePillModel.displayName)
         row.setTooltip(description)
         accessibilityText = description
@@ -109,12 +115,16 @@ public final class SubagentStripPillView: ComposerBannerView {
     }
 
     private var accessibilityText = ""
-    var shownIconCount: Int { agents.filter { icons[$0.key]?.isHidden == false }.count }
+    /// The visible groups as "driver count", then "+N" when some fold, for tests.
+    var shownSlots: [String] {
+        groups.compactMap { g in groupViews[g.instanceId].flatMap { $0.icon.isHidden ? nil : "\(g.driver) \($0.count.text)" } }
+            + (more.isHidden ? [] : [more.text])
+    }
 
-    static func icon(_ agent: SubagentStrip.Row, providers: [SubagentStrip.Provider]) -> NSView {
+    static func icon(_ group: SubagentStrip.PillGroup, providers: [SubagentStrip.Provider]) -> NSView {
         let color = Themed.color(\.mutedForeground)
-        let v = ProviderIcon.glyphDrivers.contains(agent.driver)
-            ? ProviderIcon.make(driver: agent.driver, displayName: providers.first { $0.instanceId == agent.providerInstanceId }?.name ?? agent.driver,
+        let v = ProviderIcon.glyphDrivers.contains(group.driver)
+            ? ProviderIcon.make(driver: group.driver, displayName: providers.first { $0.instanceId == group.instanceId }?.name ?? group.driver,
                                 size: icon, color: color, model: true)
             : IconView(name: .bot, size: icon, strokeColor: color)
         v.setAccessibilityElement(false)
@@ -122,16 +132,18 @@ public final class SubagentStripPillView: ComposerBannerView {
     }
 
     private var currentFit: Fit {
-        Self.fit(count: agents.count, waiting: strip.parentWaiting, maxWidth: maxWidth, wordsWidth: ceil(words.textWidth),
-                 moreWidth: measureMore)
+        Self.fit(counts: groups.map(\.count), waiting: strip.parentWaiting, maxWidth: maxWidth, wordsWidth: ceil(words.textWidth),
+                 textWidth: measure)
     }
 
-    private func measureMore(_ n: Int) -> CGFloat {
-        probe.text = "+\(n)"
+    private func measure(_ text: String) -> CGFloat {
+        probe.text = text
         return ceil(probe.textWidth)
     }
 
-    public var preferredWidth: CGFloat { Self.width(currentFit, wordsWidth: ceil(words.textWidth), moreWidth: measureMore) }
+    public var preferredWidth: CGFloat {
+        Self.width(currentFit, counts: groups.map(\.count), wordsWidth: ceil(words.textWidth), textWidth: measure)
+    }
 
     private func updateAccessibility() {
         row.setAccessibilityLabel(accessibilityText + (expanded ? ". Hide subagents." : ". Show subagents."))
@@ -140,7 +152,7 @@ public final class SubagentStripPillView: ComposerBannerView {
     private func restyle() {
         let strong = expanded || row.state.hovered
         Motion.transitioning(window == nil ? [] : .colors, duration: 0.2) {
-            for l in [words, more] { l.color = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground) }
+            for l in [words, more] + groupViews.values.map(\.count) { l.color = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground) }
             for c in [chevronUp, chevronDown] { c.strokeColor = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground) }
         }
         chevronUp.isHidden = expanded
@@ -159,27 +171,32 @@ public final class SubagentStripPillView: ComposerBannerView {
             words.frame = NSRect(x: x, y: 4, width: ceil(words.textWidth), height: 16)
             x = words.frame.maxX + Self.gap
         }
-        for (i, agent) in agents.enumerated() {
-            guard let v = icons[agent.key] else { continue }
-            v.isHidden = i >= fit.shown
-            guard !v.isHidden else { continue }
-            v.frame = NSRect(x: x, y: 6, width: Self.icon, height: Self.icon)
-            x += Self.icon + Self.iconGap
+        for (i, g) in groups.enumerated() {
+            guard let v = groupViews[g.instanceId] else { continue }
+            let hidden = i >= fit.shown
+            v.icon.isHidden = hidden
+            v.count.isHidden = hidden
+            guard !hidden else { continue }
+            v.icon.frame = NSRect(x: x, y: 6, width: Self.icon, height: Self.icon)
+            x += Self.icon + Self.iconToCount
+            let w = ceil(v.count.textWidth)
+            v.count.frame = NSRect(x: x, y: 4, width: w, height: 16)
+            x += w + Self.groupGap
         }
-        x -= Self.iconGap
         more.isHidden = fit.more == 0
         if fit.more > 0 {
             more.text = "+\(fit.more)"
-            more.frame = NSRect(x: x + Self.gap, y: 4, width: ceil(more.textWidth), height: 16)
-            x = more.frame.maxX
+            more.frame = NSRect(x: x, y: 4, width: ceil(more.textWidth), height: 16)
+            x = more.frame.maxX + Self.groupGap
         }
+        x -= Self.groupGap
         let chevron = NSRect(x: x + Self.gap, y: 6, width: Self.chevron, height: Self.chevron)
         chevronUp.frame = chevron
         chevronDown.frame = chevron
     }
 
-    /// After a subagent finished under Redesign, the next frame the row gives the pill animates, and so does the
-    /// layout under it, so the icons close up as the pill narrows. Each frame ends on its resting value.
+    /// After a group left or a count changed its digits under Redesign, the next frame the row gives the pill
+    /// animates, and so does the layout under it, so the groups close up as the pill narrows. Each frame ends on its resting value.
     public override var frame: NSRect {
         get { super.frame }
         set {
