@@ -207,8 +207,10 @@ public final class ThreadLineageController {
             return
         }
         panel.subagentStripCoversBackgroundWork = me?.backgroundTasks.allSatisfy { $0.kind == .subagent } ?? true
-        panel.lazySubagentPill.view.configure(strip)
         let providers = providers?(env) ?? []
+        let rail = ProviderCatalog(providers).entries.filter(\.isVisibleInPicker)
+            .map { SubagentStrip.Provider(instanceId: $0.id.rawValue, driver: $0.driver, name: $0.displayName) }
+        panel.lazySubagentPill.view.configure(strip, providers: rail)
         stoppingAgents.formIntersection(strip.rows.filter(\.canStop).map(\.id))
         panel.lazySubagentPanel.view.items = strip.rows.map {
             .init(row: $0, modelName: Self.modelName($0, providers), stopping: stoppingAgents.contains($0.id))

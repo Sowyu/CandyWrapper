@@ -49,11 +49,44 @@ public struct SubagentStrip: Sendable, Equatable {
 
     /// The pill shows only while a subagent still works or waits.
     public var isVisible: Bool { activeCount > 0 }
-    /// "3", or "Waiting on 2" while the thread waits on them.
-    public var pillText: String { parentWaiting ? "Waiting on \(activeCount)" : "\(activeCount)" }
-    public var accessibilityLabel: String {
-        parentWaiting ? "Waiting on \(activeCount) subagent\(activeCount == 1 ? "" : "s")"
-            : "\(activeCount) running subagent\(activeCount == 1 ? "" : "s")"
+
+    /// A provider instance as the model picker lists it.
+    public struct Provider: Sendable, Equatable {
+        public let instanceId: String
+        public let driver: String
+        public let name: String
+        public init(instanceId: String, driver: String, name: String) {
+            self.instanceId = instanceId; self.driver = driver; self.name = name
+        }
+    }
+
+    /// The pill's subagents, one per live row: grouped by provider in `order` (the model picker's rail), providers
+    /// it doesn't list after those by first start, each group in start order.
+    public func pillAgents(order: [Provider]) -> [Row] {
+        let live = Array(rows.filter { !$0.finished }.reversed())
+        var rank: [String: Int] = [:]
+        for (i, p) in order.enumerated() where rank[p.instanceId] == nil { rank[p.instanceId] = i }
+        for r in live where rank[r.providerInstanceId] == nil { rank[r.providerInstanceId] = order.count + rank.count }
+        return live.enumerated().sorted { a, b in
+            let ra = rank[a.element.providerInstanceId]!, rb = rank[b.element.providerInstanceId]!
+            return ra != rb ? ra < rb : a.offset < b.offset
+        }.map(\.element)
+    }
+
+    /// "Waiting on 5 Claude and 1 Codex subagents", or "1 Claude subagent running" while the thread doesn't wait.
+    public func pillDescription(order: [Provider], driverName: (String) -> String) -> String {
+        let agents = pillAgents(order: order)
+        var groups: [(name: String, count: Int)] = []
+        for r in agents {
+            let name = order.first { $0.instanceId == r.providerInstanceId }?.name
+                ?? (r.driver.isEmpty ? "other" : driverName(r.driver))
+            if let i = groups.firstIndex(where: { $0.name == name }) { groups[i].count += 1 } else { groups.append((name, 1)) }
+        }
+        let parts = groups.map { "\($0.count) \($0.name)" }
+        let list = parts.count <= 2 ? parts.joined(separator: " and ")
+            : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
+        let noun = agents.count == 1 ? "subagent" : "subagents"
+        return parentWaiting ? "Waiting on \(list) \(noun)" : "\(list) \(noun) running"
     }
 
     /// Milliseconds until the first live row's time label turns over: the next whole minute since some live row

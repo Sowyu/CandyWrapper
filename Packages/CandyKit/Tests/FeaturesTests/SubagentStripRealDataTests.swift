@@ -90,7 +90,7 @@ struct SubagentStripRealDataTests {
         let strip = Self.legacy(subagents: i.subagents, shells: i.shells, latestRunId: i.latestRunId, parent: i.parent)
         #expect(strip.rows.map(\.label) == ["Subagent 6", "Subagent 4", "Subagent 3", "Subagent 2"])
         #expect(strip.rows.allSatisfy { $0.status == .running && $0.title == "Redesign: agent image gallery" })
-        #expect(strip.pillText == "Waiting on 4")
+        #expect(strip.parentWaiting && strip.activeCount == 4)
     }
 
     @Test func oneRowForTheGalleryWithItsLatestTask() throws {
@@ -107,7 +107,7 @@ struct SubagentStripRealDataTests {
         #expect(strip.rows.count == 1)
         #expect(strip.rows.filter { $0.status == .running }.count == strip.activeCount)
         #expect(strip.activeCount == 1)
-        #expect(strip.pillText == "Waiting on 1")
+        #expect(strip.parentWaiting && strip.activeCount == 1)
     }
 
     @Test func aFinishedTaskOnALiveChildNeverSpinsOnItsOwn() throws {
