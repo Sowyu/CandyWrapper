@@ -176,12 +176,12 @@ final class ShellSession {
     }
 
     private func configurationChanged(_ config: JSONValue, generation: Int) async {
-        let policy = ShellOmissions(config: config)
-        let marker = config["shellResumeCompletionMarker"]?.boolValue == true
-        latestConfiguration = (generation, policy, marker)
+        let next = ShellNegotiation(config: config)
+        latestConfiguration = (generation, next.omissions, next.completionMarker)
+        let current = ShellNegotiation(omissions: omissions, completionMarker: completionMarker, negotiated: negotiatedConfig)
         guard !stopped, preparedGeneration == generation,
               await supervisor.state.generation == generation,
-              policy != omissions || marker != completionMarker else { return }
+              current.restarts(for: config) else { return }
         // Recheck even when a development server changes flags without changing its version.
         subscription?.cancel()
         preparedGeneration = 0
@@ -211,11 +211,11 @@ final class ShellSession {
             if !completionMarker { await store.resumed(); resumingConnection = false }
             return
         }
-        let config = await configFeed.initialConfig(generation: generation)
-        guard !stopped, !Task.isCancelled, preparingGeneration == generation, await supervisor.state.generation == generation else { return }
-        omissions = ShellOmissions(config: config ?? .null)
-        completionMarker = config?["shellResumeCompletionMarker"]?.boolValue == true
-        negotiatedConfig = config != nil
+        guard let negotiation = await ShellNegotiation.read(feed: configFeed, supervisor: supervisor, generation: generation),
+              !stopped, preparingGeneration == generation else { return }
+        omissions = negotiation.omissions
+        completionMarker = negotiation.completionMarker
+        negotiatedConfig = negotiation.negotiated
         negotiatedServerVersion = version
         if await store.canResume(omissions: omissions) {
             resumePrepared = true

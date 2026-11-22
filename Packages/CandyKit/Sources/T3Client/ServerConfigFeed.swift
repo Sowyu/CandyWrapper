@@ -27,9 +27,14 @@ public actor ServerConfigFeed {
         "environmentThemesUpdated", "usageLimitSourcesUpdated",
     ]
 
-    public init(supervisor: ConnectionSupervisor, environmentId: String? = nil) {
+    /// The deadlines in `initialConfig(generation:within:)` sleep with this; tests step it by hand.
+    private let sleep: @Sendable (Duration) async throws -> Void
+
+    public init(supervisor: ConnectionSupervisor, environmentId: String? = nil,
+                sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.supervisor = supervisor
         self.environmentId = environmentId
+        self.sleep = sleep
     }
 
     deinit {
@@ -104,13 +109,22 @@ public actor ServerConfigFeed {
     /// without config costs only the HTTP round trip that the socket path saves.
     public static let threadOpenConfigDeadline: Duration = .seconds(1)
 
+    /// How long the shell waits for its session's config before it loads everything with no flags (`ShellNegotiation`).
+    /// T3 waits with no deadline (client-runtime state/shell.ts:638-641). Measured, the config snapshot lands about 10 ms
+    /// after the socket opens on loopback and 54 ms after at 40 ms RTT (docs/research/connection-vs-t3-desktop-4928.md).
+    /// By arithmetic, its 98 KB, about 30 KB after the socket's compression, takes under 1 s at 1 Mbit/s and 300 ms RTT.
+    /// 5 s leaves room for a busy host behind a slow relay. Running out costs a larger first shell, so the bound sits well
+    /// above the thread open's 1 s.
+    public static let shellConfigDeadline: Duration = .seconds(5)
+
     /// `initialConfig(generation:)` that gives up after `deadline` and returns nil. A config already known returns
     /// at once with no wait. The waiter and the deadline both end when either finishes or the caller is cancelled.
     public func initialConfig(generation requested: Int, within deadline: Duration) async -> JSONValue? {
         if requested == generation, let config = snapshot?["config"] { return config }
         return await withTaskGroup(of: JSONValue?.self) { group in
             group.addTask { await self.initialConfig(generation: requested) }
-            group.addTask { try? await Task.sleep(for: deadline); return nil }
+            let sleep = self.sleep
+            group.addTask { try? await sleep(deadline); return nil }
             let first = await group.next() ?? nil
             group.cancelAll()
             return first
