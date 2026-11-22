@@ -127,7 +127,22 @@ public final class DitherArtView: NSView {
                                                name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
-    @objc private func desktopMayHaveChanged(_ note: Notification) { refresh() }
+    @objc private func desktopMayHaveChanged(_ note: Notification) { desktopAnswer = nil; refresh() }
+
+    /// The desktop picture for one screen, kept so a refresh reads no disk: a live resize refreshes every layout step,
+    /// and a lookup took 2.5 to 3.3 ms on the main thread (2026-11-21). Dropped on every event that can change the
+    /// answer (a Space or screen change, the app becoming active, a theme or setting change, a new window or backing
+    /// scale) and whenever the window hides.
+    private var desktopAnswer: (screen: NSScreen?, url: URL?)?
+    private(set) var desktopLookupsForTesting = 0
+
+    private func desktopPicture(for screen: NSScreen?) -> URL? {
+        if let desktopAnswer, desktopAnswer.screen === screen { return desktopAnswer.url }
+        desktopLookupsForTesting += 1
+        let url = DitherArt.desktopPicture(for: screen)
+        desktopAnswer = (screen, url)
+        return url
+    }
 
     deinit {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
@@ -136,7 +151,7 @@ public final class DitherArtView: NSView {
 
     @objc private func displayOptionsChanged(_ note: Notification) { updateScrim() }
     /// The ink, the accent and the palette's ground feed Picture's render, so a theme change may render again.
-    @objc private func themeChanged(_ note: Notification) { refresh() }
+    @objc private func themeChanged(_ note: Notification) { desktopAnswer = nil; refresh() }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -270,6 +285,7 @@ public final class DitherArtView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        desktopAnswer = nil
         refresh()
     }
 
@@ -297,7 +313,7 @@ public final class DitherArtView: NSView {
         if !window.isVisible || window.isMiniaturized {
             guard shown != nil || pending != nil || flowerSet != nil || flowerWanted != nil else { return }
             debounce?.cancel()
-            shown = nil; pending = nil
+            shown = nil; pending = nil; desktopAnswer = nil
             art.contents = nil
             dropFlower()
             flowerCodeSets = []
@@ -342,6 +358,7 @@ public final class DitherArtView: NSView {
     /// A move between screens refreshes the art for the new backing scale.
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
+        desktopAnswer = nil
         refresh()
     }
 
@@ -479,7 +496,7 @@ public final class DitherArtView: NSView {
         art.magnificationFilter = blur ? .linear : .nearest
         if ThemeRuntime.ditherFlower {
             debounce?.cancel()
-            shown = nil; pending = nil
+            shown = nil; pending = nil; desktopAnswer = nil
             art.contents = nil; art.mask = nil
             refreshFlower(palette: palette, dark: dark)
             return
@@ -488,8 +505,9 @@ public final class DitherArtView: NSView {
         flowerCodeSets = []
         let request: DitherArt.Request
         do {
-            let url = ThemeRuntime.ditherPicture ?? DitherArt.desktopPicture(for: window.screen)
-            let fallbacks = [DitherArt.desktopPicture(for: window.screen), DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url }
+            let desktop = desktopPicture(for: window.screen)
+            let url = ThemeRuntime.ditherPicture ?? desktop
+            let fallbacks = [desktop, DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url }
             PictureTint.sync([url].compactMap { $0 } + fallbacks)
             // Picture's cell lands on whole device pixels at this window's scale (`DitherDotSize`).
             let unit = blur ? DitherArt.blurPixel : ThemeRuntime.ditherDotSize.points(scale: scale)
