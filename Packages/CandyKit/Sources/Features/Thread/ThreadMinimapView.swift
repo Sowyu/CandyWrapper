@@ -224,17 +224,19 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         let old = hovered
         hovered = stripRect.contains(point) ? index(atY: point.y) : nil
         // Only the pointer moving from one message to another ticks: never entering the rail, a click, a card
-        // closing or a scroll under a still pointer.
-        guard Haptics.currentEvent().type == .mouseMoved, hovered != nil else { hapticPacer.reset(); return }
-        tick(from: old, to: hovered, speed: hapticPacer.sample(y: point.y, at: Haptics.now()))
+        // closing, a scroll under a still pointer or a window in the background.
+        guard Haptics.currentEvent().type == .mouseMoved, window.isKeyWindow else { return }
+        tick(from: old, to: hovered)
     }
     private var hapticPacer = MessageRailHapticPacer()
     /// A detent for the hover moving between messages, paced by Settings > General > Message rail ticks.
-    private func tick(from old: Int?, to new: Int?, speed: CGFloat) {
+    /// It plays inside the event that moved the highlight, so the tap lands with the line the eye sees.
+    private func tick(from old: Int?, to new: Int?) {
         guard let old, let new,
-              let pattern = hapticPacer.pattern(MessageRailHaptic.current(), from: old, to: new, count: items.count, speed: speed, at: Haptics.now())
+              let pattern = hapticPacer.pattern(MessageRailHaptic.current(), from: old, to: new, count: items.count, at: Haptics.now())
         else { return }
-        Haptics.tap(pattern)
+        // The pacer holds the rail's own cap, above the shared one.
+        Haptics.tap(pattern, minimumInterval: 0)
     }
     private var pointerInside = false
     public override func mouseEntered(with event: NSEvent) { pointerInside = true; trackPointer() }
@@ -254,8 +256,8 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
     public override func keyDown(with event: NSEvent) {
         guard !items.isEmpty else { return }
         switch event.keyCode {
-        case 125: let old = hovered; hovered = min(items.count - 1, (hovered ?? currentIndex ?? -1) + 1); tick(from: old ?? currentIndex, to: hovered, speed: 0)
-        case 126: let old = hovered; hovered = max(0, (hovered ?? currentIndex ?? 1) - 1); tick(from: old ?? currentIndex, to: hovered, speed: 0)
+        case 125: let old = hovered; hovered = min(items.count - 1, (hovered ?? currentIndex ?? -1) + 1); tick(from: old ?? currentIndex, to: hovered)
+        case 126: let old = hovered; hovered = max(0, (hovered ?? currentIndex ?? 1) - 1); tick(from: old ?? currentIndex, to: hovered)
         case 115: hovered = 0
         case 119: hovered = items.count - 1
         case 36, 49: onSelect?(items[min(items.count - 1, max(0, hovered ?? currentIndex ?? 0))].id)
