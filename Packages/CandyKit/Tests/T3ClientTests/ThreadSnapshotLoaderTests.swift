@@ -20,6 +20,31 @@ struct ThreadSnapshotLoaderTests {
         #expect(await calls.count == 1)
     }
 
+    @Test func aServerThatPagesSnapshotsOpensOverTheSocketFirst() async {
+        let calls = Calls()
+        let loader = ThreadSnapshotLoader(fetch: {
+            await calls.next()
+            throw EnvironmentHTTPError.status(404, nil)
+        })
+        // The first cold open goes to the socket alone; the next asks HTTP once; later ones use the socket.
+        #expect(await loader.load(serverPagesSnapshots: true) == nil)
+        #expect(await calls.count == 0)
+        #expect(await loader.load(serverPagesSnapshots: true) == nil)
+        #expect(await calls.count == 1)
+        #expect(await loader.load(serverPagesSnapshots: true) == nil)
+        #expect(await calls.count == 1)
+    }
+
+    @Test func aServerThatDoesNotPageSnapshotsLoadsOverHTTP() async {
+        let calls = Calls()
+        let loader = ThreadSnapshotLoader(fetch: {
+            await calls.next()
+            throw EnvironmentHTTPError.status(404, nil)
+        })
+        #expect(await loader.load(serverPagesSnapshots: false) == nil)
+        #expect(await calls.count == 1)
+    }
+
     @Test func cancellationDoesNotSeedTheStore() async throws {
         let calls = Calls()
         let loader = ThreadSnapshotLoader(fetch: {

@@ -3231,7 +3231,7 @@ final class ComposerController {
         guard let editId = queuedEdits.edit(id)?.id, let env = id.environmentId, let session = environments.session(env) else { return }
         let store = ThreadStore(threadId: id.localId, environmentId: env, onChange: {})
         let subscription = UUID()
-        queuedEditWatches[id] = session.supervisor.subscribe("orchestration.subscribeThread", payload: {
+        queuedEditWatches[id] = session.supervisor.subscribe("orchestration.subscribeThread", keepsRetryingServerFailures: true, payload: {
             ThreadSession.encode(await store.subscribeInput(subscription: subscription))
         }, handler: { [weak self] event in
             guard case .value(let json) = event else { return }
@@ -6334,7 +6334,7 @@ private final class ThreadPromptRewindObserver {
         store = ThreadStore(threadId: threadId, onChange: {})
         let store = self.store
         let wireSubscription = UUID()
-        subscription = supervisor.subscribe("orchestration.subscribeThread", payload: {
+        subscription = supervisor.subscribe("orchestration.subscribeThread", keepsRetryingServerFailures: true, payload: {
             ThreadSession.encode(await store.subscribeInput(subscription: wireSubscription))
         }) { [weak self] event in
             guard case .value(let json) = event else { return }

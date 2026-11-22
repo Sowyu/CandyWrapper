@@ -10,22 +10,40 @@ public enum RouteCheck {
         public var silent: [URL]
     }
 
+    /// How long a route's check may stay unanswered before the routes after it get their turn: T3's
+    /// ROUTE_CHECK_HEAD_START_MS (client-runtime connection/driver.ts:65, 95-133). A LAN address on another network
+    /// usually doesn't refuse, it just never answers, so without this every connect away from home waited out the
+    /// whole 2.5 s check before it tried the tunnel.
+    public static let headStart: Duration = .milliseconds(500)
+
     /// Checks every route at once and returns the first, in preference order, whose check passes: a dead LAN address
-    /// ahead of a working tunnel costs one check timeout, not one per route.
-    public static func check(_ routes: [URL], check: @escaping @Sendable (URL) async -> Bool) async -> Outcome {
+    /// ahead of a working tunnel costs one check timeout, not one per route. Within `headStart` a route waits for every
+    /// route ahead of it; after it, a route still being checked is passed over and the first that passed wins.
+    public static func check(_ routes: [URL], headStart: Duration = RouteCheck.headStart,
+                             check: @escaping @Sendable (URL) async -> Bool) async -> Outcome {
         guard !routes.isEmpty else { return Outcome(first: nil, silent: []) }
-        return await withTaskGroup(of: (Int, Bool).self) { group in
+        return await withTaskGroup(of: (Int, Bool)?.self) { group in
             for (index, route) in routes.enumerated() { group.addTask { (index, await check(route)) } }
+            // nil marks the end of the head start.
+            group.addTask { try? await Task.sleep(for: headStart); return nil }
             var results = [Bool?](repeating: nil, count: routes.count)
+            var headStartOver = false
             func silent() -> [URL] { results.enumerated().compactMap { $0.element == false ? routes[$0.offset] : nil } }
-            for await (index, answered) in group {
-                results[index] = answered
+            func winner() -> Int? {
+                if headStartOver { return results.firstIndex(of: true) }
                 // The earliest route whose earlier routes all failed.
                 for (i, result) in results.enumerated() {
-                    guard let result else { break }
-                    if result { group.cancelAll(); return Outcome(first: routes[i], silent: silent()) }
+                    guard let result else { return nil }
+                    if result { return i }
                 }
+                return nil
             }
+            for await event in group {
+                if let (index, answered) = event { results[index] = answered } else { headStartOver = true }
+                if let i = winner() { group.cancelAll(); return Outcome(first: routes[i], silent: silent()) }
+                if !results.contains(nil) { break }
+            }
+            group.cancelAll()
             return Outcome(first: nil, silent: silent())
         }
     }

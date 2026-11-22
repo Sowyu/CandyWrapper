@@ -204,6 +204,26 @@ Then a new session opens on that route: a cold connect, about 20 ms on loopback 
 
 The HTTP shell from a 4928 server carries `projectIdentities`, and the resume that follows now names it back as `knownProjectIdentities`, so the server skips repository identities the client holds (client-runtime/state/shell.ts:703-707, server orchestration-v2/ShellStream.ts:126-141). On my 4928 sandbox the resume is 719 bytes either way, since its projects resolve no repository identity. A machine with many git projects saves their identity records on each reconnect.
 
+### Over a slow link (perf-net, 2026-11-22)
+
+`scripts/connection-timing/latency-proxy.py <listen> <target> <rtt ms> <Mbit/s> [log]` puts a round trip and a bandwidth cap between the app or the harness and a sandbox, and logs each TCP connection's bytes when it closes. Point `--server` or `CW_TIMING_URL` at it. All numbers below are 40 ms and 50 Mbit/s against the 4928 sandbox on 47392, which `CANDY_SLOW_LINK` doesn't cover because it only slows media.
+
+Cold connect in the harness (`coldConnect`, medians of 5): descriptor 46 ms, ticket 92, socket open 183, config 237, shell synchronized 287 with the early shell load and 392 without. That is about 6.5 round trips, the minimum the protocol allows: descriptor, ticket, TCP and upgrade, config, shell. In the app from window built to live sidebar it was 480 ms, because `--server` reads the descriptor once to learn the id and the connector reads it again. T3 skips that second read only on HTTPS and loopback routes (`rememberCheckedDescriptor`, client-runtime authorization/service.ts:200-245), and the user's direct routes are plain http, so it isn't ported.
+
+What changed:
+
+| Case | Before | After | T3 4928 |
+|---|---|---|---|
+| Cold thread open, 108 KB snapshot | HTTP then subscribe, 118 ms | subscribe alone, 58 ms | subscribe alone when the config sets `threadSnapshotPagination` (state/threads.ts:990-1047, #33306) |
+| Cold thread open, 14 KB | 95 ms | 48 ms | the same |
+| A dead LAN route ahead of a live one | 2,505 ms to choose | 525 ms | 500 ms head start (connection/driver.ts:65, 95-133) |
+| A subscription the server keeps failing (VCS status on a folder without git) | retried every 30 s forever | 6 tries in 8 s, then the next session | no retry unless the caller asks (rpc/client.ts:436-452) |
+| A picture download that trickles | held its fetch slot forever | freed after a 15 s window under 16 KiB, retried once | |
+
+The socket is compressed as well as HTTP: 610 KB of thread snapshots crossed the proxy as 182 KB.
+
+T3 Connect, read from the code only, because `--fake-t3-connect` fakes sign-in and the machine list but fails every connect: a cold launch per machine runs the Clerk JWT mint, the relay's DPoP token, the relay connect, the descriptor and `/oauth/token` through the tunnel, the ticket and the socket, in that order, as T3 does. The JWT and relay token are shared by every machine. T3 also keeps the environment token in its catalog across launches (apps/web/src/connection/storage.ts:851-869), so a relaunch within the hour skips the first five steps; CandyWrapper keeps it in memory only (`T3ConnectAuthorizer.exchange`). Not ported here: it stores an access token on disk, which is a security decision for the user.
+
 ## Timers while connected
 
 After this change, these run while a session is connected:

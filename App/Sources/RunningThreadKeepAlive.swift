@@ -76,7 +76,7 @@ final class RunningThreadKeepAlive {
 
     private func subscribe(store: ThreadStore, relay: ShellSession.ChangeRelay, session: ShellSession) -> Kept {
         let wireSubscription = UUID()
-        let subscription = session.supervisor.subscribe("orchestration.subscribeThread", payload: {
+        let subscription = session.supervisor.subscribe("orchestration.subscribeThread", keepsRetryingServerFailures: true, payload: {
             ThreadSession.encode(await store.subscribeInput(subscription: wireSubscription))
         }, handler: { event in
             guard case .value(let json) = event else { return }
