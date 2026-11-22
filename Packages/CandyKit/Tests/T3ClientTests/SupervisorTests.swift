@@ -259,6 +259,68 @@ struct SupervisorTests {
         sub.cancel()
         await s.disconnect()
     }
+
+    /// A server that fails every request with a typed error, like `subscribeVcsStatus` for a folder that isn't a
+    /// repository. Returns how many requests it failed once `stop` is called.
+    private static func failEveryRequest(_ socket: FakeSocket) -> Task<Void, Never> {
+        Task {
+            var answered = 0
+            while !Task.isCancelled {
+                let requests = socket.sent.compactMap { if case .request(let r) = $0 { r } else { nil } }
+                for request in requests.dropFirst(answered) {
+                    socket.deliver(.exit(requestId: request.id, exit: .failure([.fail(RPCTypedError(tag: "GitCommandError", fields: ["message": .string("not a git repository")]))])))
+                }
+                answered = requests.count
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+        }
+    }
+
+    private static func requestCount(_ socket: FakeSocket?) -> Int {
+        socket?.sent.filter { if case .request = $0 { true } else { false } }.count ?? 0
+    }
+
+    @Test func aSubscriptionTheServerKeepsFailingStopsUntilTheNextSession() async throws {
+        let h = Harness([.succeed, .succeed])
+        var deps = h.dependencies
+        deps.retrySleep = { _ in }
+        let s = ConnectionSupervisor(dependencies: deps)
+        let sub = s.subscribe("subscribeVcsStatus", payload: { .object(["cwd": .string("/tmp/plain")]) }, handler: { _ in })
+        await s.connect()
+        #expect(await eventually { h.lastSocket != nil })
+        let first = try #require(h.lastSocket)
+        let server = Self.failEveryRequest(first)
+        let limit = 1 + ConnectionSupervisor.serverFailureRetries
+        #expect(await eventually { Self.requestCount(first) == limit })
+        // Retries are instant here, so a loop that kept going would be far past the limit by now.
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(Self.requestCount(first) == limit)
+        server.cancel()
+
+        // A new session subscribes again.
+        first.close()
+        #expect(await eventually { await s.state.generation == 2 && h.lastSocket !== first })
+        #expect(await eventually { Self.requestCount(h.lastSocket) == 1 })
+        sub.cancel()
+        await s.disconnect()
+    }
+
+    @Test func theShellAndThreadsKeepRetryingServerFailures() async throws {
+        let h = Harness([.succeed])
+        var deps = h.dependencies
+        deps.retrySleep = { _ in }
+        let s = ConnectionSupervisor(dependencies: deps)
+        let sub = s.subscribe("orchestration.subscribeThread", keepsRetryingServerFailures: true,
+                              payload: { .object([:]) }, handler: { _ in })
+        await s.connect()
+        #expect(await eventually { h.lastSocket != nil })
+        let socket = try #require(h.lastSocket)
+        let server = Self.failEveryRequest(socket)
+        #expect(await eventually { Self.requestCount(socket) > 3 * (1 + ConnectionSupervisor.serverFailureRetries) })
+        server.cancel()
+        sub.cancel()
+        await s.disconnect()
+    }
 }
 
 actor Cursor {

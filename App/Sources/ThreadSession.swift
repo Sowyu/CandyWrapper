@@ -130,7 +130,7 @@ final class ThreadSession {
         let store = self.store
         let wireSubscription = UUID()
         let loader = ThreadSnapshotLoader(http: shell.http, token: shell.token, threadId: threadId.localId)
-        subscription = shell.supervisor.subscribe("orchestration.subscribeThread", resubscribesOnActivation: true, payload: {
+        subscription = shell.supervisor.subscribe("orchestration.subscribeThread", resubscribesOnActivation: true, keepsRetryingServerFailures: true, payload: {
             if await store.subscribeInput(subscription: wireSubscription).afterSequence == nil, let snapshot = await loader.load(), !Task.isCancelled {
                 await store.applySnapshot(snapshot, subscription: wireSubscription)
             }
@@ -695,7 +695,7 @@ final class ThreadController {
             let familyLease = shell.retainFamily(id.localId)
             let store = ThreadStore(threadId: id.localId, environmentId: env, onChange: {})
             let wireSubscription = UUID()
-            let task = supervisor.subscribe("orchestration.subscribeThread", payload: {
+            let task = supervisor.subscribe("orchestration.subscribeThread", keepsRetryingServerFailures: true, payload: {
                 ThreadSession.encode(await store.subscribeInput(subscription: wireSubscription))
             }, handler: { event in
                 guard case .value(let json) = event else { return }

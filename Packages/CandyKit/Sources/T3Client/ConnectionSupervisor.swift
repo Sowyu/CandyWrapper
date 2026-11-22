@@ -204,6 +204,8 @@ public actor ConnectionSupervisor {
         /// A host on this device: the device reporting offline, often wrongly, never parks it. The report still
         /// probes a live session (supervisor.ts:323-327).
         public var ignoresOffline: Bool
+        /// The wait before a durable subscription retries on the same session. Tests make it instant.
+        public var retrySleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
 
         public init(connect: @escaping @Sendable () async throws -> RPCConnection,
                     sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
@@ -303,6 +305,7 @@ public actor ConnectionSupervisor {
     /// The next attempt runs even while the device reports offline: a Reconnect press, or replacing a socket a
     /// probe found dead. The platform's report can stay wrong after the network is back (supervisor.ts:1213-1221).
     private var ignoreOfflineOnce = false
+    nonisolated var retrySleep: @Sendable (Duration) async throws -> Void { deps.retrySleep }
     /// Bumped on app activation; durable subscriptions that opt in subscribe again on the same session.
     private var resubscribeEpoch = 0
     private var resubscribeWaiters: [UUID: (after: Int, continuation: CheckedContinuation<Void, Never>)] = [:]
@@ -889,11 +892,19 @@ public enum SubscriptionEvent: Sendable {
     case subscribed(generation: Int)
     case value(JSONValue)
     /// The stream broke. Transport losses wait for the next session; server failures retry
-    /// on the same session after 250 ms doubling to 30 s (client-runtime rpc/client.ts:105-106).
+    /// on the same session after 250 ms doubling to 30 s (client-runtime rpc/client.ts:105-106), a few times unless
+    /// the subscription keeps retrying them (`serverFailureRetries`).
     case interrupted(RPCClientError)
 }
 
 extension ConnectionSupervisor {
+    /// Server failures in a row, with no value between them, that a subscription retries on one session before it
+    /// waits for the next session. T3 retries a failing stream only where the caller asks, the shell and threads
+    /// (client-runtime rpc/client.ts:436-452, state/shell.ts:719-720, state/threads.ts:1145-1149), and ends the rest
+    /// on the first failure. Retrying forever sent `subscribeVcsStatus` for a folder that isn't a repository every
+    /// 30 s while the app sat idle. Five retries span about 8 s.
+    public static let serverFailureRetries = 5
+
     /// A stream that follows the connection: it re-subscribes on every new session and after
     /// recoverable failures. `payload` runs before each subscribe so the caller can supply the
     /// current resume cursor (`afterSequence`). `handler` is awaited before the next value is
@@ -905,16 +916,22 @@ extension ConnectionSupervisor {
     /// `resubscribesOnActivation`: app activation (`resubscribe`) interrupts the stream and subscribes again on the same
     /// session, as T3 does for the shell and threads (client-runtime rpc/client.ts:284-330, state/shell.ts:629,
     /// state/threads.ts:984). One small round trip, and a subscription that died without an error is live again.
+    /// `keepsRetryingServerFailures`: retry server failures on the same session for as long as they last, as T3 does
+    /// for the shell and threads. Without it a subscription stops after `serverFailureRetries` and subscribes again on
+    /// the next session.
     public nonisolated func subscribe(
         _ tag: String,
         snapshotFirst: Bool = false,
         resubscribesOnActivation: Bool = false,
+        keepsRetryingServerFailures: Bool = false,
         payload: @escaping @Sendable () async -> JSONValue,
         handler: @escaping @Sendable (SubscriptionEvent) async throws -> Void
     ) -> Task<Void, Never> {
-        Task {
+        let retrySleep = self.retrySleep
+        return Task {
             var generation = 0
             var retryDelay: Duration = .milliseconds(250)
+            var serverFailures = 0
             var session: (RPCConnection, Int)?
             while !Task.isCancelled {
                 if session == nil {
@@ -947,6 +964,7 @@ extension ConnectionSupervisor {
                         return try await group.next() ?? false
                     }
                     retryDelay = .milliseconds(250)
+                    serverFailures = 0
                     if Task.isCancelled { return }
                     if resubscribe { continue }
                     // A clean end of a durable stream: the server finished it on purpose.
@@ -962,14 +980,22 @@ extension ConnectionSupervisor {
                         continue
                     }
                     if error.typedError?.tag == "EnvironmentAuthorizationError" { return }
-                    do { try await Task.sleep(for: retryDelay) } catch { return }
+                    serverFailures = progress.sawValue ? 1 : serverFailures + 1
+                    if !keepsRetryingServerFailures, serverFailures > Self.serverFailureRetries {
+                        // Parked until the next session, which subscribes again from a fresh payload.
+                        serverFailures = 0
+                        retryDelay = .milliseconds(250)
+                        session = nil
+                        continue
+                    }
+                    do { try await retrySleep(retryDelay) } catch { return }
                     retryDelay = min(retryDelay * 2, .seconds(30))
                 } catch {
                     if Task.isCancelled { return }
                     if progress.sawValue { retryDelay = .milliseconds(250) }
                     // The consumer rejected a wire value. Rebuild its payload and subscribe
                     // again, so a cleared resume cursor requests an authoritative snapshot.
-                    do { try await Task.sleep(for: retryDelay) } catch { return }
+                    do { try await retrySleep(retryDelay) } catch { return }
                     retryDelay = min(retryDelay * 2, .seconds(30))
                 }
             }
