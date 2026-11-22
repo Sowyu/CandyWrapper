@@ -154,6 +154,8 @@ public struct ClientSettings: Equatable, Sendable {
         "trackpadHaptics": SettingSpec(.bool, .bool(true)),
         // CandyWrapper only: the model Rewrite title runs on, {instanceId, model}; empty uses DeeperRename.model(for:).
         "titleRewriteModel": SettingSpec(.any, .object([:])),
+        // CandyWrapper only: Rewrite title's model options, [{id, value}]; empty uses DeeperRename.defaultOptions.
+        "titleRewriteOptions": SettingSpec(.any, .array([])),
         // CandyWrapper only: how the message rail ticks as the pointer moves along it (MessageRailHaptic).
         "messageRailHaptic": SettingSpec(.literals(["off", "light", "medium", "strong"]), .string("light")),
         // CandyWrapper only: when the in-app tooltips open (Tooltips.mode).

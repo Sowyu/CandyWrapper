@@ -486,11 +486,12 @@ public final class GeneralSettingsView: SettingsPageBase {
         let r = row("title-rewrite-model", detail: "The model that reads the thread and writes its title.", control: picker)
         let slot = ResetSlot(label: "title rewrite model")
         r.accessories = [slot]
-        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
+        let keys = [key, DeeperRename.optionsKey]
+        slot.action = { [weak self] in self?.context.writeClient?(Dictionary(uniqueKeysWithValues: keys.map { ($0, ClientSettings.fields[$0]!.defaultValue) })) }
         binder.add { [weak self, weak picker, weak r] in
             guard let self, let picker else { return }
             picker.refresh()
-            slot.isShown = !self.client.isDefault(key)
+            slot.isShown = !keys.allSatisfy(self.client.isDefault)
             r?.status = picker.fallbackNote
         }
         return r
@@ -754,7 +755,7 @@ final class SettingsModelPickerControl: DSView {
     var mixedLabel: String?
 
     /// A client setting (Rewrite title's model): read from and written to this device, unset meaning the default the
-    /// feature runs on, with no traits and no inheritance.
+    /// feature runs on, with no inheritance. Its options live in `DeeperRename.optionsKey`.
     private let clientDefault: Bool
 
     init(context: SettingsPageContext, key: String, unsetFrom: String? = nil, clientDefault: Bool = false) {
@@ -841,7 +842,7 @@ final class SettingsModelPickerControl: DSView {
             button.title = "No providers available"
             button.icon = nil
         }
-        traits.isHidden = clientDefault || descriptors.isEmpty || context.scope.isMixed([key]) || mixedLabel != nil || context.scope.connected.isEmpty || isUnset
+        traits.isHidden = descriptors.isEmpty || context.scope.isMixed([key]) || mixedLabel != nil || context.scope.connected.isEmpty || isUnset
         traits.title = ModelTraits.triggerLabel(descriptors, ultrathink: false, provider: selection?.0.driver)
         invalidateIntrinsicContentSize()
         superview?.needsLayout = true
@@ -849,9 +850,15 @@ final class SettingsModelPickerControl: DSView {
 
     private var descriptors: [ProviderOptionDescriptor] {
         guard let (entry, slug) = selection else { return [] }
-        let raw = context.scope.values[key]
-        let selected = try? raw.decode(as: ModelSelection.self)
-        return ModelTraits.descriptors(entry.model(slug), selections: selected?.options.flatMap { try? $0.decode(as: [ProviderOptionSelection].self) }).map { descriptor in
+        let selections: [ProviderOptionSelection]?
+        if clientDefault {
+            // The rewrite's own options: what the user saved where this model accepts it, else the lowest effort and fastest speed.
+            selections = DeeperRename.options(saved: context.client[DeeperRename.optionsKey], model: entry.model(slug))
+        } else {
+            let selected = try? context.scope.values[key].decode(as: ModelSelection.self)
+            selections = selected?.options.flatMap { try? $0.decode(as: [ProviderOptionSelection].self) }
+        }
+        return ModelTraits.descriptors(entry.model(slug), selections: selections).map { descriptor in
             var d = descriptor
             d.options.removeAll { d.promptInjectedValues?.contains($0.id) == true }
             return d
@@ -871,6 +878,11 @@ final class SettingsModelPickerControl: DSView {
             for (label, value) in choices {
                 rows.append(.option(label, checked: ModelTraits.currentValue(d) == value) { [weak self] in
                     guard let self else { return }
+                    if self.clientDefault {
+                        self.context.writeClient?([DeeperRename.optionsKey: (try? JSONValue(encoding: ModelTraits.pick(ds, id: d.id, value: value) ?? [])) ?? .array([])])
+                        if let popup = self.popup { self.traits.popupHost?.close(popup) }
+                        return
+                    }
                     let selection = ModelSelection(instanceId: entry.id, model: slug, options: ModelTraits.pick(ds, id: d.id, value: value).flatMap { try? JSONValue(encoding: $0) })
                     guard let json = try? JSONValue(encoding: selection) else { return }
                     self.context.patchServer([self.key: json])

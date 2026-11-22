@@ -622,7 +622,7 @@ extension SettingsController {
         labels += client("confirmThreadDelete", "Delete confirmation") + client("confirmQuit", "Quit shortcut")
         labels += client("menuBarItemEnabled", "Menu bar icon") + client("trackpadHaptics", "Trackpad haptics")
         labels += client("messageRailHaptic", "Message rail ticks") + client("tooltips", "Tooltips")
-        labels += client("titleRewriteModel", "Title rewrite model")
+        labels += c.isDefault("titleRewriteModel") && c.isDefault("titleRewriteOptions") ? [] : ["Title rewrite model"]
         labels += c.isDefault("redesignTextDim") && c.isDefault("ditherBackgroundDim") ? [] : ["Dim behind text"]
         labels += client("redesignReadingWidth", "Reading width")
         labels += server("textGenerationModelSelection", "Text generation model")
@@ -658,7 +658,7 @@ extension SettingsController {
                           "showSkillsInSlashMenu", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
                           "toolCallVisibility", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
                           "confirmTerminalClose", "language",
-                          "menuBarItemEnabled", "trackpadHaptics", "messageRailHaptic", "tooltips", "titleRewriteModel",
+                          "menuBarItemEnabled", "trackpadHaptics", "messageRailHaptic", "tooltips", "titleRewriteModel", "titleRewriteOptions",
                           "redesignTextDim", "ditherBackgroundDim", "redesignReadingWidth"]
         ClientSettingsStore.shared.update(Dictionary(uniqueKeysWithValues: clientKeys.map { ($0, ClientSettings.fields[$0]!.defaultValue) }))
         let s = pageContext.scope.values
