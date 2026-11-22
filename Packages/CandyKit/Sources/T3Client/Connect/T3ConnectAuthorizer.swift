@@ -94,8 +94,11 @@ public actor T3ConnectAuthorizer {
             // T3 reads its token store first and reuses a token for the same environment, account and key with
             // more than the 60 s skew left that wasn't just refused (service.ts:458-480).
             let started = generation
-            if let stored = await store.load(accountId: signIn.accountId, environmentId: environmentId),
-               generation == started, cache[environmentId] == nil {
+            let stored = await store.load(accountId: signIn.accountId, environmentId: environmentId)
+            // The read can wait on a Keychain prompt. A sign-out or an account switch meanwhile ends this request
+            // before the token is used: T3 checks the session again after its store read (service.ts:551).
+            try await assertSignIn(signIn, since: started)
+            if let stored, cache[environmentId] == nil {
                 if stored.thumbprint == relay.key.thumbprint, !stored.needsRenewal(at: now()), stored.accessToken != rejected {
                     cache[environmentId] = (stored, signIn)
                 } else {
@@ -140,6 +143,14 @@ public actor T3ConnectAuthorizer {
             throw CloudSessionError.accountChanged
         }
         return (fresh, false)
+    }
+
+    /// T3's `assertSession` (service.ts:327-334): throws when the sign-in is no longer `signIn` or `reset()` ran
+    /// since `started`.
+    private func assertSignIn(_ signIn: CloudSignIn, since started: Int) async throws {
+        guard generation == started, try await tokens.currentSignIn() == signIn, generation == started else {
+            throw CloudSessionError.accountChanged
+        }
     }
 
     /// The exchange every caller for one environment and sign-in shares. It checks the sign-in itself

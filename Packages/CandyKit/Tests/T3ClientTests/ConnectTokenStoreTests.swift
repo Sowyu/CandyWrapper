@@ -150,6 +150,61 @@ struct ConnectTokenStoreTests {
         #expect(Self.chain.isSubset(of: Set(calls(http))))
     }
 
+    @Test func signOutDuringStoredCredentialLookupEndsAuthorization() async throws {
+        actor SigningOut: CloudTokenProvider {
+            var signIn: CloudSignIn? = CloudSignIn(accountId: "user_1", session: "sess_1")
+            func currentSignIn() -> CloudSignIn? {
+                defer { signIn = nil }
+                return signIn
+            }
+            func relaySessionJWT() throws -> String { throw CloudSessionError.signedOut }
+        }
+        try await firstLaunch()
+        let http = FakeHTTP()
+        let relay = try RelayClient(key: key, send: http.send, now: { [clock] in clock.now })
+        let auth = T3ConnectAuthorizer(relay: relay, tokens: SigningOut(), identity: ClientIdentity(appVersion: "1"),
+                                      send: http.send, store: store, now: { [clock] in clock.now })
+        await #expect(throws: CloudSessionError.accountChanged) {
+            _ = try await auth.token(environmentId: "env-1")
+        }
+        #expect(calls(http).isEmpty)
+    }
+
+    /// Runs `hook` inside the second `currentSignIn`: the authorizer's check after its Keychain read, while that
+    /// request is suspended and the authorizer is free.
+    actor Hooked: CloudTokenProvider {
+        let cloud: FakeCloud
+        var hook: (@Sendable () async -> Void)?
+        var asked = 0
+        init(_ cloud: FakeCloud) { self.cloud = cloud }
+        func set(_ hook: @escaping @Sendable () async -> Void) { self.hook = hook }
+        func currentSignIn() async throws -> CloudSignIn? {
+            asked += 1
+            if asked == 2 { await hook?() }
+            return try await cloud.currentSignIn()
+        }
+        func relaySessionJWT() async throws -> String { try await cloud.relaySessionJWT() }
+    }
+
+    func hooked(_ http: FakeHTTP, send: HTTPSend? = nil) throws -> (T3ConnectAuthorizer, Hooked) {
+        let tokens = Hooked(cloud)
+        let relay = try RelayClient(key: key, send: http.send, now: { [clock] in clock.now })
+        return (T3ConnectAuthorizer(relay: relay, tokens: tokens, identity: ClientIdentity(appVersion: "1"),
+                                    send: send ?? http.send, store: store, now: { [clock] in clock.now }), tokens)
+    }
+
+    @Test func accountSwitchDuringStoredCredentialLookupEndsAuthorization() async throws {
+        try await firstLaunch()
+        let http = FakeHTTP()
+        serve(http, tokens: ["eat-2"])
+        let (auth, tokens) = try hooked(http)
+        await tokens.set { [cloud] in cloud.signIn("user_2", session: "sess_2") }
+        await #expect(throws: CloudSessionError.accountChanged) {
+            _ = try await auth.authorizeSocket(environmentId: "env-1")
+        }
+        #expect(calls(http).isEmpty)
+    }
+
     @Test func itemWhosePayloadNamesAnotherAccountIsDeleted() async throws {
         try await firstLaunch()
         let raw = try #require(try store.credentials.load(environmentId: "user_1/env-1"))
