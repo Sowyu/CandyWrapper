@@ -1392,21 +1392,18 @@ final class ThreadController {
         readingSubagentCosts.formUnion(stale.map(\.id))
         let environments = environments
         Task { [weak self] in
-            await withTaskGroup(of: (ThreadId, T3Timestamp?, ThreadCostEstimate.Breakdown?, ThreadImageGallery.Collected?).self) { group in
-                for child in stale {
-                    group.addTask {
-                        let payload: JSONValue = .object(["threadId": .string(child.id.localId.rawValue)])
-                        guard let json = try? await environments.request(env, "orchestration.getThreadProjection", payload),
-                              let projection = try? json.decode(as: ThreadProjection.self) else { return (child.id, nil, nil, nil) }
-                        return (child.id, child.updatedAt, ThreadCostEstimate.own(projection), ThreadImageGallery.collect(projection, agent: ""))
-                    }
-                }
-                for await (id, at, own, images) in group {
-                    // A failed read keeps the last good figure and retries on the next open.
-                    if at == nil, let kept = self?.subagentCosts[id]?.own { self?.subagentCosts[id] = (nil, kept) } else { self?.subagentCosts[id] = (at, own) }
-                    if let images { self?.subagentImages[id] = images }
-                }
-            }
+            // Two at a time: each read holds the child's whole projection while it decodes, about 80 MB at the peak for
+            // a 20 MB thread, and a parent with many long children read them all at once.
+            await forEachBounded(stale, limit: 2, work: { child -> (ThreadId, T3Timestamp?, ThreadCostEstimate.Breakdown?, ThreadImageGallery.Collected?) in
+                let payload: JSONValue = .object(["threadId": .string(child.id.localId.rawValue)])
+                guard let json = try? await environments.request(env, "orchestration.getThreadProjection", payload),
+                      let projection = try? json.decode(as: ThreadProjection.self) else { return (child.id, nil, nil, nil) }
+                return (child.id, child.updatedAt, ThreadCostEstimate.own(projection), ThreadImageGallery.collect(projection, agent: ""))
+            }, each: { (id, at, own, images) in
+                // A failed read keeps the last good figure and retries on the next open.
+                if at == nil, let kept = self?.subagentCosts[id]?.own { self?.subagentCosts[id] = (nil, kept) } else { self?.subagentCosts[id] = (at, own) }
+                if let images { self?.subagentImages[id] = images }
+            })
             guard let self else { return }
             self.readingSubagentCosts.subtract(stale.map(\.id))
             self.syncGalleryChildren()
