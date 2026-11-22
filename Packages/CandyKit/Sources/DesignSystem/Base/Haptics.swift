@@ -28,13 +28,14 @@ public enum Haptics {
     public static var minimumInterval: TimeInterval = 1.0 / 12
     static var last: TimeInterval = -.infinity
 
-    /// Plays `pattern` if the setting, the event and the rate limit allow it. Returns whether it played.
+    /// Plays `pattern` if the setting, the event and the rate limit allow it. Returns whether it played. A caller that
+    /// paces its own taps passes a shorter `minimumInterval`.
     @discardableResult
-    public static func tap(_ pattern: Pattern = .alignment) -> Bool {
+    public static func tap(_ pattern: Pattern = .alignment, minimumInterval interval: TimeInterval? = nil) -> Bool {
         guard isEnabled(), isInteraction(currentEvent()) else { return false }
         let t = now()
         // A millisecond of slack, so events that arrive exactly one interval apart all play.
-        guard t - last >= minimumInterval - 0.001 else { return false }
+        guard t - last >= min(interval ?? minimumInterval, minimumInterval) - 0.001 else { return false }
         last = t
         perform(pattern)
         return true

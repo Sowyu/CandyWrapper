@@ -6,7 +6,7 @@ import Testing
 struct HapticsTests {
     /// Runs `body` with a recorder, a clock the test moves, and the given setting and event.
     private func taps(enabled: Bool = true, event: NSEvent.EventType? = .leftMouseDragged, buttons: Int = 0,
-                      at times: [TimeInterval]) -> [Haptics.Pattern] {
+                      interval: TimeInterval? = nil, at times: [TimeInterval]) -> [Haptics.Pattern] {
         let saved = (Haptics.isEnabled, Haptics.perform, Haptics.currentEvent, Haptics.now, Haptics.minimumInterval)
         defer { (Haptics.isEnabled, Haptics.perform, Haptics.currentEvent, Haptics.now, Haptics.minimumInterval) = saved }
         var played: [Haptics.Pattern] = []
@@ -17,13 +17,14 @@ struct HapticsTests {
         Haptics.now = { clock }
         Haptics.minimumInterval = 1.0 / 12
         Haptics.last = -.infinity
-        for t in times { clock = t; Haptics.tap(.alignment) }
+        for t in times { clock = t; Haptics.tap(.alignment, minimumInterval: interval) }
         return played
     }
 
     @Test func theSettingTurnsEveryTapOff() {
         #expect(taps(at: [0, 1, 2]).count == 3)
         #expect(taps(enabled: false, at: [0, 1, 2]).isEmpty)
+        #expect(taps(enabled: false, interval: 0, at: [0, 1, 2]).isEmpty, "a caller with its own pacing still obeys the setting")
     }
 
     @Test func aFastSweepRatchetsAtTwelveASecond() {
@@ -94,5 +95,12 @@ struct HapticsTests {
         }
         #expect(slider.value == 5)
         #expect(played == Array(repeating: .levelChange, count: 5), "one per step")
+    }
+
+    @Test func aCallerCanTapFasterThanTheSharedLimitButNotSlower() {
+        let fortyASecond = (0..<10).map { Double($0) / 40 }
+        #expect(taps(at: fortyASecond).count == 3)
+        #expect(taps(interval: 0, at: fortyASecond).count == 10)
+        #expect(taps(interval: 10, at: fortyASecond).count == 3)
     }
 }

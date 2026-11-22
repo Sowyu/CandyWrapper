@@ -338,7 +338,7 @@ public final class GeneralSettingsView: SettingsPageBase {
                                    reset: "menu bar icon", title: "Show in menu bar")
         let haptics = clientSwitch("trackpad-haptics", "Needs a Force Touch trackpad and follows Force Click and haptic feedback in System Settings.",
                                    key: "trackpadHaptics", reset: "trackpad haptics", title: "Trackpad haptics")
-        let railTicks = clientSelect("message-rail-haptic", "The tap you feel moving along a thread's message rail. Strong ticks every message.",
+        let railTicks = clientSelect("message-rail-haptic", "A tap on every message rail line you pass. Light is faintest, Standard firmer, Strong firmest.",
                                      key: "messageRailHaptic", options: [("off", "Off"), ("light", "Light"), ("medium", "Standard"), ("strong", "Strong")],
                                      width: 160, reset: "message rail ticks", hideIndicator: false, label: "Message rail ticks")
         let tooltips = clientSelect("tooltips", "Delayed waits about a second before a tooltip opens. Off keeps them closed; VoiceOver still reads them.",
