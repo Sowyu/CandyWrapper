@@ -19,6 +19,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
     private var lastEditKind = ""
     private var lastEditAt = -Double.infinity
+    /// When the edit in hand was made, for the pause that starts a new undo step: the key's own time, so keys typed in
+    /// one burst stay one step when a busy main thread handles them late. Tests set it.
+    var editClock: () -> TimeInterval = {
+        if let event = NSApp?.currentEvent, event.type == .keyDown { return event.timestamp }
+        return ProcessInfo.processInfo.systemUptime
+    }
     /// Chromium's caret; AppKit's indicator stays hidden (`didAddSubview`).
     private let caretView = ComposerCaretView()
     private var isFocused = false
@@ -915,7 +921,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
         if !isChipifying {
             let kind = clipboardEdit ? "other" : hasMarkedText() ? "insert" : affectedCharRange.length == 0 ? "insert" : replacementString?.isEmpty == true ? "delete" : "other"
-            let now = ProcessInfo.processInfo.systemUptime
+            let now = editClock()
             if kind != lastEditKind || kind == "other" || now - lastEditAt > 1 { breakUndoCoalescing() }
             lastEditKind = kind; lastEditAt = now
         }

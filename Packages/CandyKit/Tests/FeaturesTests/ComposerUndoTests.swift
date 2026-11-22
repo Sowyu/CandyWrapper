@@ -11,6 +11,9 @@ import Testing
         editor.frame = NSRect(x: 0, y: 0, width: 560, height: 200)
         editor.chipLook = ComposerChipLook.basic
         editor.richTextEnabled = rich
+        // A fixed clock: the editor starts a new undo step after a 1 s pause, and on a loaded machine a run loop pass
+        // between two typed characters can take longer than that.
+        editor.editClock = { 0 }
         window.contentView = editor
         window.makeFirstResponder(editor)
         return (window, editor)
@@ -53,6 +56,23 @@ import Testing
         #expect(editor.expandedText == "draft")
         redo(editor)
         #expect(editor.expandedText == "draft more words")
+        window.contentView = nil
+    }
+
+    /// A pause of more than a second between keys starts a new undo step, by the editor's clock.
+    @Test(arguments: [false, true]) func aPauseStartsANewStep(rich: Bool) {
+        let (window, editor) = host(rich: rich)
+        var now: TimeInterval = 100
+        editor.editClock = { now }
+        editor.setText("draft")
+        type(" more", into: editor)
+        now += 1.5
+        type(" words", into: editor)
+        #expect(editor.expandedText == "draft more words")
+        undo(editor)
+        #expect(editor.expandedText == "draft more")
+        undo(editor)
+        #expect(editor.expandedText == "draft")
         window.contentView = nil
     }
 
