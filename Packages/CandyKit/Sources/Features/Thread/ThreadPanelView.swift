@@ -403,17 +403,14 @@ public final class ThreadPanelView: DSView {
         if timeline.revealFindEntry(entryId) { pendingCitation = nil; timeline.focusCitedEntry(entryId) }
     }
     public let timeline = TimelineView()
-    /// Redesign: the thread's project and title in the clear top the rows fade out of.
+    /// Redesign: the thread's project and title over the rows under the header.
     private let threadTitle = DitherThreadTitleView()
-    /// Redesign: the blur and wash over the rows under the header (`ThreadHeaderShadeView`).
+    /// Redesign: the blur behind the breadcrumb and the fade at the window's top edge (`ThreadHeaderShadeView`).
     let headerShade = ThreadHeaderShadeView()
-    /// Redesign: whether the rows fade out under the tab band, which an open thread does.
+    /// Redesign: whether the rows run up through the header row under `headerShade`, which an open thread's do.
     private var ditherTopFade = false
-    /// Redesign: where the rows fade out above the composer group, in this view's coordinates, opaque at `start` and
-    /// gone from `end` (the top of the composer and the cards on it) down. Nil while the composer isn't docked.
-    private(set) var ditherBottomFade: (start: CGFloat, end: CGFloat)?
     /// The composer's lane, which the timeline's rows share (`ThreadDetailsPlacement.lane`).
-    private var readingLane = NSRect.zero
+    private(set) var readingLane = NSRect.zero
     public let composer = ComposerView()
     /// The queued messages docked above the composer; it hides itself when empty.
     public let queue = QueuedRunsView()
@@ -713,11 +710,10 @@ public final class ThreadPanelView: DSView {
     }
     /// The top fade (a user decision, 2026-10-21, instead of T3's header bar and `topbar-scroll-fade`): the rows run
     /// on under the thread header and fade out toward the panel's top, so no band marks the header. Over an opaque
-    /// background it is a background-colored overlay, which costs scrolling nothing; over Redesign's art the timeline
-    /// wears an alpha mask instead.
+    /// background it is a background-colored overlay, which costs scrolling nothing. Redesign has no fade: an open
+    /// thread's rows run under `headerShade`.
     private let fade = CAGradientLayer()
     private let defaultFade = ThreadTopFadeView()
-    private let fadeMask = CAGradientLayer()
     /// How far below the header the fade reaches.
     static let fadeOverhang: CGFloat = 16
     /// The overlay's opacity at `y`, 0 at the panel's top to 1 at the fade's bottom: one smooth ease from 85% at the very
@@ -727,13 +723,6 @@ public final class ThreadPanelView: DSView {
         return 0.85 * (1 - t * t * (3 - 2 * t))
     }
     static let fadeStops = (0...10).map { Double($0) / 10 }
-    /// Dither's fade at the window's top edge: how far it reaches and how much it hides at `y`, 0 at the edge to 1 at its
-    /// end. Short and light, so the rows read until they are nearly at the edge.
-    static let ditherEdgeFade: CGFloat = 20
-    static func ditherFade(_ y: Double) -> Double {
-        let t = min(1, max(0, y))
-        return 0.7 * (1 - t) * (1 - t)
-    }
     /// How far the panel's top sits below the window's under Dither (the tab strip band), which the timeline reaches up through.
     private var ditherOverhang: CGFloat {
         guard !isEmbedded, ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let content = window?.contentView else { return 0 }
@@ -907,7 +896,6 @@ public final class ThreadPanelView: DSView {
         queue.onHeightChange = { [weak self] in self?.needsLayout = true }
         fade.locations = Self.fadeStops.map { NSNumber(value: $0) }
         fade.actions = ["bounds": NSNull(), "position": NSNull(), "colors": NSNull()]
-        fadeMask.actions = ["bounds": NSNull(), "position": NSNull(), "locations": NSNull()]
         layer?.addSublayer(fade)
         timeline.context.model = model
         timeline.onFocusLost = { [weak self] in self?.composer.focus() }
@@ -1782,7 +1770,6 @@ public final class ThreadPanelView: DSView {
         }
         for case let view? in ditherDockViews { view.placement = .attached }
         ditherShown = []
-        ditherBottomFade = nil
         let y: CGFloat
         let dither = false
         let showsStrip = showsContextStrip && !(isDraft && dither && !contextStrip.showsGitControls)
@@ -1984,15 +1971,13 @@ public final class ThreadPanelView: DSView {
 
     /// What the composer docks that is not in the banner stack.
     /// Redesign: the thread's project and title on the lane's left edge, centred on the header pill's line, stopping
-    /// `Space.l` short of the pill. It sits straight on the picture in the clear top the rows fade out of (the timeline
-    /// mask). The tab strip names the thread itself while tabs show.
+    /// `Space.l` short of the pill. Rows pass behind it under `headerShade`'s blur patch. The tab strip names the thread itself while tabs show.
     private func layoutThreadTitle(chat: CGFloat, above: CGFloat) {
         ditherTopFade = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded && chat > 0
             && readingLane.width > 0
         headerShade.isHidden = !ditherTopFade
         if ditherTopFade {
-            headerShade.frame = NSRect(x: 0, y: -above, width: chat,
-                                       height: ThreadHeaderShadeView.height(reducesTransparency: ThemeRuntime.reducesTransparency()))
+            headerShade.frame = NSRect(x: 0, y: -above, width: chat, height: DitherChrome.band)
         }
         threadTitle.set(project: header.projectTitle, title: header.threadTitle)
         threadTitle.titleTyping = header.titleTyping
@@ -2001,9 +1986,12 @@ public final class ThreadPanelView: DSView {
         let x = readingLane.minX
         let right = min(readingLane.maxX + RedesignTokens.Space.l, pillLeft - RedesignTokens.Space.l)
         threadTitle.isHidden = !ditherTopFade || ThreadTabsSetting.isOn || threadTitle.isEmpty || right - x < 48
-        guard !threadTitle.isHidden else { return }
+        guard !threadTitle.isHidden else { headerShade.textRect = .zero; return }
         threadTitle.frame = NSRect(x: x, y: (-above + DitherChrome.band / 2 - DitherThreadTitleView.height / 2).rounded(),
                                    width: max(0, right - x), height: DitherThreadTitleView.height)
+        var text = threadTitle.frame
+        text.size.width = threadTitle.textWidth
+        headerShade.textRect = text.offsetBy(dx: -headerShade.frame.minX, dy: -headerShade.frame.minY)
     }
 
     /// Redesign's Flower background: the content area left of the right panel, from the window's top, which the lotus
@@ -2091,7 +2079,6 @@ public final class ThreadPanelView: DSView {
             top = view.frame.minY
             shown.append(view)
         }
-        let groupTop = top
 
         // The context row: the draft's chips (the hero), Stash at the right.
         let rowY = top - gap - pillH
@@ -2292,32 +2279,11 @@ public final class ThreadPanelView: DSView {
         animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting)
 
         let inset = docked ? 8 + (y - insetTop) + height + below + 20 : 0
-        // The rows fade out from the end of the scrolled content to the group's top and draw nothing below it, so no
-        // line reads through the frosted composer, under the chips or in the strip under it (`layout`'s mask). Scroll
-        // to end adds no inset, so while it shows the fade starts above its row; it shows only away from the end, where
-        // that row holds no last line.
-        let pillRow = docked && timeline.wantsScrollToEnd ? rowY : insetTop
-        ditherBottomFade = docked ? (start: min(insetTop, pillRow) - 8, end: groupTop) : nil
         if timeline.bottomInset != inset {
             timeline.bottomInset = inset
             if terminalOpen { needsLayout = true }
         }
         if isDraft { timeline.isHidden = true }
-    }
-
-    /// Locations clamped to 0...1 and never falling, so a window too short for both fades keeps a valid gradient.
-    static func rising(_ locations: [Double]) -> [Double] {
-        var floor = 0.0
-        return locations.map { floor = max(floor, min(max($0, 0), 1)); return floor }
-    }
-
-    /// The mask's stops for `ditherBottomFade` as fractions of the timeline's height `h`, or the opaque end without it.
-    private func bottomFadeStops(_ h: Double) -> [(Double, Double)] {
-        guard let fade = ditherBottomFade else { return [(1, 1)] }
-        let origin = Double(timeline.frame.minY)
-        let end = (Double(fade.end) - origin) / h, start = min(end, (Double(fade.start) - origin) / h)
-        // Eased like the top edge's fade, so the pill row over it is already mostly gone.
-        return (0...4).map { i -> (Double, Double) in let t = Double(i) / 4; return (start + (end - start) * t, (1 - t) * (1 - t)) } + [(1, 0)]
     }
 
     private func watchSubagentPanel(_ on: Bool) {
@@ -2469,8 +2435,8 @@ public final class ThreadPanelView: DSView {
         terminalResize.isHidden = !drawerCard || drawer == 0 || lazyTerminalDrawer.loaded?.isHidden != false
         terminalResize.frame = NSRect(x: drawerX, y: chatHeight - gap, width: drawerWidth, height: gap)
         // The rows run on under the header and fade out toward the top (`fade`).
-        // In an open Redesign thread the first row starts below the rows' fade-in (the timeline mask), which is
-        // measured from the timeline's top, the window's.
+        // In an open Redesign thread the first row starts below the header band, measured from the timeline's top,
+        // the window's.
         let column = ditherHeader && !isDraft && !isEmbedded
         timeline.topClearance = column ? max(chatTop + above, DitherChrome.band) + RedesignTokens.Space.l : chatTop + above
         timeline.frame = NSRect(x: 0, y: -above, width: chat, height: max(0, chatHeight + above))
@@ -2646,32 +2612,10 @@ public final class ThreadPanelView: DSView {
         updateFadeColors()
         fade.zPosition = 1
         header.layer?.zPosition = 2
-        // Dither's art runs up to the panel's top edge, so the rows fade out over it as a mask: an overlay
-        // in any one color would paint a band over the art, and its unfaded scrollbar column left a strip at the right.
-        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
-        fade.isHidden = dither || standard
-        if dither, ditherTopFade {
-            // An open Redesign thread: the rows run on to the window's top edge under the header, where
-            // `headerShade` blurs and darkens them; the mask only fades them out above the composer.
-            fadeMask.frame = timeline.bounds
-            let h = max(1, Double(timeline.bounds.height))
-            let stops = [(0.0, 1.0)] + bottomFadeStops(h)
-            fadeMask.locations = Self.rising(stops.map(\.0)).map { NSNumber(value: $0) }
-            fadeMask.colors = stops.map { NSColor.black.withAlphaComponent($0.1).cgColor }
-            if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
-        } else if dither {
-            fadeMask.frame = timeline.bounds
-            let h = max(1, Double(timeline.bounds.height))
-            // Dither fades only the last few points at the window's edge, so the rows stay readable under the header and tabs.
-            let reach = Double(Self.ditherEdgeFade)
-            let stops = Self.fadeStops.map { ($0 * reach / h, 1 - Self.ditherFade($0)) } + bottomFadeStops(h)
-            fadeMask.locations = Self.rising(stops.map(\.0)).map { NSNumber(value: $0) }
-            fadeMask.colors = stops.map { NSColor.black.withAlphaComponent($0.1).cgColor }
-            if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
-        } else if timeline.layer?.mask === fadeMask {
-            timeline.layer?.mask = nil
-        }
+        // Redesign's rows draw at full strength to the window's top and behind the composer (the user, 2026-11-22),
+        // with no mask on the timeline: one rendered all of it offscreen on every scrolled frame, about 12 MB a
+        // frame at 2x. `headerShade` covers only the breadcrumb and the top few points.
+        fade.isHidden = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) || standard
         errorBanner.layer?.zPosition = 2
         providerBanner.layer?.zPosition = 2
         toasts.layer?.zPosition = 3

@@ -36,6 +36,8 @@ final class DitherThreadTitleView: DSView {
     private var typing: TitleTypingOverlay?
 
     var isEmpty: Bool { name.text.isEmpty }
+    /// How wide the drawn text runs from the left edge, project, slash and title, once laid out.
+    var textWidth: CGFloat { layoutSubtreeIfNeeded(); return name.isHidden ? 0 : name.frame.maxX }
 
     override func layout() {
         super.layout()
