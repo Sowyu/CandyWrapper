@@ -47,7 +47,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     private var setupHeight: CGFloat = 0
     private let pill = ButtonView("Scroll to end", icon: .chevronDown, variant: .glass, size: .xs)
     /// Whether Scroll to end is due: away from the end, after the 150ms wait.
-    public private(set) var wantsScrollToEnd = false {
+    public internal(set) var wantsScrollToEnd = false {
         didSet { if wantsScrollToEnd != oldValue { pill.isHidden = !wantsScrollToEnd || hostsScrollToEnd; onScrollToEndChange?() } }
     }
     /// Redesign draws Scroll to end as a pill in the row above the composer, so this view's own stays hidden.
@@ -81,6 +81,12 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         didSet { if historyFailed { lastNearTopId = nil } }
     }
     private var laidOutWidth: CGFloat = 0
+    /// The Redesign reading width the rows are laid out at. While the slider moves it trails the setting by
+    /// `readingWidthDelay`, so a long thread measures its text once per pause instead of on every tick; the composer
+    /// and the art's column follow the setting at once.
+    private(set) var readingWidth = ThreadChatWidth.reading
+    private var readingWidthWork: DispatchWorkItem?
+    static let readingWidthDelay: TimeInterval = 0.15
     private var tiling = false
     private var retile = false
     public var threadFindMatch: ThreadFindResult.Match? { didSet { if threadFindMatch != oldValue { visible.values.forEach(applyFindHighlight) } } }
@@ -336,6 +342,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("timestampFormat") { self?.reconfigureVisible() }
             if keys.contains("chatWidth"), let self { self.laidOutWidth = -1; self.needsLayout = true }
+            if keys.contains("redesignReadingWidth") { self?.scheduleReadingWidth() }
             // Code blocks start wrapped or not by `wordWrap` (MarkdownView reads it as T3 does at mount), which changes
             // their heights: every row measures again.
             // "Render math" changes how messages parse: drop the parses first, then measure like `wordWrap`.
@@ -592,7 +599,26 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         // `px-3 sm:px-12`: the breakpoint is the viewport's width, not the column's, so the lane
         // keeps 48px beside an open right panel.
         let padding: CGFloat = viewportWidth >= 640 ? 48 : 12
-        return ThreadDetailsPlacement.lane(width: w, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth"), dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: padding, cardLeft: detailsCardLeft)
+        return ThreadDetailsPlacement.lane(width: w, maximum: ThreadChatWidth.current(dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark), reading: readingWidth),
+                                           padding: padding, cardLeft: detailsCardLeft)
+    }
+
+    private func scheduleReadingWidth() {
+        readingWidthWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.applyReadingWidth() } }
+        readingWidthWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.readingWidthDelay, execute: work)
+    }
+
+    /// Lays the rows out at the saved reading width, keeping the row at the top of the viewport where it was, as a
+    /// window resize does.
+    func applyReadingWidth() {
+        readingWidthWork?.cancel(); readingWidthWork = nil
+        let width = ThreadChatWidth.reading
+        guard width != readingWidth else { return }
+        readingWidth = width
+        laidOutWidth = -1
+        needsLayout = true
     }
 
     /// The window's width, or the outermost view's when there is no window (tests).
@@ -711,9 +737,9 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     // MARK: Anchoring
 
-    private struct Anchor { var id: String; var offset: CGFloat; var disclosure = false }
+    struct Anchor { var id: String; var offset: CGFloat; var disclosure = false }
 
-    private func captureAnchor() -> Anchor? {
+    func captureAnchor() -> Anchor? {
         if let id = disclosureRowId, let i = indexById[id], i < tops.count, tops.count == items.count {
             return Anchor(id: id, offset: tops[i] - viewport.minY, disclosure: true)
         }

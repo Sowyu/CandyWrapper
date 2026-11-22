@@ -405,8 +405,13 @@ public final class ThreadPanelView: DSView {
     public let timeline = TimelineView()
     /// Redesign: the thread's project and title in the clear top the rows fade out of.
     private let threadTitle = DitherThreadTitleView()
+    /// Redesign: the blur and wash over the rows under the header (`ThreadHeaderShadeView`).
+    let headerShade = ThreadHeaderShadeView()
     /// Redesign: whether the rows fade out under the tab band, which an open thread does.
     private var ditherTopFade = false
+    /// Redesign: where the rows fade out above the composer group, in this view's coordinates, opaque at `start` and
+    /// gone from `end` (the top of the composer and the cards on it) down. Nil while the composer isn't docked.
+    private(set) var ditherBottomFade: (start: CGFloat, end: CGFloat)?
     /// The composer's lane, which the timeline's rows share (`ThreadDetailsPlacement.lane`).
     private var readingLane = NSRect.zero
     public let composer = ComposerView()
@@ -848,6 +853,8 @@ public final class ThreadPanelView: DSView {
         threadTitle.isHidden = true
         _ = ThreadTabsSetting.observe { [weak self] in self?.needsLayout = true }
         addSubview(timeline)
+        headerShade.isHidden = true
+        addSubview(headerShade)
         addSubview(threadTitle)
         addSubview(defaultFade)
         addSubview(header)
@@ -960,7 +967,7 @@ public final class ThreadPanelView: DSView {
         threadFileDrop.onFiles = { [weak self] urls in self?.composer.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
         threadFileDrop.onHighlight = { [weak self] highlighted in self?.fileDropOverlay.isHidden = !highlighted }
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("chatWidth") || keys.contains("persistComposerContextStrip") { self?.needsLayout = true }
+            if keys.contains("chatWidth") || keys.contains("persistComposerContextStrip") || keys.contains("redesignReadingWidth") { self?.needsLayout = true }
         }
         header.toggles[0].onPressedChange = { [weak self] _ in
             guard let self else { return }
@@ -1749,7 +1756,7 @@ public final class ThreadPanelView: DSView {
     /// the spacer are centered in the column below the header, with the hero 16px above.
     private func layoutComposer(chat: CGFloat, height chatHeight: CGFloat) {
         let lane: CGFloat = viewportWidth < 640 ? 12 : 48
-        let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth"), dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: lane, cardLeft: timeline.detailsCardLeft)
+        let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.current(dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: lane, cardLeft: timeline.detailsCardLeft)
         let width = placement.width
         let height = composer.preferredHeight
         let x = placement.x.rounded()
@@ -1775,6 +1782,7 @@ public final class ThreadPanelView: DSView {
         }
         for case let view? in ditherDockViews { view.placement = .attached }
         ditherShown = []
+        ditherBottomFade = nil
         let y: CGFloat
         let dither = false
         let showsStrip = showsContextStrip && !(isDraft && dither && !contextStrip.showsGitControls)
@@ -1981,6 +1989,11 @@ public final class ThreadPanelView: DSView {
     private func layoutThreadTitle(chat: CGFloat, above: CGFloat) {
         ditherTopFade = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded && chat > 0
             && readingLane.width > 0
+        headerShade.isHidden = !ditherTopFade
+        if ditherTopFade {
+            headerShade.frame = NSRect(x: 0, y: -above, width: chat,
+                                       height: ThreadHeaderShadeView.height(reducesTransparency: ThemeRuntime.reducesTransparency()))
+        }
         threadTitle.set(project: header.projectTitle, title: header.threadTitle)
         threadTitle.titleTyping = header.titleTyping
         let pill = header.pill
@@ -2078,6 +2091,7 @@ public final class ThreadPanelView: DSView {
             top = view.frame.minY
             shown.append(view)
         }
+        let groupTop = top
 
         // The context row: the draft's chips (the hero), Stash at the right.
         let rowY = top - gap - pillH
@@ -2278,11 +2292,32 @@ public final class ThreadPanelView: DSView {
         animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting)
 
         let inset = docked ? 8 + (y - insetTop) + height + below + 20 : 0
+        // The rows fade out from the end of the scrolled content to the group's top and draw nothing below it, so no
+        // line reads through the frosted composer, under the chips or in the strip under it (`layout`'s mask). Scroll
+        // to end adds no inset, so while it shows the fade starts above its row; it shows only away from the end, where
+        // that row holds no last line.
+        let pillRow = docked && timeline.wantsScrollToEnd ? rowY : insetTop
+        ditherBottomFade = docked ? (start: min(insetTop, pillRow) - 8, end: groupTop) : nil
         if timeline.bottomInset != inset {
             timeline.bottomInset = inset
             if terminalOpen { needsLayout = true }
         }
         if isDraft { timeline.isHidden = true }
+    }
+
+    /// Locations clamped to 0...1 and never falling, so a window too short for both fades keeps a valid gradient.
+    static func rising(_ locations: [Double]) -> [Double] {
+        var floor = 0.0
+        return locations.map { floor = max(floor, min(max($0, 0), 1)); return floor }
+    }
+
+    /// The mask's stops for `ditherBottomFade` as fractions of the timeline's height `h`, or the opaque end without it.
+    private func bottomFadeStops(_ h: Double) -> [(Double, Double)] {
+        guard let fade = ditherBottomFade else { return [(1, 1)] }
+        let origin = Double(timeline.frame.minY)
+        let end = (Double(fade.end) - origin) / h, start = min(end, (Double(fade.start) - origin) / h)
+        // Eased like the top edge's fade, so the pill row over it is already mostly gone.
+        return (0...4).map { i -> (Double, Double) in let t = Double(i) / 4; return (start + (end - start) * t, (1 - t) * (1 - t)) } + [(1, 0)]
     }
 
     private func watchSubagentPanel(_ on: Bool) {
@@ -2587,8 +2622,10 @@ public final class ThreadPanelView: DSView {
         // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
         // Each banner has its own `pt-3` in a `flex-col`.
         var bannerTop = chatTop + 12
+        // Redesign's banners stay inside a reading column narrower than T3's 48rem.
+        let bannerMax = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? min(768, ThreadChatWidth.current(dither: true)) : 768
         for banner in [providerBanner, errorBanner] where !banner.isHidden {
-            let w = banner.fittingWidth(max: max(0, min(768, chat - 32)))
+            let w = banner.fittingWidth(max: max(0, min(bannerMax, chat - 32)))
             let h = banner.height(forWidth: w)
             banner.frame = NSRect(x: ((chat - w) / 2).rounded(), y: bannerTop, width: w, height: h)
             bannerTop = banner.frame.maxY + 12
@@ -2615,22 +2652,22 @@ public final class ThreadPanelView: DSView {
         // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
         fade.isHidden = dither || standard
         if dither, ditherTopFade {
-            // An open Redesign thread: the rows are gone above the tab band's bottom, so none reads under the header
-            // pill, then fade in over `Space.l`. The mask leaves the picture itself showing there, so no bar shows.
+            // An open Redesign thread: the rows run on to the window's top edge under the header, where
+            // `headerShade` blurs and darkens them; the mask only fades them out above the composer.
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
-            let clear = Double(DitherChrome.band)
-            fadeMask.locations = [0, clear / h, (clear + Double(RedesignTokens.Space.l)) / h, 1].map { NSNumber(value: min($0, 1)) }
-            fadeMask.colors = [0, 0, 1, 1].map { NSColor.black.withAlphaComponent($0).cgColor }
+            let stops = [(0.0, 1.0)] + bottomFadeStops(h)
+            fadeMask.locations = Self.rising(stops.map(\.0)).map { NSNumber(value: $0) }
+            fadeMask.colors = stops.map { NSColor.black.withAlphaComponent($0.1).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
         } else if dither {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
             // Dither fades only the last few points at the window's edge, so the rows stay readable under the header and tabs.
             let reach = Double(Self.ditherEdgeFade)
-            fadeMask.locations = (Self.fadeStops.map { $0 * reach / h } + [1]).map { NSNumber(value: min($0, 1)) }
-            fadeMask.colors = (Self.fadeStops.map { 1 - Self.ditherFade($0) } + [1])
-                .map { NSColor.black.withAlphaComponent($0).cgColor }
+            let stops = Self.fadeStops.map { ($0 * reach / h, 1 - Self.ditherFade($0)) } + bottomFadeStops(h)
+            fadeMask.locations = Self.rising(stops.map(\.0)).map { NSNumber(value: $0) }
+            fadeMask.colors = stops.map { NSColor.black.withAlphaComponent($0.1).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
         } else if timeline.layer?.mask === fadeMask {
             timeline.layer?.mask = nil
