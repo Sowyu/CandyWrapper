@@ -27,6 +27,19 @@ public enum DeeperRename {
         tools. Reply with only the title.
         """
 
+    /// The prompt with the user's "Thread title instructions" (Settings > Text generation) appended under the heading
+    /// T3's own title prompt gives them (`threadTitlePromptSuffix`, provider-core textGenerationPrompts.ts:482-486).
+    public static func prompt(instructions: String?) -> String {
+        guard let text = instructions?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return prompt }
+        return prompt + "\n\nTitle instructions from the user:\n" + String(text.prefix(20_000))
+    }
+
+    /// The helper's `message.dispatch`: the prompt on the rewrite's model with its options, as a composer send carries them.
+    public static func helperMessage(helper: ThreadId, messageId: String, model: ModelSelection, instructions: String?) -> JSONValue {
+        OrchestrationCommands.message(threadId: helper.rawValue, messageId: messageId, text: prompt(instructions: instructions),
+                                      selection: model, queue: false)
+    }
+
     /// The model the helper runs on: the cheapest of the parent's provider. Claude Haiku 5.5 costs $0.10 a million input
     /// tokens against Opus 5.5's $4 cached at $0.20, so even a cold million-token read ($0.125 to write the cache) costs
     /// less than Opus's cache hit; it has the same 1M context. Other providers keep the parent's model.
@@ -45,6 +58,55 @@ public enum DeeperRename {
     public static func model(chosen: ModelSelection?, parent: ModelSelection, providers: [ServerProvider]) -> (selection: ModelSelection, fellBack: Bool) {
         guard let chosen else { return (model(for: parent), false) }
         return isOffered(chosen, providers) ? (chosen, false) : (model(for: parent), true)
+    }
+
+    /// The client setting with the rewrite's model options (Settings > Title rewrite model's options menu), as
+    /// selections like `[{"id": "effort", "value": "high"}]`; an option without one uses `defaultOptions`.
+    public static let optionsKey = "titleRewriteOptions"
+
+    /// A title is a small job: the lowest reasoning level and the fastest speed. Other options keep the model's default.
+    public static func defaultOptions(_ descriptors: [ProviderOptionDescriptor]) -> [ProviderOptionSelection] {
+        descriptors.compactMap { d in
+            switch d.type {
+            case .boolean where d.isReasoningControl: return ProviderOptionSelection(id: d.id, value: .bool(false))
+            case .boolean where d.id == "fastMode": return ProviderOptionSelection(id: d.id, value: .bool(true))
+            case .select where d.isReasoningControl:
+                return d.options.first { d.promptInjectedValues?.contains($0.id) != true }.map { ProviderOptionSelection(id: d.id, value: .string($0.id)) }
+            case .select where d.id == "serviceTier":
+                let fastest = d.options.first { $0.label == "Ultrafast" } ?? d.options.first { $0.label == "Fast" }
+                return fastest.map { ProviderOptionSelection(id: d.id, value: .string($0.id)) }
+            default: return nil
+            }
+        }
+    }
+
+    /// The options a rewrite on `model` sends: each saved value the model accepts, else that option's default. A model
+    /// that lacks a saved value (the user picked another model) gets its own defaults.
+    public static func options(saved: JSONValue, model: ServerProviderModel?) -> [ProviderOptionSelection] {
+        let descriptors = model?.optionDescriptors ?? []
+        let saved = (try? saved.decode(as: [ProviderOptionSelection].self)) ?? []
+        let defaults = defaultOptions(descriptors)
+        return descriptors.compactMap { d in
+            if let s = saved.first(where: { $0.id == d.id }), accepts(d, s.value) { return s }
+            return defaults.first { $0.id == d.id }
+        }
+    }
+
+    static func accepts(_ d: ProviderOptionDescriptor, _ value: ProviderOptionValue) -> Bool {
+        switch (d.type, value) {
+        case (.boolean, .bool): return true
+        case (.select, .string(let id)): return d.options.contains { $0.id == id } && d.promptInjectedValues?.contains(id) != true
+        default: return false
+        }
+    }
+
+    /// `selection` carrying the rewrite's options for its model.
+    public static func withOptions(_ selection: ModelSelection, saved: JSONValue, providers: [ServerProvider]) -> ModelSelection {
+        let model = providers.first { $0.instanceId == selection.instanceId }?.models.first { $0.slug == selection.model }
+        let options = options(saved: saved, model: model)
+        var out = selection
+        out.options = options.isEmpty ? nil : try? JSONValue(encoding: options)
+        return out
     }
 
     /// The setting's stored value as a selection, nil when unset.

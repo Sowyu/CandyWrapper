@@ -579,8 +579,10 @@ final class SidebarCommands {
         guard let thread = shell(id), let env = id.environmentId, environments.canOperate(env),
               threads.composer.config(env)?.capabilities.contains(SideChats.capability) == true,
               thread.lineage.sideChat != true, thread.lineage.relationshipToParent != .subagent else { return nil }
-        let chosen = DeeperRename.chosen(ClientSettingsStore.shared.current[DeeperRename.settingKey])
-        return DeeperRename.model(chosen: chosen, parent: thread.modelSelection, providers: threads.composer.providers(env)).selection
+        let settings = ClientSettingsStore.shared.current, providers = threads.composer.providers(env)
+        let chosen = DeeperRename.chosen(settings[DeeperRename.settingKey])
+        let selection = DeeperRename.model(chosen: chosen, parent: thread.modelSelection, providers: providers).selection
+        return DeeperRename.withOptions(selection, saved: settings[DeeperRename.optionsKey], providers: providers)
     }
 
     /// Rewrite title can run on this thread now: the server has side chats and no rewrite runs on it.
@@ -679,8 +681,8 @@ final class SidebarCommands {
             if timedOut() { return .failure("The title helper did not reach this client within 30 seconds.") }
             try? await Task.sleep(for: .milliseconds(100))
         }
-        let message = OrchestrationCommands.message(threadId: helper.rawValue, messageId: UUID().uuidString.lowercased(), text: DeeperRename.prompt,
-                                                    selection: model, queue: false)
+        let instructions = id.environmentId.flatMap { threads.composer.config($0) }?.settings.raw["threadTitleInstructions"]?.stringValue
+        let message = DeeperRename.helperMessage(helper: helper, messageId: UUID().uuidString.lowercased(), model: model, instructions: instructions)
         do { _ = try await environments.dispatch(scoped, message) } catch {
             return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not ask the title helper.")
         }

@@ -134,4 +134,39 @@ struct SettingsConcernTests {
         #expect(chat.anchor("tool-call-visibility") != nil)
         #expect(SettingsSearch.title("tool-call-visibility") == "Tool calls in chat")
     }
+
+    /// Title rewrite model gets the options menu the Text generation model row has, from the same control, at the same
+    /// right edge (the user, 2026-11-22).
+    @Test func titleRewriteRowHasTheOptionsMenuOfTheRowAbove() throws {
+        let luna = ServerProviderModel(slug: "gpt-6-luna", name: "GPT-6-Luna", optionDescriptors: [
+            ProviderOptionDescriptor(id: "reasoningEffort", label: "Reasoning", type: .select,
+                                     options: ["low", "medium", "high"].map { ProviderOptionChoice(id: $0, label: $0.capitalized, isDefault: $0 == "medium") }),
+            ProviderOptionDescriptor(id: "serviceTier", label: "Speed", type: .select,
+                                     options: [ProviderOptionChoice(id: "default", label: "Standard", isDefault: true), ProviderOptionChoice(id: "priority", label: "Fast")]),
+        ])
+        let context = SettingsPagesFidelityTests.context()
+        context.providers = [ServerProvider(instanceId: "codex", driver: "codex", displayName: "Codex", models: [luna])]
+        let pick = JSONValue.object(["instanceId": .string("codex"), "model": .string("gpt-6-luna")])
+        context.scope = SettingsScopeState(environments: [SettingsScopeEnvironment(id: "a", label: "host", settings: ServerSettingsValues(.object(["textGenerationModelSelection": pick])),
+                                                                                  capabilities: [])], primaryId: "a")
+        _ = context.client.apply(["titleRewriteModel": pick])
+        let page = ConcernSettingsView(context: context, section: .threads)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 2400), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = page
+        defer { window.contentView = nil; window.close() }
+        page.refresh()
+        page.layoutSubtreeIfNeeded()
+        func control(_ id: String) throws -> SettingsModelPickerControl {
+            func find(_ v: NSView) -> SettingsModelPickerControl? { (v as? SettingsModelPickerControl) ?? v.subviews.lazy.compactMap(find).first }
+            return try #require(page.anchor(id).flatMap(find))
+        }
+        let above = try control("text-generation-model"), rewrite = try control("title-rewrite-model")
+        // The model menu, then the options menu; each sizes to its label, so only the right edges line up.
+        let visible = { (c: SettingsModelPickerControl) in c.subviews.filter { !$0.isHidden }.map(\.frame) }
+        #expect(visible(rewrite).count == 2 && visible(above).count == 2)
+        #expect(visible(rewrite).map(\.height) == visible(above).map(\.height) && visible(rewrite)[0].minX == 0)
+        #expect(rewrite.button.title == above.button.title)
+        #expect(page.convert(rewrite.bounds, from: rewrite).maxX == page.convert(above.bounds, from: above).maxX)
+    }
 }

@@ -101,7 +101,8 @@ import T3Store
         }
     }
 
-    @Test func moreLevelsWrapAndOptionsFollowAsRows() throws {
+    /// Levels past the width wrap; other options are chips on the footer, never rows (the user, 2026-11-22).
+    @Test func moreLevelsWrapAndOptionsBecomeFooterChips() throws {
         try Self.withRedesign {
             let many = ProviderOptionDescriptor(id: "effort", label: "Reasoning", type: .select,
                                                 options: (1...9).map { ProviderOptionChoice(id: "l\($0)", label: "Level \($0)") },
@@ -111,11 +112,13 @@ import T3Store
                                                    currentValue: .string("200k"))
             let dock = Self.dock(models: 2)
             dock.column.update(descriptors: [many, context], ultrathink: false, locked: false, model: "Opus 5.5")
+            dock.footer.update(descriptors: Self.footerOptions + [context], runtimeMode: .fullAccess)
             Self.lay(dock)
             #expect(dock.column.levelLines.count >= 2, "levels past the width wrap to another line")
             #expect(dock.column.levelLines.flatMap(\.segments).count == 9)
-            let menu = try #require(dock.column.rows.last)
-            #expect(!menu.isHidden && menu.frame.minY > dock.column.levelLines.last!.frame.maxY && menu.frame.width == 335 - 12)
+            #expect(dock.column.rows.count == 9, "no option row")
+            let chip = try #require(dock.footer.chips.first)
+            #expect(chip.segments.first?.title == "200K" && chip.frame.maxX <= 335 - 8 && chip.frame.height == 28)
         }
     }
 
