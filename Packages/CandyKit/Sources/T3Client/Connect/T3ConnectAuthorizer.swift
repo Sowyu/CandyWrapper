@@ -56,6 +56,8 @@ public actor T3ConnectAuthorizer {
     private var pending: [String: Pending] = [:]
     /// Bumped by `reset()`, so an exchange started before a sign-out can't publish or hand out its token.
     private var generation = 0
+    /// How often `forget` ran for each environment, so a read or an exchange it overtook doesn't keep its token.
+    private var forgotten: [String: Int] = [:]
 
     /// One shared exchange, bound to the sign-in and reset generation it started under (service.ts:413-415).
     private struct Pending {
@@ -93,12 +95,12 @@ public actor T3ConnectAuthorizer {
         if cache[environmentId] == nil, pending[environmentId] == nil, let store {
             // T3 reads its token store first and reuses a token for the same environment, account and key with
             // more than the 60 s skew left that wasn't just refused (service.ts:458-480).
-            let started = generation
+            let started = generation, removals = forgotten[environmentId]
             let stored = await store.load(accountId: signIn.accountId, environmentId: environmentId)
             // The read can wait on a Keychain prompt. A sign-out or an account switch meanwhile ends this request
             // before the token is used: T3 checks the session again after its store read (service.ts:551).
             try await assertSignIn(signIn, since: started)
-            if let stored, cache[environmentId] == nil {
+            if let stored, forgotten[environmentId] == removals, cache[environmentId] == nil {
                 if stored.thumbprint == relay.key.thumbprint, !stored.needsRenewal(at: now()), stored.accessToken != rejected {
                     cache[environmentId] = (stored, signIn)
                 } else {
@@ -157,6 +159,7 @@ public actor T3ConnectAuthorizer {
     /// before caching, so the cache never takes another sign-in's token (service.ts:424-445).
     private func sharedExchange(environmentId: String, signIn: CloudSignIn, generation started: Int, id: UUID) async throws -> T3ConnectToken {
         defer { if pending[environmentId]?.id == id { pending[environmentId] = nil } }
+        let removals = forgotten[environmentId]
         let work = Task { try await self.exchange(environmentId: environmentId, account: signIn.accountId) }
         let fresh: T3ConnectToken
         do {
@@ -169,6 +172,8 @@ public actor T3ConnectAuthorizer {
         guard generation == started, try await tokens.currentSignIn() == signIn, generation == started else {
             throw CloudSessionError.accountChanged
         }
+        // A machine removed meanwhile keeps nothing: its callers get the token once, for sockets about to close.
+        guard forgotten[environmentId] == removals else { return fresh }
         cache[environmentId] = (fresh, signIn)
         store?.save(fresh)
         return fresh
@@ -212,6 +217,7 @@ public actor T3ConnectAuthorizer {
 
     /// Drops the token for one environment (removed, or signed out of it), stored ones under every account too.
     public func forget(environmentId: String) {
+        forgotten[environmentId, default: 0] += 1
         cache[environmentId] = nil
         store?.delete(environmentId: environmentId)
     }

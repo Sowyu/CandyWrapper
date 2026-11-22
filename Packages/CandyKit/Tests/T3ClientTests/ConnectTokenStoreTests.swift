@@ -205,6 +205,34 @@ struct ConnectTokenStoreTests {
         #expect(calls(http).isEmpty)
     }
 
+    /// The machine was removed while its stored token was read: that token is not used or kept.
+    @Test func machineRemovedDuringStoredCredentialLookupDropsTheToken() async throws {
+        try await firstLaunch()
+        let http = FakeHTTP()
+        serve(http, tokens: ["eat-2"])
+        let (auth, tokens) = try hooked(http)
+        await tokens.set { await auth.forget(environmentId: "env-1") }
+        _ = try await auth.authorizeSocket(environmentId: "env-1")
+        #expect(http.requests("/api/auth/websocket-ticket").map { header($0, "Authorization") } == ["DPoP eat-2"])
+    }
+
+    /// The machine was removed while its token was exchanged: the caller gets the token, nothing keeps it.
+    @Test func machineRemovedDuringTheExchangeKeepsNoToken() async throws {
+        let http = FakeHTTP()
+        serve(http)
+        let removing = Box<T3ConnectAuthorizer>()
+        let auth = try authorizer(http, send: { [http] request in
+            if request.url?.path == "/oauth/token" { await removing.value?.forget(environmentId: "env-1") }
+            return try await http.send(request)
+        })
+        removing.value = auth
+        #expect(try await auth.token(environmentId: "env-1").accessToken == "eat-1")
+        await auth.flushStore()
+        #expect(await store.load(accountId: "user_1", environmentId: "env-1") == nil)
+        removing.value = nil
+        #expect(try await auth.token(environmentId: "env-1").accessToken == "eat-2")
+    }
+
     @Test func itemWhosePayloadNamesAnotherAccountIsDeleted() async throws {
         try await firstLaunch()
         let raw = try #require(try store.credentials.load(environmentId: "user_1/env-1"))
