@@ -963,7 +963,7 @@ public final class ThreadPanelView: DSView {
         threadFileDrop.onFiles = { [weak self] urls in self?.composer.onFiles?(urls.map { ComposerIncomingFile(url: $0) }) }
         threadFileDrop.onHighlight = { [weak self] highlighted in self?.fileDropOverlay.isHidden = !highlighted }
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("chatWidth") || keys.contains("persistComposerContextStrip") { self?.needsLayout = true }
+            if keys.contains("chatWidth") || keys.contains("persistComposerContextStrip") || keys.contains("redesignReadingWidth") { self?.needsLayout = true }
         }
         header.toggles[0].onPressedChange = { [weak self] _ in
             guard let self else { return }
@@ -1752,7 +1752,7 @@ public final class ThreadPanelView: DSView {
     /// the spacer are centered in the column below the header, with the hero 16px above.
     private func layoutComposer(chat: CGFloat, height chatHeight: CGFloat) {
         let lane: CGFloat = viewportWidth < 640 ? 12 : 48
-        let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.maximum(ClientSettingsStore.shared.current.string("chatWidth"), dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: lane, cardLeft: timeline.detailsCardLeft)
+        let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.current(dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: lane, cardLeft: timeline.detailsCardLeft)
         let width = placement.width
         let height = composer.preferredHeight
         let x = placement.x.rounded()
@@ -2611,8 +2611,10 @@ public final class ThreadPanelView: DSView {
         // `mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3` in the chat column.
         // Each banner has its own `pt-3` in a `flex-col`.
         var bannerTop = chatTop + 12
+        // Redesign's banners stay inside a reading column narrower than T3's 48rem.
+        let bannerMax = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? min(768, ThreadChatWidth.current(dither: true)) : 768
         for banner in [providerBanner, errorBanner] where !banner.isHidden {
-            let w = banner.fittingWidth(max: max(0, min(768, chat - 32)))
+            let w = banner.fittingWidth(max: max(0, min(bannerMax, chat - 32)))
             let h = banner.height(forWidth: w)
             banner.frame = NSRect(x: ((chat - w) / 2).rounded(), y: bannerTop, width: w, height: h)
             bannerTop = banner.frame.maxY + 12

@@ -93,8 +93,20 @@ public struct ThreadFindResult: Decodable, Equatable, Sendable {
 /// index.css:2076-2084. Shared by messages and the composer.
 public enum ThreadChatWidth {
     /// Redesign's Comfortable follows Capy's thread column (`mx-auto max-w-4xl px-4`, 864 inside), wider than T3's 736.
-    public static func maximum(_ setting: String, dither: Bool = false) -> CGFloat {
-        switch setting { case "wide": 1152; case "full": .greatestFiniteMagnitude; default: dither ? 864 : 736 }
+    /// Under Redesign, Comfortable takes Settings > Redesign > Reading width (`reading`), whose default is that column;
+    /// Wide and Full keep T3's meaning.
+    public static func maximum(_ setting: String, dither: Bool = false, reading: CGFloat = readingDefault) -> CGFloat {
+        switch setting { case "wide": 1152; case "full": .greatestFiniteMagnitude; default: dither ? reading : 736 }
+    }
+    public static let readingDefault: CGFloat = 864
+    public static let readingRange: ClosedRange<Double> = 520...1100
+    /// The saved "Reading width".
+    @MainActor public static var reading: CGFloat {
+        CGFloat(ClientSettingsStore.shared.current["redesignReadingWidth"].doubleValue ?? Double(readingDefault))
+    }
+    /// The column's maximum from the saved settings.
+    @MainActor public static func current(dither: Bool, reading: CGFloat = ThreadChatWidth.reading) -> CGFloat {
+        maximum(ClientSettingsStore.shared.current.string("chatWidth"), dither: dither, reading: reading)
     }
 }
 

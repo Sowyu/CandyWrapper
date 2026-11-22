@@ -60,14 +60,14 @@ public final class RedesignSettingsView: SettingsPageBase {
             if let i = Self.useInChoices.firstIndex(where: { $0.1 == shown }), self?.useIn.selectedIndex != i { self?.useIn.selectedIndex = i }
         }
 
-        let picture = pictureRow(), dim = textDimRow()
+        let picture = pictureRow(), dim = textDimRow(), reading = readingWidthRow()
         // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").
         let animate = clientSwitch("redesign-gradient-animate", "Let Flower's lotus bloom when a thread opens, and turn slowly over its drifting dots on the new-thread page. It stops while the window is in the background and under Reduce Motion.",
                                    key: "redesignGradientAnimate", reset: "animate background", title: "Animate background")
         let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
         let ink = inkRow(), dots = dotSizeRow()
-        let look: [SettingsRowView] = [picture, backgroundRow(), ink, dots, tint, animate, dim, accentRow(), avatarsRow()]
+        let look: [SettingsRowView] = [picture, backgroundRow(), ink, dots, tint, animate, dim, reading, accentRow(), avatarsRow()]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
         let stacked = clientSwitch("redesign-stacked-picker", "One column with six models at a time over Reasoning and the footer. Off shows the models with a details pane beside them.",
@@ -91,6 +91,8 @@ public final class RedesignSettingsView: SettingsPageBase {
             if dots.inertReason != dotsOff { dots.inertReason = dotsOff }
             let animateOff = off ?? (background == "flower" ? nil : Self.animateReason)
             if animate.inertReason != animateOff { animate.inertReason = animateOff }
+            let readingOff = off ?? Self.readingWidthReason(self.client.string("chatWidth"))
+            if reading.inertReason != readingOff { reading.inertReason = readingOff }
         }
         items = [
             section(nil, "Theme", [masterRow]),
@@ -258,6 +260,44 @@ public final class RedesignSettingsView: SettingsPageBase {
             if r?.status != status { r?.status = status }
         }
         return r
+    }
+
+    /// The thread column's maximum under Comfortable (the user, 2026-11-22: "make it adjustable actually"). It writes on
+    /// every step: the thread moves its composer and the art's column at once and lays its rows out a moment later.
+    private func readingWidthRow() -> SettingsRowView {
+        let key = "redesignReadingWidth"
+        let control = SettingsSliderControl(value: Double(ThreadChatWidth.readingDefault), range: ThreadChatWidth.readingRange, step: 20, outputWidth: 64)
+        control.format = { "\(Int($0)) pt" }
+        control.slider.setAccessibilityLabel("Reading width")
+        let hint = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+        let r = row("redesign-reading-width", title: "Reading width", detail: "How wide a thread\u{2019}s text and the composer can grow.",
+                    control: SettingsControlGroup([hint, control], gap: 12))
+        let slot = ResetSlot(label: "reading width")
+        r.accessories = [slot]
+        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
+        control.onChange = { [weak self] v in self?.context.writeClient?([key: .number(v.rounded())]) }
+        binder.add { [weak self, weak control, weak hint] in
+            guard let self else { return }
+            let width = Double(self.client.int(key))
+            if control?.value != width { control?.value = width }
+            let text = "about \(Self.charactersPerLine(CGFloat(width))) characters a line"
+            if hint?.text != text { hint?.text = text; hint?.superview?.invalidateIntrinsicContentSize(); hint?.superview?.needsLayout = true }
+            slot.isShown = !self.client.isDefault(key)
+        }
+        return r
+    }
+
+    /// Why Reading width does nothing: Wide and Full keep T3's widths.
+    static func readingWidthReason(_ chatWidth: String) -> String? {
+        switch chatWidth { case "wide": "Chat width is set to Wide in Appearance."; case "full": "Chat width is set to Full in Appearance."; default: nil }
+    }
+
+    /// Roughly how many characters of a reply's body text fit in `width`, from the body font's average advance over
+    /// lowercase prose, rounded to 5. It follows the interface text size.
+    static func charactersPerLine(_ width: CGFloat) -> Int {
+        let sample = "the quick brown fox jumps over the lazy dog while five wizards box"
+        let advance = (sample as NSString).size(withAttributes: [.font: MarkdownStyle.font(MarkdownStyle.fontSize)]).width / CGFloat(sample.count)
+        return Int((width / max(1, advance) / 5).rounded()) * 5
     }
 
     static let textDimWarning = "Text may be harder to read over bright backgrounds."
