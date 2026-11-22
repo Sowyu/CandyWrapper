@@ -182,3 +182,18 @@ extension GalleryTileLifetimeTests {
         #expect(view.image != nil && view.image !== old)
     }
 }
+
+extension GalleryTileLifetimeTests {
+    /// A closed gallery lets go of its masonry. The scroll observer's block held the clip view, which holds the masonry
+    /// as its document, so every gallery opened stayed in memory with its clip view and observer.
+    @Test func aClosedWallFreesItsMasonry() {
+        weak var masonry: GalleryMasonryView?
+        autoreleasepool {
+            let wall = ThreadImageWallView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+            wall.layoutSubtreeIfNeeded()
+            masonry = wall.masonry
+            wall.releaseImages()
+        }
+        #expect(masonry == nil)
+    }
+}

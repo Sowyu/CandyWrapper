@@ -160,9 +160,10 @@ final class GalleryMasonryView: DSView {
         if let observer { NotificationCenter.default.removeObserver(observer); self.observer = nil }
         guard let clip = enclosingScrollView?.contentView else { return }
         clip.postsBoundsChangedNotifications = true
-        observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+        // The clip view holds this view as its document, so the block must not hold the clip view.
+        observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self, weak clip] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
+                guard let self, let clip else { return }
                 // A width change re-flows the columns; a scroll only brings tiles in and out.
                 if clip.bounds.width != self.lastWidth { self.relayout() } else { self.tile(); self.measure() }
             }
