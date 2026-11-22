@@ -85,9 +85,14 @@ public enum DeeperRename {
         return title.isEmpty ? nil : title
     }
 
+    public static func renameCommand(_ id: ThreadId, original: String, current: String?, suggestion: String) -> JSONValue? {
+        guard current == original, suggestion != current else { return nil }
+        return ThreadCommands.rename(id, title: suggestion)
+    }
+
     /// A side chat this feature made and did not get to delete.
-    public static func isLeftover(_ shell: ThreadShell) -> Bool {
-        shell.lineage.sideChat == true && shell.title == helperTitle && shell.activeRunId == nil
+    public static func isLeftover(_ shell: ThreadShell, owned: Set<ThreadId>) -> Bool {
+        owned.contains(shell.id) && shell.lineage.sideChat == true && shell.title == helperTitle && shell.activeRunId == nil
     }
 
     /// The helper's reply: the newest assistant message of its projection.

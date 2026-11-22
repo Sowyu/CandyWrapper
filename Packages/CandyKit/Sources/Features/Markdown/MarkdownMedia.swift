@@ -275,19 +275,21 @@ public enum MarkdownImages {
 
     /// Checks a kept copy against the server once a session: the file's revision from a fresh sign, or its ETag from a
     /// `HEAD` when the server reports no revision. A changed file leaves the cache and its views load it again.
-    nonisolated static func revalidate(_ kept: Kept, key: String, entry: MediaDiskCache.Entry) async {
+    @discardableResult
+    nonisolated static func revalidate(_ kept: Kept, key: String, entry: MediaDiskCache.Entry) async -> Task<Void, Never>? {
         let first = await MainActor.run { cacheScope == kept.scope && revalidated.insert(kept.id).inserted }
-        guard first else { return }
-        Task.detached(priority: .utility) {
+        guard first else { return nil }
+        return Task.detached(priority: .utility) {
             guard let asset = await signedURL(kept.path) else { return }
             if let size = asset.size { await record(size, for: key) }
             let fresh: Bool
             if let revision = asset.revision, entry.revision != nil || entry.etag == nil {
                 fresh = revision == entry.revision
             } else if let etag = entry.etag {
-                let head = await MediaTransfer.shared.download(asset.url, method: "HEAD")
-                if let head { try? FileManager.default.removeItem(at: head.file) }
-                fresh = head?.response.value(forHTTPHeaderField: "ETag") == etag
+                guard let head = await MediaTransfer.shared.download(asset.url, method: "HEAD") else { return }
+                try? FileManager.default.removeItem(at: head.file)
+                guard let current = head.response.value(forHTTPHeaderField: "ETag") else { return }
+                fresh = current == etag
             } else {
                 fresh = true
             }

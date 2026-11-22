@@ -59,6 +59,19 @@ import T3Protocol
         #expect(!(try store(false)).current.bool("redesignStackedPicker"))
     }
 
+    @Test func storedSliderValuesClampAtTheirLimits() {
+        let low = ClientSettings(decoding: .object(["redesignReadingWidth": .number(400), "redesignTextDim": .number(-1),
+                                                    "redesignPickerPaneWidth": .number(90)]))
+        #expect(low.int("redesignReadingWidth") == 520)
+        #expect(low.int("redesignTextDim") == 0)
+        #expect(low["redesignPickerPaneWidth"] == .number(120))
+        let high = ClientSettings(decoding: .object(["redesignReadingWidth": .number(2000), "redesignTextDim": .number(110),
+                                                     "redesignPickerPaneWidth": .number(1000)]))
+        #expect(high.int("redesignReadingWidth") == 1100)
+        #expect(high.int("redesignTextDim") == 100)
+        #expect(high["redesignPickerPaneWidth"] == .number(800))
+    }
+
     @Test func pickerDefaultsForAnUpgrade() {
         // A stored document from a build without the keys: the details layout (stacked off), account card off.
         let old = ClientSettings(decoding: .object(["glassOpacity": .number(60)]))

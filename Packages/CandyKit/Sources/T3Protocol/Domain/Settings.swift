@@ -171,6 +171,15 @@ public struct ClientSettings: Equatable, Sendable {
         for (key, spec) in Self.fields {
             var stored = json?[key]
             if key == "confirmQuit", case .bool(let on)? = stored { stored = .string(on ? "hold" : "direct") }
+            if let number = stored?.doubleValue, number.isFinite {
+                switch (key, spec.kind) {
+                case ("redesignReadingWidth", .int(let range)), ("redesignTextDim", .int(let range)):
+                    stored = .number(min(Double(range.upperBound), max(Double(range.lowerBound), number)))
+                case ("redesignPickerPaneWidth", .nullableNumber(let range)):
+                    stored = .number(min(range.upperBound, max(range.lowerBound, number)))
+                default: break
+                }
+            }
             values[key] = stored.flatMap { spec.accepts($0) ? $0 : nil } ?? spec.defaultValue
         }
         self.values = values

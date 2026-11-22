@@ -73,15 +73,17 @@ public enum UsageChartLogic {
 
     /// `niceScale`: the max is a readable 1/2/5 x 10^n step at or above the peak.
     public static func niceScale(_ peak: Double, count: Int = tickCount) -> (max: Double, ticks: [Double]) {
-        guard peak > 0 else { return (0, [0]) }
+        guard peak.isFinite, peak > 0 else { return (0, [0]) }
+        // ponytail: 1024 requested divisions, revisit if a non-screen consumer needs more
+        guard (1...1024).contains(count) else { return (peak, [0, peak]) }
         let raw = peak / Double(count)
         let magnitude = pow(10, floor(log10(raw)))
         let n = raw / magnitude
         let step = (n > 5 ? 10 : n > 2 ? 5 : n > 1 ? 2 : 1) * magnitude
         let max = ceil(peak / step) * step
-        var ticks: [Double] = []
-        var v = 0.0
-        while v <= max + step * 1e-6 { ticks.append(v); v += step }
+        guard step > 0, max.isFinite else { return (peak, [0, peak]) }
+        let divisions = Int(ceil(peak / step))
+        let ticks = (0...divisions).map { Double($0) * step }
         return (max, ticks)
     }
 
