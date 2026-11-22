@@ -944,7 +944,10 @@ extension ConnectionSupervisor {
                 do {
                     let epoch = await self.currentResubscribeEpoch
                     try await handler(.subscribed(generation: gen))
-                    let stream = await connection.stream(tag, payload: await payload(), snapshotFirst: snapshotFirst)
+                    let input = await payload()
+                    // Cancelled while the payload waited, as when the user leaves a thread during its cold open.
+                    if Task.isCancelled { return }
+                    let stream = await connection.stream(tag, payload: input, snapshotFirst: snapshotFirst)
                     // True when activation asked for a new subscription; false when the stream ended.
                     let resubscribe = try await withThrowingTaskGroup(of: Bool.self) { group in
                         group.addTask {

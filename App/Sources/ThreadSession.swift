@@ -133,8 +133,7 @@ final class ThreadSession {
         let supervisor = shell.supervisor, configFeed = shell.configFeed
         subscription = supervisor.subscribe("orchestration.subscribeThread", resubscribesOnActivation: true, keepsRetryingServerFailures: true, payload: {
             if await store.subscribeInput(subscription: wireSubscription).afterSequence == nil {
-                let config = await configFeed.initialConfig(generation: await supervisor.state.generation)
-                if let snapshot = await loader.load(serverPagesSnapshots: config?["threadSnapshotPagination"]?.boolValue == true),
+                if let snapshot = await loader.coldOpen(supervisor: supervisor, config: configFeed),
                    !Task.isCancelled {
                     await store.applySnapshot(snapshot, subscription: wireSubscription)
                 }

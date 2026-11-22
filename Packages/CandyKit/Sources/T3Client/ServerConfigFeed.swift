@@ -97,6 +97,26 @@ public actor ServerConfigFeed {
         }
     }
 
+    /// How long a cold thread open waits for its session's config before it opens without it. T3 waits with no
+    /// deadline (client-runtime state/threads.ts:1035, rpc/session.ts:382-397), so a config stream that hangs
+    /// without an error holds the thread. The snapshot arrives 9 ms after the socket opens on loopback and 54 ms at
+    /// 40 ms RTT (docs/research/connection-vs-t3-desktop-4928.md), so 1 s leaves room for a slow relay, and opening
+    /// without config costs only the HTTP round trip that the socket path saves.
+    public static let threadOpenConfigDeadline: Duration = .seconds(1)
+
+    /// `initialConfig(generation:)` that gives up after `deadline` and returns nil. A config already known returns
+    /// at once with no wait. The waiter and the deadline both end when either finishes or the caller is cancelled.
+    public func initialConfig(generation requested: Int, within deadline: Duration) async -> JSONValue? {
+        if requested == generation, let config = snapshot?["config"] { return config }
+        return await withTaskGroup(of: JSONValue?.self) { group in
+            group.addTask { await self.initialConfig(generation: requested) }
+            group.addTask { try? await Task.sleep(for: deadline); return nil }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
     /// Each consumer gets a separate stream. Late consumers receive subscribed, the current snapshot,
     /// then at most one of each known update. Registration before `start` is supported.
     public func events() -> AsyncStream<SubscriptionEvent> {

@@ -194,6 +194,46 @@ struct ConnectionTimingTests {
         await connection.close()
     }
 
+    /// ThreadSession's cold open through the supervisor, the config feed and `ThreadSnapshotLoader.coldOpen`, on the
+    /// thread named by `CW_TIMING_LONG`: `known` with the session's config already in (the usual click), `http` with a
+    /// feed that has no config, which is the path a config wait that ran out takes.
+    @Test(.timeLimit(.minutes(5)))
+    func threadColdOpenPath() async throws {
+        guard let id = Self.env["CW_TIMING_LONG"], !id.isEmpty else { return }
+        let http = EnvironmentHTTP(baseURL: Self.baseURL)
+        let supervisor = ConnectionSupervisor(dependencies: Self.dependencies(http))
+        let feed = ServerConfigFeed(supervisor: supervisor)
+        await feed.start()
+        await supervisor.connect()
+        #expect(await feed.initialConfig(generation: 1) != nil)
+        let noConfig = ServerConfigFeed(supervisor: supervisor)
+        for (label, source) in [("known", feed), ("http", noConfig)] {
+            var samples: [[String: Double]] = []
+            for _ in 0..<Self.runs {
+                let synced = SyncCounter()
+                let loader = ThreadSnapshotLoader(http: http, token: Self.token, threadId: ThreadId(rawValue: id))
+                let t0 = ContinuousClock.now
+                let sub = supervisor.subscribe("orchestration.subscribeThread", keepsRetryingServerFailures: true, payload: {
+                    var input: [String: JSONValue] = ["threadId": .string(id), "requestCompletionMarker": .bool(true),
+                                                      "acceptBoundedSnapshot": .bool(true), "acceptCompactTurnItems": .bool(true),
+                                                      "acceptDedupedBodies": .bool(true), "acceptCompactIds": .bool(true)]
+                    if let snapshot = await loader.coldOpen(supervisor: supervisor, config: source) {
+                        input["afterSequence"] = .number(Double(snapshot.snapshotSequence))
+                    }
+                    return .object(input)
+                }) { event in
+                    if case .value(let json) = event, json["kind"]?.stringValue == "synchronized" { await synced.bump() }
+                }
+                #expect(await eventually(seconds: 30) { await synced.count >= 1 })
+                samples.append(["synchronized": (ContinuousClock.now - t0).milliseconds])
+                sub.cancel()
+            }
+            Self.report("thread-cold-open-path", [:], samples, name: label)
+        }
+        await feed.stop()
+        await supervisor.disconnect()
+    }
+
     // MARK: Reconnect after a restart
 
     /// Kills the server named by `CW_TIMING_SERVER_DIR` (its server.pid), starts it again with

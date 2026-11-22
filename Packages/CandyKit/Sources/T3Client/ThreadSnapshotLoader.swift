@@ -38,6 +38,18 @@ public actor ThreadSnapshotLoader {
 
     private var socketOpenTried = false
 
+    /// The snapshot a subscription without a retained sequence applies before it subscribes, or nil to let the
+    /// socket send it. Waits for the session's config at most `configDeadline`; without it the open takes the HTTP
+    /// path, and a config that arrives later changes nothing for this open. A session that ends during the wait
+    /// loads nothing, and the next session's open decides again, as T3 interrupts the open with its session.
+    public func coldOpen(supervisor: ConnectionSupervisor, config feed: ServerConfigFeed,
+                         configDeadline: Duration = ServerConfigFeed.threadOpenConfigDeadline) async -> ThreadDetailSnapshot? {
+        let generation = await supervisor.state.generation
+        let config = await feed.initialConfig(generation: generation, within: configDeadline)
+        guard await supervisor.state.generation == generation, await supervisor.currentConnection != nil else { return nil }
+        return await load(serverPagesSnapshots: config?["threadSnapshotPagination"]?.boolValue == true)
+    }
+
     /// Called only without a retained sequence. Try once per subscription owner, including
     /// when an old host lacks the route; reconnects continue through the socket.
     public func load() async -> ThreadDetailSnapshot? {
