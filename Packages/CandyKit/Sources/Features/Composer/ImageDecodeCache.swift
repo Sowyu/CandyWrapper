@@ -119,11 +119,14 @@ enum ImageDecodeCache {
         let requestID = request.id, requestSide = request.side, task = request.task
         return await withTaskCancellationHandler {
             let image = await task?.value
+            // Read before `release`: releasing the last user cancels the finished task, and a failed load would then
+            // look cancelled and retry forever.
+            let sharedCancelled = task?.isCancelled == true
             release(key: key, request: requestID, user: user)
             guard !Task.isCancelled else { return nil }
             // `clear()` cancelled the shared request under a consumer that still wants it: a cancel is not a failure,
             // or the view would show "Image unavailable" until it is rebuilt.
-            if image == nil, task?.isCancelled == true { return await load(key: key, side: side, in: memory, loader: loader) }
+            if image == nil, sharedCancelled { return await load(key: key, side: side, in: memory, loader: loader) }
             guard let image else { return nil }
             return Cached(image, side: requestSide)
         } onCancel: {
