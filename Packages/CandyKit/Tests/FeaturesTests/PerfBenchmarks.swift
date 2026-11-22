@@ -638,6 +638,31 @@ struct PerfBenchmarks {
         #expect(count > 0)
     }
 
+    /// Work every shell change or open-thread update repeats at the M10 load plus 1,000 archived threads: finding a
+    /// thread by id (`[ThreadShell].index(of:)`, 0.47 ms through `first(where:)`, which copies each 1.8 KB shell) and
+    /// rescoping the merged shell after one thread changed.
+    @MainActor @Test func shellScans() {
+        var snapshot = SidebarLoadTests.loadSnapshot()
+        snapshot.archivedThreads = snapshot.threads.prefix(1_000).enumerated().map { i, t in
+            var a = t
+            a.id = ThreadId("archived-\(i)")
+            return a
+        }
+        let missing = ThreadId("missing")
+        var found: ThreadShell?
+        measure("shell_thread_by_id_2580", inner: 50, extra: ["threads": 2_580]) { found = snapshot.thread(missing) }
+        #expect(found == nil && snapshot.thread(snapshot.archivedThreads[999].id) != nil)
+        var merged = MergedShell()
+        merged.set(snapshot, environmentId: "env")
+        var k = 0
+        measure("shell_merge_one_change_2580", inner: 5, extra: ["threads": 2_580]) {
+            k += 1
+            snapshot.threads[1_450].title = "renamed \(k)"
+            merged.set(snapshot, environmentId: "env")
+        }
+        #expect(merged.merged(order: ["env"])?.threads[1_450].title == "renamed \(k)")
+    }
+
     /// The sidebar at the M10 load's 1,580 threads with the settled shelf open: a hinted one-thread rename, a
     /// minute's clock step and the settled shelf opening or closing, each with the layout that follows.
     @MainActor @Test func sidebarUpdates() {

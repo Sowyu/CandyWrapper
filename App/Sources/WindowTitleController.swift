@@ -29,7 +29,7 @@ final class WindowTitleController {
     func update() {
         guard let window else { return }
         let snapshot = sidebar?.snapshot
-        let shell = openThreadId().flatMap { id in snapshot?.threads.first { $0.id == id } }
+        let shell = openThreadId().flatMap { snapshot?.threads.thread($0) }
         let project = shell.flatMap { s in snapshot?.projects.first { $0.id == s.projectId } }
         let screenReader: String?? = ClientSettingsStore.shared.current.bool("screenReaderWindowTitle")
             ? .some(shell.flatMap { WindowTitle.threadStatus(SidebarThread($0)) }) : nil
