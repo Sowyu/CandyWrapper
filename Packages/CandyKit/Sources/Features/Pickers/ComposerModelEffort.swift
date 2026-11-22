@@ -348,8 +348,10 @@ final class ComposerEffortColumnView: DSView {
                 }
             }
         }
-        separatorAfter = controls.effort != nil && !controls.others.isEmpty ? rows.count : nil
-        for d in controls.others {
+        // Redesign puts every other option on the footer's line as a chip, so none takes a full-width row.
+        let others = stacked ? [] : controls.others
+        separatorAfter = controls.effort != nil && !others.isEmpty ? rows.count : nil
+        for d in others {
             if d.type == .boolean {
                 rows.append(ComposerEffortRowView(.toggle(label: d.label, on: d.currentValue?.bool == true)))
                 rowDescriptors.append((d, nil))
@@ -674,33 +676,37 @@ final class ComposerFooterSegmentView: ControlView {
     let checked: Bool
     let title: String
     private let label: LabelView
+    /// A menu chip's muted name before its value, like "Context" in "Context 1M"; the value then stays bright.
+    private let caption: LabelView?
     private let glyph: NSView?
     var first = true, last = true
     /// Keyboard focus held by the dock while the search keeps first responder (Redesign's stacked picker).
     var focused = false { didSet { if focused != oldValue { needsDisplay = true } } }
     /// The track's sliding fill stands in for this segment's own while it moves here.
     var fillSuppressed = false { didSet { if fillSuppressed != oldValue { needsDisplay = true } } }
-    init(title: String, checked: Bool, glyph: NSView? = nil) {
+    init(title: String, checked: Bool, glyph: NSView? = nil, caption: String? = nil) {
         self.checked = checked
         self.title = title
         label = LabelView(title, font: DSFont.ui(12))
+        self.caption = caption.map { LabelView($0, font: DSFont.ui(12)) }
         self.glyph = glyph
         super.init(frame: .zero)
         scalesWhenPressed = false
-        label.lineHeight = 16; label.smoothsFont = false
-        addSubview(label)
+        for l in [self.caption, label].compactMap({ $0 }) { l.lineHeight = 16; l.smoothsFont = false; addSubview(l) }
         if let glyph { addSubview(glyph) }
         setAccessibilityRole(.radioButton); setAccessibilityLabel(title); setAccessibilityValue(checked ? 1 : 0)
     }
     private var glyphWidth: CGFloat { glyph.map { ($0 as? ComposerFastGlyphView)?.intrinsicContentSize.width ?? 12 } ?? 0 }
     /// `px-2`; Redesign's stacked footer uses 6 so its controls share one 335pt line.
     var inset: CGFloat = 8 { didSet { needsLayout = true } }
-    var naturalWidth: CGFloat { 2 * inset + ceil(label.textWidth) + (glyph == nil ? 0 : glyphWidth + 4) }
+    private var captionWidth: CGFloat { caption.map { ceil($0.textWidth) + 4 } ?? 0 }
+    var naturalWidth: CGFloat { 2 * inset + captionWidth + ceil(label.textWidth) + (glyph == nil ? 0 : glyphWidth + (title.isEmpty ? 0 : 4)) }
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); needsDisplay = true }
     override func layout() {
         super.layout()
         var x = (bounds.width - naturalWidth) / 2 + inset
         if let glyph { glyph.frame = NSRect(x: x, y: (bounds.height - 12) / 2, width: glyphWidth, height: 12); x += glyphWidth + 4 }
+        if let caption { caption.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: captionWidth - 4, height: 16); x += captionWidth }
         label.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: ceil(label.textWidth), height: 16)
     }
     /// The fill's radius: concentric with the track, its radius less the inset between them, never under 2pt.
@@ -709,12 +715,13 @@ final class ComposerFooterSegmentView: ControlView {
         // T3 rounds only the track's outer corners (`first:rounded-l-md last:rounded-r-md`, ComposerModelEffort.tsx:565); Redesign rounds every
         // segment, so a middle pick sits on a rounded fill too (the user, 2026-11-21).
         if let layer {
-            Self.paint(layer, in: self, checked: checked && !fillSuppressed, hovered: state.hovered, focused: state.focusVisible || focused,
+            Self.paint(layer, in: self, checked: checked && !fillSuppressed, hovered: state.hovered || state.popupOpen, focused: state.focusVisible || focused,
                        first: first, last: last)
         }
         alphaValue = state.enabled ? 1 : 0.64
-        let color = checked || state.hovered ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground)
-        label.color = color
+        let color = checked || state.hovered || state.popupOpen ? Themed.color(\.contrastForeground) : Themed.color(\.contrastMutedForeground)
+        label.color = caption == nil ? color : Themed.color(\.contrastForeground)
+        caption?.color = Themed.color(\.contrastMutedForeground)
         (glyph as? ComposerFastGlyphView)?.color = color
         (glyph as? IconView)?.strokeColor = color
     }
@@ -859,38 +866,63 @@ final class ComposerPermissionsTriggerView: ControlView {
 }
 
 /// `ComposerPickerFooter` (:709-726): `flex-wrap gap-2 border-t bg-muted/40 px-3 py-2`, speed one click away and
-/// permissions one menu deeper.
+/// permissions one menu deeper. Redesign adds a chip for every option the reasoning control and speed leave over, so
+/// no option takes a full-width row (the user, 2026-11-22).
 final class ComposerPickerFooterView: DSView {
     static let height: CGFloat = 45
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// How the one row's chips fit the room the levels leave: whole, without their names ("1M", the Ultracode glyph),
+    /// or as one "Options" chip that opens a menu holding them all.
+    enum Fit: CaseIterable { case full, compact, collapsed }
     private(set) var speed: ComposerFooterGroupView?
     private(set) var ultracode: ComposerFooterGroupView?
+    /// Redesign: a chip for each other option, or the one "Options" chip when collapsed.
+    private(set) var chips: [ComposerFooterGroupView] = []
     private(set) var permissions: ComposerPermissionsTriggerView?
+    private var descriptors: [ProviderOptionDescriptor] = []
+    private var runtimeMode: RuntimeMode = .fullAccess
+    private var unrestricted = false
     private let rule = CALayer()
     var onSelect: ((ProviderOptionDescriptor, String) -> Void)?
     var onBoolean: ((String, Bool) -> Void)?
     var onPermissions: ((NSView) -> Void)?
+    /// A select chip's choices, as a menu anchored to the chip.
+    var onOpenOption: ((ProviderOptionDescriptor, NSView) -> Void)?
+    /// The collapsed "Options" chip's menu, holding every option on the line.
+    var onOpenOptions: (([ProviderOptionDescriptor], NSView) -> Void)?
     /// Redesign's pickers: the controls wrap to a second line when they don't fit (335pt stacked).
     var stacked: Bool { capy }
     /// The detail layout's one bottom row: the controls side by side at the line's right, no rule and no fill; the dock
     /// sizes the footer to `inlineWidth` and places it on the reasoning track's line.
-    var oneRow = false { didSet { if oneRow != oldValue { needsLayout = true; needsDisplay = true } } }
+    var oneRow = false { didSet { if oneRow != oldValue { rebuild(notify: false); needsLayout = true; needsDisplay = true } } }
+    /// One row: how the chips fit; the dock sets it from the room the levels leave.
+    var fit: Fit = .full { didSet { if fit != oldValue { rebuild(notify: false) } } }
     private var inlineParts: [(NSView, CGFloat)] {
         permissions?.showsChevron = false
         permissions?.inset = 6
-        for group in [speed, ultracode].compactMap({ $0 }) { group.segments.forEach { $0.inset = 6 } }
-        return [speed, ultracode].compactMap { $0 }.map { ($0, $0.naturalWidth) } + [permissions].compactMap { $0 }.map { ($0, $0.naturalWidth) }
+        let groups = [speed, ultracode].compactMap { $0 } + chips
+        for group in groups { group.segments.forEach { $0.inset = 6 } }
+        return groups.map { ($0, $0.naturalWidth) } + [permissions].compactMap { $0 }.map { ($0, $0.naturalWidth) }
     }
     /// One row: the controls' width, 6pt apart.
-    var inlineWidth: CGFloat {
-        let parts = inlineParts
-        return parts.map(\.1).reduce(0, +) + CGFloat(max(0, parts.count - 1)) * 6
+    var inlineWidth: CGFloat { width(of: inlineParts.map(\.1)) }
+    private func width(of parts: [CGFloat]) -> CGFloat { parts.reduce(0, +) + CGFloat(max(0, parts.count - 1)) * 6 }
+    /// One row: the first fit whose chips are within `room`, else collapsed. Measures spare views, so nothing on screen changes.
+    func bestFit(within room: CGFloat) -> Fit {
+        Fit.allCases.first { f in
+            let g = groups(f)
+            let parts = ([g.speed, g.ultracode].compactMap { $0 } + g.chips).map { group in
+                group.segments.forEach { $0.inset = 6 }
+                return group.naturalWidth
+            }
+            return f == .collapsed || width(of: parts) <= room
+        } ?? .collapsed
     }
     var onSizeChange: (() -> Void)?
     /// Keyboard focus among the segments and the permissions trigger, in reading order (stacked only).
     private(set) var focusIndex: Int? { didSet { showFocus() } }
     var focusVisible = false { didSet { showFocus() } }
-    var items: [ControlView] { ([speed, ultracode].compactMap { $0 }.flatMap(\.segments) as [ControlView]) + [permissions].compactMap { $0 } }
+    var items: [ControlView] { (([speed, ultracode].compactMap { $0 } + chips).flatMap(\.segments) as [ControlView]) + [permissions].compactMap { $0 } }
     private func showFocus() {
         for (i, item) in items.enumerated() {
             let on = focusVisible && i == focusIndex
@@ -937,10 +969,53 @@ final class ComposerPickerFooterView: DSView {
     }
 
     func update(descriptors: [ProviderOptionDescriptor], runtimeMode: RuntimeMode, unrestricted: Bool = false) {
-        [speed, ultracode].forEach { $0?.removeFromSuperview() }
-        permissions?.removeFromSuperview()
+        self.descriptors = descriptors; self.runtimeMode = runtimeMode; self.unrestricted = unrestricted
+        rebuild(notify: true)
+    }
+
+    /// The options the chips hold: speed, Ultracode, then each option the column's levels leave (`columnControls`).
+    private var chipDescriptors: [ProviderOptionDescriptor] {
+        let c = ComposerEffortControls(descriptors)
+        return [c.speedSelect ?? c.fastToggle, c.ultracodeToggle].compactMap { $0 } + c.others
+    }
+
+    private func groups(_ fit: Fit) -> (speed: ComposerFooterGroupView?, ultracode: ComposerFooterGroupView?, chips: [ComposerFooterGroupView]) {
         let controls = ComposerEffortControls(descriptors)
-        speed = nil; ultracode = nil
+        let fit = oneRow ? fit : .full
+        if fit == .collapsed, !chipDescriptors.isEmpty {
+            let s = ComposerFooterSegmentView(title: "Options", checked: false)
+            s.setAccessibilityRole(.popUpButton)
+            s.opensPopupOnPress = true
+            let all = chipDescriptors
+            s.action = { [weak self, weak s] in if let s { self?.onOpenOptions?(all, s) } }
+            return (nil, nil, [ComposerFooterGroupView([s])])
+        }
+        let (speed, ultracode) = speedAndUltracode(controls, compact: fit == .compact)
+        return (speed, ultracode, capy || oneRow ? controls.others.map { chip($0, compact: fit == .compact) } : [])
+    }
+
+    private func rebuild(notify: Bool) {
+        ([speed, ultracode] + chips).forEach { $0?.removeFromSuperview() }
+        permissions?.removeFromSuperview()
+        (speed, ultracode, chips) = groups(fit)
+        // The detail layout leaves access to the composer's own chip, which Redesign then always shows (the user, 2026-11-21).
+        if !oneRow {
+            let trigger = ComposerPermissionsTriggerView(mode: runtimeMode, unrestricted: unrestricted)
+            trigger.opensPopupOnPress = true
+            trigger.action = { [weak self, weak trigger] in if let trigger { self?.onPermissions?(trigger) } }
+            permissions = trigger
+        } else {
+            permissions = nil
+        }
+        for v in ([speed, ultracode] + chips + [permissions]).compactMap({ $0 as NSView? }) { addSubview(v) }
+        if let f = focusIndex { focusIndex = items.isEmpty ? nil : min(f, items.count - 1) }
+        needsLayout = true
+        needsDisplay = true
+        if stacked && notify { onSizeChange?() }
+    }
+
+    private func speedAndUltracode(_ controls: ComposerEffortControls, compact: Bool) -> (ComposerFooterGroupView?, ComposerFooterGroupView?) {
+        var speed: ComposerFooterGroupView?, ultracode: ComposerFooterGroupView?
         if let tier = controls.speedSelect {
             let value = ModelTraits.currentValue(tier)?.string
             speed = ComposerFooterGroupView(ComposerEffortControls.choices(tier).map { choice in
@@ -960,25 +1035,35 @@ final class ComposerPickerFooterView: DSView {
         }
         if let toggle = controls.ultracodeToggle {
             let on = toggle.currentValue?.bool == true
-            let s = ComposerFooterSegmentView(title: toggle.label, checked: on, glyph: IconView(name: .workflow, size: 12))
-            s.setAccessibilityRole(.checkBox)
+            // Compact keeps the glyph and drops the name, which the tooltip and VoiceOver still give.
+            let s = ComposerFooterSegmentView(title: compact ? "" : toggle.label, checked: on, glyph: IconView(name: .workflow, size: 12))
+            s.setAccessibilityRole(.checkBox); s.setAccessibilityLabel(toggle.label)
+            if compact { s.setTooltip(toggle.label) }
             s.action = { [weak self] in self?.onBoolean?(toggle.id, !on) }
             ultracode = ComposerFooterGroupView([s])
         }
-        // The detail layout leaves access to the composer's own chip, which Redesign then always shows (the user, 2026-11-21).
-        if !oneRow {
-            let trigger = ComposerPermissionsTriggerView(mode: runtimeMode, unrestricted: unrestricted)
-            trigger.opensPopupOnPress = true
-            trigger.action = { [weak self, weak trigger] in if let trigger { self?.onPermissions?(trigger) } }
-            permissions = trigger
+        return (speed, ultracode)
+    }
+
+    /// A two-state option toggles like Ultracode; a select shows its name muted and its value ("Context 1M"), compact
+    /// only its value, and opens its choices as a menu.
+    private func chip(_ d: ProviderOptionDescriptor, compact: Bool) -> ComposerFooterGroupView {
+        let s: ComposerFooterSegmentView
+        if d.type == .boolean {
+            let on = d.currentValue?.bool == true
+            s = ComposerFooterSegmentView(title: d.label, checked: on)
+            s.setAccessibilityRole(.checkBox)
+            s.action = { [weak self] in self?.onBoolean?(d.id, !on) }
         } else {
-            permissions = nil
+            let id = ModelTraits.currentValue(d)?.string
+            let value = d.options.first { $0.id == id }?.label ?? ""
+            s = ComposerFooterSegmentView(title: value, checked: false, caption: compact ? nil : d.label)
+            s.setAccessibilityRole(.popUpButton); s.setAccessibilityLabel("\(d.label): \(value)")
+            s.opensPopupOnPress = true
+            s.action = { [weak self, weak s] in if let s { self?.onOpenOption?(d, s) } }
         }
-        for v in [speed, ultracode, permissions].compactMap({ $0 as NSView? }) { addSubview(v) }
-        if let f = focusIndex { focusIndex = min(f, items.count - 1) }
-        needsLayout = true
-        needsDisplay = true
-        if stacked { onSizeChange?() }
+        s.setTooltip(d.description ?? (compact ? d.label : nil))
+        return ComposerFooterGroupView([s])
     }
 
     /// Stacked: `flex-wrap` in 335pt, 8pt in and 6pt apart so Standard, Fast, Ultracode and Full access share one line as
@@ -987,13 +1072,8 @@ final class ComposerPickerFooterView: DSView {
 
     @discardableResult
     private func placeStacked(width w: CGFloat, apply: Bool) -> CGFloat {
-        permissions?.showsChevron = false
-        permissions?.inset = 6
-        for group in [speed, ultracode].compactMap({ $0 }) { group.segments.forEach { $0.inset = 6 } }
         var x: CGFloat = 8, y: CGFloat = 9
-        let parts: [(NSView, CGFloat)] = [speed, ultracode].compactMap { $0 }.map { ($0, $0.naturalWidth) }
-            + [permissions].compactMap { $0 }.map { ($0, $0.naturalWidth) }
-        for (view, width) in parts {
+        for (view, width) in inlineParts {
             if x > 8, x + width > w - 8 { x = 8; y += 28 + 6 }
             let px = view === permissions ? w - 8 - width : x
             if apply { view.frame = NSRect(x: px, y: y, width: width, height: 28) }
@@ -1118,10 +1198,17 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
     }
 
     /// The popup's width in the detail layout: the list card's default width and the details card's, with the gaps.
-    /// The bottom row widens it when its controls need more (they never wrap or shrink).
+    /// The levels keep their width; the chips drop their names, then fold into one "Options" chip, to fit beside them.
+    /// The popup widens only when even that does not fit.
     static var detailWidth: CGFloat { ModelPickerView.detailListWidth + ModelDetailPaneView.width + 2 * gap }
+    private func fitRow() {
+        let track = column.trackWidth
+        footer.fit = footer.bestFit(within: Self.detailWidth - 2 * Self.gap - (track > 0 ? track + 12 : 0))
+    }
     private var popupWidth: CGFloat {
-        let row = column.trackWidth + footer.inlineWidth + (column.trackWidth > 0 && footer.inlineWidth > 0 ? 12 : 0) + 2 * Self.gap
+        fitRow()
+        let track = column.trackWidth
+        let row = track + footer.inlineWidth + (track > 0 && footer.inlineWidth > 0 ? 12 : 0) + 2 * Self.gap
         return max(Self.detailWidth, ceil(row))
     }
     /// The details card's width: the live drag, the saved width, or the default, kept inside `paneLimits`.
@@ -1323,6 +1410,7 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         if detailed {
             // The host caps the height; the cards give up the space, and the list scrolls.
             let w = bounds.width, g = Self.gap
+            fitRow()
             column.reservesLine = !footer.items.isEmpty
             let columnH = column.stackedHeight(width: w)
             let topH = max(0, bounds.height - g - columnH)

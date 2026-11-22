@@ -130,6 +130,97 @@ import T3Store
         }
     }
 
+    static let context = ProviderOptionDescriptor(id: "contextWindow", label: "Context", type: .select,
+                                                  options: [ProviderOptionChoice(id: "200k", label: "200K"), ProviderOptionChoice(id: "1m", label: "1M")],
+                                                  currentValue: .string("1m"))
+
+    /// Every option is a chip on the one row (the user, 2026-11-22): a select reads "Context 1M" and opens a menu, a
+    /// two-state option toggles, and none falls to a full-width row. Five levels, speed, Ultracode and Context fit the
+    /// default popup at every details card width; more chips drop their names, then fold into one "Options" chip.
+    @Test func everyOptionIsAChipOnTheOneRow() throws {
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let rig = ModelPickerShrinkTests.Rig(), dock = rig.dock
+            let height = dock.naturalSize.height
+            let all = [RedesignPickerLayoutTests.levels, Self.context] + RedesignPickerLayoutTests.footerOptions
+            dock.column.update(descriptors: all, ultrathink: false, locked: false, model: "Opus 5.5")
+            dock.footer.update(descriptors: all, runtimeMode: .fullAccess)
+            rig.lay()
+            #expect(dock.column.rows.allSatisfy { if case .level = $0.kind { true } else { false } }, "no full-width option row")
+            #expect(dock.naturalSize.height == height, "Context on the line keeps the popup's height")
+            #expect(dock.naturalSize.width == DockedModelPickerView.detailWidth)
+            #expect(dock.footer.chips.count == 1 && dock.footer.items.count == 4)
+            var opened: String?
+            dock.footer.onOpenOption = { d, _ in opened = d.id }
+            dock.footer.chips.first?.segments.first?.action?()
+            #expect(opened == "contextWindow")
+            for paneWidth in [dock.paneLimits.lowerBound, dock.paneLimits.upperBound] {
+                dock.paneHandle.onResize?(paneWidth)
+                rig.lay()
+                let track = try #require(dock.column.levelLines.first)
+                #expect(dock.column.segments.count == 5 && track.frame.width == track.naturalWidth)
+                #expect(track.segments.allSatisfy { $0.frame.width >= $0.naturalWidth }, "the levels never shrink")
+                #expect(dock.column.convert(track.frame, to: dock).maxX + 6 <= dock.footer.frame.minX)
+                #expect(dock.footer.frame.maxX == dock.bounds.width - 6 && dock.footer.frame.width == dock.footer.inlineWidth)
+                let parts = dock.footer.subviews.filter { $0 is ComposerFooterGroupView }.sorted { $0.frame.minX < $1.frame.minX }
+                #expect(zip(parts, parts.dropFirst()).allSatisfy { $0.frame.maxX <= $1.frame.minX }, "chips overlap")
+                #expect(parts.allSatisfy { $0.frame.maxX <= dock.footer.bounds.width })
+            }
+            dock.paneHandle.onReset?()
+
+            // The collapse steps, in order.
+            let footer = dock.footer
+            #expect(footer.bestFit(within: .infinity) == .full && footer.bestFit(within: 0) == .collapsed)
+            footer.fit = .full; let full = footer.inlineWidth
+            footer.fit = .compact; let compact = footer.inlineWidth
+            #expect(compact < full && footer.bestFit(within: compact) == .compact)
+            #expect(footer.chips.first?.segments.first?.title == "1M")
+            footer.fit = .collapsed
+            #expect(footer.speed == nil && footer.ultracode == nil && footer.chips.count == 1 && footer.chips[0].segments[0].title == "Options")
+            var menu: [String]?
+            footer.onOpenOptions = { ds, _ in menu = ds.map(\.id) }
+            footer.items.first?.action?()
+            #expect(menu == ["fastMode", "ultracode", "contextWindow"])
+            #expect(footer.bestFit(within: compact - 1) == .collapsed)
+
+            // Enough chips that the full row cannot fit: they drop their names first, the levels keep theirs.
+            let extra = (1...3).map { i in
+                ProviderOptionDescriptor(id: "opt\(i)", label: "Option \(i)", type: .select,
+                                         options: [ProviderOptionChoice(id: "a", label: "A")], currentValue: .string("a"))
+            }
+            dock.column.update(descriptors: all + extra, ultrathink: false, locked: false, model: "Opus 5.5")
+            footer.update(descriptors: all + extra, runtimeMode: .fullAccess)
+            rig.lay()
+            #expect(footer.fit != .full && dock.naturalSize.width == DockedModelPickerView.detailWidth)
+            let track = try #require(dock.column.levelLines.first)
+            #expect(dock.column.convert(track.frame, to: dock).maxX + 6 <= footer.frame.minX)
+            #expect(dock.column.rows.count == 5)
+
+            // No levels: the chips alone at the right. No options: no row.
+            dock.column.update(descriptors: [Self.context], ultrathink: false, locked: false, model: "Haiku")
+            footer.update(descriptors: [Self.context], runtimeMode: .fullAccess)
+            rig.lay()
+            #expect(footer.fit == .full && footer.items.count == 1 && footer.frame.maxX == dock.bounds.width - 6)
+            #expect(dock.column.frame.height == 34)
+            dock.column.update(descriptors: [], ultrathink: false, locked: false, model: "Haiku")
+            footer.update(descriptors: [], runtimeMode: .fullAccess)
+            rig.lay()
+            #expect(dock.column.frame.height == 0 && dock.naturalSize.height == height - 34)
+        }
+    }
+
+    /// The default themes keep T3's column: a select is an option row with a side menu, and the footer adds no chip.
+    @Test func defaultThemesKeepTheOptionRow() throws {
+        try ModelPickerShrinkTests.withTheme(.standard, stacked: false) {
+            let rig = ModelPickerShrinkTests.Rig(), dock = rig.dock
+            let all = [RedesignPickerLayoutTests.levels, Self.context] + RedesignPickerLayoutTests.footerOptions
+            dock.column.update(descriptors: all, ultrathink: false, locked: false, model: "Opus 5.5")
+            dock.footer.update(descriptors: all, runtimeMode: .fullAccess)
+            rig.lay()
+            #expect(dock.column.rows.contains { $0.kind == .menu(label: "Context", value: "1M") })
+            #expect(dock.footer.chips.isEmpty)
+        }
+    }
+
     /// Dragging the details card's left edge: the drag math clamps, commits once, and double-click restores the default.
     @Test func theDetailsCardResizes() throws {
         #expect(ModelDetailPaneResizeHandle.width(from: 276, startX: 500, to: 450, in: 240...332) == 326)

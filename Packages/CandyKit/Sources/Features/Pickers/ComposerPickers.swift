@@ -337,6 +337,8 @@ public final class ComposerPickers {
         dock.footer.onSelect = { [weak self] d, value in self?.pickSelect(d, value) }
         dock.footer.onBoolean = { [weak self] id, on in self?.pickBoolean(id, on) }
         dock.footer.onPermissions = { [weak self] trigger in self?.openFooterPermissions(trigger) }
+        dock.footer.onOpenOption = { [weak self] d, chip in self?.openOptionMenu(d, from: chip, side: .top) }
+        dock.footer.onOpenOptions = { [weak self] descriptors, chip in self?.openOptionsMenu(descriptors, from: chip) }
         docked = dock
         let body: PickerPopupBody = dock
         // Docked, the popup opens above the composer and slides over it when that space is short
@@ -387,10 +389,10 @@ public final class ComposerPickers {
 
     /// The menu content (TraitsPicker.tsx:390-486): one radio group per select descriptor, then
     /// On and Off groups for boolean descriptors.
-    func traitsEntries() -> [PickerMenuEntry] {
-        let descriptors = current.descriptors
+    func traitsEntries(_ descriptors: [ProviderOptionDescriptor]? = nil) -> [PickerMenuEntry] {
+        let descriptors = descriptors ?? current.descriptors
         let selects = descriptors.filter { $0.type == .select }, booleans = descriptors.filter { $0.type == .boolean }
-        let primary = selects.first?.id
+        let primary = current.descriptors.first { $0.type == .select }?.id
         let controlled = ultrathinkControlled
         let locked = controlled && ModelTraits.ultrathinkInBody(prompt)
         var out: [PickerMenuEntry] = []
@@ -444,8 +446,10 @@ public final class ComposerPickers {
     }
 
     /// `OptionMenuRow` (ComposerModelEffort.tsx:385-485): the option's choices beside the column; a pick closes it.
-    private func openOptionMenu(_ d: ProviderOptionDescriptor, from row: NSView) {
+    /// Redesign's footer chips open it above the chip, end aligned, as the Permissions chip does.
+    private func openOptionMenu(_ d: ProviderOptionDescriptor, from row: NSView, side: PopupPlacement.Side = .right) {
         guard let host = row.popupHost, let parent = openPopup else { return }
+        if side == .top, let open = host.popups.first(where: { $0.trigger === row }) { host.close(open); return }
         let value = ModelTraits.currentValue(d)?.string
         let entries = ComposerEffortControls.choices(d).map { choice in
             PickerMenuEntry.option(choice.label, badge: choice.isDefault == true ? "Default" : nil, description: choice.description,
@@ -455,10 +459,20 @@ public final class ComposerPickers {
             }
         }
         let menu = PickerMenuView(entries: entries, style: .menu, minimumWidth: 160)
-        let popup = host.open(PickerPopupView(menu), trigger: row, placement: PopupPlacement(side: .right, align: .start, sideOffset: 6),
-                              swallowsOutsideClick: true, parent: parent)
+        let placement = side == .top ? PopupPlacement(side: .top, align: .end, sideOffset: 4) : PopupPlacement(side: .right, align: .start, sideOffset: 6)
+        let popup = host.open(PickerPopupView(menu), trigger: row, placement: placement, swallowsOutsideClick: true, parent: parent)
         menu.onClose = { [weak host, weak popup] in if let host, let popup { host.close(popup) } }
         menu.highlightedIndex = menu.selectableIndices.first { menu.entry($0).checked }
+    }
+
+    /// Redesign's collapsed "Options" chip: every option on the row in one menu, grouped as the traits menu groups them.
+    private func openOptionsMenu(_ descriptors: [ProviderOptionDescriptor], from chip: NSView) {
+        guard let host = chip.popupHost, let parent = openPopup else { return }
+        if let open = host.popups.first(where: { $0.trigger === chip }) { host.close(open); return }
+        let menu = PickerMenuView(entries: traitsEntries(descriptors), style: .menu, minimumWidth: 160)
+        let popup = host.open(PickerPopupView(menu), trigger: chip, placement: PopupPlacement(side: .top, align: .end, sideOffset: 4),
+                              swallowsOutsideClick: true, parent: parent)
+        menu.onClose = { [weak host, weak popup] in if let host, let popup { host.close(popup) } }
     }
 
     /// `composer.increaseEffort` and `composer.decreaseEffort` (ChatComposer.tsx:6054-6082): stores the
