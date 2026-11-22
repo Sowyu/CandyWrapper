@@ -2165,6 +2165,8 @@ public final class ThreadPanelView: DSView {
         }
         func cluster(_ titled: Bool) -> CGFloat { rightPills.reduce(0) { $0 + pillWidth($1, titled) + spacing } }
         let leftNeed = left > px ? left - px : pills.first.map { min($0.1, pw) + spacing } ?? 0
+        // The subagent pill gets what the row leaves beside the context pills and an untitled Stash.
+        strip?.maxWidth = max(0, pw - (left > px ? left - px : 0) - (badgeShown ? stashBadge.width(showingTitle: false) + spacing : 0))
         let titled = leftNeed + cluster(true) <= pw || (leftNeed + cluster(false) > pw && cluster(true) <= pw)
         for view in rightPills.reversed() {
             (view as? ComposerStashBadgeView)?.showsTitle = titled

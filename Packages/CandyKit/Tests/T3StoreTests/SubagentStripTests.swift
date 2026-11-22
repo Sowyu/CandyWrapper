@@ -6,11 +6,11 @@ import Testing
 /// Redesign's subagent strip: which subagents it lists, in what order, with what status, and when the pill shows.
 @Suite struct SubagentStripTests {
     private func agent(_ id: String, child: String?, status: String, run: String = "run-2", origin: String = "app_owned",
-                       started: Bool = true, extra: String = "") -> JSONValue {
+                       started: Bool = true, extra: String = "", driver: String = "claudeAgent", instance: String = "claude") -> JSONValue {
         let childField = child.map { "\"\($0)\"" } ?? "null"
         let json = """
-            {"id":"\(id)","threadId":"parent","runId":"\(run)","origin":"\(origin)","driver":"claudeAgent",
-             "providerInstanceId":"claude","childThreadId":\(childField),"prompt":"Sleep then reply ok","title":"Task \(id)",
+            {"id":"\(id)","threadId":"parent","runId":"\(run)","origin":"\(origin)","driver":"\(driver)",
+             "providerInstanceId":"\(instance)","childThreadId":\(childField),"prompt":"Sleep then reply ok","title":"Task \(id)",
              "model":"claude-haiku-5-5","status":"\(status)","result":null,
              "startedAt":\(started ? "\"2026-10-23T10:00:00.000Z\"" : "null"),"completedAt":null\(extra)}
             """
@@ -39,7 +39,6 @@ import Testing
         // The child's shell title wins; a missing child falls back to the record's title.
         #expect(strip.rows.map(\.title) == ["Task c", "Child c2", "Child c4", "Child c1"])
         #expect(strip.activeCount == 2)
-        #expect(strip.pillText == "2")
         #expect(strip.isVisible)
     }
 
@@ -81,11 +80,30 @@ import Testing
         }
         let waiting = SubagentStrip.make(subagents: records, shells: [], latestTurn: ["run-2"], parent: idle)
         #expect(waiting.parentWaiting)
-        #expect(waiting.pillText == "Waiting on 2")
+        #expect(waiting.pillDescription(order: [], driverName: { _ in "Claude" }) == "Waiting on 2 Claude subagents")
         let working = thread("parent") { $0.status = .running; $0.activityRunStatus = .running }
         let running = SubagentStrip.make(subagents: records, shells: [], latestTurn: ["run-2"], parent: working)
         #expect(!running.parentWaiting)
-        #expect(running.pillText == "2")
+        #expect(running.pillDescription(order: [], driverName: { _ in "Claude" }) == "2 Claude subagents running")
+    }
+
+    @Test func pillGroupsLiveSubagentsByPickerOrderThenStartOrder() {
+        // Started in this order: claude a, codex b, claude c..f; g finished.
+        let records = [agent("a", child: nil, status: "running"), agent("b", child: nil, status: "running", driver: "codex", instance: "codex"),
+                       agent("c", child: nil, status: "running"), agent("d", child: nil, status: "waiting"),
+                       agent("e", child: nil, status: "running"), agent("f", child: nil, status: "pending"),
+                       agent("g", child: nil, status: "completed"),
+                       agent("h", child: nil, status: "running", driver: "", instance: "gone")]
+        let idle = thread("parent") { $0.status = .completed; $0.pendingBackgroundTasks = [PendingBackgroundTask(taskId: "a", kind: .subagent)] }
+        let strip = SubagentStrip.make(subagents: records, shells: [], latestTurn: ["run-2"], parent: idle)
+        let order = [SubagentStrip.Provider(instanceId: "codex", driver: "codex", name: "Codex"),
+                     SubagentStrip.Provider(instanceId: "claude", driver: "claudeAgent", name: "Claude")]
+        #expect(strip.pillAgents(order: order).map(\.id) == ["b", "a", "c", "d", "e", "f", "h"])
+        #expect(strip.pillAgents(order: order.reversed()).map(\.id) == ["a", "c", "d", "e", "f", "b", "h"])
+        #expect(strip.pillDescription(order: order.reversed(), driverName: { $0 })
+                == "Waiting on 5 Claude, 1 Codex and 1 other subagents")
+        let two = SubagentStrip.make(subagents: Array(records.prefix(6)), shells: [], latestTurn: ["run-2"], parent: idle)
+        #expect(two.pillDescription(order: order.reversed(), driverName: { $0 }) == "Waiting on 5 Claude and 1 Codex subagents")
     }
 
     @Test func stopFollowsLineageRules() {

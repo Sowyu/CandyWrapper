@@ -201,6 +201,10 @@ enum ProviderIcon {
         return d
     }()
 
+    /// Drivers `make` has a glyph for; any other gets initials.
+    static let glyphDrivers: Set<String> = ["claudeAgent", "codex", "cursor", "grok", "fx", "pi", "muse", "opencode",
+                                            "antigravity", "kiro", "acpRegistry"]
+
     static func make(driver: String, displayName: String, size: CGFloat, color: NSColor = Themed.color(\.contrastForeground),
                      model: Bool = false) -> NSView {
         switch driver {

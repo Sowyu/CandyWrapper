@@ -3,28 +3,67 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
-/// Redesign's subagent strip (after Capy's activity strip, docs/research/capy-subagents.md): a pill in the row above
-/// the composer with the status glyph, the count and a chevron, which opens `SubagentStripPanelView` over the timeline.
+/// The subagent strip (after Capy's activity strip, docs/research/capy-subagents.md): a pill in the row above the
+/// composer with the status glyph, "Waiting on" while the thread waits, one provider icon per live subagent and a
+/// chevron, which opens `SubagentStripPanelView` over the timeline. T3 has no such pill: its nearest is the background
+/// work banner, "Waiting on 2 subagents" in words (ThreadActivityBanners.tsx:245-262, threadExecution.ts:674-695).
 public final class SubagentStripPillView: ComposerBannerView {
     public var onToggle: (() -> Void)?
     public var expanded = false { didSet { if expanded != oldValue { restyle() } } }
     public private(set) var strip = SubagentStrip()
+    /// The live subagents in icon order.
+    public private(set) var agents: [SubagentStrip.Row] = []
+    /// The most room the pill gets. It drops "Waiting on" first, then icons from the end into "+N".
+    public var maxWidth: CGFloat = .greatestFiniteMagnitude { didSet { if maxWidth != oldValue { needsLayout = true } } }
 
     private let row = BannerRowButton()
     private var glyph: NSView = NSView()
     private var glyphStatus: SubagentStrip.Status?
-    private let label = glassLabel("0", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
+    private let words = glassLabel("Waiting on", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
+    private let more = glassLabel("", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
+    private let probe = glassLabel("", font: DSFont.ui(12, weight: .medium), color: .clear, lineHeight: 16)
+    private var icons: [String: NSView] = [:]
+    private var animateIcons = false
     /// Up while closed, down while open (Capy's `rotate-180`), as two glyphs: rotating a layer-backed view's layer
     /// moved it off its frame.
     private let chevronUp = IconView(name: .chevronUp, size: 12, strokeColor: Themed.color(\.mutedForeground))
     private let chevronDown = IconView(name: .chevronDown, size: 12, strokeColor: Themed.color(\.mutedForeground))
 
     static let padX: CGFloat = 6, glyphColumn: CGFloat = 24, chevron: CGFloat = 12, gap: CGFloat = 4
+    static let icon: CGFloat = 12
+    /// Space between icons; the picture test also draws them overlapped with a negative gap.
+    static var iconGap: CGFloat = 4
+    // ponytail: 8 icons at most, the rest as "+N"; raise it if threads often wait on more and the row has room
+    static let maxIcons = 8
+
+    /// What the pill shows at a width: the words or not, how many icons, and the "+N" count.
+    struct Fit: Equatable { var words: Bool; var shown: Int; var more: Int }
+
+    static func width(_ fit: Fit, wordsWidth: CGFloat, moreWidth: (Int) -> CGFloat) -> CGFloat {
+        let icons = CGFloat(fit.shown) * icon + CGFloat(max(0, fit.shown - 1)) * iconGap
+        return 2 * padX + glyphColumn + (fit.words ? wordsWidth + gap : 0) + icons
+            + (fit.more > 0 ? gap + moreWidth(fit.more) : 0) + gap + chevron + 6
+    }
+
+    /// The widest fit within `maxWidth`: up to `maxIcons` with the words, then without them, then fewer icons,
+    /// down to one.
+    static func fit(count: Int, waiting: Bool, maxWidth: CGFloat, wordsWidth: CGFloat, moreWidth: (Int) -> CGFloat) -> Fit {
+        var shown = min(count, maxIcons)
+        if waiting {
+            let f = Fit(words: true, shown: shown, more: count - shown)
+            if width(f, wordsWidth: wordsWidth, moreWidth: moreWidth) <= maxWidth { return f }
+        }
+        while shown > 1, width(Fit(words: false, shown: shown, more: count - shown), wordsWidth: wordsWidth, moreWidth: moreWidth) > maxWidth {
+            shown -= 1
+        }
+        return Fit(words: false, shown: shown, more: count - shown)
+    }
 
     public init() {
         super.init(variant: .neutral)
         placement = .floating
-        row.addSubview(label)
+        row.addSubview(words)
+        row.addSubview(more)
         row.addSubview(chevronUp)
         row.addSubview(chevronDown)
         row.action = { [weak self] in self?.onToggle?() }
@@ -33,11 +72,13 @@ public final class SubagentStripPillView: ComposerBannerView {
         restyle()
     }
 
-    public func configure(_ strip: SubagentStrip) {
-        guard strip != self.strip else { return }
-        let widthChanged = strip.pillText != self.strip.pillText
+    /// `providers`: the model picker's instances in rail order, which sets the icons' order and names them.
+    public func configure(_ strip: SubagentStrip, providers: [SubagentStrip.Provider] = []) {
+        let agents = strip.pillAgents(order: providers)
+        guard strip != self.strip || agents.map(\.key) != self.agents.map(\.key) else { return }
+        let old = Set(self.agents.map(\.key))
         self.strip = strip
-        label.text = strip.pillText
+        self.agents = agents
         // The pill spins while anything runs; waiting or asking alone shows that glyph instead.
         let status: SubagentStrip.Status = strip.rows.contains { $0.status == .running } ? .running
             : strip.rows.first { !$0.finished }?.status ?? .running
@@ -47,22 +88,59 @@ public final class SubagentStripPillView: ComposerBannerView {
             glyph = SubagentStripGlyph.make(status, size: 12)
             row.addSubview(glyph)
         }
+        var kept: [String: NSView] = [:]
+        for agent in agents {
+            if let v = icons.removeValue(forKey: agent.key) { kept[agent.key] = v; continue }
+            let v = Self.icon(agent, providers: providers)
+            row.addSubview(v)
+            kept[agent.key] = v
+        }
+        icons.values.forEach { $0.removeFromSuperview() }
+        icons = kept
+        // Under Redesign the icons left behind close up when one finishes; a new one just appears.
+        animateIcons = window != nil && !Motion.reduced && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+            && !old.isEmpty && Set(agents.map(\.key)).isSubset(of: old)
+        let description = strip.pillDescription(order: providers, driverName: SidebarProviderUpdatePillModel.displayName)
+        row.setTooltip(description)
+        accessibilityText = description
         updateAccessibility()
         needsLayout = true
-        if widthChanged { superview?.needsLayout = true }
+        superview?.needsLayout = true
     }
 
-    /// Stash's layout: 6 a side, the 24pt glyph column, the label, 4, the chevron, then 6 inside the row.
-    public var preferredWidth: CGFloat { 2 * Self.padX + Self.glyphColumn + ceil(label.textWidth) + Self.gap + Self.chevron + 6 }
+    private var accessibilityText = ""
+    var shownIconCount: Int { agents.filter { icons[$0.key]?.isHidden == false }.count }
+
+    static func icon(_ agent: SubagentStrip.Row, providers: [SubagentStrip.Provider]) -> NSView {
+        let color = Themed.color(\.mutedForeground)
+        let v = ProviderIcon.glyphDrivers.contains(agent.driver)
+            ? ProviderIcon.make(driver: agent.driver, displayName: providers.first { $0.instanceId == agent.providerInstanceId }?.name ?? agent.driver,
+                                size: icon, color: color, model: true)
+            : IconView(name: .bot, size: icon, strokeColor: color)
+        v.setAccessibilityElement(false)
+        return v
+    }
+
+    private var currentFit: Fit {
+        Self.fit(count: agents.count, waiting: strip.parentWaiting, maxWidth: maxWidth, wordsWidth: ceil(words.textWidth),
+                 moreWidth: measureMore)
+    }
+
+    private func measureMore(_ n: Int) -> CGFloat {
+        probe.text = "+\(n)"
+        return ceil(probe.textWidth)
+    }
+
+    public var preferredWidth: CGFloat { Self.width(currentFit, wordsWidth: ceil(words.textWidth), moreWidth: measureMore) }
 
     private func updateAccessibility() {
-        row.setAccessibilityLabel(strip.accessibilityLabel + (expanded ? ". Hide subagents." : ". Show subagents."))
+        row.setAccessibilityLabel(accessibilityText + (expanded ? ". Hide subagents." : ". Show subagents."))
     }
 
     private func restyle() {
         let strong = expanded || row.state.hovered
         Motion.transitioning(window == nil ? [] : .colors, duration: 0.2) {
-            label.color = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
+            for l in [words, more] { l.color = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground) }
             for c in [chevronUp, chevronDown] { c.strokeColor = strong ? Themed.color(\.foreground) : Themed.color(\.mutedForeground) }
         }
         chevronUp.isHidden = expanded
@@ -72,12 +150,54 @@ public final class SubagentStripPillView: ComposerBannerView {
 
     public override func layout() {
         super.layout()
+        let fit = currentFit
         row.frame = NSRect(x: Self.padX, y: ((bounds.height - 24) / 2).rounded(), width: max(0, bounds.width - 2 * Self.padX), height: 24)
         glyph.frame = NSRect(x: 6, y: 6, width: 12, height: 12)
-        label.frame = NSRect(x: Self.glyphColumn, y: 4, width: ceil(label.textWidth), height: 16)
-        let chevron = NSRect(x: label.frame.maxX + Self.gap, y: 6, width: Self.chevron, height: Self.chevron)
+        var x = Self.glyphColumn
+        words.isHidden = !fit.words
+        if fit.words {
+            words.frame = NSRect(x: x, y: 4, width: ceil(words.textWidth), height: 16)
+            x = words.frame.maxX + Self.gap
+        }
+        for (i, agent) in agents.enumerated() {
+            guard let v = icons[agent.key] else { continue }
+            v.isHidden = i >= fit.shown
+            guard !v.isHidden else { continue }
+            v.frame = NSRect(x: x, y: 6, width: Self.icon, height: Self.icon)
+            x += Self.icon + Self.iconGap
+        }
+        x -= Self.iconGap
+        more.isHidden = fit.more == 0
+        if fit.more > 0 {
+            more.text = "+\(fit.more)"
+            more.frame = NSRect(x: x + Self.gap, y: 4, width: ceil(more.textWidth), height: 16)
+            x = more.frame.maxX
+        }
+        let chevron = NSRect(x: x + Self.gap, y: 6, width: Self.chevron, height: Self.chevron)
         chevronUp.frame = chevron
         chevronDown.frame = chevron
+    }
+
+    /// After a subagent finished under Redesign, the next frame the row gives the pill animates, and so does the
+    /// layout under it, so the icons close up as the pill narrows. Each frame ends on its resting value.
+    public override var frame: NSRect {
+        get { super.frame }
+        set {
+            guard animateIcons else { super.frame = newValue; return }
+            animateIcons = false
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = RedesignTokens.Motion.fast
+                ctx.timingFunction = RedesignTokens.Motion.curve
+                ctx.allowsImplicitAnimation = true
+                CATransaction.begin()
+                CATransaction.setAnimationDuration(RedesignTokens.Motion.fast)
+                CATransaction.setAnimationTimingFunction(RedesignTokens.Motion.curve)
+                super.frame = newValue
+                needsLayout = true
+                layoutSubtreeIfNeeded()
+                CATransaction.commit()
+            }
+        }
     }
 }
 
