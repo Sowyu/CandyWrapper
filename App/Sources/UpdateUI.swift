@@ -90,11 +90,13 @@ final class UpdateUI {
         Task {
             await footerCheck.run(checks: [
                 { [updater] in
-                    let result = await updater.check(background: true)
-                    // A check or download already under way is not a failure (canCheckForUpdate, desktopUpdate.logic.ts:195).
-                    if !result.checked, result.state.status == .downloading || result.state.status == .checking { return [.busy] }
+                    // The same user check as Settings and the menu, so the three cannot disagree. It joins a check
+                    // under way and retries a transient failure once (`UpdateController.checkFailed`).
+                    let result = await updater.check()
+                    // A download under way is not a failure (canCheckForUpdate, desktopUpdate.logic.ts:195).
+                    if !result.checked, result.state.status == .downloading { return [.busy] }
                     if result.checked, result.state.errorContext != .check { return [.checked] }
-                    return [.appFailed(reason: result.state.message)]
+                    return [.appFailed(reason: result.state.message ?? updater.disabledReason)]
                 },
                 checkEnvironmentUpdates
             ], hasUpdates: { [updater, runtime] in
@@ -103,6 +105,9 @@ final class UpdateUI {
             })
             switch footerCheck.state {
             case .upToDate: toast("Up to date", nil, .success)
+            case .busy:
+                let version = updater.state.availableVersion.map { "CandyWrapper \($0)" } ?? "An update"
+                toast("Update already downloading", "\(version) is downloading. The update button shows Restart when it is ready.", .info)
             case .failed:
                 let copy = SidebarUpdateCheck.failureCopy(footerCheck.failures)
                 toast(copy.title, copy.message)

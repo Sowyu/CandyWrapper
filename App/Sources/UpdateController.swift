@@ -35,6 +35,10 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     private var wantsDownload = false
     private var wantsInstall = false
     private var checkWaiters: [(DesktopUpdateState) -> Void] = []
+    /// The one retry of a check that failed for a transient reason (`UpdateCheckError.isTransient`), waiting
+    /// out `UpdateCheckError.retryDelay`. The check stays `checking` meanwhile, and its waiters get the retry's result.
+    private var retryTask: Task<Void, Never>?
+    private var retriedCheck = false
     private var downloadWaiter: ((Bool) -> Void)?
     private var installWaiter: (() -> Void)?
     private var checkAfterSession = false
@@ -110,7 +114,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         if installReply != nil || resumedReply != nil { return (true, state) }
         let result = await withCheckedContinuation { (c: CheckedContinuation<DesktopUpdateState, Never>) in
             checkWaiters.append { c.resume(returning: $0) }
-            if state.status == .checking, updater.sessionInProgress { return } // a background check is under way
+            // A check under way, or waiting to retry, answers this one too.
+            if state.status == .checking, updater.sessionInProgress || retryTask != nil { return }
             if updater.sessionInProgress {
                 checkAfterSession = true
                 checkInBackgroundAfterSession = background
@@ -212,15 +217,15 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
-        cycleFinished(error: error)
+        cycleFinished(error: error, background: updateCheck == .updatesInBackground)
     }
 
-    private func cycleFinished(error: Error?) {
+    private func cycleFinished(error: Error?, background: Bool) {
         let ns = error as NSError?
         let noUpdate = ns == nil || (ns?.domain == SUSparkleErrorDomain && ns?.code == Int(SUError.noUpdateError.rawValue))
-        if state.status == .checking {
-            state = noUpdate ? state.onNoUpdate(at: Date()) : state.onCheckFailure(message(ns), at: Date())
-            resolveChecks()
+        // A user check's error already reached `showUpdaterError`, which may have scheduled the retry.
+        if state.status == .checking, retryTask == nil {
+            if noUpdate { state = state.onNoUpdate(at: Date()); resolveChecks() } else { checkFailed(ns, background: background) }
         }
         if state.status == .downloading || wantsDownload {
             wantsDownload = false
@@ -311,8 +316,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
             state = state.onInstallFailure(text)
             finishInstall()
         default:
-            state = state.onCheckFailure(text, at: Date())
-            resolveChecks()
+            checkFailed(error as NSError, background: false)
         }
         phase = nil
         acknowledgement()
@@ -389,8 +393,27 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
 
     // MARK: Helpers
 
+    /// Every failed check ends here, whichever button, menu item or timer started it. A transient failure,
+    /// such as the feed missing for the moment `scripts/release` swaps it, gets one retry before it shows.
+    private func checkFailed(_ error: NSError?, background: Bool) {
+        guard !retriedCheck, UpdateCheckError.isTransient(error) else {
+            state = state.onCheckFailure(UpdateCheckError.describe(error), at: Date())
+            return resolveChecks()
+        }
+        retriedCheck = true
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(for: UpdateCheckError.retryDelay)
+            guard let self else { return }
+            self.retryTask = nil
+            guard self.state.status == .checking else { return }
+            guard let updater = self.updater, !updater.sessionInProgress else { return self.checkFailed(error, background: background) }
+            if background { updater.checkForUpdatesInBackground() } else { updater.checkForUpdates() }
+        }
+    }
+
     private func resolveChecks() {
         guard state.status != .checking else { return }
+        retriedCheck = false
         let waiters = checkWaiters
         checkWaiters = []
         waiters.forEach { $0(state) }
