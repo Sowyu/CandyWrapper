@@ -647,6 +647,15 @@ final class SidebarCommands {
     private func runDeeperRename(parent: ThreadShell, helper: ThreadId, scoped: ThreadId, model: ModelSelection) async -> DeeperOutcome {
         let id = parent.id
         let start = Date()
+        func applyTitle(_ suggestion: String) async -> DeeperOutcome {
+            let current = shell(id)?.title
+            guard let command = DeeperRename.renameCommand(id.localId, original: parent.title, current: current, suggestion: suggestion) else {
+                return current == suggestion ? .success(suggestion) : .failure("The thread changed while the title helper was running.")
+            }
+            do { _ = try await environments.dispatch(id, command) }
+            catch { return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not rename the thread.") }
+            return .success(suggestion)
+        }
         #if DEBUG
         // `CANDY_TITLE_REWRITE_FAIL=1` fails every rewrite after two seconds, to see the way back without a broken server.
         if ProcessInfo.processInfo.environment["CANDY_TITLE_REWRITE_FAIL"] != nil {
@@ -656,9 +665,7 @@ final class SidebarCommands {
         // `CANDY_TITLE_REWRITE_STUB=<title>` answers with that title after three seconds, with no helper turn.
         if let stub = ProcessInfo.processInfo.environment["CANDY_TITLE_REWRITE_STUB"] {
             try? await Task.sleep(for: .seconds(3))
-            guard stub != shell(id)?.title else { return .success(stub) }
-            do { _ = try await environments.dispatch(id, ThreadCommands.rename(id.localId, title: stub)) } catch { return .failure("Could not rename the thread.") }
-            return .success(stub)
+            return await applyTitle(stub)
         }
         #endif
         func timedOut() -> Bool { Date().timeIntervalSince(start) > DeeperRename.timeout }
@@ -698,11 +705,7 @@ final class SidebarCommands {
               let reply = DeeperRename.reply(in: snapshot.projection), let title = DeeperRename.title(fromReply: reply) else {
             return .failure("The title helper gave no title. The title is unchanged.")
         }
-        guard title != shell(id)?.title else { return .success(title) }
-        do { _ = try await environments.dispatch(id, ThreadCommands.rename(id.localId, title: title)) } catch {
-            return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not rename the thread.")
-        }
-        return .success(title)
+        return await applyTitle(title)
     }
 
     private static let ownedHelperKey = "titleRewrite.ownedHelpers"

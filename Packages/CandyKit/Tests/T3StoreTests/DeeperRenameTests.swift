@@ -4,6 +4,12 @@ import T3Protocol
 
 /// Deeper rename: the helper's reply becomes a short title, on the provider's cheapest model, offered in the menu.
 struct DeeperRenameTests {
+    @Test func aPendingRewritePreservesAnInterveningRename() {
+        #expect(DeeperRename.renameCommand("t", original: "First", current: "Manual edit", suggestion: "Helper title") == nil)
+        #expect(DeeperRename.renameCommand("t", original: "First", current: nil, suggestion: "Helper title") == nil)
+        #expect(DeeperRename.renameCommand("t", original: "First", current: "First", suggestion: "Helper title") != nil)
+    }
+
     @Test func repliesBecomeShortTitles() {
         #expect(DeeperRename.title(fromReply: "Sourdough starter summer care") == "Sourdough starter summer care")
         #expect(DeeperRename.title(fromReply: "\"Sourdough Starter Care.\"\n") == "Sourdough Starter Care")
