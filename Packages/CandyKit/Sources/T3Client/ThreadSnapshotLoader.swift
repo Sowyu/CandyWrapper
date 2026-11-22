@@ -23,6 +23,21 @@ public actor ThreadSnapshotLoader {
         self.fetch = fetch
     }
 
+    /// The first cold open of a server that pages snapshots (`threadSnapshotPagination` in its config) skips HTTP:
+    /// that server sends the same bounded window over the socket, compressed, so the open costs one round trip
+    /// instead of an HTTP request and then the subscription, and no new connection when the HTTP pool has gone idle.
+    /// A later cold attempt, after that open failed or its session dropped, asks HTTP once. T3 4928 does the same
+    /// (client-runtime state/threads.ts:990-1047, #33306).
+    public func load(serverPagesSnapshots: Bool) async -> ThreadDetailSnapshot? {
+        if serverPagesSnapshots, !socketOpenTried {
+            socketOpenTried = true
+            return nil
+        }
+        return await load()
+    }
+
+    private var socketOpenTried = false
+
     /// Called only without a retained sequence. Try once per subscription owner, including
     /// when an old host lacks the route; reconnects continue through the socket.
     public func load() async -> ThreadDetailSnapshot? {
