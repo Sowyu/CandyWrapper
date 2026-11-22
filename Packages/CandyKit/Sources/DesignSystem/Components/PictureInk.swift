@@ -428,8 +428,19 @@ public enum PictureInk {
         return (L, (A * A + B * B).squareRoot(), h)
     }
 
-    /// Gamma-encoded sRGB at OKLCH, the chroma reduced until it fits sRGB.
+    /// Mid grey, the answer for a lightness or hue that is NaN or infinite.
+    nonisolated static let nonFiniteFallback = SIMD3<Double>(repeating: 0.5)
+    /// Above any sRGB color's OKLCH chroma (about 0.33), so the cap changes nothing a real color can reach and the
+    /// fitting loop below runs at most `maxChroma / 0.002` steps.
+    nonisolated static let maxChroma = 0.5
+
+    /// Gamma-encoded sRGB at OKLCH, the chroma reduced until it fits sRGB. A NaN chroma counts as grey, an infinite
+    /// or huge one as `maxChroma`, a lightness outside -1...2 as the nearer end, and a non-finite lightness or hue gives
+    /// `nonFiniteFallback`.
     nonisolated static func srgb(oklch l: Double, _ c: Double, _ h: Double) -> SIMD3<Double> {
+        guard l.isFinite, h.isFinite else { return nonFiniteFallback }
+        // OKLCH lightness is 0...1. The wider clamp leaves every real color alone and keeps the cubes below finite.
+        let l = min(max(l, -1), 2)
         func linear(_ c: Double) -> SIMD3<Double> {
             let a = c * cos(h * .pi / 180), b = c * sin(h * .pi / 180)
             let l_ = pow(l + 0.3963377774 * a + 0.2158037573 * b, 3)
@@ -439,8 +450,9 @@ public enum PictureInk {
                          -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
                          -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_)
         }
-        var chroma = c
-        while chroma > 0 {
+        var chroma = c.isNaN ? 0 : min(c, maxChroma)
+        // Counted, so no input can spin it: 0.5 / 0.002 is 250 steps, the bound leaves room for rounding.
+        for _ in 0..<Int(maxChroma / 0.002) + 2 where chroma > 0 {
             let v = linear(chroma)
             if v.min() >= -0.0005, v.max() <= 1.0005 { return SIMD3(enc(v.x), enc(v.y), enc(v.z)) }
             chroma -= 0.002
