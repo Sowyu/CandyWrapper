@@ -27,12 +27,6 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
 
     private let lock = NSLock()
     private var states: [Int: State] = [:]
-    /// Tasks that ended before their caller registered: cancelled between creation and `resume`. URLSession may never
-    /// report a task cancelled before it started, so cancellation answers the caller itself; whichever of the two
-    /// removes the task's state resumes it, exactly once.
-    private var endedEarly: Set<Int> = []
-    /// Tasks cancellation already answered, so their late completion is dropped instead of kept in `endedEarly`.
-    private var answered: Set<Int> = []
     private let queue: OperationQueue = {
         let q = OperationQueue()
         q.name = "MediaTransfer"
@@ -43,9 +37,11 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
     /// ids both start at 1, so two transfers shared one entry in `states` and one caller waited forever.
     private var session: URLSession!
 
-    override init() {
+    private let temporaryDirectory: URL
+
+    init(config: URLSessionConfiguration = .default, temporaryDirectory: URL = FileManager.default.temporaryDirectory) {
+        self.temporaryDirectory = temporaryDirectory
         super.init()
-        let config = URLSessionConfiguration.default
         config.urlCache = nil
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.httpShouldSetCookies = false
@@ -59,12 +55,12 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
         guard !Task.isCancelled else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        let file = FileManager.default.temporaryDirectory.appendingPathComponent("cw-media-" + UUID().uuidString)
+        let file = temporaryDirectory.appendingPathComponent("cw-media-" + UUID().uuidString)
         let task = session.dataTask(with: request)
-        return await withTaskCancellationHandler {
+        let result = await withTaskCancellationHandler {
             await withCheckedContinuation { (done: CheckedContinuation<Result?, Never>) in
                 let early = lock.withLock {
-                    if endedEarly.remove(task.taskIdentifier) != nil { return true }
+                    if Task.isCancelled { return true }
                     states[task.taskIdentifier] = State(file: file, progress: progress, done: done)
                     return false
                 }
@@ -73,9 +69,17 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
             }
         } onCancel: {
             task.cancel()
-            end(task.taskIdentifier, error: CancellationError(), cancelling: true)
+            // A response or data callback can still be using the file handle.
+            queue.addOperation { self.end(task.taskIdentifier, error: CancellationError()) }
         }
+        if Task.isCancelled, let result {
+            try? FileManager.default.removeItem(at: result.file)
+            return nil
+        }
+        return result
     }
+
+    func invalidate() { session.invalidateAndCancel() }
 
     private func state(_ task: URLSessionTask) -> State? { lock.withLock { states[task.taskIdentifier] } }
 
@@ -109,18 +113,11 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         ImageTiming.mark("transfer-end", "\(task.taskIdentifier) \(error.map { "\($0)" } ?? "ok")")
-        end(task.taskIdentifier, error: error, cancelling: false)
+        end(task.taskIdentifier, error: error)
     }
 
-    private func end(_ id: Int, error: Error?, cancelling: Bool) {
-        guard let state = lock.withLock({ () -> State? in
-            guard let state = states.removeValue(forKey: id) else {
-                if answered.remove(id) == nil { endedEarly.insert(id) }
-                return nil
-            }
-            if cancelling { answered.insert(id) }
-            return state
-        }) else { return }
+    private func end(_ id: Int, error: Error?) {
+        guard let state = lock.withLock({ states.removeValue(forKey: id) }) else { return }
         try? state.handle?.close()
         if error == nil, let response = state.response {
             state.done.resume(returning: Result(file: state.file, response: response))
