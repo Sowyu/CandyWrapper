@@ -129,8 +129,9 @@ public enum ThreadCostEstimate {
     /// turns count in their own threads only: T3 scopes a turn's totals to the main agent (providerRuntime.ts:321-331).
     /// Nil when nothing priced has usage yet or a subagent's first read is in flight,
     /// so the figure appears once with its subagents instead of jumping when they arrive.
-    public static func breakdown(_ projection: ThreadProjection, id: ThreadId, children: (ThreadId) -> [SubagentThread]) -> Breakdown? {
-        var result = own(projection)
+    public static func breakdown(_ projection: ThreadProjection, id: ThreadId, memo: OwnMemo? = nil,
+                                 children: (ThreadId) -> [SubagentThread]) -> Breakdown? {
+        var result = memo?.own(projection) ?? own(projection)
         var seen: Set<ThreadId> = [id], reading = false
         func walk(_ parent: ThreadId) {
             for child in children(parent) where seen.insert(child.id).inserted {
@@ -149,6 +150,24 @@ public enum ThreadCostEstimate {
         walk(id)
         if reading { return nil }
         return result.models.isEmpty && result.subagents.isEmpty ? nil : result
+    }
+
+    /// `own` for one thread's updates, worked out again only when what it reads changed: the runs, attempts, nodes,
+    /// provider turns or the thread's model. On a long thread `own` takes 2.7 ms (900 runs, 3,600 nodes), and most
+    /// updates only grow a reply or a tool row, which leave those arrays' storage as it was, so the check is cheap.
+    public final class OwnMemo {
+        private var inputs: (runs: [Run], attempts: [RunAttempt], nodes: [ExecutionNode], turns: [JSONValue], model: JSONValue?)?
+        private var result = Breakdown()
+        public init() {}
+
+        public func own(_ projection: ThreadProjection) -> Breakdown {
+            let model = projection.thread.raw["modelSelection"]
+            if let inputs, inputs.runs == projection.runs, inputs.attempts == projection.attempts, inputs.nodes == projection.nodes,
+               inputs.turns == projection.providerTurns, inputs.model == model { return result }
+            inputs = (projection.runs, projection.attempts, projection.nodes, projection.providerTurns, model)
+            result = ThreadCostEstimate.own(projection)
+            return result
+        }
     }
 
     /// The thread's own turns, no models when it has none. Turns on a model without a price only add to `unpricedModels`.

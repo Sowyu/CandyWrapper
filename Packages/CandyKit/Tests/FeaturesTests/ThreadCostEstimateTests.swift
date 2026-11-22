@@ -87,6 +87,22 @@ import T3Protocol
         #expect(abs(unpricedRoot.usd - 2.15) < 1e-9 && unpricedRoot.label == "≥ $2.15")
     }
 
+    /// The memo answers what `own` does after a new provider turn, another model and another thread, and keeps its
+    /// answer while only the turn items change.
+    @Test func theMemoFollowsEveryInputOwnReads() throws {
+        let memo = ThreadCostEstimate.OwnMemo()
+        var p = try thread("claude-opus-5-5", input: 1_000_000, output: 0)
+        #expect(memo.own(p) == ThreadCostEstimate.own(p))
+        p.visibleTurnItems = []
+        #expect(memo.own(p) == ThreadCostEstimate.own(p))
+        p.providerTurns.append(.object(["turnTokenUsage": .object(["inputTokens": .number(500_000), "outputTokens": .number(0)])]))
+        #expect(memo.own(p) == ThreadCostEstimate.own(p) && abs(memo.own(p).usd - 6) < 1e-9)
+        for i in p.runs.indices { p.runs[i].modelSelection = ModelSelection(instanceId: "claudeAgent", model: "claude-haiku-5-5") }
+        #expect(memo.own(p) == ThreadCostEstimate.own(p) && memo.own(p).models == ["claude-haiku-5-5"])
+        let other = try thread("claude-sonnet-5-5", input: 1_000_000, output: 0)
+        #expect(memo.own(other) == ThreadCostEstimate.own(other) && memo.own(other).models == ["claude-sonnet-5-5"])
+    }
+
     @Test func aThreadWithNoUsageOfItsOwnStillShowsItsSubagents() throws {
         var empty = try thread("claude-opus-5-5", input: 0, output: 0)
         empty.providerTurns = []

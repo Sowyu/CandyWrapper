@@ -290,6 +290,24 @@ struct MarkdownIncrementalTests {
         #expect(view.layout(forWidth: 640).reusedBlocks > 0)
     }
 
+    /// The colored-code cache is bounded by total length as well as by count, and always keeps the newest block, so
+    /// one block over the limit still lexes once per change instead of on every layout.
+    @Test func coloredCodeCacheIsBoundedByLength() {
+        let limit = MarkdownLayout.coloredCodeUnitLimit
+        // 256 small blocks: nothing goes. A 257th: the oldest goes.
+        #expect(MarkdownLayout.coloredCodeEvictions(oldestFirst: Array(repeating: 2_000, count: 256), units: 512_000) == 0)
+        #expect(MarkdownLayout.coloredCodeEvictions(oldestFirst: Array(repeating: 2_000, count: 257), units: 514_000) == 1)
+        // Five 1M-unit blocks: the oldest go until the rest fit.
+        let big = Array(repeating: 1_000_000, count: 5)
+        let drop = MarkdownLayout.coloredCodeEvictions(oldestFirst: big, units: 5_000_000)
+        #expect(big.dropFirst(drop).reduce(0, +) <= limit)
+        #expect(drop == 5 - limit / 1_000_000)
+        // One block over the limit alone stays.
+        #expect(MarkdownLayout.coloredCodeEvictions(oldestFirst: [limit * 2], units: limit * 2) == 0)
+        // A huge newest block pushes out everything older.
+        #expect(MarkdownLayout.coloredCodeEvictions(oldestFirst: [3_000, 3_000, limit * 2], units: limit * 2 + 6_000) == 2)
+    }
+
     /// A streaming answer's open fence shows plain and stays out of the colored-code cache on every token; once it
     /// settles it draws exactly what a fresh view of the full text draws.
     @Test func openFenceSkipsColoringUntilItSettles() throws {

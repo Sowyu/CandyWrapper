@@ -1040,7 +1040,7 @@ final class ComposerController {
     /// The project the open thread or draft belongs to (`contextualProjectRef`).
     var activeProjectId: ProjectId? {
         switch target {
-        case .thread(let id): sidebar?.snapshot?.threads.first { $0.id == id }?.projectId
+        case .thread(let id): sidebar?.snapshot?.threads.thread(id)?.projectId
         case .draft(let s): ProjectId(s.projectId)
         case nil: nil
         }
@@ -1081,7 +1081,7 @@ final class ComposerController {
         guard let snapshot = sidebar?.snapshot, !snapshot.projects.isEmpty else { return false }
         var projectId: ProjectId?
         switch target {
-        case .thread(let id): projectId = snapshot.threads.first { $0.id == id }?.projectId
+        case .thread(let id): projectId = snapshot.threads.thread(id)?.projectId
         case .draft(let s): projectId = ProjectId(s.projectId)
         case nil: break
         }
@@ -2051,9 +2051,10 @@ final class ComposerController {
 
     // MARK: Commands
 
+    /// Read on every refresh of the open thread, so by index (`[ThreadShell].thread(_:)`).
     private var shellThread: ThreadShell? {
         guard case .thread(let id) = target else { return nil }
-        return sidebar?.snapshot?.threads.first { $0.id == id }
+        return sidebar?.snapshot?.threads.thread(id)
     }
 
     /// `background`: a draft starts in the background behind a fresh draft (`beginBackgroundDraftSubmission`,
