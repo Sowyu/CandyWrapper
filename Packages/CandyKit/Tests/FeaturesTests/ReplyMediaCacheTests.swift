@@ -186,3 +186,23 @@ extension ImageSigningDeadlockTests {
         #expect(await cache.entry(MediaDiskCache.key(scope: "env", path: same)) != nil)
     }
 }
+
+extension ImageSigningDeadlockTests {
+    @Test func failedHeadKeepsTheLastKnownImage() async throws {
+        let previous = MediaDiskCache.shared, sign = MarkdownImages.assetURL, scope = MarkdownImages.cacheScope
+        defer { MediaDiskCache.shared = previous; MarkdownImages.assetURL = sign; MarkdownImages.cacheScope = scope }
+        let root = ReplyMediaFiles.folder()
+        let cache = MediaDiskCache(root: root)
+        MediaDiskCache.shared = cache
+        MarkdownImages.cacheScope = "env"
+        let path = "/image-\(UUID().uuidString).png"
+        let kept = try #require(MarkdownImages.Kept(.workspaceFile(path), scope: "env"))
+        await cache.store(kept.id, scope: "env", path: path, file: ReplyMediaFiles.png(), revision: nil, etag: "old", natural: nil)
+        let entry = try #require(await cache.entry(kept.id))
+        MarkdownImages.assetURL = { _ in (root.appendingPathComponent("missing"), nil, nil) }
+        let check = await MarkdownImages.revalidate(kept, key: "media-file:" + path, entry: entry)
+        await check?.value
+        #expect(await cache.lookup(kept.id) != nil)
+        await cache.clear()
+    }
+}
