@@ -1166,13 +1166,26 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// An invisible view over the clicked chip, so a popover can open from the chip itself.
     let chipAnchor = NSView()
 
-    private func placeChipAnchor(at index: Int) {
-        guard let layoutManager, let textContainer else { return }
-        let glyphs = layoutManager.glyphRange(forCharacterRange: NSRange(location: index, length: 1), actualCharacterRange: nil)
-        var rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
-        rect.origin.x += textContainerOrigin.x; rect.origin.y += textContainerOrigin.y
+    func placeChipAnchor(at index: Int) {
+        guard let rect = chipRect(at: index) else { return }
         if chipAnchor.superview !== self { addSubview(chipAnchor) }
         chipAnchor.frame = rect
+    }
+
+    /// The character's box in view coordinates. Never read `layoutManager` here: that switches the
+    /// editor to TextKit 1 for good, which drops the chips' views and draws each chip as AppKit's
+    /// default attachment cell, a blank page icon.
+    func chipRect(at index: Int) -> NSRect? {
+        guard let tlm = textLayoutManager, let content = tlm.textContentManager,
+              let start = content.location(content.documentRange.location, offsetBy: index),
+              let end = content.location(start, offsetBy: 1),
+              let range = NSTextRange(location: start, end: end) else { return nil }
+        var rect: NSRect?
+        tlm.enumerateTextSegments(in: range, type: .standard, options: []) { _, frame, _, _ in
+            rect = rect.map { $0.union(frame) } ?? frame
+            return true
+        }
+        return rect?.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
     }
 
     override func flagsChanged(with event: NSEvent) {
