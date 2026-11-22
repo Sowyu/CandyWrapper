@@ -295,6 +295,9 @@ class TimelineRowView: DSView, FocusWithinObserver, HoverSyncPointerClient {
     var kind: TimelineView.Kind?
     /// Sitting in the timeline's pool; a pooled view must never be recycled twice.
     var pooled = false
+    /// `TimelineView.reviveGeneration` when the view was pooled: it may come back to the same item unconfigured
+    /// only while nothing reconfigured the rows since.
+    var pooledGeneration = -1
     var context: TimelineContext!
 
     /// Clicks on the background of the row land here when the whole row is a button.

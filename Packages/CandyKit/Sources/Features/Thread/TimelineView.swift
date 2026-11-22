@@ -286,6 +286,14 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// Counters for tests.
     private(set) var createdRowViews = 0
     private(set) var configureCount = 0
+    /// Pooled message rows keep their last message's Markdown layout, so a message scrolled back into view gets its
+    /// own view back without configuring it: laying out a 6 KB reply again took 3 to 10 ms of a scroll frame. The
+    /// pool keeps up to `spares` such views per kind before it reuses the oldest for another message.
+    // ponytail: 8 spares per kind, a byte budget over their layouts if replies of hundreds of KB sit in the pool
+    static let spares = 8
+    static let revivable: Set<Kind> = [.assistant, .user]
+    /// Bumped by every pass that configures only the visible rows again, which pooled views missed.
+    private var reviveGeneration = 0
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -376,6 +384,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()
+        reviveGeneration += 1
         measured.removeAll()
         func refreshText(_ view: NSView) {
             if let markdown = view as? MarkdownView { markdown.fontRuntimeDidChange() }
@@ -402,6 +411,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     }
 
     private func remeasure(where affected: (TimelineItem) -> Bool) {
+        reviveGeneration += 1
         var changed = false
         for item in items {
             guard affected(item), measured.removeValue(forKey: item.id) != nil else { continue }
@@ -415,6 +425,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     /// Configures the visible rows again with the same items.
     private func reconfigureVisible() {
+        reviveGeneration += 1
         for view in visible.values { if let item = view.item { view.configure(item); applyFindHighlight(view) } }
     }
 
@@ -443,6 +454,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// differ from the current ones, so an update on a long thread touches only those.
     func setItems(_ new: [TimelineItem], change: TimelineChange = .all) {
         if change == .thread {
+            reviveGeneration += 1
             followsEnd = true
             lastNearTopId = nil
             context.releasePages()
@@ -969,11 +981,23 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             visible[item.id] = nil
             recycle(view)
         }
-        let view = dequeue(Self.kind(item.row))
-        configureCount += 1
-        view.configure(item); applyFindHighlight(view)
+        let view = dequeue(Self.kind(item.row), for: item.id)
+        if view.item != item || view.pooledGeneration != reviveGeneration {
+            configureCount += 1
+            view.configure(item)
+        } else {
+            // The same message comes back: a selection made before it scrolled away goes, as on a fresh view.
+            Self.clearSelections(in: view)
+        }
+        view.pooledGeneration = -1
+        applyFindHighlight(view)
         visible[item.id] = view
         return view
+    }
+
+    private static func clearSelections(in view: NSView) {
+        if let markdown = view as? MarkdownView { markdown.clearAssistantSelection(); return }
+        for child in view.subviews { clearSelections(in: child) }
     }
 
     static func kind(_ row: TimelineRow) -> Kind {
@@ -998,8 +1022,20 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         }
     }
 
-    private func dequeue(_ kind: Kind) -> TimelineRowView {
-        if let view = pools[kind]?.popLast() {
+    /// A pooled view for `kind`: the one that last showed `id` if it waits there, else, for a message kind, a new view
+    /// until `spares` wait, then the one pooled longest ago.
+    private func dequeue(_ kind: Kind, for id: String? = nil) -> TimelineRowView {
+        if Self.revivable.contains(kind), var pool = pools[kind] {
+            let index = id.flatMap { id in pool.lastIndex { $0.item?.id == id } } ?? (pool.count > Self.spares ? 0 : nil)
+            if let index {
+                let view = pool.remove(at: index)
+                pools[kind] = pool
+                view.pooled = false
+                document.addSubview(view)
+                view.isHidden = false
+                return view
+            }
+        } else if let view = pools[kind]?.popLast() {
             view.pooled = false
             document.addSubview(view)
             view.isHidden = false
@@ -1047,6 +1083,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             onFocusLost?()
         }
         view.pooled = true
+        view.pooledGeneration = reviveGeneration
         // NSView's `prepareForReuse` unhides the view and resets its alpha, so it runs first.
         // The other order left every recycled row on screen at its old frame.
         view.prepareForReuse()

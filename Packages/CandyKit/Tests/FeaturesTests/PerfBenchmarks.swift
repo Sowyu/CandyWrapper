@@ -753,6 +753,153 @@ struct PerfBenchmarks {
         try await measurePaging("paging_seeded2000", seeded, window: 20, page: 40)
         try await measurePaging("paging_huge", huge, window: 75, page: 75)
     }
+
+    /// A long thread on screen in a window: 40 turns of the huge thread, every reply 6 KB of markdown and a little
+    /// different, so no two rows share a parse. Opened, then scrolled to the top and back 300 pt per step as
+    /// `--perf-scroll` does, then resized. Main-thread time per step (scroll, layout and display), with the row
+    /// configures each pass made.
+    @Test func timelineScroll() async throws {
+        try await measureScroll("scroll_long", copies: 300, window: 40)
+    }
+}
+
+/// A thread of `window` turns whose replies are each a different 6 KB of markdown.
+@MainActor
+private func longThreadProjection(copies: Int, window: Int) throws -> ThreadProjection {
+    let reply = longReply(sections: 12)
+    let (frame, threadId) = try syntheticThreadFrame(copies: copies, window: window, reply: reply)
+    guard case .chunk(_, let values)? = try RPCFrame.decodeServer(frame).first else { throw CancellationError() }
+    var reducer = ThreadReducer(threadId: ThreadId(threadId))
+    reducer.apply([try values[0].decode(as: ThreadStreamItem.self)])
+    var p = try #require(reducer.projection)
+    for i in p.visibleTurnItems.indices where p.visibleTurnItems[i].item.type == .assistantMessage {
+        p.visibleTurnItems[i].item = try replacing(p.visibleTurnItems[i].item, ["text": .string("Reply \(i) starts here.\n\n" + reply)])
+    }
+    return p
+}
+
+@MainActor
+private func measureScroll(_ name: String, copies: Int, window turns: Int) async throws {
+    let p = try longThreadProjection(copies: copies, window: turns)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+    window.contentView = panel
+    let openStart = ContinuousClock.now
+    panel.setProjection(p, projectTitle: "demo-repo", workspaceRoot: nil)
+    var open = milliseconds(ContinuousClock.now - openStart)
+    open += await panel.model.rowsSettled()
+    let openLayout = ContinuousClock.now
+    window.layoutIfNeeded()
+    window.displayIfNeeded()
+    open += milliseconds(ContinuousClock.now - openLayout)
+    let timeline = panel.timeline
+    func emit(_ suffix: String, _ steps: [Double], _ extra: [String: Any] = [:]) {
+        let sorted = steps.sorted()
+        var line: [String: Any] = ["name": "\(name)_\(suffix)", "median_ms": sorted[sorted.count / 2], "min_ms": sorted[0],
+                                   "max_ms": sorted[sorted.count - 1], "runs": sorted.count, "total_ms": steps.reduce(0, +),
+                                   "timeline_rows": panel.model.items.count]
+        line.merge(extra) { $1 }
+        let data = try! JSONSerialization.data(withJSONObject: line, options: [.sortedKeys])
+        print("PERF " + String(decoding: data, as: UTF8.self))
+    }
+    emit("open", [open], ["created": timeline.createdRowViews, "configures": timeline.configureCount])
+    let clip = timeline.scrollView.contentView
+    func pass(_ suffix: String, up: Bool) {
+        let configures = timeline.configureCount, created = timeline.createdRowViews
+        var steps: [Double] = []
+        for _ in 0..<400 {
+            let maxY = max(0, (timeline.scrollView.documentView?.frame.height ?? 0) - clip.bounds.height)
+            let y = min(maxY, max(0, clip.bounds.origin.y + (up ? -300 : 300)))
+            let before = clip.bounds.origin.y
+            if y == before { break }
+            let start = ContinuousClock.now
+            clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y))
+            timeline.scrollView.reflectScrolledClipView(clip)
+            window.layoutIfNeeded()
+            window.displayIfNeeded()
+            steps.append(milliseconds(ContinuousClock.now - start))
+            if clip.bounds.origin.y == before { break }
+        }
+        emit(suffix, steps, ["configures": timeline.configureCount - configures, "created": timeline.createdRowViews - created,
+                             "document": Int(timeline.scrollView.documentView?.frame.height ?? 0)])
+    }
+    pass("up_first", up: true)
+    pass("down", up: false)
+    pass("up_again", up: true)
+    // Reading back: from the middle, six steps up and six back down, ten times, as a reader checks something above.
+    clip.scroll(to: NSPoint(x: 0, y: 60_000))
+    timeline.scrollView.reflectScrolledClipView(clip)
+    window.layoutIfNeeded()
+    window.displayIfNeeded()
+    do {
+        let configures = timeline.configureCount
+        var steps: [Double] = []
+        for _ in 0..<10 {
+            for up in [true, false] {
+                for _ in 0..<6 {
+                    let start = ContinuousClock.now
+                    clip.scroll(to: NSPoint(x: 0, y: clip.bounds.origin.y + (up ? -300 : 300)))
+                    timeline.scrollView.reflectScrolledClipView(clip)
+                    window.layoutIfNeeded()
+                    window.displayIfNeeded()
+                    steps.append(milliseconds(ContinuousClock.now - start))
+                }
+            }
+        }
+        emit("back_and_forth", steps, ["configures": timeline.configureCount - configures])
+    }
+    // CW_BENCH_PROFILE=scroll repeats the passes for about 10 s, for `sample`.
+    let profile = ProcessInfo.processInfo.environment["CW_BENCH_PROFILE"]
+    if profile == "scroll" {
+        let until = ContinuousClock.now + .seconds(10)
+        while ContinuousClock.now < until { pass("profile_down", up: false); pass("profile_up", up: true) }
+    }
+    // A live resize: the window narrows by 8 pt a step to 900 pt, then widens back.
+    var resize: [Double] = []
+    let configures = timeline.configureCount
+    let widths = Array(stride(from: 1192, through: 900, by: -8)) + Array(stride(from: 908, through: 1200, by: 8))
+    for w in profile == "resize" ? Array(repeating: widths, count: 25).flatMap { $0 } : widths {
+        let start = ContinuousClock.now
+        window.setContentSize(NSSize(width: CGFloat(w), height: 800))
+        window.layoutIfNeeded()
+        window.displayIfNeeded()
+        resize.append(milliseconds(ContinuousClock.now - start))
+    }
+    emit("resize", resize, ["configures": timeline.configureCount - configures])
+    // A reply streams at the bottom while the reader sits near the top: one word per update.
+    var live = p
+    let run = try #require(live.runs.indices.max { live.runs[$0].ordinal < live.runs[$1].ordinal })
+    live.runs[run].status = .running
+    live.runs[run].completedAt = nil
+    let answer = try #require(live.visibleTurnItems.lastIndex { $0.item.type == .assistantMessage })
+    live.visibleTurnItems[answer].item = try replacing(live.visibleTurnItems[answer].item, ["streaming": .bool(true), "status": .string("running")])
+    panel.setProjection(live, projectTitle: "demo-repo", workspaceRoot: nil)
+    await panel.model.rowsSettled()
+    window.layoutIfNeeded()
+    clip.scroll(to: NSPoint(x: 0, y: 1200))
+    timeline.scrollView.reflectScrolledClipView(clip)
+    window.layoutIfNeeded()
+    window.displayIfNeeded()
+    let text = live.visibleTurnItems[answer].item.text
+    var streamed: [Double] = []
+    let streamConfigures = timeline.configureCount
+    for k in 1...(profile == "stream" ? 3_000 : 14) {
+        var next = live
+        next.visibleTurnItems[answer].item = try replacing(next.visibleTurnItems[answer].item, ["text": .string(text + String(repeating: " word", count: k))])
+        let start = ContinuousClock.now
+        panel.setProjection(next, projectTitle: "demo-repo", workspaceRoot: nil)
+        var main = milliseconds(ContinuousClock.now - start)
+        main += await panel.model.rowsSettled()
+        let layout = ContinuousClock.now
+        window.layoutIfNeeded()
+        window.displayIfNeeded()
+        main += milliseconds(ContinuousClock.now - layout)
+        if k > 2 { streamed.append(main) }
+    }
+    #expect(clip.bounds.origin.y < 2000)
+    emit("stream_offscreen", streamed, ["configures": timeline.configureCount - streamConfigures])
+    window.close()
 }
 
 // MARK: History paging
