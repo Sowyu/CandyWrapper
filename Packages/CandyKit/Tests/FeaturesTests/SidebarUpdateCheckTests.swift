@@ -43,6 +43,8 @@ struct SidebarUpdateCheckTests {
         typealias C = SidebarUpdateCheck
         #expect(C.failureCopy([.appFailed(reason: nil)]) == ("Could not check for updates", "This app's own update check failed."))
         #expect(C.failureCopy([.appFailed(reason: "Offline.")]).message == "This app's own update check failed: Offline.")
+        let notFound = UpdateCheckError.describe(UpdateCheckErrorTests.http(404))
+        #expect(C.failureCopy([.appFailed(reason: notFound)]).message == "This app's own update check failed: The update feed was not found (HTTP 404). A release may be publishing; check again in a minute.")
         #expect(C.failureCopy([.machineFailed("vps")]) == ("Could not check updates on vps", "Try again once it is reachable."))
         let both = C.failureCopy([.machineFailed("vps"), .appFailed(reason: nil), .machineFailed("Mac mini"), .machineFailed("Pi")])
         #expect(both.title == "Could not check updates on vps, Mac mini and Pi")
