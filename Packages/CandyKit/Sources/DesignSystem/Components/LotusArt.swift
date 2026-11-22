@@ -412,10 +412,16 @@ public enum LotusArt {
                                         let ax = sx[a], ay = sy[a], bx = sx[b], by = sy[b], qx = sx[c], qy = sy[c]
                                         let area = (bx - ax) * (qy - ay) - (by - ay) * (qx - ax)
                                         guard abs(area) > 1e-9 else { continue }
-                                        let x0 = max(0, Int((min(ax, bx, qx) - 0.5).rounded(.up)))
-                                        let x1 = min(w - 1, Int((max(ax, bx, qx) - 0.5).rounded(.down)))
-                                        let y0 = max(0, Int((min(ay, by, qy) - 0.5).rounded(.up)))
-                                        let y1 = min(h - 1, Int((max(ay, by, qy) - 0.5).rounded(.down)))
+                                        // A vertex the camera can't see (`nearPlane`) is NaN, so its triangle goes.
+                                        // The rest clamp to just outside the canvas before turning into integers,
+                                        // which leaves every on-canvas bound as it was and can't trap.
+                                        let minX = min(ax, bx, qx), maxX = max(ax, bx, qx), minY = min(ay, by, qy), maxY = max(ay, by, qy)
+                                        guard minX.isFinite, maxX.isFinite, minY.isFinite, maxY.isFinite else { continue }
+                                        let fw = Float(w), fh = Float(h)
+                                        let x0 = max(0, Int(min(max((minX - 0.5).rounded(.up), -1), fw)))
+                                        let x1 = min(w - 1, Int(min(max((maxX - 0.5).rounded(.down), -1), fw)))
+                                        let y0 = max(0, Int(min(max((minY - 0.5).rounded(.up), -1), fh)))
+                                        let y1 = min(h - 1, Int(min(max((maxY - 0.5).rounded(.down), -1), fh)))
                                         guard x0 <= x1, y0 <= y1 else { continue }
                                         let inv = 1 / area
                                         let petal = t / per
@@ -471,16 +477,34 @@ public enum LotusArt {
 
     /// The shadow map's side in texels for a flower `samples` across in radius: about one texel per three samples,
     /// since the shadow is blurred on screen anyway, and the map is a fixed cost every frame.
-    static func shadowSize(radius: Float) -> Int { min(384, max(64, Int(radius * 0.8))) }
+    static func shadowSize(radius: Float) -> Int { radius.isFinite ? min(384, max(64, Int(min(max(radius * 0.8, 0), 384)))) : 64 }
     /// The shadow map's reach either side of the target, in flower units.
     static var shadowReach: Float { openRadius * 1.25 }
+
+    /// The closest a vertex can sit in front of the camera and still be drawn, in flower units. The standard views and
+    /// the opening's flight keep the whole flower several units away.
+    static let nearPlane: Float = 1e-3
+    /// The largest canvas side in cells, and the most samples a cell: a 6K screen at 1pt cells is 6,016 wide. Anything
+    /// bigger is refused before a byte is allocated.
+    static let maxSide = 8192, maxSamples = 8
+
+    /// Whether `placement` can render: no side over `maxSide` and a finite centre and radius. A zero-size canvas is
+    /// fine and renders nothing.
+    static func renderable(_ p: Placement) -> Bool {
+        let limit = 1e7
+        func ok(_ v: Double) -> Bool { v.isFinite && abs(v) <= limit }
+        func ok(_ v: Float) -> Bool { v.isFinite && abs(v) <= Float(limit) }
+        guard (0...maxSide).contains(p.width), (0...maxSide).contains(p.height), ok(p.centreX), ok(p.centreY), ok(p.radius) else { return false }
+        guard let c = p.camera else { return true }
+        return [c.eye.x, c.eye.y, c.eye.z, c.lookAt.x, c.lookAt.y, c.lookAt.z, c.focal, c.centreX, c.centreY].allSatisfy(ok)
+    }
 
     /// The scene at `pose` on a `samples`-per-cell grid: the z-buffer with each sample's tone in channel 0.
     /// Gouraud-shaded triangles; the key light is shadowed per sample from a shadow map (a bilinear lookup blurred
     /// twice on screen, so the shadow of a petal on the one beneath is soft), and a depth-darkening pass (Luft et
     /// al.'s unsharp mask on depth) adds contact shade where a nearer petal overlaps.
     static func scene(_ pose: Pose, placement: Placement, samples: Int) -> Raster {
-        let ss = max(1, samples)
+        let ss = min(max(1, samples), maxSamples)
         let w = placement.width * ss, h = placement.height * ss
         let m = mesh(bloom: pose.bloom, breath: pose.breath)
         // The turn repeats every quarter, so the loop's end renders exactly its start.
@@ -532,8 +556,10 @@ public enum LotusArt {
             let ambient = m.shade[i] * (under * (sky + fill) + 0.24 * m.glow[i]) + rim + m.edge[i] * under
             let d = p - camera
             let z = dot(d, forward)
-            sx[i] = cx + focal * dot(d, right) / z
-            sy[i] = cy - focal * dot(d, upC) / z
+            // Near-plane rejection: a vertex in or behind the camera plane has no screen position, and `raster` drops
+            // every triangle that uses it.
+            sx[i] = z > nearPlane ? cx + focal * dot(d, right) / z : .nan
+            sy[i] = z > nearPlane ? cy - focal * dot(d, upC) / z : .nan
             sz[i] = z
             let t = p - target
             mx[i] = (dot(t, lx) / (2 * shadowReach * Float(pose.scale)) + 0.5) * Float(shadowSize)
@@ -592,14 +618,18 @@ public enum LotusArt {
     }
 
     /// Renders `pose` with `samples` x `samples` samples a cell, down to one tone and one coverage value per cell.
+    /// A canvas `renderable` refuses gives an empty shot, 0 x 0.
     public static func render(_ pose: Pose, placement: Placement, samples: Int = 2) -> Shot {
+        guard renderable(placement) else { return Shot(width: 0, height: 0, light: [], cover: []) }
         let (light, cover) = cells(pose, placement: placement, samples: samples)
         return Shot(width: placement.width, height: placement.height, light: Array(light), cover: Array(cover))
     }
 
     /// `render`'s tone and coverage in scratch, for the frame renders.
+    /// Callers check `renderable` first; a canvas it refuses gives empty scratch.
     static func cells(_ pose: Pose, placement: Placement, samples: Int) -> (light: Scratch<Float>, cover: Scratch<Float>) {
-        let ss = max(1, samples)
+        guard renderable(placement) else { return (Scratch(0, 0), Scratch(0, 0)) }
+        let ss = min(max(1, samples), maxSamples)
         let light = Scratch<Float>(placement.width * placement.height, 0), cover = Scratch<Float>(placement.width * placement.height, 0)
         guard placement.width > 0, placement.height > 0 else { return (light, cover) }
         let r = scene(pose, placement: placement, samples: ss)
@@ -623,10 +653,12 @@ public enum LotusArt {
         return (light, cover)
     }
 
-    /// `body` over `cells`' tone and coverage. The pointers are only valid inside `body`, which keeps their scratch
-    /// mapped: a pointer taken from a `Scratch` must never outlive the last use of the `Scratch` itself.
+    /// `body` over `cells`' tone and coverage, or nil for a canvas `renderable` refuses. The pointers are only valid
+    /// inside `body`, which keeps their scratch mapped: a pointer taken from a `Scratch` must never outlive the last
+    /// use of the `Scratch` itself.
     static func withCells<R>(_ pose: Pose, placement: Placement, samples: Int,
-                             _ body: (_ light: UnsafeBufferPointer<Float>, _ cover: UnsafeBufferPointer<Float>) -> R) -> R {
+                             _ body: (_ light: UnsafeBufferPointer<Float>, _ cover: UnsafeBufferPointer<Float>) -> R?) -> R? {
+        guard renderable(placement) else { return nil }
         let c = cells(pose, placement: placement, samples: samples)
         return withExtendedLifetime(c) { body(UnsafeBufferPointer(c.light.buffer), UnsafeBufferPointer(c.cover.buffer)) }
     }
@@ -997,12 +1029,13 @@ public enum LotusArt {
 
     /// The content area's whole canvas: the field and the flower's every position on it.
     public static func fullCanvas(content: CGRect, cell: CGFloat = 3) -> Placement? {
-        guard let spot = spot(in: content) else { return nil }
+        guard cell.isFinite, cell >= 0.5, let spot = spot(in: content) else { return nil }
         let x0 = (content.minX / cell).rounded(.down), y0 = (content.minY / cell).rounded(.down)
         let x1 = (content.maxX / cell).rounded(.up), y1 = (content.maxY / cell).rounded(.up)
-        guard x1 > x0, y1 > y0 else { return nil }
-        return Placement(width: Int(x1 - x0), height: Int(y1 - y0), centreX: Double(spot.centre.x / cell - x0),
-                         centreY: Double(spot.centre.y / cell - y0), radius: Double(spot.radius / cell), originX: Int(x0), originY: Int(y0))
+        guard x1 > x0, y1 > y0, x1 - x0 <= CGFloat(maxSide), y1 - y0 <= CGFloat(maxSide) else { return nil }
+        let p = Placement(width: Int(x1 - x0), height: Int(y1 - y0), centreX: Double(spot.centre.x / cell - x0),
+                          centreY: Double(spot.centre.y / cell - y0), radius: Double(spot.radius / cell), originX: Int(x0), originY: Int(y0))
+        return renderable(p) ? p : nil
     }
 
     // MARK: Placement
@@ -1027,7 +1060,8 @@ public enum LotusArt {
 
     /// The flower for a content area in points (top left origin, y down), or nil when the area is empty.
     public static func spot(in content: CGRect) -> Spot? {
-        guard content.width >= 1, content.height >= 1 else { return nil }
+        guard content.width >= 1, content.height >= 1,
+              [content.minX, content.minY, content.width, content.height].allSatisfy({ $0.isFinite && abs($0) <= 1e7 }) else { return nil }
         let unit = Swift.max(content.width, content.height * referenceAspect)
         return Spot(centre: CGPoint(x: content.minX + composition.x * content.width, y: content.minY + composition.y * content.height),
                     radius: composition.radius * unit)
@@ -1036,12 +1070,12 @@ public enum LotusArt {
     /// The canvas for a content area in points: the area's cells on the art's `cell` lattice that any bloom or idle
     /// frame can cover, so nothing outside the area renders or is stored. Nil when that is nothing.
     public static func canvas(content: CGRect, cell: CGFloat = 3) -> Placement? {
-        guard let spot = spot(in: content) else { return nil }
+        guard cell.isFinite, cell >= 0.5, let spot = spot(in: content) else { return nil }
         let x0 = Int((content.minX / cell).rounded(.down)), y0 = Int((content.minY / cell).rounded(.down))
         let x1 = Int((content.maxX / cell).rounded(.up)), y1 = Int((content.maxY / cell).rounded(.up))
         var p = placement(panelWidth: x1 - x0, panelHeight: y1 - y0, centreX: Double(spot.centre.x / cell) - Double(x0),
                           centreY: Double(spot.centre.y / cell) - Double(y0), radius: Double(spot.radius / cell))
-        guard p.width > 0, p.height > 0 else { return nil }
+        guard p.width > 0, p.height > 0, renderable(p) else { return nil }
         p.originX += x0; p.originY += y0
         return p
     }

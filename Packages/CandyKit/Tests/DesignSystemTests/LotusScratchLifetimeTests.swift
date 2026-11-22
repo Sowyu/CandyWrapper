@@ -17,14 +17,14 @@ struct LotusScratchLifetimeTests {
         }
     }
 
-    @Test func cellsPointersOutliveEveryOtherReference() {
+    @Test func cellsPointersOutliveEveryOtherReference() throws {
         let n = place.width * place.height
         for pose in [LotusArt.openPose] + LotusArt.bloomPoses().enumerated().filter { $0.offset % 8 == 0 }.map(\.element) {
             let reference = LotusArt.render(pose, placement: place, samples: 2)
-            let (light, cover) = LotusArt.withCells(pose, placement: place, samples: 2) { light, cover -> ([Float], [Float]) in
+            let (light, cover) = try #require(LotusArt.withCells(pose, placement: place, samples: 2) { light, cover -> ([Float], [Float]) in
                 churn(n)
                 return (Array(light), Array(cover))
-            }
+            })
             #expect(light == reference.light && cover == reference.cover)
         }
     }
