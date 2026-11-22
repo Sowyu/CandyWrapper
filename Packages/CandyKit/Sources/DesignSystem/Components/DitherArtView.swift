@@ -999,9 +999,9 @@ extension DitherArtView {
                     }.flatMap { images($0, o.canvas) }.map { FlowerPhase.flight(o, $0) }
                 case 0 where parts.contains(.open):
                     phase = codes.frames(.open) {
-                        let c = LotusArt.cells(LotusArt.openPose, placement: p, samples: samples)
-                        return [LotusArt.pack(LotusArt.codes(light: UnsafeBufferPointer(c.light.buffer), cover: UnsafeBufferPointer(c.cover.buffer),
-                                                             placement: p, dark: dark))]
+                        LotusArt.withCells(LotusArt.openPose, placement: p, samples: samples) { light, cover in
+                            [LotusArt.pack(LotusArt.codes(light: light, cover: cover, placement: p, dark: dark))]
+                        }
                     }.flatMap { packed -> FlowerPhase? in
                         LotusArt.frame(packed: packed[0], flower: p, full: full, t: fieldT, dark: dark)
                             .map { FlowerPhase.open($0, LotusArt.unpack(packed[0], count: p.width * p.height)) }

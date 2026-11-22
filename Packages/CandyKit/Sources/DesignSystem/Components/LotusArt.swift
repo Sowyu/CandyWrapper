@@ -399,7 +399,7 @@ public enum LotusArt {
         let bary = Scratch<SIMD2<Float>>(nc > 0 ? w * h : 0, .zero)
         let per = trianglesPerPetal
         let keep = nc > 0
-        do {
+        withExtendedLifetime((r, tri, bary)) {
             let zb = r.depth.buffer, tb = tri.buffer, bb = bary.buffer
             do {
                 do {
@@ -450,7 +450,7 @@ public enum LotusArt {
         }
         guard keep else { return r }
         // Resolve: one interpolation per covered sample.
-        do {
+        withExtendedLifetime((r, tri, bary, attr)) {
             let ab = r.attrs.buffer, idb = r.id.buffer
             do {
                 do { let va = attr.buffer
@@ -558,7 +558,7 @@ public enum LotusArt {
         // space, so a petal's shadow on the one beneath has a soft edge.
         let sm = shadowSize
         let litBuffer = Scratch<Float>(w * h, 1)
-        do {
+        withExtendedLifetime((litBuffer, r, map)) {
             let lit = litBuffer.buffer, at = r.attrs.buffer, id = r.id.buffer
             do {
                 do {
@@ -579,12 +579,14 @@ public enum LotusArt {
             }
         }
         let soft = max(1, Int(Float(placement.radius) * Float(ss) * 0.018))
-        boxBlur(litBuffer.buffer, width: w, height: h, radius: soft)
-        boxBlur(litBuffer.buffer, width: w, height: h, radius: soft)
-        let lit = litBuffer.buffer, at = r.attrs.buffer, id = r.id.buffer, occ = occlusion.buffer
-        for k in 0..<(w * h) where id[k] >= 0 {
-            let a = k * nc
-            at[a] = (at[a + 1] + at[a] * (0.35 + 0.65 * lit[k])) * (1 - 0.5 * occ[k])
+        withExtendedLifetime((litBuffer, r, occlusion)) {
+            boxBlur(litBuffer.buffer, width: w, height: h, radius: soft)
+            boxBlur(litBuffer.buffer, width: w, height: h, radius: soft)
+            let lit = litBuffer.buffer, at = r.attrs.buffer, id = r.id.buffer, occ = occlusion.buffer
+            for k in 0..<(w * h) where id[k] >= 0 {
+                let a = k * nc
+                at[a] = (at[a + 1] + at[a] * (0.35 + 0.65 * lit[k])) * (1 - 0.5 * occ[k])
+            }
         }
         return r
     }
@@ -601,22 +603,32 @@ public enum LotusArt {
         let light = Scratch<Float>(placement.width * placement.height, 0), cover = Scratch<Float>(placement.width * placement.height, 0)
         guard placement.width > 0, placement.height > 0 else { return (light, cover) }
         let r = scene(pose, placement: placement, samples: ss)
-        let w = r.width, nc = r.channels, id = r.id.buffer, attrs = r.attrs.buffer
-        let lb = light.buffer, cb = cover.buffer
-        let n = Float(ss * ss)
-        for y in 0..<placement.height {
-            for x in 0..<placement.width {
-                var sum: Float = 0, hit: Float = 0
-                for dy in 0..<ss {
-                    let row = (y * ss + dy) * w + x * ss
-                    for dx in 0..<ss where id[row + dx] >= 0 { sum += attrs[(row + dx) * nc]; hit += 1 }
+        withExtendedLifetime((r, light, cover)) {
+            let w = r.width, nc = r.channels, id = r.id.buffer, attrs = r.attrs.buffer
+            let lb = light.buffer, cb = cover.buffer
+            let n = Float(ss * ss)
+            for y in 0..<placement.height {
+                for x in 0..<placement.width {
+                    var sum: Float = 0, hit: Float = 0
+                    for dy in 0..<ss {
+                        let row = (y * ss + dy) * w + x * ss
+                        for dx in 0..<ss where id[row + dx] >= 0 { sum += attrs[(row + dx) * nc]; hit += 1 }
+                    }
+                    let k = y * placement.width + x
+                    cb[k] = hit / n
+                    lb[k] = hit > 0 ? min(1, sum / hit) : 0
                 }
-                let k = y * placement.width + x
-                cb[k] = hit / n
-                lb[k] = hit > 0 ? min(1, sum / hit) : 0
             }
         }
         return (light, cover)
+    }
+
+    /// `body` over `cells`' tone and coverage. The pointers are only valid inside `body`, which keeps their scratch
+    /// mapped: a pointer taken from a `Scratch` must never outlive the last use of the `Scratch` itself.
+    static func withCells<R>(_ pose: Pose, placement: Placement, samples: Int,
+                             _ body: (_ light: UnsafeBufferPointer<Float>, _ cover: UnsafeBufferPointer<Float>) -> R) -> R {
+        let c = cells(pose, placement: placement, samples: samples)
+        return withExtendedLifetime(c) { body(UnsafeBufferPointer(c.light.buffer), UnsafeBufferPointer(c.cover.buffer)) }
     }
 
     /// Samples that show a petal in pieces smaller than `limit` samples: slivers where one petal cuts through
@@ -646,14 +658,16 @@ public enum LotusArt {
     /// How far each covered sample sits behind the mean depth of the covered samples within `radius`, over `reach`
     /// units, 0...1. Two separable box passes over running sums, so it costs the same at any radius.
     static func darkening(_ depth: Scratch<Float>, width w: Int, height h: Int, radius r: Int, reach: Float) -> Scratch<Float> {
-        let sum = Scratch<Float>(w * h, 0), hits = Scratch<Float>(w * h, 0)
-        let d = depth.buffer, sb = sum.buffer, hb = hits.buffer
-        for k in 0..<(w * h) where d[k] < .infinity { sb[k] = d[k]; hb[k] = 1 }
-        boxBlur(sb, width: w, height: h, radius: r)
-        boxBlur(hb, width: w, height: h, radius: r)
-        let out = Scratch<Float>(w * h, 0), ob = out.buffer
-        for k in 0..<(w * h) where d[k] < .infinity && hb[k] > 0 {
-            ob[k] = min(1, max(0, (d[k] - sb[k] / hb[k]) / reach))
+        let sum = Scratch<Float>(w * h, 0), hits = Scratch<Float>(w * h, 0), out = Scratch<Float>(w * h, 0)
+        withExtendedLifetime((depth, sum, hits, out)) {
+            let d = depth.buffer, sb = sum.buffer, hb = hits.buffer
+            for k in 0..<(w * h) where d[k] < .infinity { sb[k] = d[k]; hb[k] = 1 }
+            boxBlur(sb, width: w, height: h, radius: r)
+            boxBlur(hb, width: w, height: h, radius: r)
+            let ob = out.buffer
+            for k in 0..<(w * h) where d[k] < .infinity && hb[k] > 0 {
+                ob[k] = min(1, max(0, (d[k] - sb[k] / hb[k]) / reach))
+            }
         }
         return out
     }
@@ -663,6 +677,8 @@ public enum LotusArt {
     static func boxBlur(_ a: UnsafeMutableBufferPointer<Float>, width w: Int, height h: Int, radius r: Int) {
         guard w > 0, h > 0 else { return }
         let lineScratch = Scratch<Float>(w, 0), accScratch = Scratch<Float>(w, 0), outScratch = Scratch<Float>(w * h, 0)
+        // The pointers below are into the scratch's pages, so the scratch stays mapped until the function returns.
+        defer { withExtendedLifetime((lineScratch, accScratch, outScratch)) {} }
         let line = lineScratch.buffer, acc = accScratch.buffer, out = outScratch.buffer
         for y in 0..<h {
             let row = y * w
@@ -854,9 +870,10 @@ public enum LotusArt {
                              top: [Float]? = nil, cap: [UInt8]? = nil, samples: Int = 2, parallel: Bool = true,
                              stop: (@Sendable () -> Bool)? = nil) -> [CGImage]? {
         each(poses.count, parallel: parallel, stop: stop) { i in
-            let c = cells(poses[i], placement: placement, samples: samples)
-            return image(mask(light: UnsafeBufferPointer(c.light.buffer), cover: UnsafeBufferPointer(c.cover.buffer), placement: placement,
-                              dark: dark, inks: inks, density: density, top: top, cap: cap), width: placement.width, height: placement.height)
+            withCells(poses[i], placement: placement, samples: samples) { light, cover in
+                image(mask(light: light, cover: cover, placement: placement,
+                           dark: dark, inks: inks, density: density, top: top, cap: cap), width: placement.width, height: placement.height)
+            }
         }
     }
 
@@ -864,9 +881,9 @@ public enum LotusArt {
     public static func packedMasks(_ poses: [Pose], placement: Placement, dark: Bool, samples: Int = 2,
                                    parallel: Bool = true, stop: (@Sendable () -> Bool)? = nil) -> [[UInt8]]? {
         each(poses.count, parallel: parallel, stop: stop) { i in
-            let c = cells(poses[i], placement: placement, samples: samples)
-            return pack(codes(light: UnsafeBufferPointer(c.light.buffer), cover: UnsafeBufferPointer(c.cover.buffer), placement: placement,
-                              dark: dark))
+            withCells(poses[i], placement: placement, samples: samples) { light, cover in
+                pack(codes(light: light, cover: cover, placement: placement, dark: dark))
+            }
         }
     }
 
@@ -1136,9 +1153,9 @@ public enum LotusArt {
         nonisolated(unsafe) let frames = frames
         return each(frames.count, parallel: true, stop: stop) { i in
             let (pose, p) = frames[i]
-            let c = cells(pose, placement: p, samples: samples)
-            return pack(codes(light: UnsafeBufferPointer(c.light.buffer), cover: UnsafeBufferPointer(c.cover.buffer), placement: p,
-                              dark: dark, density: density(i)))
+            return withCells(pose, placement: p, samples: samples) { light, cover in
+                pack(codes(light: light, cover: cover, placement: p, dark: dark, density: density(i)))
+            }
         }
     }
 
