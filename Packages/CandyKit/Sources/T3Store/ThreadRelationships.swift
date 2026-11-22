@@ -55,6 +55,9 @@ public struct ProjectedSubagent: Sendable, Equatable {
     public var nativeStatus: String? = nil
     /// `nativeTaskRef.strength == "strong"` with a native id: a provider-native task Stop can reach.
     public var nativeTaskStrong = false
+    /// The model the task ran on: `executedModel`, else `modelSelection.model` (orchestrationV2.ts:944-946). Nil
+    /// when the record has neither; `model` is then the one asked for.
+    public var ranModel: String? = nil
 
     public init(id: String, childThreadId: ThreadId?, origin: String, driver: String, providerInstanceId: String, title: String,
                 model: String?, status: String, progress: String?, result: String?, startedAt: T3Timestamp?, completedAt: T3Timestamp?) {
@@ -81,6 +84,8 @@ public struct ProjectedSubagent: Sendable, Equatable {
         runId = json["runId"]?.stringValue.map { RunId($0) }
         let ref = json["nativeTaskRef"]
         nativeTaskStrong = ref?["strength"]?.stringValue == "strong" && ref?["nativeId"]?.stringValue != nil
+        ranModel = [json["executedModel"]?.stringValue, json["modelSelection"]?["model"]?.stringValue]
+            .compactMap { $0 }.first { !$0.isEmpty }
     }
 
     /// `liveSubagent` (ThreadRelationshipsControl.tsx:177-194): while the child thread has a live run, the
@@ -95,6 +100,7 @@ public struct ProjectedSubagent: Sendable, Equatable {
         out.runId = runId
         out.nativeStatus = nativeStatus
         out.nativeTaskStrong = nativeTaskStrong
+        out.ranModel = ranModel
         return out
     }
 }

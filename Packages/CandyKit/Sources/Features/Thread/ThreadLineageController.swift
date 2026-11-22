@@ -213,8 +213,25 @@ public final class ThreadLineageController {
         panel.lazySubagentPill.view.configure(strip, providers: rail)
         stoppingAgents.formIntersection(strip.rows.filter(\.canStop).map(\.id))
         panel.lazySubagentPanel.view.items = strip.rows.map {
-            .init(row: $0, modelName: Self.modelName($0, providers), stopping: stoppingAgents.contains($0.id))
+            .init(row: $0, modelName: Self.modelName($0, providers), stopping: stoppingAgents.contains($0.id),
+                  group: Self.modelGroup($0, providers))
         }
+    }
+
+    /// The row's group in the card: its model as the picker names it, ranked by provider in the picker's order and
+    /// then by the provider's model list. A row with no model groups under its provider's name, or "Other", last.
+    static func modelGroup(_ row: SubagentStrip.Row, _ providers: [ServerProvider]) -> SubagentStripPanelView.Group {
+        let rail = ProviderCatalog(providers).entries.filter(\.isVisibleInPicker)
+        let p = rail.firstIndex { $0.id.rawValue == row.providerInstanceId } ?? rail.count
+        let provider = providers.first { $0.instanceId.rawValue == row.providerInstanceId }
+        guard let slug = row.model, !slug.isEmpty else {
+            return .init(title: provider.flatMap { ProviderCatalog([$0]).entries.first?.displayName } ?? "Other", rank: 1_000_000 + p)
+        }
+        if let provider, let model = ThreadRelationships.resolveModel(provider.models, slug),
+           let m = provider.models.firstIndex(of: model) {
+            return .init(title: ModelNames.trigger(model), rank: p * 1000 + m)
+        }
+        return .init(title: ThreadRelationships.modelSlugName(slug), rank: p * 1000 + 999)
     }
 
     /// The row's model as the model picker names it, else the slug made readable, else the provider's name.

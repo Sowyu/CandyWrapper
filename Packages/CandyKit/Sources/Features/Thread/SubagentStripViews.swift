@@ -90,7 +90,7 @@ public final class SubagentStripPillView: ComposerBannerView {
         var kept: [String: (icon: NSView, count: LabelView)] = [:]
         for g in groups {
             let views = groupViews.removeValue(forKey: g.instanceId) ?? {
-                let icon = Self.icon(g, providers: providers)
+                let icon = Self.icon(driver: g.driver, name: providers.first { $0.instanceId == g.instanceId }?.name ?? g.driver)
                 let count = glassLabel("", font: SB.tabular(12, .medium), color: words.color, lineHeight: 16)
                 row.addSubview(icon)
                 row.addSubview(count)
@@ -121,11 +121,11 @@ public final class SubagentStripPillView: ComposerBannerView {
             + (more.isHidden ? [] : [more.text])
     }
 
-    static func icon(_ group: SubagentStrip.PillGroup, providers: [SubagentStrip.Provider]) -> NSView {
+    /// A provider's glyph at the pill's size, or the bot for a driver without one.
+    static func icon(driver: String, name: String) -> NSView {
         let color = Themed.color(\.mutedForeground)
-        let v = ProviderIcon.glyphDrivers.contains(group.driver)
-            ? ProviderIcon.make(driver: group.driver, displayName: providers.first { $0.instanceId == group.instanceId }?.name ?? group.driver,
-                                size: icon, color: color, model: true)
+        let v = ProviderIcon.glyphDrivers.contains(driver)
+            ? ProviderIcon.make(driver: driver, displayName: name, size: icon, color: color, model: true)
             : IconView(name: .bot, size: icon, strokeColor: color)
         v.setAccessibilityElement(false)
         return v
@@ -257,12 +257,35 @@ public struct SubagentStopConfirm: Equatable {
 /// 28pt rows, on the composer's own surface. It sizes to its rows up to `maxRows` and scrolls past that with the header
 /// pinned. Running rows' times tick once a minute while the panel shows. The pill, Esc or a click outside closes it.
 public final class SubagentStripPanelView: ComposerBannerView {
+    /// A row's model group: its heading and its place among the groups (lower first).
+    public struct Group: Equatable, Hashable {
+        public var title: String
+        public var rank: Int
+        public init(title: String, rank: Int) { self.title = title; self.rank = rank }
+    }
+
     public struct Item: Equatable {
         public var row: SubagentStrip.Row
         public var modelName: String
         public var stopping: Bool
-        public init(row: SubagentStrip.Row, modelName: String, stopping: Bool = false) {
+        public var group: Group
+        public init(row: SubagentStrip.Row, modelName: String, stopping: Bool = false, group: Group? = nil) {
             self.row = row; self.modelName = modelName; self.stopping = stopping
+            self.group = group ?? Group(title: modelName, rank: 0)
+        }
+    }
+
+    /// The list in order: a heading per model group, with its row count when it has more than one, only when the
+    /// rows run on two or more models.
+    enum Entry: Equatable { case heading(String, count: Int), row(Item) }
+
+    static func entries(_ items: [Item]) -> [Entry] {
+        let groups = items.map(\.group).reduce(into: [Group]()) { if !$0.contains($1) { $0.append($1) } }
+        guard groups.count > 1 else { return items.map(Entry.row) }
+        let sorted = groups.enumerated().sorted { ($0.element.rank, $0.offset) < ($1.element.rank, $1.offset) }.map(\.element)
+        return sorted.flatMap { g -> [Entry] in
+            let rows = items.filter { $0.group == g }
+            return [.heading(g.title, count: rows.count)] + rows.map(Entry.row)
         }
     }
 
@@ -273,17 +296,17 @@ public final class SubagentStripPanelView: ComposerBannerView {
     /// A fixed clock for renders and tests; nil reads the real one.
     public var nowMs: Int64? { didSet { if nowMs != oldValue { refreshTimes() } } }
 
-    static let row: CGFloat = 28, pad: CGFloat = 4, header: CGFloat = 26, maxRows = 6
+    static let row: CGFloat = 28, pad: CGFloat = 4, header: CGFloat = 26, heading: CGFloat = 24, maxRows = 6
 
     private let list = FlippedDocument()
     private lazy var scroll = ScrollAreaView(documentView: list, scrollFade: true)
     private var rows: [SubagentStripRowView] = []
+    private var entries: [Entry] = []
+    private var headings: [(title: LabelView, count: LabelView)] = []
     private var expiry: DispatchWorkItem?
     /// The one minute tick, scheduled only while `wantsTick`.
     private var tick: DispatchWorkItem?
     private var occlusion: NSObjectProtocol?
-    private var headerProvider: NSView?
-    private var headerDriver: String?
     private let headerLabel = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
     private let headerCount = glassLabel(font: SB.tabular(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
 
@@ -315,11 +338,21 @@ public final class SubagentStripPanelView: ComposerBannerView {
             .joined(separator: " · ")
     }
 
-    private func listHeight(_ n: Int) -> CGFloat { CGFloat(n) * Self.row }
+    private static func height(_ e: Entry) -> CGFloat { if case .heading = e { heading } else { row } }
 
-    /// Sized to the rows up to `maxRows`, and never past `maxHeight`; the list scrolls beyond.
+    /// The whole list, or up to its `limit`th row with the headings before it.
+    static func listHeight(_ entries: [Entry], rows limit: Int = .max) -> CGFloat {
+        var h: CGFloat = 0, n = 0
+        for e in entries {
+            if case .row = e { guard n < limit else { break }; n += 1 }
+            h += height(e)
+        }
+        return h
+    }
+
+    /// Sized to the list up to `maxRows` rows and their headings, and never past `maxHeight`; the list scrolls beyond.
     public func preferredHeight(maxHeight: CGFloat) -> CGFloat {
-        min(maxHeight, 2 * Self.pad + Self.header + listHeight(min(items.count, Self.maxRows)))
+        min(maxHeight, 2 * Self.pad + Self.header + Self.listHeight(Self.entries(items), rows: Self.maxRows))
     }
 
     /// Esc: disarms an armed Stop. True when it did, so the caller leaves the panel open.
@@ -432,6 +465,23 @@ public final class SubagentStripPanelView: ComposerBannerView {
             return view
         }
         old.values.forEach { $0.removeFromSuperview() }
+        entries = Self.entries(items)
+        let titles = entries.compactMap { e -> (String, Int)? in if case .heading(let t, let c) = e { (t, c) } else { nil } }
+        while headings.count > titles.count { let h = headings.removeLast(); h.title.removeFromSuperview(); h.count.removeFromSuperview() }
+        while headings.count < titles.count {
+            let h = (title: glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16),
+                     count: glassLabel(font: SB.tabular(12), color: Themed.color(\.mutedForeground), lineHeight: 16))
+            h.title.truncation = .end
+            h.title.setAccessibilityRole(.staticText)
+            list.addSubview(h.title)
+            list.addSubview(h.count)
+            headings.append(h)
+        }
+        for (h, t) in zip(headings, titles) {
+            h.title.text = t.0
+            h.count.text = t.1 > 1 ? "\(t.1)" : ""
+            h.count.isHidden = t.1 < 2
+        }
         // An armed row that stopped working or left can no longer stop.
         if let armed = confirm.armed, !items.contains(where: { $0.row.key == armed && $0.row.canStop }) { confirm.cancel() }
         syncArmed()
@@ -446,34 +496,35 @@ public final class SubagentStripPanelView: ComposerBannerView {
         headerLabel.text = headerText
         headerLabel.setTooltip(model)
         headerCount.text = countText
-        let driver = model == nil ? nil : items.first?.row.driver
-        guard driver != headerDriver || (headerProvider == nil) != (driver == nil) else { return }
-        headerDriver = driver
-        headerProvider?.removeFromSuperview()
-        headerProvider = nil
-        if let driver, let model {
-            let icon = ProviderIcon.make(driver: driver, displayName: model, size: 12, color: Themed.color(\.mutedForeground), model: true)
-            addSubview(icon)
-            headerProvider = icon
-        }
     }
 
     public override func layout() {
         super.layout()
         let w = bounds.width, pad = Self.pad, inner = max(0, w - 2 * pad)
-        // The header lines up with the rows' mark and title columns, and stays put while the rows scroll.
-        var x = pad + SubagentStripRowView.padX
-        if let headerProvider {
-            headerProvider.frame = NSRect(x: x, y: pad + 7, width: 12, height: 12)
-            x += 12 + SubagentStripRowView.gap
-        }
+        // The header lines up with the rows' provider column, and stays put while the rows scroll. The rows carry
+        // the provider icons, so the header names a shared model in words only.
+        let x = pad + SubagentStripRowView.padX
         let cw = ceil(headerCount.textWidth)
         headerCount.frame = NSRect(x: w - pad - SubagentStripRowView.padX - cw, y: pad + 5, width: cw, height: 16)
         headerLabel.frame = NSRect(x: x, y: pad + 5, width: max(0, headerCount.frame.minX - 8 - x), height: 16)
         scroll.frame = NSRect(x: pad, y: pad + Self.header, width: inner, height: max(0, bounds.height - 2 * pad - Self.header))
-        list.frame = NSRect(x: 0, y: 0, width: inner, height: listHeight(rows.count))
-        for (i, row) in rows.enumerated() {
-            row.frame = NSRect(x: 0, y: CGFloat(i) * Self.row, width: inner, height: Self.row)
+        list.frame = NSRect(x: 0, y: 0, width: inner, height: Self.listHeight(entries))
+        // Headings line up with the rows' leading icon and their times.
+        var y: CGFloat = 0, h = 0
+        let byKey = Dictionary(rows.map { ($0.item?.row.key ?? "", $0) }, uniquingKeysWith: { a, _ in a })
+        for e in entries {
+            switch e {
+            case .heading:
+                guard h < headings.count else { continue }
+                let heading = headings[h]; h += 1
+                let cw = ceil(heading.count.textWidth), x = SubagentStripRowView.padX
+                heading.count.frame = NSRect(x: inner - x - cw, y: y + 6, width: cw, height: 16)
+                heading.title.frame = NSRect(x: x, y: y + 6, width: max(0, inner - 2 * x - cw - 8), height: 16)
+                y += Self.heading
+            case .row(let item):
+                byKey[item.row.key]?.frame = NSRect(x: 0, y: y, width: inner, height: Self.row)
+                y += Self.row
+            }
         }
     }
 }
@@ -495,6 +546,9 @@ final class SubagentStripRowView: DSView {
     private(set) var hovered = false
 
     private var mark = NSView()
+    /// The subagent's provider, beside its status mark.
+    private(set) var provider = NSView()
+    private var providerDriver: String?
     let title = glassLabel(font: DSFont.ui(13), color: Themed.color(\.foreground), lineHeight: 16)
     let time = glassLabel(font: SB.tabular(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
     let stop = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
@@ -502,6 +556,8 @@ final class SubagentStripRowView: DSView {
     private var trackingArea: NSTrackingArea?
 
     static let padX: CGFloat = 8, gap: CGFloat = 8, icon: CGFloat = 12
+    /// The provider icon leads and the status mark follows; the picture test also draws them swapped.
+    static var providerFirst = true
 
     init() {
         super.init(frame: .zero)
@@ -529,6 +585,12 @@ final class SubagentStripRowView: DSView {
             mark.removeFromSuperview()
             mark = SubagentStripGlyph.make(r.status, size: Self.icon)
             addSubview(mark)
+        }
+        if old == nil || providerDriver != r.driver {
+            providerDriver = r.driver
+            provider.removeFromSuperview()
+            provider = SubagentStripPillView.icon(driver: r.driver, name: item.modelName)
+            addSubview(provider)
         }
         setTooltip(item.modelName.isEmpty ? nil : item.modelName)
         title.text = r.title
@@ -570,7 +632,10 @@ final class SubagentStripRowView: DSView {
     override func layout() {
         super.layout()
         let mid = (bounds.height / 2).rounded(), i = Self.icon
-        mark.frame = NSRect(x: Self.padX, y: mid - i / 2, width: i, height: i)
+        let first = NSRect(x: Self.padX, y: mid - i / 2, width: i, height: i)
+        let second = first.offsetBy(dx: i + Self.gap, dy: 0)
+        mark.frame = Self.providerFirst ? second : first
+        provider.frame = Self.providerFirst ? first : second
         var right = bounds.width - Self.padX
         let controls = !confirmStop.isHidden || !stop.isHidden
         if !confirmStop.isHidden {
@@ -590,7 +655,7 @@ final class SubagentStripRowView: DSView {
             time.frame = NSRect(x: right, y: mid - 8, width: tw, height: 16)
             right -= Self.gap
         }
-        let tx = mark.frame.maxX + Self.gap
+        let tx = second.maxX + Self.gap
         title.frame = NSRect(x: tx, y: mid - 8, width: max(0, right - tx), height: 16)
     }
 
