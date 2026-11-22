@@ -405,6 +405,8 @@ public final class ThreadPanelView: DSView {
     public let timeline = TimelineView()
     /// Redesign: the thread's project and title in the clear top the rows fade out of.
     private let threadTitle = DitherThreadTitleView()
+    /// Redesign: the blur and wash over the rows under the header (`ThreadHeaderShadeView`).
+    let headerShade = ThreadHeaderShadeView()
     /// Redesign: whether the rows fade out under the tab band, which an open thread does.
     private var ditherTopFade = false
     /// Redesign: where the rows fade out above the composer group, in this view's coordinates, opaque at `start` and
@@ -851,6 +853,8 @@ public final class ThreadPanelView: DSView {
         threadTitle.isHidden = true
         _ = ThreadTabsSetting.observe { [weak self] in self?.needsLayout = true }
         addSubview(timeline)
+        headerShade.isHidden = true
+        addSubview(headerShade)
         addSubview(threadTitle)
         addSubview(defaultFade)
         addSubview(header)
@@ -1985,6 +1989,11 @@ public final class ThreadPanelView: DSView {
     private func layoutThreadTitle(chat: CGFloat, above: CGFloat) {
         ditherTopFade = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded && chat > 0
             && readingLane.width > 0
+        headerShade.isHidden = !ditherTopFade
+        if ditherTopFade {
+            headerShade.frame = NSRect(x: 0, y: -above, width: chat,
+                                       height: ThreadHeaderShadeView.height(reducesTransparency: ThemeRuntime.reducesTransparency()))
+        }
         threadTitle.set(project: header.projectTitle, title: header.threadTitle)
         threadTitle.titleTyping = header.titleTyping
         let pill = header.pill
@@ -2641,12 +2650,11 @@ public final class ThreadPanelView: DSView {
         // ponytail: the mask renders the timeline offscreen while it scrolls, a mask per row if Dither scrolling drops frames
         fade.isHidden = dither || standard
         if dither, ditherTopFade {
-            // An open Redesign thread: the rows are gone above the tab band's bottom, so none reads under the header
-            // pill, then fade in over `Space.l`. The mask leaves the picture itself showing there, so no bar shows.
+            // An open Redesign thread: the rows run on to the window's top edge under the header, where
+            // `headerShade` blurs and darkens them; the mask only fades them out above the composer.
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
-            let clear = Double(DitherChrome.band)
-            let stops = [(0, 0), (clear / h, 0), ((clear + Double(RedesignTokens.Space.l)) / h, 1)] + bottomFadeStops(h)
+            let stops = [(0.0, 1.0)] + bottomFadeStops(h)
             fadeMask.locations = Self.rising(stops.map(\.0)).map { NSNumber(value: $0) }
             fadeMask.colors = stops.map { NSColor.black.withAlphaComponent($0.1).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
