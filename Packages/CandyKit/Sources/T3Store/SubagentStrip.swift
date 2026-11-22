@@ -167,7 +167,7 @@ public struct SubagentStrip: Sendable, Equatable {
             let raw = child?.title ?? agent.title
             let row = Row(id: record.id, key: key, number: index + 1, childThreadId: agent.childThreadId,
                           title: ThreadRelationships.subagentDisplayTitle(raw), status: status, driver: agent.driver,
-                          providerInstanceId: agent.providerInstanceId, model: agent.model, canStop: canStop(agent),
+                          providerInstanceId: agent.providerInstanceId, model: agent.ranModel ?? agent.model, canStop: canStop(agent),
                           startedAt: agent.startedAt, completedAt: agent.completedAt)
             if live { active.append(row) }
             else if let run = record.runId, latestTurn.contains(run) { finished.append(row) }
