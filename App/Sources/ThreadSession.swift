@@ -182,6 +182,7 @@ final class ThreadSession {
             panel.setProjection(update.projection, projectTitle: projectTitle, workspaceRoot: workspaceRoot, onlyStreamingText: onlyStreamingText)
         }
         panel.header.projectIcon = project(update.projection).map(ProjectIconSource.init)
+        if update.projection != nil { LaunchGuard.shared.shown(threadId.rawValue) }
         onProjection?(update.projection, onlyStreamingText)
         onStatus?(update.status)
         advanceCitation(update)
@@ -1851,9 +1852,25 @@ final class ThreadController {
         if let env = remembered?.environmentId, environments.isRegistered(env), !environments.hasShell(env) { return }
         restored = true
         guard session == nil, !panel.isDraft else { return }
-        if let remembered, snapshot.threads.contains(where: { $0.id == remembered }) || remembered.environmentId.map({ environments.hasPartialShell($0) }) == true {
+        let available = remembered.map { id in
+            snapshot.threads.contains(where: { $0.id == id }) || id.environmentId.map({ environments.hasPartialShell($0) }) == true
+        } ?? false
+        // The last run crashed, froze or was killed, maybe on this thread: start on a new one, once.
+        let launch = LaunchGuard.shared
+        if let remembered, available, launch.restoresLastThread {
+            launch.willRestore(remembered.rawValue)
             open(remembered)
-        } else if let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
+            return
+        }
+        if let remembered, available, let notice = launch.takeNotice(title: snapshot.threads.first { $0.id == remembered }?.title) {
+            var toast: Int?
+            toast = panel.toasts.show(ToastView(title: "Started on a new thread", message: notice, kind: .warning, actionTitle: "Open thread",
+                                                action: { [weak self] in
+                                                    if let toast { self?.panel.toasts.dismiss(toast) }
+                                                    self?.open(remembered)
+                                                }), timeout: 0)
+        }
+        if let project = SidebarModel.sortProjectsForSidebar(snapshot.projects, threads: snapshot.threads, order: .updatedAt).first {
             _ = composer.newThread(in: project)
         }
     }

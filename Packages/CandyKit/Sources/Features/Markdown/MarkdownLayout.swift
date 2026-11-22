@@ -1194,7 +1194,7 @@ private struct Builder {
             italics[font] = made
             return made
         }
-        for token in plain ? [] : CodeHighlighter.tokens(code, language: language) {
+        for token in plain ? [] : CodeHighlighter.tokens(CodeHighlighter.highlightedPrefix(code), language: language) {
             string.addAttribute(.foregroundColor, value: token.kind.markdownColor, range: token.range)
             if token.kind == .emphasis { string.addAttribute(.font, value: italic, range: token.range) }
         }

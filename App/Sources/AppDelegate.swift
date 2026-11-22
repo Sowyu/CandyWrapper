@@ -49,6 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if handOffToRunningInstance() { return }
+        // Shift held at launch skips reopening the last thread, a way past one that hangs.
+        LaunchGuard.shared.begin(shiftHeld: NSEvent.modifierFlags.contains(.shift))
         StallMonitor.start()
         if !CommandLine.arguments.contains("--server") { ServerController.prefetchCachedSidebar() }
         // The View menu carries its own Toggle Full Screen (DesktopApplicationMenu.ts:258-268).
@@ -74,7 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
-    func applicationWillTerminate(_ notification: Notification) { notifications?.willTerminate(); desktopManaged?.shutdown() }
+    func applicationWillTerminate(_ notification: Notification) {
+        LaunchGuard.shared.end()
+        notifications?.willTerminate(); desktopManaged?.shutdown()
+    }
 
     /// T3 holds a single-instance lock (DesktopClerk.ts:122-131): a second launch focuses the first window
     /// (`second-instance`, :186-196) and quits. Development launches (any `--` flag) may run side by side.

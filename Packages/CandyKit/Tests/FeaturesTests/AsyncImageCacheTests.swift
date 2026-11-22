@@ -51,6 +51,21 @@ struct AsyncImageCacheTests {
         #expect(calls.all.count == 1)
     }
 
+    /// A load that fails after `clear()` cancelled it gets one retry, then gives up, even when every attempt is
+    /// cleared: the retry is bounded by a flag, not by telling a cancel from a failure correctly.
+    @Test(arguments: [false, true]) func clearsDuringALoadRetryOnce(everyTime: Bool) async {
+        AsyncImageView.clearMemory()
+        let calls = Calls()
+        let result = await ImageDecodeCache.load(key: "cleared-\(UUID().uuidString)", side: 64) { side in
+            calls.record(side)
+            // Past 20 calls the clears stop, so a regression fails here instead of hanging.
+            if everyTime && calls.all.count < 20 || calls.all.count == 1 { await MainActor.run { ImageDecodeCache.clear() } }
+            return calls.all.count >= 20 ? await Self.loader(Calls())(side) : nil
+        }
+        #expect(result == nil)
+        #expect(calls.all.count == 2)
+    }
+
     /// Thread A, then B, then A again: the rebuilt cell shows A's image in the same pass, with no new decode.
     @Test func switchBackShowsCachedImageAtOnce() async throws {
         AsyncImageView.clearMemory()

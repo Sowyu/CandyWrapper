@@ -99,7 +99,10 @@ enum ImageDecodeCache {
         memory.setObject(Cached(image, side: side), forKey: key, cost: image.bytesPerRow * image.height)
     }
 
-    static func load(key: String, side: Int, in memory: NSCache<NSString, Cached> = memory, loader: @escaping AsyncImageView.Loader) async -> Cached? {
+    /// `retry`: whether a request `clear()` cancels under this caller loads once more. The retry passes false, so no
+    /// mistake in telling a cancel from a failure can loop: a 1.17.0 one recursed 339 levels deep on the main thread.
+    static func load(key: String, side: Int, in memory: NSCache<NSString, Cached> = memory, retry: Bool = true,
+                     loader: @escaping AsyncImageView.Loader) async -> Cached? {
         guard !Task.isCancelled else { return nil }
         if let hit = memory.object(forKey: key as NSString), hit.side >= side { return hit }
         let request: Request
@@ -126,7 +129,7 @@ enum ImageDecodeCache {
             guard !Task.isCancelled else { return nil }
             // `clear()` cancelled the shared request under a consumer that still wants it: a cancel is not a failure,
             // or the view would show "Image unavailable" until it is rebuilt.
-            if image == nil, sharedCancelled { return await load(key: key, side: side, in: memory, loader: loader) }
+            if image == nil, sharedCancelled, retry { return await load(key: key, side: side, in: memory, retry: false, loader: loader) }
             guard let image else { return nil }
             return Cached(image, side: requestSide)
         } onCancel: {
