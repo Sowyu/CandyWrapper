@@ -159,6 +159,33 @@ struct ConnectionSignalTests {
         #expect(await RouteCheck.check([lan]) { _ in false } == RouteCheck.Outcome(first: nil, silent: [lan]))
     }
 
+    /// A route that hasn't answered within T3's 500 ms head start is passed over (driver.ts:65, 95-133): a LAN address
+    /// on another network never answers, and the tunnel behind it shouldn't wait out its 2.5 s check.
+    @Test func aSilentRouteIsPassedOverAfterTheHeadStart() async {
+        let lan = URL(string: "http://192.168.1.4:3773")!, tailnet = URL(string: "http://100.64.0.2:3773")!
+        let relay = URL(string: "https://tunnel.example.com")!
+        let started = ContinuousClock.now
+        let picked = await RouteCheck.check([lan, relay]) { route in
+            if route == lan { try? await Task.sleep(for: .milliseconds(2_500)); return false }
+            return true
+        }
+        let waited = ContinuousClock.now - started
+        #expect(picked == RouteCheck.Outcome(first: relay, silent: []))
+        #expect(waited >= .milliseconds(450) && waited < .milliseconds(1_500))
+        // A later route that answers after the head start still wins over a silent one ahead of it.
+        let late = await RouteCheck.check([lan, tailnet, relay]) { route in
+            if route == lan { try? await Task.sleep(for: .milliseconds(2_500)); return true }
+            if route == tailnet { try? await Task.sleep(for: .milliseconds(700)); return true }
+            return false
+        }
+        #expect(late.first == tailnet)
+        #expect(late.silent == [relay])
+        // Every route failed: no answer, without waiting for the head start.
+        let quick = ContinuousClock.now
+        #expect(await RouteCheck.check([lan, relay]) { _ in false } == RouteCheck.Outcome(first: nil, silent: [lan, relay]))
+        #expect(ContinuousClock.now - quick < .milliseconds(400))
+    }
+
     @Test func betterRoutesAndTheirBackoff() {
         let lan = URL(string: "http://192.168.1.4:3773")!, tailnet = URL(string: "http://100.64.0.2:3773")!
         let relay = URL(string: "https://tunnel.example.com")!
