@@ -54,6 +54,15 @@ import Testing
             let q = clock.measure { editor.setSelectedRange(NSRange(location: plain + 1, length: 0)) }
             if round >= 10 { moves.append(m); moves.append(p); plainMoves.append(q) }
         }
+        // CW_BENCH_PROFILE=typing types in plain text for about 15 s, for `sample`.
+        if ProcessInfo.processInfo.environment["CW_BENCH_PROFILE"] == "typing" {
+            try? "\(getpid())".write(toFile: "/tmp/cw-bench-profile.pid", atomically: true, encoding: .utf8)
+            let until = ContinuousClock.now + .seconds(15)
+            while ContinuousClock.now < until {
+                editor.setSelectedRange(NSRange(location: plain, length: 0))
+                editor.insertText("a", replacementRange: NSRange(location: NSNotFound, length: 0))
+            }
+        }
         print(String(format: "BENCH keystroke plain=%.3fms styled=%.3fms selection into/out of styled=%.3fms plain=%.3fms",
                      median(plainKeys), median(styledKeys), median(moves), median(plainMoves)))
         #expect(median(plainKeys) < 50)

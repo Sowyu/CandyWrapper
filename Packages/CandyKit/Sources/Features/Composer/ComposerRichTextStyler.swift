@@ -54,6 +54,14 @@ enum ComposerRichTextStyler {
         return LineBox(height: height, spacing: m.lineSpacing, top: m.top)
     }
 
+    /// A render's memo key: the marks and the line base's font and color objects (a heading line has its own); every
+    /// other key of a line base is the render's `base`.
+    private struct RunStyleKey: Hashable {
+        var marks: [ComposerRichText.Mark]
+        var font: ObjectIdentifier?
+        var color: ObjectIdentifier?
+    }
+
     /// What a render did besides styling.
     struct Info {
         /// The input rule applied at the caret: the result range of its atom and any character
@@ -165,6 +173,18 @@ enum ComposerRichTextStyler {
         // Where each result line starts, the block it is, and its atom, for the layout pass.
         var lines: [(start: Int, line: ComposerBlockLayout.Line, atom: Int?)] = []
         let text = input.string as NSString
+        // One style per marks and line base in a render: building one converts fonts, and every keystroke renders the
+        // whole draft, a run per styled word (84% of a keystroke in a 5,000-character draft went to that).
+        // The memo holds the font and color it keyed on, so no other object takes their address during the render.
+        var runStyles: [RunStyleKey: (attributes: [NSAttributedString.Key: Any], held: [AnyObject])] = [:]
+        func attributes(_ marks: [ComposerRichText.Mark], base lineBase: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+            let font = lineBase[.font] as AnyObject?, color = lineBase[.foregroundColor] as AnyObject?
+            let key = RunStyleKey(marks: marks, font: font.map(ObjectIdentifier.init), color: color.map(ObjectIdentifier.init))
+            if let hit = runStyles[key] { return hit.attributes }
+            let made = Self.attributes(marks, base: lineBase)
+            runStyles[key] = (made, [font, color].compactMap { $0 })
+            return made
+        }
         var lineStart = 0
         while lineStart < text.length {
             let newline = text.range(of: "\n", range: NSRange(location: lineStart, length: text.length - lineStart))
