@@ -57,6 +57,19 @@ struct SideChatsTests {
         #expect(SideChats.tabState(thread { $0.status = .running; $0.pendingRuntimeRequest = approval }) == .needsApproval)
     }
 
+    @Test func titleHelperCleanupPreservesUserSideChats() {
+        let own = thread("env-a/helper") {
+            $0.title = "Title helper"
+            $0.lineage = ThreadLineage(parentThreadId: "parent", relationshipToParent: .fork, rootThreadId: "parent", sideChat: true)
+        }
+        var other = own
+        other.id = "env-b/helper"
+        let recorded: Set<ThreadId> = [own.id]
+        #expect(DeeperRename.isLeftover(own, owned: recorded))
+        #expect(!DeeperRename.isLeftover(other, owned: recorded))
+        #expect(!DeeperRename.isLeftover(own, owned: []))
+    }
+
     @Test func aSideChatOpensAsItsParent() {
         let side = thread("thread-side") {
             $0.lineage = ThreadLineage(parentThreadId: "thread-parent", relationshipToParent: .fork, rootThreadId: "thread-parent", sideChat: true)

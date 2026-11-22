@@ -612,7 +612,7 @@ final class SidebarCommands {
             // The new title types out; after a failure the old one types back.
             if case .success(let title) = outcome { self.land(id, old: old, target: title) } else { self.land(id, old: old, target: old) }
             // Deleted whatever happened; a quit before this line leaves it to the next launch's cleanup.
-            _ = try? await self.environments.dispatch(scoped, ThreadCommands.delete(helper))
+            await self.deleteOwnedHelper(scoped)
             switch outcome {
             case .success(let title) where title == old:
                 self.toast("Title unchanged", "The current title already fits this thread.", .info)
@@ -664,6 +664,7 @@ final class SidebarCommands {
         func timedOut() -> Bool { Date().timeIntervalSince(start) > DeeperRename.timeout }
         do {
             _ = try await environments.dispatch(id, SideChats.fork(source: id.localId, target: helper, title: DeeperRename.helperTitle))
+            ownedHelpers.insert(scoped)
         } catch {
             return .failure((error as? RPCClientError)?.typedError?.message ?? "Could not start the title helper.")
         }
@@ -704,17 +705,29 @@ final class SidebarCommands {
         return .success(title)
     }
 
-    /// Helpers a quit left behind: side chats titled "Title helper" with no run, never one running now. A /btw side
-    /// chat is titled "Side chat", so the user's own are never touched.
-    private func deleteLeftoverHelpers() {
-        guard let threads = snapshot?.threads else { return }
-        let running = Set(deeperRenames.values)
-        for thread in threads where DeeperRename.isLeftover(thread) && !running.contains(thread.id) && !cleaningHelpers.contains(thread.id) {
-            cleaningHelpers.insert(thread.id)
-            Task { [environments] in _ = try? await environments.dispatch(thread.id, ThreadCommands.delete(thread.id.localId)) }
-        }
+    private static let ownedHelperKey = "titleRewrite.ownedHelpers"
+    private lazy var ownedHelpers: Set<ThreadId> = Set((UserDefaults.standard.stringArray(forKey: Self.ownedHelperKey) ?? []).map { ThreadId($0) }) {
+        didSet { UserDefaults.standard.set(ownedHelpers.map(\.rawValue), forKey: Self.ownedHelperKey) }
     }
     private var cleaningHelpers: Set<ThreadId> = []
+
+    private func deleteLeftoverHelpers() {
+        guard !ownedHelpers.isEmpty, let threads = snapshot?.threads else { return }
+        let running = Set(deeperRenames.values)
+        for thread in threads where DeeperRename.isLeftover(thread, owned: ownedHelpers)
+            && !running.contains(thread.id) && !cleaningHelpers.contains(thread.id) {
+            Task { await self.deleteOwnedHelper(thread.id) }
+        }
+    }
+
+    private func deleteOwnedHelper(_ id: ThreadId) async {
+        guard ownedHelpers.contains(id), cleaningHelpers.insert(id).inserted else { return }
+        // A failed delete stays recorded for the next launch. Shell updates can arrive many times per second.
+        do { _ = try await environments.dispatch(id, ThreadCommands.delete(id.localId)) }
+        catch { return }
+        ownedHelpers.remove(id)
+        cleaningHelpers.remove(id)
+    }
 
     private func simple(_ id: ThreadId, _ payload: JSONValue, update: OptimisticThreadUpdate? = nil, failure: String?) {
         Task {
