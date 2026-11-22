@@ -41,4 +41,47 @@ struct ComposerCaretTests {
         let rows = Set(bands.map(\.minY)).sorted()
         #expect(rows.count == 2 && abs(rows[1] - rows[0] - ComposerEditor.lineHeight) <= 1)
     }
+
+    /// The caret has a box in every editing state, including after a chip click, which once moved
+    /// the editor to TextKit 1 and hid the caret for good (`placeChipAnchor`).
+    @Test(arguments: [
+        ("", 0), ("plain text", 10), ("plain text", 0), ("@README.md ", 11), ("a @README.md", 12),
+        ("- item", 6), ("1. item", 7), ("> quote", 7), ("`code` here", 3), ("```\ncode\n```", 6),
+        ("one\n\ntwo", 4), ("line\n", 5),
+    ])
+    func caretHasABoxInEveryState(text: String, caret: Int) throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 240), styleMask: [.borderless], backing: .buffered, defer: true)
+        let editor = ComposerEditor()
+        editor.frame = NSRect(x: 0, y: 0, width: 560, height: 200)
+        editor.chipLook = ComposerChipLook.basic
+        editor.richTextEnabled = true
+        window.contentView?.addSubview(editor)
+        editor.setText(text)
+        let length = editor.textStorage?.length ?? 0
+        func check(_ step: String) {
+            let rect = editor.caretRect()
+            #expect(rect != nil && rect!.height > 10 && editor.bounds.contains(rect!.origin), "\(step) \(text.debugDescription): \(String(describing: rect))")
+        }
+        editor.setSelectedRange(NSRange(location: min(caret, length), length: 0))
+        check("placed")
+        if length > 0, let chip = (0..<length).first(where: { editor.textStorage!.attribute(.attachment, at: $0, effectiveRange: nil) is ComposerChipAttachment }) {
+            editor.placeChipAnchor(at: chip)
+            editor.setSelectedRange(NSRange(location: min(caret, length), length: 0))
+            check("after a chip click")
+        }
+        editor.insertText("x", replacementRange: editor.selectedRange())
+        check("typed")
+        editor.insertNewline(nil)
+        check("return")
+        editor.deleteBackward(nil)
+        check("backspace")
+        editor.setSelectedRange(NSRange(location: 0, length: editor.textStorage?.length ?? 0))
+        editor.setSelectedRange(NSRange(location: editor.textStorage?.length ?? 0, length: 0))
+        check("selection collapsed")
+        editor.undoManager?.undo()
+        check("undo")
+        editor.undoManager?.redo()
+        check("redo")
+    }
 }
+
