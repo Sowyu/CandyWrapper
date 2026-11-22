@@ -55,6 +55,36 @@ struct ThreadContextWindowMeterTests {
         }
     }
 
+    /// Counts come from the server unchecked. A huge negative `maxTokens` trapped in `tokens`; now any number draws an
+    /// empty meter or a full one.
+    @Test(arguments: [-1e300, -Double(Int.max) * 4, -5, 0, .nan, .infinity, -.infinity, 1e300, Double(Int.max) * 4])
+    func anyServerCountDrawsAnEmptyOrFullMeter(value: Double) throws {
+        #expect(ThreadContextWindowUsage.tokens(value).isEmpty == false)
+        if !(value > 0) || !value.isFinite { #expect(ThreadContextWindowUsage.tokens(value) == "0") }
+        let cases: [(ThreadContextWindowUsage, Double)] = [
+            (ThreadContextWindowUsage(used: 1_000, maximum: value, automatically: true), value.isFinite && value > 0 ? min(1, 1_000 / value) : 0),
+            (ThreadContextWindowUsage(used: value.isFinite ? max(0, value) : 0, maximum: 1_000, automatically: true), value.isFinite && value > 0 ? min(1, value / 1_000) : 0),
+            (ThreadContextWindowUsage(used: 1e300, maximum: value, automatically: true, inputTokens: value, cachedInputTokens: value, outputTokens: value),
+             value > 0 ? (value.isFinite ? min(1, 1e300 / value) : 0) : 0),
+        ]
+        for redesign in [false, true] {
+            let draw = {
+                for (usage, fraction) in cases {
+                    let meter = ThreadContextWindowMeterView(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+                    meter.usage = usage
+                    meter.layoutSubtreeIfNeeded()
+                    _ = try self.inkedPixels(meter)
+                    #expect(abs(Double(meter.arc.strokeEnd) - fraction) < 0.001, "\(usage)")
+                    let details = ThreadContextWindowDetailsView(frame: NSRect(x: 0, y: 0, width: 280, height: 200))
+                    _ = details.configure(usage: usage, capy: redesign, model: "m", compactOffered: true, disabled: false, reason: nil)
+                    details.layoutSubtreeIfNeeded()
+                    _ = usage.redesignSummary
+                }
+            }
+            if redesign { try withDither(draw) } else { try draw() }
+        }
+    }
+
     /// On 2026-10-27 the Conductor's ring showed as an empty pill: back from another theme, the meter returned above
     /// the queue and the pill it had left behind covered it.
     @Test func theRingStaysAboveItsPillAcrossThemeSwitches() throws {

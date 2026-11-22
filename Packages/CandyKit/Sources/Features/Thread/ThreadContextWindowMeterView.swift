@@ -86,7 +86,8 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
     }
 
     public static func tokens(_ value: Double) -> String {
-        guard value.isFinite else { return "0" }
+        // The server's counts are unchecked: `Int(_:)` traps on a negative one past `Int.min`, and none below 0 is real.
+        guard value.isFinite, value > 0 else { return "0" }
         if value < 1_000 { return String(Int(value.rounded())) }
         if value < 10_000 { return decimal(value / 1_000) + "k" }
         // Anything from 999,500 rounds to 1000k, so it belongs to the next unit (contextWindow.ts:174-177).
