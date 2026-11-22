@@ -1165,9 +1165,17 @@ private struct Builder {
     /// A code block's text with its token colors. Neither depends on the width or the appearance (the colors are
     /// dynamic), so long blocks keep theirs: a window resize or reopening the thread lays out again without lexing
     /// again. Lexing an 18,000 line block took 0.1 s of every layout.
-    // ponytail: the last 256 blocks of 2,000 UTF-16 units or more, FIFO. 16 thrashed: a thread with more long blocks than that re-lexed every one on every layout and pinned the main thread. Bound by total length if memory shows in profiles
+    /// The last 256 blocks of 2,000 UTF-16 units or more, FIFO, and at most `coloredCodeUnitLimit` units in all. 16
+    /// blocks thrashed: a thread with more long blocks than that re-lexed every one on every layout and pinned the main
+    /// thread. The newest block always stays, so one block over the limit still lexes once.
+    // ponytail: FIFO by count and total length, LRU if a long thread's blocks evict each other in profiles
     nonisolated(unsafe) private static var coloredCodeCache: [ColoredCodeKey: NSAttributedString] = [:]
     nonisolated(unsafe) fileprivate static var coloredCodeOrder: [ColoredCodeKey] = []
+    nonisolated(unsafe) fileprivate static var coloredCodeUnits = 0
+    /// A cached unit holds about 3.4 bytes (the key's string, the attributed copy and its color runs; 5.6 MB for
+    /// 1.67M units of Swift), so this is about 14 MB: five 18,000 line blocks, or 256 blocks of 15,000 units. By
+    /// count alone, 256 such long blocks could hold 700 MB.
+    static let coloredCodeUnitLimit = 4_000_000
     fileprivate static let coloredCodeLock = NSLock()
     nonisolated(unsafe) private static var italics: [NSFont: NSFont] = [:]
     struct ColoredCodeKey: Hashable { var code: String; var language: String; var font: NSFont }
@@ -1201,8 +1209,13 @@ private struct Builder {
         guard cached else { return string }
         let frozen = string.copy() as! NSAttributedString
         coloredCodeLock.withLock {
-            if coloredCodeCache.updateValue(frozen, forKey: key) == nil { coloredCodeOrder.append(key) }
-            if coloredCodeOrder.count > 256 { coloredCodeCache[coloredCodeOrder.removeFirst()] = nil }
+            if coloredCodeCache.updateValue(frozen, forKey: key) == nil { coloredCodeOrder.append(key); coloredCodeUnits += key.code.utf16.count }
+            let drop = MarkdownLayout.coloredCodeEvictions(oldestFirst: coloredCodeOrder.lazy.map { $0.code.utf16.count }, units: coloredCodeUnits)
+            for old in coloredCodeOrder.prefix(drop) {
+                coloredCodeCache[old] = nil
+                coloredCodeUnits -= old.code.utf16.count
+            }
+            coloredCodeOrder.removeFirst(drop)
         }
         return frozen
     }
@@ -1687,6 +1700,22 @@ extension MarkdownLayout {
     }
     /// The code of the cached colored blocks, oldest first (tests).
     static var coloredCodeKeys: [String] { Builder.coloredCodeLock.withLock { Builder.coloredCodeOrder.map(\.code) } }
+    /// The UTF-16 units the colored blocks hold, and the cap on them (tests).
+    static var coloredCodeUnits: Int { Builder.coloredCodeLock.withLock { Builder.coloredCodeUnits } }
+    static var coloredCodeUnitLimit: Int { Builder.coloredCodeUnitLimit }
+
+    /// How many of the oldest colored blocks go so that at most `maxCount` stay and they hold at most `maxUnits` UTF-16
+    /// units, never the newest.
+    static func coloredCodeEvictions<C: Collection>(oldestFirst lengths: C, units: Int, maxCount: Int = 256,
+                                                    maxUnits: Int = Builder.coloredCodeUnitLimit) -> Int where C.Element == Int {
+        var count = lengths.count, units = units, drop = 0
+        for length in lengths where count > 1 && (count > maxCount || units > maxUnits) {
+            units -= length
+            count -= 1
+            drop += 1
+        }
+        return drop
+    }
 }
 
 private extension MarkdownLayout.Item {
