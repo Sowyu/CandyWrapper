@@ -781,6 +781,22 @@ private func longThreadProjection(copies: Int, window: Int) throws -> ThreadProj
 @MainActor
 private func measureScroll(_ name: String, copies: Int, window turns: Int) async throws {
     let p = try longThreadProjection(copies: copies, window: turns)
+    // CW_BENCH_PROFILE=open opens the thread in fresh windows for about 20 s, for `sample`.
+    if ProcessInfo.processInfo.environment["CW_BENCH_PROFILE"] == "open" {
+        try? "\(getpid())".write(toFile: "/tmp/cw-bench-profile.pid", atomically: true, encoding: .utf8)
+        let until = ContinuousClock.now + .seconds(20)
+        while ContinuousClock.now < until {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
+            window.contentView = panel
+            panel.setProjection(p, projectTitle: "demo-repo", workspaceRoot: nil)
+            await panel.model.rowsSettled()
+            window.layoutIfNeeded()
+            window.displayIfNeeded()
+            window.close()
+        }
+    }
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     let panel = ThreadPanelView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
@@ -884,11 +900,15 @@ private func measureScroll(_ name: String, copies: Int, window turns: Int) async
     let text = live.visibleTurnItems[answer].item.text
     var streamed: [Double] = []
     let streamConfigures = timeline.configureCount
-    for k in 1...(profile == "stream" ? 3_000 : 14) {
+    if profile == "stream" { try? "\(getpid())".write(toFile: "/tmp/cw-bench-profile.pid", atomically: true, encoding: .utf8) }
+    let streamUntil = ContinuousClock.now + .seconds(20)
+    for k in 1...(profile == "stream" ? 100_000 : 14) {
+        if profile == "stream", ContinuousClock.now > streamUntil { break }
         var next = live
         next.visibleTurnItems[answer].item = try replacing(next.visibleTurnItems[answer].item, ["text": .string(text + String(repeating: " word", count: k))])
         let start = ContinuousClock.now
-        panel.setProjection(next, projectTitle: "demo-repo", workspaceRoot: nil)
+        // As ThreadSession hands it on: the reducer marks an update that only grew the answer's text.
+        panel.setProjection(next, projectTitle: "demo-repo", workspaceRoot: nil, onlyStreamingText: true)
         var main = milliseconds(ContinuousClock.now - start)
         main += await panel.model.rowsSettled()
         let layout = ContinuousClock.now

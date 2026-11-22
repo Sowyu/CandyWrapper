@@ -253,16 +253,28 @@ public struct TimelineRunState: Sendable, Hashable {
     public var activeTurnStartedAt: T3Timestamp?
 
     public init(projection: ThreadProjection) {
-        func newest(_ statuses: Set<ThreadStatus>) -> Run? {
-            projection.runs.filter { statuses.contains($0.status) }.max { $0.ordinal < $1.ordinal }
+        // One pass over the runs for the three newest, each the first of the highest ordinal as `max(by:)` keeps it. It
+        // runs on every streamed word, and four filtered copies of a 900-run thread's runs took 0.4 ms of each.
+        var doing: Int?, running: Int?, unheldIndex: Int?
+        let runs = projection.runs
+        for i in runs.indices {
+            let run = runs[i]
+            switch run.status {
+            case .preparing, .starting, .running:
+                if running.map({ runs[$0].ordinal < run.ordinal }) ?? true { running = i }
+                if doing.map({ runs[$0].ordinal < run.ordinal }) ?? true { doing = i }
+            case .waiting:
+                if doing.map({ runs[$0].ordinal < run.ordinal }) ?? true { doing = i }
+            default: break
+            }
+            if !(run.status == .queued && run.queueHeld == true), unheldIndex.map({ runs[$0].ordinal < run.ordinal }) ?? true { unheldIndex = i }
         }
-        let unheld = projection.runs.filter { !($0.status == .queued && $0.queueHeld == true) }.max { $0.ordinal < $1.ordinal }
-        let activity = newest([.preparing, .starting, .running, .waiting]) ?? unheld
+        let activity = (doing ?? unheldIndex).map { runs[$0] }
         latestRun = activity.map {
             TimelineLatestRun(runId: $0.id, status: $0.status, requestedAt: $0.requestedAt, startedAt: $0.startedAt, completedAt: $0.completedAt,
                               turnEnded: Self.turnEnded($0, projection.providerTurns))
         }
-        runningRunId = newest([.preparing, .starting, .running])?.id
+        runningRunId = running.map { runs[$0].id }
         isWorking = activity.map { [.preparing, .starting, .queued, .running, .waiting].contains($0.status) } ?? false
         // A provider-native subagent thread has a runless root turn whose status follows the child.
         if projection.thread.isProviderNativeSubagent,
@@ -284,8 +296,12 @@ public struct TimelineRunState: Sendable, Hashable {
     static func turnEnded(_ run: Run, _ providerTurns: [JSONValue]) -> Bool {
         guard [.preparing, .starting, .running, .waiting].contains(run.status), let attempt = run.activeAttemptId?.rawValue else { return false }
         func ordinal(_ turn: JSONValue) -> Double { if case .number(let n)? = turn["ordinal"] { return n }; return 0 }
-        let latest = providerTurns.filter { $0["runAttemptId"]?.stringValue == attempt }.max { ordinal($0) < ordinal($1) }
-        guard let status = latest?["status"]?.stringValue else { return false }
+        var latest: (turn: JSONValue, ordinal: Double)?
+        for turn in providerTurns where turn["runAttemptId"]?.stringValue == attempt {
+            let n = ordinal(turn)
+            if latest.map({ $0.ordinal < n }) ?? true { latest = (turn, n) }
+        }
+        guard let status = latest?.turn["status"]?.stringValue else { return false }
         return status != "pending" && status != "running"
     }
 
