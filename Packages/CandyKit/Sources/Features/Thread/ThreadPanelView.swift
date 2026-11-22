@@ -405,7 +405,7 @@ public final class ThreadPanelView: DSView {
     public let timeline = TimelineView()
     /// Redesign: the thread's project and title over the rows under the header.
     private let threadTitle = DitherThreadTitleView()
-    /// Redesign: the blur behind the breadcrumb and the fade at the window's top edge (`ThreadHeaderShadeView`).
+    /// Redesign: the fade at the window's top edge (`ThreadHeaderShadeView`).
     let headerShade = ThreadHeaderShadeView()
     /// Redesign: whether the rows run up through the header row under `headerShade`, which an open thread's do.
     private var ditherTopFade = false
@@ -1970,8 +1970,11 @@ public final class ThreadPanelView: DSView {
     }
 
     /// What the composer docks that is not in the banner stack.
-    /// Redesign: the thread's project and title on the lane's left edge, centred on the header pill's line, stopping
-    /// `Space.l` short of the pill. Rows pass behind it under `headerShade`'s blur patch. The tab strip names the thread itself while tabs show.
+    /// Redesign: the thread's project and title as a pill at the left end of the header row (`DitherThreadTitleView`).
+    /// In the app the tab strip holds it as its leading accessory and places it, so it pairs with the header pill and
+    /// takes the tooltip's hover there. Without a strip (a panel on its own) it sits in this view at the same place:
+    /// `accessoryRight` in, centred in the band, stopping `leadingGap` short of the header pill. The tab strip names
+    /// the thread itself while tabs show.
     private func layoutThreadTitle(chat: CGFloat, above: CGFloat) {
         ditherTopFade = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded && chat > 0
             && readingLane.width > 0
@@ -1981,18 +1984,19 @@ public final class ThreadPanelView: DSView {
         }
         threadTitle.set(project: header.projectTitle, title: header.threadTitle)
         threadTitle.titleTyping = header.titleTyping
+        threadTitle.isHidden = !ditherTopFade || ThreadTabsSetting.isOn || threadTitle.isEmpty || isHiddenOrHasHiddenAncestor
+        guard threadTitle.superview === self else { threadTitle.superview?.needsLayout = true; return }
+        guard !threadTitle.isHidden else { return }
         let pill = header.pill
-        let pillLeft = pill.isHidden || pill.window == nil ? chat : convert(pill.frame, from: pill.superview).minX
-        let x = readingLane.minX
-        let right = min(readingLane.maxX + RedesignTokens.Space.l, pillLeft - RedesignTokens.Space.l)
-        threadTitle.isHidden = !ditherTopFade || ThreadTabsSetting.isOn || threadTitle.isEmpty || right - x < 48
-        guard !threadTitle.isHidden else { headerShade.textRect = .zero; return }
+        let x = DitherTabStripView.accessoryRight
+        let end = pill.isHidden || pill.window == nil ? chat - x : min(chat - x, convert(pill.frame, from: pill.superview).minX)
         threadTitle.frame = NSRect(x: x, y: (-above + DitherChrome.band / 2 - DitherThreadTitleView.height / 2).rounded(),
-                                   width: max(0, right - x), height: DitherThreadTitleView.height)
-        var text = threadTitle.frame
-        text.size.width = threadTitle.textWidth
-        headerShade.textRect = text.offsetBy(dx: -headerShade.frame.minX, dy: -headerShade.frame.minY)
+                                   width: threadTitle.fittingWidth(max: max(0, end - DitherTabStripView.leadingGap - x)),
+                                   height: DitherThreadTitleView.height)
     }
+
+    /// The breadcrumb pill, for the tab strip to hold at its left end.
+    public var titlePill: DitherStripLeading { threadTitle }
 
     /// Redesign's Flower background: the content area left of the right panel, from the window's top, which the lotus
     /// fills, and on the new thread the top of the composer and its pills, which the opening bloom sits above.
@@ -2368,9 +2372,11 @@ public final class ThreadPanelView: DSView {
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil { DitherArtView.setEmphasis(isDraft ? .hero : .thread, from: self) } else { DitherArtView.pagesMoved() }
+        // The strip holds the breadcrumb pill outside this view: it leaves with the panel and comes back on layout.
+        if window == nil { threadTitle.isHidden = true } else { needsLayout = true }
     }
-    public override func viewDidHide() { super.viewDidHide(); DitherArtView.pagesMoved() }
-    public override func viewDidUnhide() { super.viewDidUnhide(); DitherArtView.pagesMoved() }
+    public override func viewDidHide() { super.viewDidHide(); DitherArtView.pagesMoved(); threadTitle.isHidden = true }
+    public override func viewDidUnhide() { super.viewDidUnhide(); DitherArtView.pagesMoved(); needsLayout = true }
 
     public override func layout() {
         super.layout()
@@ -2614,7 +2620,7 @@ public final class ThreadPanelView: DSView {
         header.layer?.zPosition = 2
         // Redesign's rows draw at full strength to the window's top and behind the composer (the user, 2026-11-22),
         // with no mask on the timeline: one rendered all of it offscreen on every scrolled frame, about 12 MB a
-        // frame at 2x. `headerShade` covers only the breadcrumb and the top few points.
+        // frame at 2x. `headerShade` covers only the top few points.
         fade.isHidden = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) || standard
         errorBanner.layer?.zPosition = 2
         providerBanner.layer?.zPosition = 2

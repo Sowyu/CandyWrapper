@@ -662,6 +662,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Capy's + opens the new-thread page for the current project; its project chip picks another.
         // Redesign's header controls sit at the right of the tab band (they hide with the thread panel).
         layout.tabStrip.trailingAccessory = self.threads?.panel.header.pill
+        // The thread's breadcrumb pill sits at the band's left end, the header pill's twin.
+        layout.tabStrip.leadingAccessory = self.threads?.panel.titlePill
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
                                           newThread: { [weak palette] opened in palette?.newThreadFromSidebar(shift: true, then: opened) })
         commands.historyBack = { [weak history] in history?.back() ?? false }

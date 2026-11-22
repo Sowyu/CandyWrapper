@@ -93,6 +93,9 @@ public final class TitleTypingOverlay: DSView {
     /// Landings this overlay played, so a refresh of the same row never replays one.
     private var played: Set<Int> = []
     public static var now: () -> CFTimeInterval = { CACurrentMediaTime() }
+    /// The width the shown text and cursor take now, each time it renders, then nil when the effect ends: a host
+    /// that hugs the title (Redesign's breadcrumb pill) follows it.
+    public var onTextWidth: ((CGFloat?) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -169,11 +172,13 @@ public final class TitleTypingOverlay: DSView {
         copy.color = label.color
         let font = label.font
         let h = ceil(font.ascender - font.descender)
-        let x = min(f.text.isEmpty ? 0 : ceil(copy.textWidth), max(0, bounds.width - 1.5))
+        let typed = f.text.isEmpty ? 0 : ceil(copy.textWidth)
+        let x = min(typed, max(0, bounds.width - 1.5))
         CATransaction.begin(); CATransaction.setDisableActions(true)
         cursor.backgroundColor = label.color.cgColor(in: self)
         cursor.frame = CGRect(x: x, y: ((bounds.height - h) / 2).rounded(), width: 1.5, height: h)
         CATransaction.commit()
+        onTextWidth?(typed + 2)
         let thinkingBlink: Bool = {
             guard case .thinking = phase, !reduced else { return false }
             return elapsed >= TitleTyping.eraseDuration
@@ -225,6 +230,7 @@ public final class TitleTypingOverlay: DSView {
         stopTimer()
         phase = nil
         label?.alphaValue = 1
+        onTextWidth?(nil)
         copy.text = ""
         cursor.removeAnimation(forKey: "blink")
         let fades = cursor.opacity > 0 && window != nil && !reduced && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)

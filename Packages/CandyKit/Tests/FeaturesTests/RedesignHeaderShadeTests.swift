@@ -53,10 +53,10 @@ import T3Protocol
                     let end = RedesignBaselineTests.image(panel, size: size, dark: dark)
                     let shade = panel.headerShade
                     #expect(!shade.isHidden)
-                    // Rows draw in the header row away from the breadcrumb: right of the patch, below the edge fade.
-                    let patch = shade.convert(shade.patchFrame, to: panel)
-                    let header = NSRect(x: patch.maxX, y: shade.frame.minY + ThreadHeaderShadeView.edgeFade,
-                                        width: panel.readingLane.maxX - patch.maxX, height: DitherChrome.band - ThreadHeaderShadeView.edgeFade)
+                    // Rows draw in the header row away from the breadcrumb: right of its pill, below the edge fade.
+                    let pill = panel.titlePill.frame
+                    let header = NSRect(x: pill.maxX, y: shade.frame.minY + ThreadHeaderShadeView.edgeFade,
+                                        width: panel.readingLane.maxX - pill.maxX, height: DitherChrome.band - ThreadHeaderShadeView.edgeFade)
                     let beside = Self.pixels(top, header) != Self.pixels(end, header)
                     #expect(!header.isEmpty && beside, "\(ground) dark \(dark): no rows beside the breadcrumb")
                     // And below the composer's top: behind it and in the strip under it (the user: not a bug).
@@ -68,28 +68,62 @@ import T3Protocol
         }
     }
 
-    @Test func thePatchCoversTheBreadcrumbsTextOnly() throws {
+    @Test func theBreadcrumbIsAPillAtTheLeftEnd() throws {
         try Self.withRedesign(.picture, dark: true) {
             let panel = try Self.thread(width: 1240, dark: true)
             _ = RedesignBaselineTests.image(panel, size: NSSize(width: 1240, height: 780), dark: true)
-            let shade = panel.headerShade
-            let text = shade.textRect, patch = shade.patchFrame
-            #expect(!text.isEmpty)
-            #expect(patch.contains(text))
-            #expect(patch.width <= text.width + 2 * (ThreadHeaderShadeView.patchPad.width + ThreadHeaderShadeView.patchFeather) + 2)
-            #expect(patch.width < shade.bounds.width / 2)
-            // The patch follows the title's width.
-            let before = patch.width
+            // The render took the panel out of its window, which hides the pill until the panel lays out again.
+            panel.needsLayout = true
+            panel.layoutSubtreeIfNeeded()
+            let pill = try #require(panel.titlePill as? DitherThreadTitleView)
+            #expect(!pill.isHidden)
+            #expect(pill.superview === panel)
+            // On its own the panel places it as the strip would: in from the left as far as the header pill is from
+            // the right, centred in the band, as tall as the tabs, hugging its text.
+            #expect(pill.frame.minX == DitherTabStripView.accessoryRight)
+            #expect(pill.frame.height == DitherTabStripView.tabHeight)
+            #expect(abs(pill.frame.midY - (panel.headerShade.frame.minY + DitherChrome.band / 2)) <= 0.5)
+            #expect(pill.frame.width == pill.intrinsicContentSize.width)
+            #expect(!pill.project.isHidden && !pill.name.isTruncated)
+            // Takes no clicks: the band under it drags the window.
+            #expect(pill.hitTest(NSPoint(x: pill.frame.midX, y: pill.frame.midY)) == nil)
+            // Its width follows the title.
+            let before = pill.frame.width
             panel.header.threadTitle = "A"
             panel.needsLayout = true
             panel.layoutSubtreeIfNeeded()
-            #expect(shade.patchFrame.width < before)
-            // The shade sits between the rows and the title and takes no clicks.
-            let order = [panel.timeline, shade].compactMap { v in panel.subviews.firstIndex { $0 === v } }
-            #expect(order.count == 2 && order[0] < order[1])
-            #expect(shade.hitTest(NSPoint(x: 10, y: 10)) == nil)
-            #expect(shade.frame.height == DitherChrome.band)
+            #expect(pill.frame.width < before)
         }
+    }
+
+    @Test func theStripPairsThePillWithTheHeaderPill() throws {
+        try Self.withRedesign(.picture, dark: true) {
+            let panel = try Self.thread(width: 1240, dark: true)
+            panel.header.threadTitle = String(repeating: "A very long thread title that runs on ", count: 6)
+            panel.layoutSubtreeIfNeeded()
+            let strip = DitherTabStripView(frame: NSRect(x: 0, y: 0, width: 900, height: DitherChrome.band))
+            strip.showsTabs = false
+            let right = PillStandIn(); strip.trailingAccessory = right
+            strip.leadingAccessory = panel.titlePill
+            strip.layoutSubtreeIfNeeded()
+            let left = panel.titlePill.frame
+            #expect(left.minX == strip.contentStart - DitherTabStripView.accessoryRight)
+            #expect(left.minX == strip.bounds.width - right.frame.maxX)
+            #expect(left.midY == right.frame.midY && left.height == right.frame.height)
+            #expect(right.frame.minX - left.maxX >= DitherTabStripView.leadingGap - 0.5)
+            // A long title keeps the project and truncates in its middle.
+            let pill = try #require(panel.titlePill as? DitherThreadTitleView)
+            #expect(!pill.project.isHidden && pill.name.isTruncated && pill.name.truncation == .middle)
+            // Narrow: the project drops first, then the title truncates alone.
+            strip.setFrameSize(NSSize(width: 360, height: DitherChrome.band))
+            strip.layoutSubtreeIfNeeded()
+            #expect(pill.project.isHidden && pill.name.isTruncated)
+            #expect(right.frame.minX - panel.titlePill.frame.maxX >= DitherTabStripView.leadingGap - 0.5)
+        }
+    }
+
+    private final class PillStandIn: NSView {
+        override var intrinsicContentSize: NSSize { NSSize(width: 180, height: DitherTabStripView.tabHeight) }
     }
 
     @Test func theTopFadeIsOnlyTheEdge() {

@@ -4,6 +4,11 @@ import AppKit
 /// thread and a + for a new thread. The selected tab is a raised pill; the others are plain text that brighten on
 /// hover. A tab's close button shows on hover or selection. A press selects a tab, as in a browser; dragging it
 /// sideways reorders the strip.
+/// A view the strip places at its left end, as wide as it asks for within the room left.
+@MainActor public protocol DitherStripLeading: NSView {
+    func fittingWidth(max: CGFloat) -> CGFloat
+}
+
 public final class DitherTabStripView: TopbarDragView {
     public struct Tab: Equatable, Sendable {
         public var id: String
@@ -38,6 +43,14 @@ public final class DitherTabStripView: TopbarDragView {
 
     /// The accessory's room from the strip's right edge.
     public static let accessoryRight: CGFloat = 10
+
+    /// The thread's breadcrumb pill at the left end of the band (the user, 2026-11-22: "turn this into a pill like the
+    /// other crap then put it at the very left"): as far in from where the content starts as the trailing accessory
+    /// is from the right, on its midline, and never closer to it than `leadingGap`. Hidden while the tabs show.
+    public var leadingAccessory: DitherStripLeading? {
+        didSet { if oldValue !== leadingAccessory { oldValue?.removeFromSuperview(); leadingAccessory.map { addSubview($0) }; needsLayout = true } }
+    }
+    public static let leadingGap: CGFloat = 16
     /// Moves the accessory left and down from its resting place. Redesign's right panel card sets it, so the header
     /// pill sits concentric in the card's top right corner while the card is open.
     public var accessoryShift: CGSize = .zero { didSet { if accessoryShift != oldValue { needsLayout = true } } }
@@ -72,7 +85,10 @@ public final class DitherTabStripView: TopbarDragView {
     }
 
     public override func accessibilityTabs() -> [Any]? { views }
-    public override func accessibilityChildren() -> [Any]? { views.filter { !$0.isHidden } + (plus.isHidden ? [] : [plus]) + [trailingAccessory].compactMap { $0?.isHidden == false ? $0 : nil } }
+    public override func accessibilityChildren() -> [Any]? {
+        [leadingAccessory as NSView?].compactMap { $0?.isHidden == false ? $0 : nil } + views.filter { !$0.isHidden } + (plus.isHidden ? [] : [plus])
+            + [trailingAccessory].compactMap { $0?.isHidden == false ? $0 : nil }
+    }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
@@ -107,6 +123,14 @@ public final class DitherTabStripView: TopbarDragView {
             accessory.frame = NSRect(x: bounds.width - right - size.width, y: ((bounds.height - size.height) / 2).rounded() + accessoryShift.height,
                                      width: size.width, height: size.height)
             reserve = size.width + right + 8
+        }
+        if let leading = leadingAccessory, !leading.isHidden {
+            // The trailing accessory's resting place, so the breadcrumb doesn't jump while it glides into the card.
+            let x = contentStart - Self.accessoryRight
+            let end = trailingAccessory.map { $0.isHidden ? bounds.width - Self.accessoryRight : bounds.width - Self.accessoryRight - $0.intrinsicContentSize.width }
+                ?? bounds.width - Self.accessoryRight
+            let width = leading.fittingWidth(max: max(0, end - Self.leadingGap - x))
+            leading.frame = NSRect(x: x, y: ((bounds.height - Self.tabHeight) / 2).rounded(), width: width, height: Self.tabHeight)
         }
         plus.isHidden = !showsTabs
         let room = max(0, bounds.width - contentStart - 40 - reserve)
