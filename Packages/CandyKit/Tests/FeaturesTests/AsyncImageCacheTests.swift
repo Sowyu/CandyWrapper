@@ -36,6 +36,21 @@ struct AsyncImageCacheTests {
         _ = await eventually { view.image != nil }
     }
 
+    /// A loader that fails used to retry forever: releasing the last user cancels the finished task, and the
+    /// cancelled-by-`clear()` check then read that as a reason to load again. Each retry nested another cancellation
+    /// handler, and a broken image in a reply held the main thread at 100%. The loader gives up after 20 calls so a
+    /// regression fails here instead of hanging.
+    @Test func failedLoadDoesNotRetry() async {
+        AsyncImageView.clearMemory()
+        let calls = Calls()
+        let result = await ImageDecodeCache.load(key: "fails-\(UUID().uuidString)", side: 64) { side in
+            calls.record(side)
+            return calls.all.count >= 20 ? await Self.loader(Calls())(side) : nil
+        }
+        #expect(result == nil)
+        #expect(calls.all.count == 1)
+    }
+
     /// Thread A, then B, then A again: the rebuilt cell shows A's image in the same pass, with no new decode.
     @Test func switchBackShowsCachedImageAtOnce() async throws {
         AsyncImageView.clearMemory()
