@@ -10,6 +10,14 @@ struct UsageLogicTests {
         UsagePriceTarget(environmentId: id, label: id.uppercased(), prices: prices, aliases: aliases, unavailable: unavailable)
     }
 
+    @Test func chartScaleHasFiniteEndpointsAtTheNumericLimits() {
+        for peak in [Double.leastNonzeroMagnitude, Double.greatestFiniteMagnitude] {
+            let result = UsageChartLogic.niceScale(peak)
+            #expect(result.max == peak)
+            #expect(result.ticks == [0, peak])
+        }
+    }
+
     @Test func parsesPriceForms() {
         let ok = UsagePriceLogic.parse(model: " m ", [.input: "3", .output: "15", .cacheRead: "", .cacheWrite: "0"])
         #expect(ok?.model == "m")
