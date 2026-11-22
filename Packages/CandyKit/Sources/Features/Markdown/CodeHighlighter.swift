@@ -124,11 +124,30 @@ public struct CodeToken: Sendable, Equatable {
 // ponytail: hand-written lexers, not TextMate grammars; context-dependent scopes (TS parameters, Python
 // f-string fields, embedded languages) differ from Shiki. Port a TextMate engine if users notice.
 public enum CodeHighlighter {
-    public static func tokens(_ code: String, language: String) -> [CodeToken] {
-        guard let profile = Profile.named(language.lowercased()) else { return [] }
+    public static func tokens(_ code: String, language: String) -> [CodeToken] { lex(code, language: language).tokens }
+
+    /// The tokens and how many times a lexer loop failed to advance and the guard in `Lexer.next` skipped a unit.
+    /// The fuzz tests require `stalls` to stay 0.
+    static func lex(_ code: String, language: String) -> (tokens: [CodeToken], stalls: Int) {
+        guard let profile = Profile.named(language.lowercased()) else { return ([], 0) }
         var lexer = Lexer(Array(code.utf16), profile)
         lexer.run()
-        return lexer.tokens
+        return (lexer.tokens, lexer.stalls)
+    }
+
+    /// One language id per lexer profile, for the fuzz tests.
+    static var profileLanguages: [String] { Profile.table.map { $0.ids[0] } }
+
+    /// The part of a chat code block that gets token colors. Lexing and coloring cost about 0.11 µs per UTF-16 unit in a
+    /// release build on an M2 Pro, so a block colored in full on the main thread could hold it for 0.1 s and more.
+    // ponytail: blocks over 30,000 UTF-16 units (about 3 ms) color only up to the first line break after that, the rest
+    // plain. Color the rest off the main thread and swap it in if users notice long blocks going plain.
+    static func highlightedPrefix(_ code: String, limit: Int = 30_000) -> String {
+        let units = code.utf16
+        guard units.count > limit else { return code }
+        var end = units.index(units.startIndex, offsetBy: limit)
+        end = units[end...].firstIndex(of: 0x0a) ?? end
+        return String(code[..<end])
     }
 
     /// Whether `language` gets token colors.
@@ -158,26 +177,27 @@ private struct Profile {
     var at: CodeTokenKind? = nil
     var caseInsensitive = false
 
-    static func named(_ id: String) -> Profile? {
-        switch id {
-        case "ts", "typescript", "tsx", "js", "javascript", "jsx", "mjs", "cjs", "mts", "cts": return .typescript
-        case "swift": return .swift
-        case "rust", "rs": return .rust
-        case "go", "golang": return .go
-        case "java", "kotlin", "kt", "c", "cpp", "c++", "h", "hpp", "cs", "csharp", "dart", "scala": return .genericC
-        case "python", "py", "python3": return .python
-        case "bash", "sh", "zsh", "shell", "shellscript", "console", "fish": return Profile(family: .shell, lineComments: ["#"], blockComment: nil)
-        case "json", "jsonc", "json5", "jsonl": return Profile(family: .json, constants: ["true", "false"])
-        case "yaml", "yml": return Profile(family: .yaml, lineComments: ["#"], blockComment: nil)
-        case "toml", "ini", "gitignore": return Profile(family: .toml, lineComments: ["#", ";"], blockComment: nil)
-        case "css", "scss", "less": return Profile(family: .css, lineComments: [])
-        case "html", "xml", "svg", "vue", "svelte": return Profile(family: .markup, lineComments: [], blockComment: ("<!--", "-->"))
-        case "diff", "patch": return Profile(family: .diff, lineComments: [], blockComment: nil)
-        case "sql", "postgres", "postgresql", "mysql", "sqlite": return .sql
-        case "markdown", "md", "mdx": return Profile(family: .markdown, lineComments: [], blockComment: nil)
-        default: return nil
-        }
-    }
+    /// One row per profile, with every language id that picks it.
+    static let table: [(ids: [String], profile: Profile)] = [
+        (["ts", "typescript", "tsx", "js", "javascript", "jsx", "mjs", "cjs", "mts", "cts"], .typescript),
+        (["swift"], .swift),
+        (["rust", "rs"], .rust),
+        (["go", "golang"], .go),
+        (["java", "kotlin", "kt", "c", "cpp", "c++", "h", "hpp", "cs", "csharp", "dart", "scala"], .genericC),
+        (["python", "py", "python3"], .python),
+        (["bash", "sh", "zsh", "shell", "shellscript", "console", "fish"], Profile(family: .shell, lineComments: ["#"], blockComment: nil)),
+        (["json", "jsonc", "json5", "jsonl"], Profile(family: .json, constants: ["true", "false"])),
+        (["yaml", "yml"], Profile(family: .yaml, lineComments: ["#"], blockComment: nil)),
+        (["toml", "ini", "gitignore"], Profile(family: .toml, lineComments: ["#", ";"], blockComment: nil)),
+        (["css", "scss", "less"], Profile(family: .css, lineComments: [])),
+        (["html", "xml", "svg", "vue", "svelte"], Profile(family: .markup, lineComments: [], blockComment: ("<!--", "-->"))),
+        (["diff", "patch"], Profile(family: .diff, lineComments: [], blockComment: nil)),
+        (["sql", "postgres", "postgresql", "mysql", "sqlite"], .sql),
+        (["markdown", "md", "mdx"], Profile(family: .markdown, lineComments: [], blockComment: nil)),
+    ]
+    private static let byID = Dictionary(table.flatMap { row in row.ids.map { ($0, row.profile) } }, uniquingKeysWith: { a, _ in a })
+
+    static func named(_ id: String) -> Profile? { byID[id] }
 
     static let typescript = Profile(
         family: .cLike, quotes: [0x22, 0x27, 0x60],
@@ -269,6 +289,10 @@ private struct Lexer {
     let p: Profile
     var i = 0
     var tokens: [CodeToken] = []
+    /// Iterations the guard in `next` had to advance.
+    var stalls = 0
+    /// Template literal fields lexed inside fields.
+    var depth = 0
 
     init(_ s: [UInt16], _ p: Profile) { self.s = s; self.p = p }
 
@@ -286,6 +310,15 @@ private struct Lexer {
     }
 
     // MARK: Helpers
+
+    /// The head of every lexer loop, `while next(&mark)` with `mark` starting at `i - 1`. An iteration that leaves `i`
+    /// where it found it loops forever: json() did that on the "-" in `0-100` and froze the app on launch. This skips
+    /// one unit instead and counts it in `stalls`. One compare per iteration.
+    mutating func next(_ mark: inout Int) -> Bool {
+        if i <= mark { i = mark + 1; stalls += 1 }
+        mark = i
+        return i < s.count
+    }
 
     func at(_ k: Int = 0) -> UInt16 { i + k < s.count ? s[i + k] : 0 }
     func starts(_ str: String, at pos: Int? = nil) -> Bool {
@@ -330,7 +363,8 @@ private struct Lexer {
         let a = i
         i += triple ? 3 : 1
         var segment = a
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             let c = s[i]
             if quote == 0x60, c == 0x24, at(1) == 0x7b { // template literal field: ${ and } as keywords, the expression lexed
                 emit(segment, i, .string)
@@ -338,9 +372,16 @@ private struct Lexer {
                 i += 2
                 let b = i
                 while i < s.count, s[i] != 0x7d { i += 1 }
-                var inner = Lexer(Array(s[b..<i]), p)
-                inner.code()
-                for t in inner.tokens { emit(b + t.range.location, b + t.range.upperBound, t.kind) }
+                // ponytail: fields nested 8 deep are left plain. Without a cap, "`${" repeated with no "}" copied and lexed
+                // the rest of the block once per level: quadratic, and one stack frame per level. Lex fields in place if
+                // real code ever nests deeper.
+                if depth < 8 {
+                    var inner = Lexer(Array(s[b..<i]), p)
+                    inner.depth = depth + 1
+                    inner.code()
+                    stalls += inner.stalls
+                    for t in inner.tokens { emit(b + t.range.location, b + t.range.upperBound, t.kind) }
+                }
                 if at() == 0x7d { emit(i, i + 1, .keyword); i += 1 }
                 segment = i
                 continue
@@ -388,7 +429,8 @@ private struct Lexer {
         var paramDepth = 0
         var genericDepth = 0
         var lastSignificant: UInt16 = 0
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             let c = s[i]
             if Self.isSpace(c) { i += 1; continue }
             if let comment = p.lineComments.first(where: { starts($0) }) {
@@ -507,7 +549,8 @@ private struct Lexer {
         i += 1
         var inClass = false
         while i < s.count, s[i] != 0x0a {
-            if s[i] == 0x5c { i += 2; continue }
+            // A backslash as the last unit stepped past the end, and the closing token ran outside the text.
+            if s[i] == 0x5c { i = min(s.count, i + 2); continue }
             if s[i] == 0x5b { inClass = true } else if s[i] == 0x5d { inClass = false }
             else if s[i] == 0x2f, !inClass { i += 1; break }
             i += 1
@@ -525,7 +568,8 @@ private struct Lexer {
         var commandPosition = true
         let keywords: Set<String> = ["if", "then", "else", "elif", "fi", "for", "in", "do", "done", "while", "until", "case",
                                      "esac", "function", "export", "local", "return", "select", "time"]
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             let c = s[i]
             if c == 0x0a { commandPosition = true; i += 1; continue }
             if Self.isSpace(c) { i += 1; continue }
@@ -547,8 +591,9 @@ private struct Lexer {
             while i < s.count, !Self.isSpace(s[i]), !Self.shellWordEnd.contains(s[i]) { i += 1 }
             if i == a { i += 1; continue }
             let w = word(a, i)
-            if s[a] == 0x3d || w.contains("=") && commandPosition, let eq = w.firstIndex(of: "=") { // NAME=value
-                let n = w.distance(from: w.startIndex, to: eq)
+            if s[a] == 0x3d || w.contains("=") && commandPosition, let eq = s[a..<i].firstIndex(of: 0x3d) { // NAME=value
+                // A UTF-16 offset: counting Characters put the colors off by one per combining mark before the "=".
+                let n = eq - a
                 emit(a, a + n, .variable); emit(a + n, a + n + 1, .operator); emit(a + n + 1, i, .string)
             } else if keywords.contains(w) {
                 emit(a, i, .keyword)
@@ -594,7 +639,8 @@ private struct Lexer {
     mutating func shellString() {
         var segment = i
         i += 1
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             if s[i] == 0x5c { i += 2; continue }
             if s[i] == 0x22 { i += 1; break }
             if s[i] == 0x24 { emit(segment, i, .string); variable(); segment = i; continue }
@@ -606,7 +652,8 @@ private struct Lexer {
     // MARK: JSON, YAML, TOML
 
     mutating func json() {
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             let c = s[i]
             if Self.isSpace(c) { i += 1; continue }
             if starts("//") { let a = i; skipToLineEnd(); emit(a, i, .comment); continue }
@@ -651,7 +698,21 @@ private struct Lexer {
     mutating func keyValue() {
         let yaml = p.family == .yaml
         var lineStart = true
-        while i < s.count {
+        // Whether a "[" or "{" sits between the last line break and `a`. It scanned back to the line start for every
+        // scalar, quadratic on one long flow line like `[a, b, c, ...]`. Scalar starts only grow, so this scans
+        // forward once per line instead.
+        var flowScan = 0, flowOpen = false
+        func flowContext(_ a: Int) -> Bool {
+            if a < flowScan { flowScan = 0; flowOpen = false }
+            while flowScan < a {
+                let c = s[flowScan]
+                if c == 0x0a { flowOpen = false } else if c == 0x5b || c == 0x7b { flowOpen = true }
+                flowScan += 1
+            }
+            return flowOpen
+        }
+        var mark = i - 1
+        while next(&mark) {
             let c = s[i]
             if c == 0x0a { lineStart = true; i += 1; continue }
             if Self.isSpace(c) { i += 1; continue }
@@ -692,18 +753,26 @@ private struct Lexer {
         }
     }
 
-    func flowContext(_ from: Int) -> Bool {
-        var j = from - 1
-        while j >= 0, s[j] != 0x0a { if s[j] == 0x5b || s[j] == 0x7b { return true }; j -= 1 }
-        return false
-    }
-
     // MARK: CSS
 
     mutating func css() {
         var depth = 0
         var inValue = false
-        while i < s.count {
+        // `name:` before the next `;` or `}` inside a rule body (not `a:hover` in a nested selector). Every position
+        // inside one run of name characters gets the same answer, so the run is scanned once: `{` and a long run of
+        // digits or dashes, which go out one unit at a time, rescanned the rest of the run per unit.
+        var runStart = -1, runEnd = -1, runColon = false
+        func isDeclarationAhead() -> Bool {
+            if i > runStart, i < runEnd { return runColon }
+            var j = i
+            while j < s.count, Self.isIdent(s[j]) || s[j] == 0x2d { j += 1 }
+            runStart = i; runEnd = j
+            while j < s.count, s[j] == 0x20 { j += 1 }
+            runColon = j < s.count && s[j] == 0x3a
+            return j > i && runColon
+        }
+        var mark = i - 1
+        while next(&mark) {
             let c = s[i]
             if Self.isSpace(c) { i += 1; continue }
             if starts("/*") { let a = i; while i < s.count, !starts("*/") { i += 1 }; i = min(s.count, i + 2); emit(a, i, .comment); continue }
@@ -750,18 +819,11 @@ private struct Lexer {
         }
     }
 
-    /// `name:` before the next `;` or `}` inside a rule body (not `a:hover` in a nested selector).
-    func isDeclarationAhead() -> Bool {
-        var j = i
-        while j < s.count, Self.isIdent(s[j]) || s[j] == 0x2d { j += 1 }
-        while j < s.count, s[j] == 0x20 { j += 1 }
-        return j > i && j < s.count && s[j] == 0x3a
-    }
-
     // MARK: HTML and XML
 
     mutating func markup() {
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             if starts("<!--") {
                 let a = i; while i < s.count, !starts("-->") { i += 1 }; i = min(s.count, i + 3); emit(a, i, .comment); continue
             }
@@ -770,7 +832,8 @@ private struct Lexer {
                 emit(a, i, .punctuation)
                 let n = i; while i < s.count, Self.isIdent(s[i]) || s[i] == 0x2d || s[i] == 0x3a { i += 1 }
                 emit(n, i, .tag)
-                while i < s.count, s[i] != 0x3e {
+                var attributeMark = i - 1
+                while next(&attributeMark), s[i] != 0x3e {
                     if Self.isSpace(s[i]) { i += 1; continue }
                     if s[i] == 0x22 || s[i] == 0x27 { string(quote: s[i], multiline: true); continue }
                     if s[i] == 0x3d || s[i] == 0x2f { emit(i, i + 1, .punctuation); i += 1; continue }
@@ -796,27 +859,29 @@ private struct Lexer {
     // MARK: Diff and Markdown
 
     mutating func diff() {
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             let a = i
             skipToLineEnd()
-            let line = word(a, i)
-            if line.hasPrefix("+++") || line.hasPrefix("---") { emit(a, i, .function) }
-            else if line.hasPrefix("@@") {
+            // UTF-16 prefixes, not String ones: a combining mark after "+" made a different Character, and finding the
+            // second "@@" in a String force-unwrapped an index conversion.
+            if starts("+++", at: a) || starts("---", at: a) { emit(a, i, .function) }
+            else if starts("@@", at: a) {
                 emit(a, a + 2, .punctuation)
-                if let close = line.dropFirst(2).range(of: "@@") {
-                    let off = a + line.utf16.distance(from: line.utf16.startIndex, to: close.lowerBound.samePosition(in: line.utf16)!)
-                    emit(off, off + 2, .punctuation)
-                }
+                var j = a + 2
+                while j + 1 < i, !starts("@@", at: j) { j += 1 }
+                if j + 1 < i { emit(j, j + 2, .punctuation) }
             }
-            else if line.hasPrefix("+") { emit(a, a + 1, .punctuation); emit(a + 1, i, .string) }
-            else if line.hasPrefix("-") { emit(a, a + 1, .punctuation); emit(a + 1, i, .tag) }
+            else if a < i, s[a] == 0x2b { emit(a, a + 1, .punctuation); emit(a + 1, i, .string) }
+            else if a < i, s[a] == 0x2d { emit(a, a + 1, .punctuation); emit(a + 1, i, .tag) }
             i += 1
         }
     }
 
     mutating func markdown() {
         var inFence = false
-        while i < s.count {
+        var mark = i - 1
+        while next(&mark) {
             let a = i
             skipToLineEnd()
             let line = word(a, i)
@@ -837,10 +902,17 @@ private struct Lexer {
 
     mutating func inline(from start: Int, to end: Int) {
         var k = start
+        // The last answer per needle: the first match at or after `from`, or nil for none before `end`. Every `[`
+        // on a line with no `](` scanned to the line end, quadratic on a long line; later searches start further
+        // right, so a remembered answer covers them until they pass it.
+        var found: [String: (from: Int, at: Int?)] = [:]
         func find(_ str: String, from: Int) -> Int? {
+            if let hit = found[str], from >= hit.from, hit.at.map({ from <= $0 }) ?? true { return hit.at }
             var j = from
-            while j < end { if starts(str, at: j) { return j }; j += 1 }
-            return nil
+            while j < end, !starts(str, at: j) { j += 1 }
+            let at: Int? = j < end ? j : nil
+            found[str] = (from, at)
+            return at
         }
         while k < end {
             if starts("**", at: k), let close = find("**", from: k + 2) { emit(k, close + 2, .parameter); k = close + 2; continue }

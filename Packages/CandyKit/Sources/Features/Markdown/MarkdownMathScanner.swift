@@ -562,7 +562,8 @@ private final class Scan {
             c += b[s.start..<end]
             at += s.start..<end
         }
-        for (range, math) in InlineScan(c: c, singleLine: singleLine).formulas() {
+        var scan = InlineScan(c: c, singleLine: singleLine)
+        for (range, math) in scan.formulas() {
             formulas.append(math)
             edits.append((at[range.lowerBound]..<(at[range.upperBound - 1] + 1), "<\(scheme):\(formulas.count - 1)x>"))
         }
@@ -578,8 +579,14 @@ private struct InlineScan {
     /// A GFM table row: a formula can't run past the row's end (the patched table tokenizer's `mathSingleLine`).
     let singleLine: Bool
     var n: Int { c.count }
+    /// States `texText` has passed through on a scan that failed. The scan depends only on its state, so one that
+    /// reaches a state a failed scan passed through fails too. Without it every `\(` with no `\)` after it rescanned
+    /// the rest of the paragraph: 16,000 units of `\(` took 4 s.
+    private var failedTex = Set<Int>()
 
-    func formulas() -> [(Range<Int>, MarkdownMath)] {
+    init(c: [UInt8], singleLine: Bool) { self.c = c; self.singleLine = singleLine }
+
+    mutating func formulas() -> [(Range<Int>, MarkdownMath)] {
         var out: [(Range<Int>, MarkdownMath)] = []
         var i = 0, escapedDollar = -1, brackets = 0
         while i < n {
@@ -701,17 +708,26 @@ private struct InlineScan {
 
     /// `\(…\)` or `\[…\]` at `start` (patched math-tex-text.js): its end. A `\[…\]` of only digits, commas and
     /// spaces is a citation, not math.
-    func texText(_ start: Int) -> Int? {
+    mutating func texText(_ start: Int) -> Int? {
         let close = c[start + 1] == UInt8(ascii: "(") ? UInt8(ascii: ")") : UInt8(ascii: "]")
         var p = start + 2, substantive = false, inData = false
+        var passed: [Int] = []
+        defer { failedTex.formUnion(passed) }
         while true {
             if !inData {
+                let state = p << 3 | (close == UInt8(ascii: "]") ? 4 : 0) | (substantive ? 1 : 0)
+                if failedTex.contains(state) { return nil }
+                passed.append(state)
                 guard p < n else { return nil }
                 let ch = c[p]
                 if ch == backtick || singleLine && isEOL(ch) { return nil }
                 if ch == backslash {
                     let next: UInt8? = p + 1 < n ? c[p + 1] : nil
-                    if next == close { return close == UInt8(ascii: "]") && !substantive ? nil : p + 2 }
+                    if next == close {
+                        if close == UInt8(ascii: "]") && !substantive { return nil }
+                        passed = []
+                        return p + 2
+                    }
                     p += next == backslash ? 2 : 1
                     inData = true
                     continue
