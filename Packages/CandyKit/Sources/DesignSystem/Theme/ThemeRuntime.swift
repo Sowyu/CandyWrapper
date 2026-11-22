@@ -48,6 +48,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherPicture: String?
     /// How much the background dims the art behind an open thread, 0 to 90 (percent).
     public var ditherDim = 35
+    /// "Dim behind text" for Picture and Flower, 0 to 100 (`TextDim`). Blur's position is `ditherDim`.
+    public var textDim = TextDim.standard
     /// Redesign's "Background": the picture blurred behind the whole window instead of dithered in the main panel.
     public var ditherBlur = false
     /// Redesign's "Background" is Flower: no picture, a dithered lotus over a field of accent dots.
@@ -91,6 +93,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var glassOpacity: CGFloat = 0.8
     /// Redesign's dim over the art behind an open thread (the "Background dim" setting).
     nonisolated(unsafe) public private(set) static var ditherDim: CGFloat = 0.35
+    /// "Dim behind text" for Picture and Flower (`TextDim`).
+    nonisolated(unsafe) public private(set) static var ditherTextDim = TextDim.standard
     /// Redesign's "Background" is Blur: the picture blurred behind the whole window (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherBlur = false
     /// Redesign's "Background" is Flower: a large dithered lotus rising from the bottom of the page over a field of
@@ -178,6 +182,12 @@ public enum ThemeRuntime {
             ditherPicture = next.ditherPicture.map { URL(filePath: $0) }
             if next.ditherLight || next.ditherDark { SmoothCorners.install() }
             changed = true
+        }
+        // "Dim behind text" changes only the art, which rebuilds its column mask or cap on the notification, so a drag
+        // never walks the view tree.
+        if next.textDim != old.textDim {
+            ditherTextDim = min(max(next.textDim, 0), 100)
+            if !changed { NotificationCenter.default.post(name: didChange, object: nil); return }
         }
         guard changed else { return }
         generation += 1

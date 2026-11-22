@@ -156,7 +156,7 @@ extension SettingsSearch {
         .item(SettingsSearchItem(id: "redesign-project-avatars", title: "Project avatars", to: .redesign, searchTerms: ["redesign project account avatar icon sprite pixel art monogram letters initials"])),
         .item(SettingsSearchItem(id: "redesign-tint", title: "Tint from picture", to: .redesign, searchTerms: ["redesign picture wallpaper color colour tint hue match surfaces"])),
         .item(SettingsSearchItem(id: "redesign-gradient-animate", title: "Animate background", to: .redesign, searchTerms: ["redesign gradient flower lotus bloom dither dots motion move animate animation drift"])),
-        .item(SettingsSearchItem(id: "background-dim", title: "Background dim", to: .redesign, searchTerms: ["redesign blur picture wallpaper darken dim scrim opacity"])),
+        .item(SettingsSearchItem(id: "redesign-text-dim", title: "Dim behind text", to: .redesign, searchTerms: ["redesign dim text column band readable readability middle line darken background dim blur picture flower wallpaper scrim opacity contrast"])),
         .item(SettingsSearchItem(id: "accent-color", title: "Accent color", to: .redesign, searchTerms: ["redesign accent colour tint highlight switches send focus selection"])),
         .item(SettingsSearchItem(id: "ignore-reduce-transparency", title: "Ignore Reduce Transparency", to: .redesign, searchTerms: ["redesign blur accessibility reduce transparency picture"])),
         .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout one column details pane cost description scroll"])),

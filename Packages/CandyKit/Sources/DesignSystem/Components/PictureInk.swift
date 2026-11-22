@@ -284,8 +284,9 @@ public enum PictureInk {
     /// ink (ground, deep, light); in light the dark parts do (ground, light, deep). Dither runs only between
     /// neighbouring levels. `text` is the body and muted text colors (sRGB 0...1), whose floors hold behind a column:
     /// there each ink is held to the cell cap (`cellCap`), which relaxes across the margin, and nothing else changes.
+    /// `dim` is "Dim behind text" (`TextDim`), which moves the floors' bound and leaves the falloff's shape alone.
     nonisolated static func render(_ tone: Tone, inks: Inks, ground: SIMD3<Double>, dark: Bool, shape: Shape,
-                                   text: [SIMD3<Double>]) -> CGImage? {
+                                   text: [SIMD3<Double>], dim: Int = TextDim.standard) -> CGImage? {
         let w = tone.width, h = tone.height
         guard w > 0, h > 0,
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
@@ -306,7 +307,8 @@ public enum PictureInk {
         let groundY = luminance(ground)
         var row = [Double](repeating: 1, count: w), fade = [Double](repeating: 0, count: w)
         var columnInks: [(UInt8, UInt8, UInt8)]?
-        if case let .thread(column?) = shape, column.count == 4, let bound = textBound(text, dark: dark) {
+        if case let .thread(column?) = shape, column.count == 4,
+           let bound = TextDim.pictureBound(textBound(text, dark: dark), groundY: groundY, dark: dark, at: dim) {
             var inksAt = [(UInt8, UInt8, UInt8)](repeating: (0, 0, 0), count: w * 2)
             for x in 0..<w {
                 let f = columnCalm((Double(x) + 0.5) * unit, column: column, panelWidth: panel.width)

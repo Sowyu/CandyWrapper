@@ -30,7 +30,6 @@ public final class RedesignSettingsView: SettingsPageBase {
     static let animateReason = "Only Flower moves. Choose Flower to change this."
     static let inkReason = "Only Picture draws in inks. Choose Picture to change this."
     static let dotSizeReason = "Only Picture's dots change size. Choose Picture to change this."
-    static let dimReason = "Picture thins its dots behind text instead of dimming. Choose Blur to change this."
     private let library: ThemeLibrary
     private var themeObserver: Int?
     /// The master switch, bound to the theme picker's setting.
@@ -61,7 +60,7 @@ public final class RedesignSettingsView: SettingsPageBase {
             if let i = Self.useInChoices.firstIndex(where: { $0.1 == shown }), self?.useIn.selectedIndex != i { self?.useIn.selectedIndex = i }
         }
 
-        let picture = pictureRow(), dim = dimRow()
+        let picture = pictureRow(), dim = textDimRow()
         // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").
         let animate = clientSwitch("redesign-gradient-animate", "Let Flower's lotus bloom when a thread opens, and turn slowly over its drifting dots on the new-thread page. It stops while the window is in the background and under Reduce Motion.",
                                    key: "redesignGradientAnimate", reset: "animate background", title: "Animate background")
@@ -84,9 +83,8 @@ public final class RedesignSettingsView: SettingsPageBase {
             let background = self.client.string("redesignBackground")
             let pictureOff = off ?? (background == "flower" ? Self.flowerReason : nil)
             for r in [picture, tint] where r.inertReason != pictureOff { r.inertReason = pictureOff }
-            // The dim only darkens Blur; Picture's inks only draw Picture.
-            let dimOff = pictureOff ?? (background == "blur" ? nil : Self.dimReason)
-            if dim.inertReason != dimOff { dim.inertReason = dimOff }
+            // Dim behind text works in every background; Picture's inks only draw Picture.
+            if dim.inertReason != off { dim.inertReason = off }
             let inkOff = off ?? (background == "dither" ? nil : Self.inkReason)
             if ink.inertReason != inkOff { ink.inertReason = inkOff }
             let dotsOff = off ?? (background == "dither" ? nil : Self.dotSizeReason)
@@ -228,24 +226,45 @@ public final class RedesignSettingsView: SettingsPageBase {
         return r
     }
 
-    /// How much Redesign dims its blurred picture behind an open thread (the user, 2026-10-22). Picture lays no dim
-    /// since 2026-11-21: its dots thin behind text instead.
-    private func dimRow() -> SettingsRowView {
-        let key = "ditherBackgroundDim"
-        let control = SettingsSliderControl(value: Double(client.int(key)), range: 0...90, step: 5, outputWidth: 48)
+    /// "Dim behind text" (the user, 2026-11-21: "allow me to change the dimness of the opacity of the line down the
+    /// middle"): how much the background is held back behind a thread's text, 0 to 100 with the earlier look at 70
+    /// (`TextDim`). Picture moves its cap's floors and Flower its mask's depth, both from `redesignTextDim`. Blur's dim
+    /// over the whole thread page is the same thing for Blur, so this row folds in the old "Background dim": in Blur it
+    /// shows and writes `ditherBackgroundDim`, mapped so its 35% default sits at 70 too and a saved value carries over.
+    private func textDimRow() -> SettingsRowView {
+        let control = SettingsSliderControl(value: Double(TextDim.standard), range: 0...100, step: 1, outputWidth: 48)
         control.format = { "\(Int($0))%" }
-        control.slider.setAccessibilityLabel("Background dim")
-        let r = row("background-dim", title: "Background dim", detail: "How much the blurred picture dims behind an open thread.", control: control)
-        let slot = ResetSlot(label: "background dim")
+        control.slider.setAccessibilityLabel("Dim behind text")
+        let r = row("redesign-text-dim", title: "Dim behind text", detail: "How much the background is held back behind a thread\u{2019}s text.",
+                    control: control)
+        let slot = ResetSlot(label: "dim behind text")
         r.accessories = [slot]
-        slot.action = { [weak self] in self?.context.writeClient?([key: ClientSettings.fields[key]!.defaultValue]) }
-        control.onChange = { [weak self] v in self?.context.writeClient?([key: .number(v)]) }
-        binder.add { [weak self, weak control] in
+        let blurKey = "ditherBackgroundDim", key = "redesignTextDim"
+        let blur = { [weak self] in self?.client.string("redesignBackground") == "blur" }
+        slot.action = { [weak self] in
+            let k = blur() ? blurKey : key
+            self?.context.writeClient?([k: ClientSettings.fields[k]!.defaultValue])
+        }
+        control.onChange = { [weak self] v in
+            let position = Int(v.rounded())
+            self?.context.writeClient?(blur() ? [blurKey: .number(Double(TextDim.blurDim(at: position)))] : [key: .number(Double(position))])
+        }
+        binder.add { [weak self, weak control, weak r] in
             guard let self else { return }
-            control?.value = Double(self.client.int(key))
-            slot.isShown = !self.client.isDefault(key)
+            let position = Self.textDimPosition(self.client)
+            if control?.value != Double(position) { control?.value = Double(position) }
+            slot.isShown = !self.client.isDefault(blur() ? blurKey : key)
+            let status = position < 50 ? Self.textDimWarning : nil
+            if r?.status != status { r?.status = status }
         }
         return r
+    }
+
+    static let textDimWarning = "Text may be harder to read over bright backgrounds."
+
+    /// Where "Dim behind text" stands for the chosen background.
+    static func textDimPosition(_ client: ClientSettings) -> Int {
+        client.string("redesignBackground") == "blur" ? TextDim.position(blurDim: client.int("ditherBackgroundDim")) : client.int("redesignTextDim")
     }
 
     /// Redesign's accent (the user, 2026-10-23). It recolors the palette's accent roles.

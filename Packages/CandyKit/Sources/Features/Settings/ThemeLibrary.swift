@@ -58,7 +58,7 @@ public final class ThemeLibrary {
     public func start() {
         migrateRemovedGlass()
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInk") || keys.contains("redesignDotSize") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("redesignTextDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInk") || keys.contains("redesignDotSize") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -516,6 +516,7 @@ public final class ThemeLibrary {
         var input = ThemeRuntimeInput(contrast: client.int("appearanceContrast"), glassOpacity: client.int("glassOpacity"))
         input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
         input.ditherDim = client.int("ditherBackgroundDim")
+        input.textDim = client.int("redesignTextDim")
         input.ditherBlur = client.string("redesignBackground") == "blur"
         // Gradient's dots became Flower's field (2026-11-21); a 1.16.0 "gradient" shows Flower.
         input.ditherFlower = ["flower", "gradient"].contains(client.string("redesignBackground"))

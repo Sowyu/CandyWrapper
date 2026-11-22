@@ -25,8 +25,9 @@ import T3Protocol
         // The theme picker turns Redesign on: the switch follows and the rows wake.
         lib.setTheme(ThemeDefinition.dither.id)
         #expect(page.master.isOn)
-        // Animate background waits for Flower and Background dim for Blur; the default Background is Picture.
-        #expect(page.gated.allSatisfy { [nil, RedesignSettingsView.animateReason, RedesignSettingsView.dimReason].contains($0.inertReason) })
+        // Animate background waits for Flower; the default Background is Picture. Dim behind text works in all three.
+        #expect(page.gated.allSatisfy { [nil, RedesignSettingsView.animateReason].contains($0.inertReason) })
+        #expect(page.anchor("redesign-text-dim").flatMap { $0 as? SettingsRowView }?.inertReason == nil)
         // The switch turns it off, and on again: the picker follows.
         page.master.onChange?(false)
         #expect(!lib.isRedesignOn && !page.master.isOn)
@@ -106,7 +107,7 @@ import T3Protocol
     }
 
     @Test func searchFindsTheTabAndEveryRow() {
-        let ids = ["redesign", "redesign-picture", "background-dim", "accent-color", "ignore-reduce-transparency",
+        let ids = ["redesign", "redesign-picture", "redesign-text-dim", "accent-color", "ignore-reduce-transparency",
                    "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate", "redesign-tint"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
         for word in ["flower", "lotus"] {
@@ -124,13 +125,33 @@ import T3Protocol
         for id in ids { #expect(page.anchor(id) != nil, "\(id) on the tab") }
     }
 
+    @Test func dimBehindTextSearchWords() {
+        for word in ["dim", "text", "column", "band", "readable"] {
+            #expect(SettingsSearch.search(word).contains { $0.id == "redesign-text-dim" }, "\(word)")
+        }
+    }
+
+    @Test func dimBehindTextPositionPerBackground() {
+        // A settings file saved before the setting loads at the default.
+        #expect(ClientSettings(decoding: .object(["redesignBackground": .string("flower")])).int("redesignTextDim") == TextDim.standard)
+        var c = ClientSettings(decoding: nil)
+        #expect(RedesignSettingsView.textDimPosition(c) == TextDim.standard)
+        c.apply(["redesignTextDim": .number(20)])
+        #expect(RedesignSettingsView.textDimPosition(c) == 20)
+        // Blur shows its own saved dim, mapped onto the same track.
+        c.apply(["redesignBackground": .string("blur")])
+        #expect(RedesignSettingsView.textDimPosition(c) == TextDim.standard)
+        c.apply(["ditherBackgroundDim": .number(90)])
+        #expect(RedesignSettingsView.textDimPosition(c) == 100)
+    }
+
     @Test func movedRowsLeaveTheirOldPages() {
         defer { ThemeRuntime.apply(previous) }
         var input = previous
         input.ditherLight = true; input.ditherDark = true
         ThemeRuntime.apply(input)
         let context = SettingsPagesFidelityTests.context()
-        let titles = ["Redesign picture", "Background dim", "Accent color", "Ignore Reduce Transparency", "Redesign"]
+        let titles = ["Redesign picture", "Background dim", "Dim behind text", "Accent color", "Ignore Reduce Transparency", "Redesign"]
         func rowTitles(_ view: NSView) -> [String] {
             ((view as? SettingsRowView).map { [$0.title] } ?? []) + view.subviews.flatMap(rowTitles)
         }
