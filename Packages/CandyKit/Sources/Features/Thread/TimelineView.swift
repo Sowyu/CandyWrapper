@@ -294,6 +294,8 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     static let revivable: Set<Kind> = [.assistant, .user]
     /// Bumped by every pass that configures only the visible rows again, which pooled views missed.
     private var reviveGeneration = 0
+    /// Message views made while the pool still had a view to give, which only the spares rule keeps.
+    private var spareViews: [Kind: Int] = [:]
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -438,7 +440,24 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     }
 
     /// A hidden or closed timeline holds no web pages; its shown rows drop theirs themselves.
-    public override func viewDidHide() { super.viewDidHide(); context.releasePages() }
+    public override func viewDidHide() { super.viewDidHide(); context.releasePages(); dropSpares() }
+
+    /// A hidden timeline or another thread keeps no parked message view that remembers its message, and none of the
+    /// views the spares rule made beyond what the pool needed (the oldest go).
+    private func dropSpares() {
+        reviveGeneration += 1
+        for kind in Self.revivable {
+            guard let extra = spareViews[kind], extra > 0, var pool = pools[kind], !pool.isEmpty else { continue }
+            let dropped = pool.prefix(min(extra, pool.count))
+            pool.removeFirst(dropped.count)
+            pools[kind] = pool
+            spareViews[kind] = extra - dropped.count
+            dropped.forEach { $0.removeFromSuperview() }
+        }
+    }
+
+    /// Parked views of `kind`, for tests.
+    func pooledCount(_ kind: Kind) -> Int { pools[kind]?.count ?? 0 }
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil { context.releasePages() }
@@ -454,7 +473,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// differ from the current ones, so an update on a long thread touches only those.
     func setItems(_ new: [TimelineItem], change: TimelineChange = .all) {
         if change == .thread {
-            reviveGeneration += 1
+            dropSpares()
             followsEnd = true
             lastNearTopId = nil
             context.releasePages()
@@ -1004,8 +1023,11 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             visible[item.id] = nil
             recycle(view)
         }
-        let view = dequeue(Self.kind(item.row), for: item.id)
-        if view.item != item || view.pooledGeneration != reviveGeneration {
+        let kind = Self.kind(item.row)
+        let view = dequeue(kind, for: item.id)
+        // Only message rows come back unconfigured. Every other kind configures as it always did: a web row mints a
+        // fresh signed URL and builds its page there, and a work row resubscribes.
+        if !Self.revivable.contains(kind) || view.item != item || view.pooledGeneration != reviveGeneration {
             configureCount += 1
             view.configure(item)
         } else {
@@ -1058,6 +1080,8 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
                 view.isHidden = false
                 return view
             }
+            // The old pool would have handed this one out: the new view is a spare.
+            if !pool.isEmpty { spareViews[kind, default: 0] += 1 }
         } else if let view = pools[kind]?.popLast() {
             view.pooled = false
             document.addSubview(view)
@@ -1251,6 +1275,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     var liveViewCount: Int { visible.count }
     var isPillVisible: Bool { wantsScrollToEnd }
     var documentHeight: CGFloat { contentHeight }
+    var viewportMinY: CGFloat { viewport.minY }
 }
 
 /// A timeline footer whose height follows the lane's width, such as one holding a guest's waiting messages.
