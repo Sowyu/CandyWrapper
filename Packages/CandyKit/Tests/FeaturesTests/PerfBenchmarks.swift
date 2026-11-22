@@ -564,6 +564,43 @@ struct PerfBenchmarks {
         try await measureThreadUpdate("huge_update", copies: 300, window: 300)
     }
 
+    /// Redesign's extra main-thread work on every update of the open thread (`ThreadSession.setCost`): the gallery's
+    /// image collection and the cost estimate, on the bounded window (`_open`, 57 rows, 900 runs) and the fully
+    /// loaded thread (`_full`, 5,700 rows).
+    @Test func redesignOpenThreadUpdate() throws {
+        for (name, window) in [("open", 3), ("full", 300)] {
+            let (p, _, tool) = try streamingProjection(copies: 300, window: window)
+            var images = 0
+            measure("redesign_update_gallery_\(name)_uncached", runs: 9, extra: ["rows": p.visibleTurnItems.count]) {
+                images = ThreadImageGallery.collect(p, agent: "Main").images.count
+            }
+            // What the open thread pays since 2026-11-22: one tool row changed since the last update.
+            let item = p.visibleTurnItems[tool].item
+            let flips = try ["2026-01-02T00:00:01.000Z", "2026-01-02T00:00:02.000Z"].map { at in
+                var q = p
+                q.visibleTurnItems[tool].item = try replacing(item, ["updatedAt": .string(at)])
+                return q
+            }
+            let cache = ThreadImageGallery.CollectCache()
+            var k = 0
+            measure("redesign_update_gallery_\(name)", runs: 9, extra: ["rows": p.visibleTurnItems.count]) {
+                k += 1
+                images = ThreadImageGallery.collect(flips[k % 2], agent: "Main", cache: cache).images.count
+            }
+            #expect(ThreadImageGallery.collect(flips[0], agent: "Main", cache: cache) == ThreadImageGallery.collect(flips[0], agent: "Main"))
+            var models = 0
+            measure("redesign_update_cost_\(name)_uncached", runs: 9, extra: ["runs": p.runs.count, "nodes": p.nodes.count]) {
+                models = ThreadCostEstimate.own(p).models.count
+            }
+            let memo = ThreadCostEstimate.OwnMemo()
+            measure("redesign_update_cost_\(name)", runs: 9, extra: ["runs": p.runs.count, "nodes": p.nodes.count]) {
+                k += 1
+                models = memo.own(flips[k % 2]).models.count
+            }
+            #expect(images >= 0 && models >= 0)
+        }
+    }
+
     /// The reducer's share of one streamed word on the `huge_full` thread (5,700 rows, 900 runs), which runs off the
     /// main thread for every token: `turn-item.updated` for the streaming answer through `ThreadReducer.apply`.
     @Test func hugeThreadReduceStream() throws {

@@ -112,17 +112,55 @@ public enum ThreadImageGallery {
         collect(projection, agent: agent).images
     }
 
+    /// Each row's and finished reply's share of `collect`, kept by revision, so an update of the open thread reads
+    /// only the rows that changed. `collect` took 32 ms on every update of a 5,700 row thread, mostly building each
+    /// tool row's work log entry. An item gets a new `updatedAt` whenever it changes (`WorkLog`'s failure cache
+    /// relies on the same), and a finished reply's text no longer changes. It holds only the rows and replies of the
+    /// last collect, so it never outgrows the thread.
+    public final class CollectCache {
+        struct RowPart { var revision: RowRevision; var images: [GalleryImage]; var candidates: [Candidate] }
+        struct RowRevision: Equatable { var updatedAt: String; var status: String?; var visibility: String }
+        struct MessagePart { var updatedAt: String; var length: Int; var images: [GalleryImage] }
+        var owner: (ThreadId, String)?
+        var rows: [String: RowPart] = [:]
+        var messages: [String: MessagePart] = [:]
+        public init() {}
+    }
+
     /// The images of one thread's projection, oldest first, and the tool items whose stored output may hold more:
     /// items that viewed an image, browser and computer surfaces, and tools named like screenshots.
-    public static func collect(_ projection: ThreadProjection, agent: String) -> Collected {
+    public static func collect(_ projection: ThreadProjection, agent: String, cache: CollectCache? = nil) -> Collected {
         let thread = projection.thread.id
         var out: [GalleryImage] = []
         var candidates: [Candidate] = []
+        if let cache, cache.owner.map({ $0 != thread || $1 != agent }) ?? true {
+            cache.owner = (thread, agent)
+            cache.rows = [:]
+            cache.messages = [:]
+        }
+        var rowsSeen: [String: CollectCache.RowPart] = [:], messagesSeen: [String: CollectCache.MessagePart] = [:]
+        defer {
+            if let cache { cache.rows = rowsSeen; cache.messages = messagesSeen }
+        }
         for row in projection.visibleTurnItems {
             // Inherited rows belong to the parent thread, which collects them itself.
             guard row.visibility != "inherited" else { continue }
             // Only tool rows show images; skipping the rest keeps a push on a long thread cheap.
             guard toolTypes.contains(row.item.type) || row.item.string("viewedImagePath") != nil else { continue }
+            let key = itemKey(row.sourceThreadId, row.sourceItemId)
+            let revision = CollectCache.RowRevision(updatedAt: row.item.updatedAt.raw, status: row.item["status"]?.stringValue, visibility: row.visibility)
+            if let cache, let part = cache.rows[key], part.revision == revision {
+                out += part.images
+                candidates += part.candidates
+                rowsSeen[key] = part
+                continue
+            }
+            let (imagesBefore, candidatesBefore) = (out.count, candidates.count)
+            defer {
+                if cache != nil {
+                    rowsSeen[key] = CollectCache.RowPart(revision: revision, images: Array(out[imagesBefore...]), candidates: Array(candidates[candidatesBefore...]))
+                }
+            }
             let entry = WorkLog.entry(for: row)
             let at = row.item.startedAt ?? row.item.updatedAt
             let viewed = WorkLog.viewedImagePath(entry)
@@ -142,6 +180,14 @@ public enum ThreadImageGallery {
             }
         }
         for message in projection.messages where message.role == "assistant" && !message.streaming {
+            let length = message.text.utf8.count
+            if let cache, let part = cache.messages[message.id.rawValue], part.length == length, part.updatedAt == message.updatedAt.raw {
+                out += part.images
+                messagesSeen[message.id.rawValue] = part
+                continue
+            }
+            let imagesBefore = out.count
+            defer { if cache != nil { messagesSeen[message.id.rawValue] = CollectCache.MessagePart(updatedAt: message.updatedAt.raw, length: length, images: Array(out[imagesBefore...])) } }
             for src in markdownImages(message.text) {
                 let lower = src.lowercased()
                 let source: GalleryImage.Source
@@ -297,6 +343,8 @@ public final class ThreadImageGalleryController {
     public var isOpen: Bool { popup != nil }
 
     /// The open thread's own images; nil clears everything, as on a draft or Settings.
+    private let collectCache = ThreadImageGallery.CollectCache()
+
     public func update(threadId: ThreadId?, projection: ThreadProjection?) {
         if threadId != self.threadId {
             close()
@@ -307,7 +355,7 @@ public final class ThreadImageGalleryController {
             failed = []
             if let threadId, lookedAt[threadId] == nil { lookedAt[threadId] = TimestampFormat.nowMs() }
         }
-        own = projection.map { ThreadImageGallery.collect($0, agent: "Main") } ?? .init()
+        own = projection.map { ThreadImageGallery.collect($0, agent: "Main", cache: collectCache) } ?? .init()
         sync()
         fetch(own)
     }

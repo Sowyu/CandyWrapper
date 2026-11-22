@@ -1331,6 +1331,9 @@ final class ThreadController {
         keepAlive?.update()
     }
 
+    /// The open thread's own cost between updates (`ThreadCostEstimate.OwnMemo`).
+    private let costMemo = ThreadCostEstimate.OwnMemo()
+
     private func setCost(_ projection: ThreadProjection?, id: ThreadId? = nil) {
         let dither = ThemeRuntime.isDither(dark: true) || ThemeRuntime.isDither(dark: false)
         let opened = projection != nil && id != nil && id != costThreadId
@@ -1345,7 +1348,7 @@ final class ThreadController {
         var next: ThreadCostEstimate.Breakdown?
         if dither, let projection, let id {
             let byParent = subagentShellsByParent()
-            next = ThreadCostEstimate.breakdown(projection, id: id) { [subagentCosts, readingSubagentCosts] parent in
+            next = ThreadCostEstimate.breakdown(projection, id: id, memo: costMemo) { [subagentCosts, readingSubagentCosts] parent in
                 (byParent[parent] ?? []).map {
                     .init(id: $0.id, title: $0.title, own: subagentCosts[$0.id]?.own,
                           reading: subagentCosts[$0.id] == nil && readingSubagentCosts.contains($0.id))

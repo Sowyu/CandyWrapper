@@ -44,6 +44,29 @@ struct ThreadImageGalleryTests {
         #expect(images[0].entryId == "a" && images[2].entryId == "m")
     }
 
+    /// The open thread's collect reuses unchanged rows and replies, and always returns what a fresh collect does: a
+    /// row that changes, a row that goes, a new reply, another thread and another agent name.
+    @Test func cachedCollectMatchesAFreshOne() throws {
+        let output: JSONValue = .array([.object(["type": .string("image"), "data": .string("AAAA"), "mimeType": .string("image/png")])])
+        let cache = ThreadImageGallery.CollectCache()
+        func check(_ p: ThreadProjection, agent: String = "Main") {
+            #expect(ThreadImageGallery.collect(p, agent: agent, cache: cache) == ThreadImageGallery.collect(p, agent: agent))
+        }
+        let a = try Self.viewed("a", "/w/a.png", at: "2026-10-23T10:00:00Z")
+        let b = try Self.item("b", at: "2026-10-23T10:01:00Z", extra: ["status": .string("running")])
+        let msg = ("m", "See ![one](https://x.test/1.png)", "2026-10-23T10:03:00Z")
+        check(try Self.projection("t", items: [a, b], messages: [msg]))
+        // b finishes with an image: a new revision, so it is read again.
+        let bDone = try Self.item("b", at: "2026-10-23T10:02:00Z", extra: ["output": output])
+        check(try Self.projection("t", items: [a, bDone], messages: [msg]))
+        #expect(ThreadImageGallery.collect(try Self.projection("t", items: [a, bDone]), agent: "Main", cache: cache).images.count == 2)
+        // a goes, a reply arrives, the cache drops what it no longer sees.
+        check(try Self.projection("t", items: [bDone], messages: [msg, ("n", "![two](https://x.test/2.png)", "2026-10-23T10:04:00Z")]))
+        #expect(cache.rows.count == 1 && cache.messages.count == 2)
+        check(try Self.projection("t", items: [bDone], messages: [msg]), agent: "Subagent 1")
+        check(try Self.projection("u", items: [try Self.viewed("a", "/w/a.png", at: "2026-10-23T10:00:00Z", thread: "u")]))
+    }
+
     @Test func mergeIsNewestFirstAndKeepsEachPictureOnce() throws {
         let main = ThreadImageGallery.images(try Self.projection("t", items: [
             try Self.viewed("a", "/w/shot.png", at: "2026-10-23T10:00:00Z"),
