@@ -820,6 +820,20 @@ private func measureScroll(_ name: String, copies: Int, window turns: Int) async
         print("PERF " + String(decoding: data, as: UTF8.self))
     }
     emit("open", [open], ["created": timeline.createdRowViews, "configures": timeline.configureCount])
+    // The first guess an open makes for every row not measured yet: the old split of each text against today's pass.
+    let texts = panel.model.items.compactMap { $0.row.message?.text }
+    let chars = max(1, 736 / 7.5)
+    var lines: CGFloat = 0
+    measure("scroll_long_estimate_split", runs: 7, extra: ["texts": texts.count]) {
+        lines = texts.reduce(0) { sum, text in
+            sum + text.split(separator: "\n", omittingEmptySubsequences: false).reduce(0) { $0 + max(1, ceil(CGFloat($1.count) / chars)) }
+        }
+    }
+    var fast: CGFloat = 0
+    measure("scroll_long_estimate_lines", runs: 7, extra: ["texts": texts.count]) {
+        fast = texts.reduce(0) { $0 + TimelineView.estimatedLineCount($1, chars: chars) }
+    }
+    #expect(fast == lines)
     let clip = timeline.scrollView.contentView
     func pass(_ suffix: String, up: Bool) {
         let configures = timeline.configureCount, created = timeline.createdRowViews

@@ -669,12 +669,35 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     }
     private static var lastEstimate: (text: String, width: CGFloat, perLine: CGFloat, lines: CGFloat)?
 
+    /// The lines `text` wraps to at `chars` characters a line: each line between newlines counts its characters, at least
+    /// one line. The same sum as splitting on "\n" and counting each piece's characters, which an open paid for every
+    /// row not measured yet: lines of ASCII count their bytes, and a carriage return, which joins the next newline into
+    /// one character, takes the split.
+    static func estimatedLineCount(_ text: String, chars: CGFloat) -> CGFloat {
+        func split() -> CGFloat {
+            text.split(separator: "\n", omittingEmptySubsequences: false).reduce(0) { $0 + max(1, ceil(CGFloat($1.count) / chars)) }
+        }
+        let utf8 = text.utf8
+        return utf8.withContiguousStorageIfAvailable { bytes -> CGFloat in
+            var total: CGFloat = 0, start = 0, ascii = true
+            func line(_ end: Int) -> CGFloat {
+                let count = ascii ? end - start
+                    : text[utf8.index(utf8.startIndex, offsetBy: start)..<utf8.index(utf8.startIndex, offsetBy: end)].count
+                return max(1, ceil(CGFloat(count) / chars))
+            }
+            for i in 0..<bytes.count {
+                let byte = bytes[i]
+                if byte == 10 { total += line(i); start = i + 1; ascii = true }
+                else if byte >= 0x80 { ascii = false }
+                else if byte == 13 { return split() }
+            }
+            return total + line(bytes.count)
+        } ?? split()
+    }
+
     /// A first guess for rows not measured yet, from their kind and text length.
     static func estimate(_ item: TimelineItem, width: CGFloat) -> CGFloat {
-        func lines(_ text: String, _ perLine: CGFloat) -> CGFloat {
-            let chars = max(1, width / perLine)
-            return text.split(separator: "\n", omittingEmptySubsequences: false).reduce(0) { $0 + max(1, ceil(CGFloat($1.count) / chars)) }
-        }
+        func lines(_ text: String, _ perLine: CGFloat) -> CGFloat { estimatedLineCount(text, chars: max(1, width / perLine)) }
         switch item.row.kind {
         case .message(let m, _, let meta, _, _, let summary):
             if m.role == .user {

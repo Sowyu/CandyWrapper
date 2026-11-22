@@ -62,4 +62,19 @@ import T3Store
         }
         #expect(checked > 5)
     }
+
+    @Test func lineEstimateMatchesSplittingTheText() {
+        let samples = [
+            "", "\n", "a", "a\n", "\n\nb", String(repeating: "word ", count: 300),
+            "plain line\n" + String(repeating: "x", count: 250) + "\n\nend",
+            "café and naïve\n👩‍👩‍👧 family\ne\u{301} combining\n", "tab\tand ‘quotes’ — dash\n",
+            "crlf line\r\nnext\r\n", "lone \r carriage", "🇫🇷🇩🇪\n" + String(repeating: "é", count: 120),
+        ]
+        for text in samples {
+            for chars: CGFloat in [1, 7, 98.13] {
+                let want = text.split(separator: "\n", omittingEmptySubsequences: false).reduce(CGFloat(0)) { $0 + max(1, ceil(CGFloat($1.count) / chars)) }
+                #expect(TimelineView.estimatedLineCount(text, chars: chars) == want, "\(text.debugDescription) at \(chars)")
+            }
+        }
+    }
 }
