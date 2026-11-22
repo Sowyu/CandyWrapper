@@ -5,7 +5,7 @@ import Testing
 /// Typing undo in the composer behaves like a plain macOS text view: one step per burst, chips and list
 /// edits as a unit. The editor sits in a window so it gets the window's undo manager, as in the app.
 @MainActor struct ComposerUndoTests {
-    private func host(rich: Bool) -> (NSWindow, ComposerEditor) {
+    private func host(rich: Bool, fixedClock: Bool = true) -> (NSWindow, ComposerEditor) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
         let editor = ComposerEditor()
         editor.frame = NSRect(x: 0, y: 0, width: 560, height: 200)
@@ -13,7 +13,7 @@ import Testing
         editor.richTextEnabled = rich
         // A fixed clock: the editor starts a new undo step after a 1 s pause, and on a loaded machine a run loop pass
         // between two typed characters can take longer than that.
-        editor.editClock = { 0 }
+        if fixedClock { editor.editClock = { 0 } }
         window.contentView = editor
         window.makeFirstResponder(editor)
         return (window, editor)
@@ -73,6 +73,28 @@ import Testing
         #expect(editor.expandedText == "draft more")
         undo(editor)
         #expect(editor.expandedText == "draft")
+        window.contentView = nil
+    }
+
+    /// The pause is read from the keys' own times, so keys typed close together stay one step however late a busy
+    /// main thread handles them, and keys typed 2 s apart are two steps however fast it handles them.
+    @Test func thePauseIsTheKeysOwn() throws {
+        let (window, editor) = host(rich: false, fixedClock: false)
+        func key(_ character: String, at time: TimeInterval) throws {
+            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: time, windowNumber: 0,
+                context: nil, characters: character, charactersIgnoringModifiers: character, isARepeat: false, keyCode: 0))
+            editor.keyDown(with: event)
+            RunLoop.main.run(mode: .default, before: Date())
+        }
+        editor.setText("")
+        try key("a", at: 50)
+        try key("b", at: 50.4)
+        try key("c", at: 52.4)
+        try #require(editor.expandedText == "abc", "the test's key events did not type")
+        undo(editor)
+        #expect(editor.expandedText == "ab")
+        undo(editor)
+        #expect(editor.expandedText == "")
         window.contentView = nil
     }
 

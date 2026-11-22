@@ -21,10 +21,9 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     private var lastEditAt = -Double.infinity
     /// When the edit in hand was made, for the pause that starts a new undo step: the key's own time, so keys typed in
     /// one burst stay one step when a busy main thread handles them late. Tests set it.
-    var editClock: () -> TimeInterval = {
-        if let event = NSApp?.currentEvent, event.type == .keyDown { return event.timestamp }
-        return ProcessInfo.processInfo.systemUptime
-    }
+    lazy var editClock: () -> TimeInterval = { [unowned self] in keyTime ?? ProcessInfo.processInfo.systemUptime }
+    /// The key being handled, from `keyDown`'s start to its end. An edit made outside one is timed as it happens.
+    private var keyTime: TimeInterval?
     /// Chromium's caret; AppKit's indicator stays hidden (`didAddSubview`).
     private let caretView = ComposerCaretView()
     private var isFocused = false
@@ -987,6 +986,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     }
 
     override func keyDown(with event: NSEvent) {
+        keyTime = event.timestamp
+        defer { keyTime = nil }
         if let onMenuKey, !hasMarkedText() {
             let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
             let key: MenuKey? = switch event.keyCode {
