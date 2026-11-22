@@ -1165,7 +1165,7 @@ private struct Builder {
     /// A code block's text with its token colors. Neither depends on the width or the appearance (the colors are
     /// dynamic), so long blocks keep theirs: a window resize or reopening the thread lays out again without lexing
     /// again. Lexing an 18,000 line block took 0.1 s of every layout.
-    // ponytail: the last 16 blocks of 2,000 UTF-16 units or more; key by something cheaper than the text if it shows in profiles
+    // ponytail: the last 256 blocks of 2,000 UTF-16 units or more, FIFO. 16 thrashed: a thread with more long blocks than that re-lexed every one on every layout and pinned the main thread. Bound by total length if memory shows in profiles
     nonisolated(unsafe) private static var coloredCodeCache: [ColoredCodeKey: NSAttributedString] = [:]
     nonisolated(unsafe) fileprivate static var coloredCodeOrder: [ColoredCodeKey] = []
     fileprivate static let coloredCodeLock = NSLock()
@@ -1202,7 +1202,7 @@ private struct Builder {
         let frozen = string.copy() as! NSAttributedString
         coloredCodeLock.withLock {
             if coloredCodeCache.updateValue(frozen, forKey: key) == nil { coloredCodeOrder.append(key) }
-            if coloredCodeOrder.count > 16 { coloredCodeCache[coloredCodeOrder.removeFirst()] = nil }
+            if coloredCodeOrder.count > 256 { coloredCodeCache[coloredCodeOrder.removeFirst()] = nil }
         }
         return frozen
     }
