@@ -95,13 +95,20 @@ public actor MediaDiskCache {
     func store(_ key: String, scope: String, path: String, file: URL, revision: String?, etag: String?, natural: CGSize?) -> URL? {
         let target = fileURL(key)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try? FileManager.default.removeItem(at: thumbURL(key))
+        // The download first moves next to the kept file, which copies when the temporary folder is on another volume
+        // (`replaceItemAt` fails there), then `rename` swaps it in. A download that is gone or will not copy leaves the
+        // kept file as it was. `sweep` removes a staged file a crash left: no entry has its name.
+        let staged = root.appendingPathComponent("incoming-" + UUID().uuidString)
         do {
-            if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
-            try FileManager.default.moveItem(at: file, to: target)
+            try FileManager.default.moveItem(at: file, to: staged)
         } catch {
             return nil
         }
+        guard rename(staged.path, target.path) == 0 else {
+            try? FileManager.default.moveItem(at: staged, to: file)
+            return nil
+        }
+        try? FileManager.default.removeItem(at: thumbURL(key))
         let bytes = (try? target.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
         entries[key] = Entry(scope: scope, path: path, revision: revision, etag: etag,
                              width: Double(natural?.width ?? 0), height: Double(natural?.height ?? 0), bytes: bytes, lastUse: now())

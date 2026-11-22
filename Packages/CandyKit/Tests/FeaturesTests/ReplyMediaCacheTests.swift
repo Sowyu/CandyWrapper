@@ -7,6 +7,31 @@ import UniformTypeIdentifiers
 
 /// Reply images kept on disk (`MediaDiskCache`), the download queue's order (`MediaFetchQueue`), and the development link throttle.
 @MainActor @Suite(.serialized) struct ReplyMediaCacheTests {
+    @Test func aFailedReplacementKeepsTheCachedOriginal() async throws {
+        let root = ReplyMediaFiles.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cache = MediaDiskCache(root: root)
+        let old = try #require(await cache.store("image", scope: "env", path: "/image", file: ReplyMediaFiles.png(),
+                                                 revision: "1", etag: nil, natural: nil))
+        let original = try Data(contentsOf: old)
+        let missing = root.appendingPathComponent("missing")
+        #expect(await cache.store("image", scope: "env", path: "/image", file: missing,
+                                  revision: "2", etag: nil, natural: nil) == nil)
+        let kept = try #require(await cache.lookup("image"))
+        #expect(kept.entry.revision == "1")
+        #expect(try Data(contentsOf: kept.file) == original)
+
+        // A replacement that works swaps the bytes and leaves nothing else in the folder.
+        let next = ReplyMediaFiles.png(width: 8, height: 8)
+        let fresh = try Data(contentsOf: next)
+        let stored = try #require(await cache.store("image", scope: "env", path: "/image", file: next,
+                                                    revision: "3", etag: nil, natural: nil))
+        #expect(try Data(contentsOf: stored) == fresh)
+        #expect(await cache.entry("image")?.revision == "3")
+        #expect(!FileManager.default.fileExists(atPath: next.path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0 != "index.json" } == ["image.bin"])
+    }
+
     @Test func leastRecentlyUsedGoesFirst() async {
         final class Clock: @unchecked Sendable { var now = 0.0 }
         let clock = Clock()
