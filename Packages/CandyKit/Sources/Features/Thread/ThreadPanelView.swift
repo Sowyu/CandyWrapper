@@ -407,6 +407,9 @@ public final class ThreadPanelView: DSView {
     private let threadTitle = DitherThreadTitleView()
     /// Redesign: whether the rows fade out under the tab band, which an open thread does.
     private var ditherTopFade = false
+    /// Redesign: where the rows fade out above the composer group, in this view's coordinates, opaque at `start` and
+    /// gone from `end` (the top of the composer and the cards on it) down. Nil while the composer isn't docked.
+    private(set) var ditherBottomFade: (start: CGFloat, end: CGFloat)?
     /// The composer's lane, which the timeline's rows share (`ThreadDetailsPlacement.lane`).
     private var readingLane = NSRect.zero
     public let composer = ComposerView()
@@ -1775,6 +1778,7 @@ public final class ThreadPanelView: DSView {
         }
         for case let view? in ditherDockViews { view.placement = .attached }
         ditherShown = []
+        ditherBottomFade = nil
         let y: CGFloat
         let dither = false
         let showsStrip = showsContextStrip && !(isDraft && dither && !contextStrip.showsGitControls)
@@ -2078,6 +2082,7 @@ public final class ThreadPanelView: DSView {
             top = view.frame.minY
             shown.append(view)
         }
+        let groupTop = top
 
         // The context row: the draft's chips (the hero), Stash at the right.
         let rowY = top - gap - pillH
@@ -2276,11 +2281,32 @@ public final class ThreadPanelView: DSView {
         animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting)
 
         let inset = docked ? 8 + (y - insetTop) + height + below + 20 : 0
+        // The rows fade out from the end of the scrolled content to the group's top and draw nothing below it, so no
+        // line reads through the frosted composer, under the chips or in the strip under it (`layout`'s mask). Scroll
+        // to end adds no inset, so while it shows the fade starts above its row; it shows only away from the end, where
+        // that row holds no last line.
+        let pillRow = docked && timeline.wantsScrollToEnd ? rowY : insetTop
+        ditherBottomFade = docked ? (start: min(insetTop, pillRow) - 8, end: groupTop) : nil
         if timeline.bottomInset != inset {
             timeline.bottomInset = inset
             if terminalOpen { needsLayout = true }
         }
         if isDraft { timeline.isHidden = true }
+    }
+
+    /// Locations clamped to 0...1 and never falling, so a window too short for both fades keeps a valid gradient.
+    static func rising(_ locations: [Double]) -> [Double] {
+        var floor = 0.0
+        return locations.map { floor = max(floor, min(max($0, 0), 1)); return floor }
+    }
+
+    /// The mask's stops for `ditherBottomFade` as fractions of the timeline's height `h`, or the opaque end without it.
+    private func bottomFadeStops(_ h: Double) -> [(Double, Double)] {
+        guard let fade = ditherBottomFade else { return [(1, 1)] }
+        let origin = Double(timeline.frame.minY)
+        let end = (Double(fade.end) - origin) / h, start = min(end, (Double(fade.start) - origin) / h)
+        // Eased like the top edge's fade, so the pill row over it is already mostly gone.
+        return (0...4).map { i -> (Double, Double) in let t = Double(i) / 4; return (start + (end - start) * t, (1 - t) * (1 - t)) } + [(1, 0)]
     }
 
     private func watchSubagentPanel(_ on: Bool) {
@@ -2618,17 +2644,18 @@ public final class ThreadPanelView: DSView {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
             let clear = Double(DitherChrome.band)
-            fadeMask.locations = [0, clear / h, (clear + Double(RedesignTokens.Space.l)) / h, 1].map { NSNumber(value: min($0, 1)) }
-            fadeMask.colors = [0, 0, 1, 1].map { NSColor.black.withAlphaComponent($0).cgColor }
+            let stops = [(0, 0), (clear / h, 0), ((clear + Double(RedesignTokens.Space.l)) / h, 1)] + bottomFadeStops(h)
+            fadeMask.locations = Self.rising(stops.map(\.0)).map { NSNumber(value: $0) }
+            fadeMask.colors = stops.map { NSColor.black.withAlphaComponent($0.1).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
         } else if dither {
             fadeMask.frame = timeline.bounds
             let h = max(1, Double(timeline.bounds.height))
             // Dither fades only the last few points at the window's edge, so the rows stay readable under the header and tabs.
             let reach = Double(Self.ditherEdgeFade)
-            fadeMask.locations = (Self.fadeStops.map { $0 * reach / h } + [1]).map { NSNumber(value: min($0, 1)) }
-            fadeMask.colors = (Self.fadeStops.map { 1 - Self.ditherFade($0) } + [1])
-                .map { NSColor.black.withAlphaComponent($0).cgColor }
+            let stops = Self.fadeStops.map { ($0 * reach / h, 1 - Self.ditherFade($0)) } + bottomFadeStops(h)
+            fadeMask.locations = Self.rising(stops.map(\.0)).map { NSNumber(value: $0) }
+            fadeMask.colors = stops.map { NSColor.black.withAlphaComponent($0.1).cgColor }
             if timeline.layer?.mask !== fadeMask { timeline.layer?.mask = fadeMask }
         } else if timeline.layer?.mask === fadeMask {
             timeline.layer?.mask = nil

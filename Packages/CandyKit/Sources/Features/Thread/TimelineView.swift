@@ -47,7 +47,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     private var setupHeight: CGFloat = 0
     private let pill = ButtonView("Scroll to end", icon: .chevronDown, variant: .glass, size: .xs)
     /// Whether Scroll to end is due: away from the end, after the 150ms wait.
-    public private(set) var wantsScrollToEnd = false {
+    public internal(set) var wantsScrollToEnd = false {
         didSet { if wantsScrollToEnd != oldValue { pill.isHidden = !wantsScrollToEnd || hostsScrollToEnd; onScrollToEndChange?() } }
     }
     /// Redesign draws Scroll to end as a pill in the row above the composer, so this view's own stays hidden.
