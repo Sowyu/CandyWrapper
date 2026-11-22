@@ -28,8 +28,10 @@ env = {"HOME": os.environ["HOME"], "USER": pwd.getpwuid(os.getuid()).pw_name, "L
        "PATH": os.environ["HOME"] + "/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
        "T3CODE_TELEMETRY_ENABLED": "false", "T3CODE_HOME": sandbox + "/t3home"}
 log = open(sandbox + "/server.log", "ab")
+# cwd: a server whose working directory is deleted later, like an agent worktree, cannot spawn git and fails every
+# VCS request (seen 2026-11-22 on both shared sandboxes).
 p = subprocess.Popen([binary, "serve", "--base-dir", sandbox + "/t3home", "--port", port, "--host", "127.0.0.1", "--no-browser"],
-                     env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+                     env=env, cwd=sandbox, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
 open(sandbox + "/server.pid", "w").write(str(p.pid))
 PY
 echo "sandbox server pid $(cat "$sandbox/server.pid"), http://127.0.0.1:$port, log $sandbox/server.log"

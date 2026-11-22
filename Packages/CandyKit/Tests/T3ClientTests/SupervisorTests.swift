@@ -268,7 +268,11 @@ struct SupervisorTests {
             while !Task.isCancelled {
                 let requests = socket.sent.compactMap { if case .request(let r) = $0 { r } else { nil } }
                 for request in requests.dropFirst(answered) {
-                    socket.deliver(.exit(requestId: request.id, exit: .failure([.fail(RPCTypedError(tag: "GitCommandError", fields: ["message": .string("not a git repository")]))])))
+                    // What a 4928 host sends for every folder when git cannot start there (its working directory was deleted).
+                    socket.deliver(.exit(requestId: request.id, exit: .failure([.fail(RPCTypedError(tag: "GitManagerError", fields: [
+                        "operation": .string("GitWorkflowService.localStatus"), "cwd": .string("/sandbox/plain"),
+                        "detail": .string("Failed to detect a VCS repository for this Git workflow."),
+                    ]))])))
                 }
                 answered = requests.count
                 try? await Task.sleep(for: .milliseconds(5))
@@ -303,6 +307,56 @@ struct SupervisorTests {
         #expect(await eventually { Self.requestCount(h.lastSocket) == 1 })
         sub.cancel()
         await s.disconnect()
+    }
+
+    /// A folder without git is not a failure: 3824 and 4928 hosts answer `subscribeVcsStatus` with `isRepo: false` and
+    /// keep the stream open (frames recorded from both, paths scrubbed). After `git init`, the host pushes
+    /// `localUpdated` on that stream when `vcs.refreshStatus` runs (the window coming forward, the git menu, any git
+    /// action) or when a run finishes (apps/server/src/orchestration-v2/RunFinalizationService.ts:136-139), so the
+    /// stream needs no new request and sends none while idle.
+    @Test func aFolderWithoutGitStaysSubscribedAndLearnsWhenItBecomesARepository() async throws {
+        let h = Harness([.succeed])
+        var deps = h.dependencies
+        deps.retrySleep = { _ in }
+        let s = ConnectionSupervisor(dependencies: deps)
+        let status = StatusBox()
+        let sub = s.subscribe("subscribeVcsStatus", payload: { .object(["cwd": .string("/sandbox/plain")]) }, handler: { event in
+            if case .value(let json) = event { await status.apply(json) }
+        })
+        await s.connect()
+        #expect(await eventually { Self.requestCount(h.lastSocket) == 1 })
+        let socket = try #require(h.lastSocket)
+        let request = try #require(socket.sent.compactMap { if case .request(let r) = $0 { r } else { nil } }.first)
+        func frame(_ text: String) throws -> JSONValue { try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)) }
+        socket.deliver(.chunk(requestId: request.id, values: [try frame(#"""
+        {"_tag":"snapshot","local":{"isRepo":false,"hasPrimaryRemote":false,"isDefaultRef":false,"refName":null,
+        "hasWorkingTreeChanges":false,"workingTree":{"files":[],"insertions":0,"deletions":0}},"remote":null}
+        """#)]))
+        socket.deliver(.chunk(requestId: request.id, values: [try frame(#"{"_tag":"remoteUpdated","remote":null}"#)]))
+        #expect(await eventually {
+            let (value, count) = (await status.value, await status.count)
+            return value?.isRepo == false && count == 2
+        })
+        // Retries are instant here, so any request the idle stream sent would show by now.
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(Self.requestCount(socket) == 1)
+
+        socket.deliver(.chunk(requestId: request.id, values: [try frame(#"""
+        {"_tag":"localUpdated","local":{"isRepo":true,"hasPrimaryRemote":false,"isDefaultRef":true,"refName":"main",
+        "hasWorkingTreeChanges":false,"workingTree":{"rootPath":"/sandbox/plain","files":[],"insertions":0,"deletions":0}}}
+        """#)]))
+        #expect(await eventually { await status.value?.isRepo == true })
+        #expect(await status.value?.refName == "main")
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(Self.requestCount(socket) == 1)
+        sub.cancel()
+        await s.disconnect()
+    }
+
+    actor StatusBox {
+        var value: VcsStatus?
+        var count = 0
+        func apply(_ event: JSONValue) { value = VcsStatus.apply(event, to: value); count += 1 }
     }
 
     @Test func theShellAndThreadsKeepRetryingServerFailures() async throws {

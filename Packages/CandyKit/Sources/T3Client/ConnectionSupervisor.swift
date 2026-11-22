@@ -901,8 +901,10 @@ extension ConnectionSupervisor {
     /// Server failures in a row, with no value between them, that a subscription retries on one session before it
     /// waits for the next session. T3 retries a failing stream only where the caller asks, the shell and threads
     /// (client-runtime rpc/client.ts:436-452, state/shell.ts:719-720, state/threads.ts:1145-1149), and ends the rest
-    /// on the first failure. Retrying forever sent `subscribeVcsStatus` for a folder that isn't a repository every
-    /// 30 s while the app sat idle. Five retries span about 8 s.
+    /// on the first failure. Retrying forever sent `subscribeVcsStatus` every 30 s while the app sat idle, for every
+    /// folder on a host whose git cannot start (a server left running in a deleted working directory fails each one
+    /// with `GitManagerError`). A folder without git is not a failure: the host answers `isRepo: false` and keeps the
+    /// stream open. Five retries span about 8 s.
     public static let serverFailureRetries = 5
 
     /// A stream that follows the connection: it re-subscribes on every new session and after
