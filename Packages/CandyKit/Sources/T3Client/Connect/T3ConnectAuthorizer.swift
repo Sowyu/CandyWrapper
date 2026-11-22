@@ -88,7 +88,7 @@ public actor T3ConnectAuthorizer {
         try await selectToken(environmentId: environmentId, rejected: rejected).token
     }
 
-    private func selectToken(environmentId: String, rejected: String?) async throws -> (token: T3ConnectToken, fromCache: Bool) {
+    private func selectToken(environmentId: String, rejected: String?) async throws -> (token: T3ConnectToken, fromCache: Bool, signIn: CloudSignIn) {
         // Captured once, before any other await: everything below belongs to this sign-in (service.ts:263-268).
         let signIn = try await tokens.currentSignIn()
         guard let signIn else { throw CloudSessionError.signedOut }
@@ -112,7 +112,7 @@ public actor T3ConnectAuthorizer {
         if let cached = cache[environmentId] {
             if cached.signIn == signIn, cached.token.thumbprint == relay.key.thumbprint,
                !cached.token.needsRenewal(at: now()), cached.token.accessToken != rejected {
-                return (cached.token, true)
+                return (cached.token, true, signIn)
             }
             if cached.signIn != signIn {
                 cache = [:]
@@ -144,7 +144,7 @@ public actor T3ConnectAuthorizer {
         guard generation == shared.generation, try await tokens.currentSignIn() == signIn, generation == shared.generation else {
             throw CloudSessionError.accountChanged
         }
-        return (fresh, false)
+        return (fresh, false, signIn)
     }
 
     /// T3's `assertSession` (service.ts:327-334): throws when the sign-in is no longer `signIn` or `reset()` ran
@@ -265,18 +265,28 @@ public actor T3ConnectAuthorizer {
             checked = descriptor
         }
         let direct = checked
-        var (token, fromCache) = try await selectToken(environmentId: environmentId, rejected: nil)
-        if fromCache {
-            if let opened = try await reuse(token, directEndpoint: directEndpoint, direct: direct) { return opened }
+        let started = generation
+        let selected = try await selectToken(environmentId: environmentId, rejected: nil)
+        var token = selected.token
+        if selected.fromCache {
+            if let opened = try await reuse(token, directEndpoint: directEndpoint, direct: direct) {
+                try await assertSignIn(selected.signIn, since: started)
+                return opened
+            }
             token = try await self.token(environmentId: environmentId, rejected: token.accessToken)
         }
+        let opened: T3ConnectSocket
         do {
-            return try await socket(token, direct: directEndpoint, timeout: Self.requestTimeout)
+            opened = try await socket(token, direct: directEndpoint, timeout: Self.requestTimeout)
         } catch {
             // A direct address that refuses the socket says nothing about the token.
             if directEndpoint == nil || error is DPoPError { drop(environmentId, token) }
             throw error
         }
+        // A sign-out or an account switch while the ticket was minted: no socket opens for the old sign-in
+        // (service.ts:723, 749).
+        try await assertSignIn(selected.signIn, since: started)
+        return opened
     }
 
     /// A socket for a cached token, or nil when the route refused it and a fresh token should replace it. Returning

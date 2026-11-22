@@ -233,6 +233,23 @@ struct ConnectTokenStoreTests {
         #expect(try await auth.token(environmentId: "env-1").accessToken == "eat-2")
     }
 
+    /// A sign-out while the ticket is minted, for a stored token and for a fresh one: no socket URL comes back.
+    @Test(arguments: [true, false])
+    func signOutWhileTheTicketIsMintedEndsAuthorization(stored: Bool) async throws {
+        if stored { try await firstLaunch() }
+        let http = FakeHTTP()
+        serve(http)
+        let auth = try authorizer(http, send: { [http, cloud] request in
+            let answer = try await http.send(request)
+            if request.url?.path == "/api/auth/websocket-ticket" { cloud.signIn(nil) }
+            return answer
+        })
+        await #expect(throws: CloudSessionError.accountChanged) {
+            _ = try await auth.authorizeSocket(environmentId: "env-1")
+        }
+        #expect(http.requests("/api/auth/websocket-ticket").count == 1)
+    }
+
     @Test func itemWhosePayloadNamesAnotherAccountIsDeleted() async throws {
         try await firstLaunch()
         let raw = try #require(try store.credentials.load(environmentId: "user_1/env-1"))
