@@ -100,6 +100,7 @@ import Testing
                      SubagentStrip.Provider(instanceId: "claude", driver: "claudeAgent", name: "Claude")]
         #expect(strip.pillAgents(order: order).map(\.id) == ["b", "a", "c", "d", "e", "f", "h"])
         #expect(strip.pillAgents(order: order.reversed()).map(\.id) == ["a", "c", "d", "e", "f", "b", "h"])
+        #expect(strip.pillGroups(order: order.reversed()).map { "\($0.instanceId) \($0.count)" } == ["claude 5", "codex 1", "gone 1"])
         #expect(strip.pillDescription(order: order.reversed(), driverName: { $0 })
                 == "Waiting on 5 Claude, 1 Codex and 1 other subagents")
         let two = SubagentStrip.make(subagents: Array(records.prefix(6)), shells: [], latestTurn: ["run-2"], parent: idle)

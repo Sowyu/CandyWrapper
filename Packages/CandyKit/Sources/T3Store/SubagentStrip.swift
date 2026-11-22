@@ -73,6 +73,23 @@ public struct SubagentStrip: Sendable, Equatable {
         }.map(\.element)
     }
 
+    /// One live provider in the pill: its instance, driver and how many of its subagents still run.
+    public struct PillGroup: Sendable, Equatable {
+        public let instanceId: String
+        public let driver: String
+        public var count: Int
+    }
+
+    /// The pill's provider groups, in `pillAgents` order.
+    public func pillGroups(order: [Provider]) -> [PillGroup] {
+        var groups: [PillGroup] = []
+        for r in pillAgents(order: order) {
+            if let i = groups.firstIndex(where: { $0.instanceId == r.providerInstanceId }) { groups[i].count += 1 }
+            else { groups.append(PillGroup(instanceId: r.providerInstanceId, driver: r.driver, count: 1)) }
+        }
+        return groups
+    }
+
     /// "Waiting on 5 Claude and 1 Codex subagents", or "1 Claude subagent running" while the thread doesn't wait.
     public func pillDescription(order: [Provider], driverName: (String) -> String) -> String {
         let agents = pillAgents(order: order)
