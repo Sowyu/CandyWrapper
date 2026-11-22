@@ -416,6 +416,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             if undoManager?.isUndoing != true, undoManager?.isRedoing != true { normalizeMarkdownSource(typed: true) }
             endSourceEdit()
         }
+        // A chip that replaced a token can rewrap a line and move the numbers and rails below it.
+        if isChipifying, blockInfo.decorated { needsDisplay = true }
         highlightCodeBlocks(deferLong: true)
         onTextChange?()
         updateCaret(restart: true)
@@ -456,6 +458,10 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
 
     private func applyBlockInfo(_ info: ComposerRichTextStyler.Info) {
         let shift = blockInfo.topShift
+        // TextKit 2 redraws only the text of the lines an edit changed, never this view's background, where
+        // `drawBlockDecorations` paints ordered numbers and quote rails. Without this, numbers of items deleted,
+        // moved or renumbered stayed on screen until the composer changed height.
+        if blockInfo.decorated || info.decorated { needsDisplay = true }
         blockInfo = info
         blockInfo.rule = nil
         if shift != info.topShift { invalidateTextContainerOrigin() }
@@ -1284,6 +1290,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         let regions = ComposerMarkdownSource.regions(storage)
         for region in regions { ComposerMarkdownSource.restyle(region, in: storage, lineBase: lineBase(at: region.location)) }
         storage.endEditing()
+        // Shown or hidden markers can rewrap a line and move the numbers and rails below it.
+        if blockInfo.decorated { needsDisplay = true }
         sourceShown = !regions.isEmpty
         let empty = mapped.length == 0
         let inside = { (x: ComposerMarkdownSource.Insertion) in typed && empty && (x.closing ? takesBefore : !takesBefore) }
