@@ -65,6 +65,7 @@ public struct ClientSettings: Equatable, Sendable {
         "environmentIdentificationMode": SettingSpec(.literals(["artwork", "nightly-artwork", "dev-artwork", "pill", "none"]), .string("artwork")),
         "glassOpacity": SettingSpec(.int(10...100), .number(80)),
         "ditherBackgroundDim": SettingSpec(.int(0...90), .number(35)),  // CandyWrapper only: Redesign's dim over the art in threads  // T3 stops at 40 (settings.ts:94); CandyWrapper goes to 10, the value stays local
+        "redesignTextDim": SettingSpec(.int(0...100), .number(70)),  // CandyWrapper only: Redesign's "Dim behind text" for Picture and Flower; Blur keeps ditherBackgroundDim
         "ignoreReduceTransparency": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign ignores macOS's Reduce Transparency
         "ditherAccent": SettingSpec(.string(maxLength: 32), .string("teal")),  // CandyWrapper only: Redesign's accent, a DitherAccent id
         "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient", "flower"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, or a dithered lotus over accent dots; "gradient" (1.16.0) loads as "flower"

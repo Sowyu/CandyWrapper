@@ -503,12 +503,16 @@ public final class DitherArtView: NSView {
                 made.dot = unit
                 made.shape = pictureShape(cell: unit)
                 made.text = [palette.foreground.srgb, palette.mutedForeground.srgb].flatMap { [$0.x, $0.y, $0.z] }
+                made.textDim = ThemeRuntime.ditherTextDim
             }
             request = made
         }
         guard request != shown, request != pending else { return }
         // Only a new size waits for the drag to pause; a page, ink or picture change renders at once.
         let resizing = shown.map { $0.width != request.width || $0.height != request.height } ?? false
+        // A "Dim behind text" drag only re-thresholds the cached tone, but lands every tick: the last value renders.
+        var dimOnly = (pending ?? shown).map { $0.textDim != request.textDim } ?? false
+        if dimOnly, var same = pending ?? shown { same.textDim = request.textDim; dimOnly = same == request }
         pending = request
         debounce?.cancel()
         // A live resize lands here every frame; the last size renders, the old art scales with the panel meanwhile.
@@ -525,7 +529,7 @@ public final class DitherArtView: NSView {
             }
         }
         debounce = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (resizing ? 0.15 : 0), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (resizing ? 0.15 : dimOnly ? 0.06 : 0), execute: work)
     }
 
     /// Picture's inks from the "Ink" setting: Auto takes them from the picture, Accent from the accent, Custom from the
@@ -598,6 +602,8 @@ struct ColumnKey: Equatable {
     var column: ClosedRange<CGFloat>?
     var cap: Float
     var dark: Bool
+    /// "Dim behind text" (`TextDim`).
+    var dim = TextDim.standard
 }
 
 /// Which frames a render makes.
@@ -826,10 +832,14 @@ extension DitherArtView {
         let cap = column == nil ? 1 : LotusArt.columnCap(ground: SIMD3(ground.x, ground.y, ground.z), ink: Self.flowerInkRGB(palette, dark: dark),
                                                          text: SIMD3(text.x, text.y, text.z), muted: SIMD3(muted.x, muted.y, muted.z),
                                                          opacity: Double(Self.flowerOpacity(dark: dark)), dark: dark)
-        let key = ColumnKey(placement: p, column: column, cap: cap, dark: dark)
+        // "Dim behind text" scales the mask's depth; at 0 the flower runs at full strength behind the column.
+        let dim = ThemeRuntime.ditherTextDim
+        if dim <= 0 { column = nil }
+        let key = ColumnKey(placement: p, column: column, cap: cap, dark: dark, dim: dim)
         let glass = RedesignTokens.FlowerGlass.isOn(dark: dark)
         guard key != columnKey || (glass && glowKey != key) || (!glass && glowKey != nil) else { return }
-        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: cap, dark: dark, cell: cell) }
+        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: Self.flowerShare(cap, dim: dim), keep: Self.flowerShare(LotusArt.columnKeep, dim: dim),
+                                                    dark: dark, cell: cell) }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
         if key != columnKey {
@@ -850,6 +860,9 @@ extension DitherArtView {
         }
         syncGlow()
     }
+
+    /// The flower mask's `share` of ink or dots over the column at "Dim behind text" `dim` (`TextDim.share`).
+    nonisolated static func flowerShare(_ share: Float, dim: Int) -> Float { Float(TextDim.share(Double(share), at: dim)) }
 
     /// Publishes the glow to the surfaces over the flower (`FlowerGlassView`): shown once the flower is open, not
     /// during a bloom, so the surfaces never show a full flower's glow over a bud.
@@ -1494,6 +1507,8 @@ public enum DitherArt {
         var ink = PictureInk.Choice.auto
         var shape = PictureInk.Shape.plain
         var text: [Double] = []
+        /// Picture's "Dim behind text" (`TextDim`).
+        var textDim = TextDim.standard
         /// Picture's cell in points, from the "Dot size" setting at the window's scale.
         var dot: CGFloat = DitherDotSize.medium.points(scale: 2)
 
@@ -1667,7 +1682,8 @@ public enum DitherArt {
         }
         let ground = request.background.count == 3 ? SIMD3(request.background[0], request.background[1], request.background[2]) : .zero
         let text = request.text.count == 6 ? [SIMD3(request.text[0], request.text[1], request.text[2]), SIMD3(request.text[3], request.text[4], request.text[5])] : []
-        let art = PictureInk.render(tone, inks: inks, ground: ground, dark: request.dark, shape: request.shape, text: text)
+        let art = PictureInk.render(tone, inks: inks, ground: ground, dark: request.dark, shape: request.shape, text: text,
+                                   dim: request.textDim)
         let ms = Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6
         log.notice("picture \(request.width) x \(request.height) cells of \(request.dot, format: .fixed(precision: 1)) pt in \(ms, format: .fixed(precision: 1)) ms, \(request.width * request.height * 5) bytes")
         return art

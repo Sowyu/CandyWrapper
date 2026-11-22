@@ -1212,8 +1212,10 @@ public enum LotusArt {
     /// The still mask over the flower for a column spanning `column` (points, the art's x), one byte a cell over
     /// `placement`: full over the flower far from the column, easing down to `cap` of the ink and `columnKeep` of the
     /// dots over it. Dots drop by a fixed hash per cell, not the Bayer matrix the flower dithers with, so thinning
-    /// never lines up with the flower's own pattern. The flower's frames never change for it.
-    public static func columnMask(_ p: Placement, column: ClosedRange<CGFloat>, cap: Float, dark: Bool, cell: CGFloat = 3) -> [UInt8] {
+    /// never lines up with the flower's own pattern. The flower's frames never change for it. `keep` is the share of
+    /// dots kept over the column, `columnKeep` unless "Dim behind text" moved it (`TextDim`).
+    public static func columnMask(_ p: Placement, column: ClosedRange<CGFloat>, cap: Float, keep columnKeep: Float = columnKeep,
+                                  dark: Bool, cell: CGFloat = 3) -> [UInt8] {
         var out = [UInt8](repeating: 0, count: p.width * p.height)
         let reach = Float(columnReach(dark: dark))
         let lo = Float(column.lowerBound - columnPad), hi = Float(column.upperBound + columnPad)
