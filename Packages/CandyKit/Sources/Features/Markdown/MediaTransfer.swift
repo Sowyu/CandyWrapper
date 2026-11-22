@@ -55,10 +55,29 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
 
     private let temporaryDirectory: URL
 
+    /// This process's download folder, `<tmp>/cw-media.<pid>`, made empty. A download goes when its loader is released,
+    /// so a quit, a crash or a kill leaves behind every file still shown. Nothing removed those: 359 files, 889 MB, sat
+    /// in the build Mac's temporary folder a day after this class landed (2026-11-21). Making the folder removes the
+    /// folders of processes that are gone; one that still runs, like a test app beside the user's own, keeps its files.
+    /// Made once a process: a second transfer must not empty the folder under the first one's downloads.
+    static let processDirectory = makeProcessDirectory()
+
+    static func makeProcessDirectory(in tmp: URL = FileManager.default.temporaryDirectory, pid: Int32 = getpid(),
+                                     isRunning: (Int32) -> Bool = { kill($0, 0) == 0 || errno == EPERM }) -> URL {
+        let prefix = "cw-media."
+        let own = tmp.appendingPathComponent(prefix + String(pid))
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? [] where name.hasPrefix(prefix) {
+            guard let other = Int32(name.dropFirst(prefix.count)), other > 0, other == pid || !isRunning(other) else { continue }
+            try? FileManager.default.removeItem(at: tmp.appendingPathComponent(name))
+        }
+        try? FileManager.default.createDirectory(at: own, withIntermediateDirectories: true)
+        return own
+    }
+
     /// `idleTimeout`: seconds with no bytes before URLSession fails the request, 60 by default. 15 s matches T3's
     /// socket liveness limit (client-runtime rpc/protocol.ts:10-12). 16 KiB in 15 s is under 9 kbit/s, far below any
     /// link that can show a picture.
-    init(config: URLSessionConfiguration = .default, temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+    init(config: URLSessionConfiguration = .default, temporaryDirectory: URL = MediaTransfer.processDirectory,
          idleTimeout: TimeInterval = 15, stallWindow: Duration = .seconds(15), minimumBytes: Int64 = 16 * 1024) {
         self.temporaryDirectory = temporaryDirectory
         self.stallWindow = stallWindow
@@ -91,6 +110,9 @@ final class MediaTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable
         guard !Task.isCancelled else { return .failed }
         var request = URLRequest(url: url)
         request.httpMethod = method
+        // The system empties the temporary folder of what went unused for days, and an app left open that long would
+        // otherwise fail every download from then on.
+        try? FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
         let file = temporaryDirectory.appendingPathComponent("cw-media-" + UUID().uuidString)
         let task = session.dataTask(with: request)
         let result = await withTaskCancellationHandler {
