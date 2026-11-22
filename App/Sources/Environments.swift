@@ -465,6 +465,10 @@ final class Environments {
         let catalog = self.catalog
         let updated = try await Task.detached { try catalog.removeRoute(route, environmentId: environmentId) }.value
         guard let updated else { return }
+        // The T3 Connect route went: its environment tokens go with it (storageDocument.ts:76-90).
+        if updated.relay == nil, saved.first(where: { $0.environmentId == environmentId })?.relay != nil {
+            await t3Connect?.forget(environmentId: environmentId)
+        }
         let wasInUse = routeInUse(environmentId).map { EnvironmentRoute.origin($0) == EnvironmentRoute.origin(route) } ?? false
         upsertSaved(updated)
         if wasInUse, updated.enabled {
@@ -605,6 +609,7 @@ final class Environments {
             ProjectIconStore.shared.forget(environmentId: environmentId)
             onRemove?(environmentId)
         }
+        await t3Connect?.forget(environmentId: environmentId)
         let catalog = self.catalog, cache = self.cache, threadCache = self.threadCache
         try await Task.detached {
             try catalog.remove(environmentId: environmentId)

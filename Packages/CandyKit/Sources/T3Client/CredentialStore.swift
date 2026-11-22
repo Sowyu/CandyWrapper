@@ -6,11 +6,14 @@ import Security
 /// Tokens never go to disk elsewhere, and nothing here logs them.
 public struct CredentialStore: Sendable {
     public let service: String
+    /// The item's name in Keychain Access.
+    public let label: String
     /// Tests only: tokens in this dictionary instead of the Keychain.
     private let memory: OSAllocatedUnfairLock<[String: String]>?
 
-    public init(service: String = "dev.candywrapper.t3.environment-token") {
+    public init(service: String = "dev.candywrapper.t3.environment-token", label: String = "T3 Code environment token") {
         self.service = service
+        self.label = label
         memory = nil
     }
 
@@ -19,6 +22,7 @@ public struct CredentialStore: Sendable {
 
     private init(memory: OSAllocatedUnfairLock<[String: String]>) {
         service = "in-memory"
+        label = "in-memory"
         self.memory = memory
     }
 
@@ -52,6 +56,23 @@ public struct CredentialStore: Sendable {
         return String(data: data, encoding: .utf8)
     }
 
+    /// The account names of every item in this service, without reading any secret. One query; reading
+    /// the data of several password items at once isn't allowed on macOS, as each may need its own approval.
+    public func accounts() throws -> [String] {
+        if let memory { return memory.withLock { Array($0.keys) } }
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ]
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitAll
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return [] }
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else { throw KeychainError(status: status) }
+        return items.compactMap { $0[kSecAttrAccount as String] as? String }
+    }
+
     /// "Forget this environment". There is no server-side logout (protocol.md 4.7).
     public func delete(environmentId: String) throws {
         if let memory { return memory.withLock { $0[environmentId] = nil } }
@@ -68,7 +89,7 @@ public struct CredentialStore: Sendable {
         var add = baseQuery(environmentId)
         add[kSecValueData as String] = Data(token.utf8)
         add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        add[kSecAttrLabel as String] = "T3 Code environment token"
+        add[kSecAttrLabel as String] = label
         return add
     }
 

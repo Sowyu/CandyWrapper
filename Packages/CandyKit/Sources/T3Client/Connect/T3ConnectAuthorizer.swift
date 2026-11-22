@@ -33,8 +33,8 @@ public struct T3ConnectSocket: Sendable, Equatable {
 
 /// The T3 Connect connect sequence (protocol.md 10.4, client-runtime/src/authorization/service.ts):
 /// relay connect, descriptor check, `/oauth/token` with a DPoP proof, then a WebSocket ticket.
-/// Keeps one environment token per environment in memory, renews it 60 s before expiry and shares
-/// one pending renewal between callers.
+/// Keeps one environment token per environment in memory and in `store` between launches, renews it 60 s
+/// before expiry and shares one pending renewal between callers.
 public actor T3ConnectAuthorizer {
     /// Ticket timeout for a cached token; past it the token is replaced (service.ts:88, 503-520).
     public static let cachedSocketTimeout: TimeInterval = 3
@@ -49,6 +49,8 @@ public actor T3ConnectAuthorizer {
     private let deviceId: String?
     private let send: HTTPSend
     private let now: @Sendable () -> Date
+    /// Tokens kept between launches; nil keeps them in memory only.
+    private let store: ConnectTokenStore?
     /// Each token with the sign-in it was issued under.
     private var cache: [String: (token: T3ConnectToken, signIn: CloudSignIn)] = [:]
     private var pending: [String: Pending] = [:]
@@ -66,8 +68,9 @@ public actor T3ConnectAuthorizer {
     /// `identity.connectionMethod` is ignored: T3 Connect sockets always say `relay`, even on a
     /// learned direct route (service.ts:217-245).
     public init(relay: RelayClient, tokens: any CloudTokenProvider, identity: ClientIdentity, deviceId: String? = nil,
-                send: HTTPSend? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
+                send: HTTPSend? = nil, store: ConnectTokenStore? = nil, now: @escaping @Sendable () -> Date = { Date() }) {
         self.relay = relay
+        self.store = store
         self.tokens = tokens
         self.identity = identity
         self.deviceId = deviceId
@@ -87,12 +90,31 @@ public actor T3ConnectAuthorizer {
         // Captured once, before any other await: everything below belongs to this sign-in (service.ts:263-268).
         let signIn = try await tokens.currentSignIn()
         guard let signIn else { throw CloudSessionError.signedOut }
+        if cache[environmentId] == nil, pending[environmentId] == nil, let store {
+            // T3 reads its token store first and reuses a token for the same environment, account and key with
+            // more than the 60 s skew left that wasn't just refused (service.ts:458-480).
+            let started = generation
+            if let stored = await store.load(accountId: signIn.accountId, environmentId: environmentId),
+               generation == started, cache[environmentId] == nil {
+                if stored.thumbprint == relay.key.thumbprint, !stored.needsRenewal(at: now()), stored.accessToken != rejected {
+                    cache[environmentId] = (stored, signIn)
+                } else {
+                    // Expired, refused or bound to another proof key: it can never be used again.
+                    store.delete(accountId: signIn.accountId, environmentId: environmentId, ifToken: stored.accessToken)
+                }
+            }
+        }
         if let cached = cache[environmentId] {
             if cached.signIn == signIn, cached.token.thumbprint == relay.key.thumbprint,
                !cached.token.needsRenewal(at: now()), cached.token.accessToken != rejected {
                 return (cached.token, true)
             }
-            if cached.signIn != signIn { cache = [:] } else if cached.token.accessToken == rejected { cache[environmentId] = nil }
+            if cached.signIn != signIn {
+                cache = [:]
+                if cached.signIn.accountId != signIn.accountId { store?.deleteAll(keepingAccount: signIn.accountId) }
+            } else if cached.token.accessToken == rejected {
+                drop(environmentId, cached.token)
+            }
         }
         // The relay key never changes for this authorizer, so the sign-in and generation are the whole identity.
         let shared: Pending
@@ -137,12 +159,11 @@ public actor T3ConnectAuthorizer {
             throw CloudSessionError.accountChanged
         }
         cache[environmentId] = (fresh, signIn)
+        store?.save(fresh)
         return fresh
     }
 
     /// Steps 3 to 6 of protocol.md 10.4.
-    // ponytail: tokens live in memory only, so a relaunch runs the relay connect again; persist to
-    // the Keychain if launch latency on T3 Connect matters.
     private func exchange(environmentId: String, account: String) async throws -> T3ConnectToken {
         let jwt = try await tokens.relaySessionJWT()
         guard jwtSubject(jwt).map({ $0 == account }) ?? true else { throw CloudSessionError.accountChanged }
@@ -175,16 +196,36 @@ public actor T3ConnectAuthorizer {
                               accessToken: access.accessToken,
                               expiresAt: issuedAt.addingTimeInterval(TimeInterval(access.expiresIn)),
                               accountId: account, thumbprint: relay.key.thumbprint, serverVersion: descriptor.serverVersion,
-                              serverCapabilities: Set(descriptor.capabilities.compactMap { $0.value.boolValue == true ? $0.key : nil }))
+                              serverCapabilities: Self.capabilities(descriptor))
     }
 
-    /// Drops the token for one environment (removed, or signed out of it).
-    public func forget(environmentId: String) { cache[environmentId] = nil }
+    /// Drops the token for one environment (removed, or signed out of it), stored ones under every account too.
+    public func forget(environmentId: String) {
+        cache[environmentId] = nil
+        store?.delete(environmentId: environmentId)
+    }
 
-    /// Drops everything, relay tokens included (sign-out, account switch).
+    /// Deletes stored tokens issued to any other account; nil deletes them all. At launch and after a sign-in.
+    public func keepStoredTokens(forAccount accountId: String?) {
+        store?.deleteAll(keepingAccount: accountId)
+    }
+
+    /// Waits for queued Keychain writes. Tests.
+    func flushStore() async { await store?.flush() }
+
+    /// Drops a refused token from memory and the store, unless a newer one replaced it.
+    private func drop(_ environmentId: String, _ token: T3ConnectToken) {
+        guard cache[environmentId]?.token.accessToken == token.accessToken else { return }
+        let accountId = cache[environmentId]?.signIn.accountId
+        cache[environmentId] = nil
+        if let accountId { store?.delete(accountId: accountId, environmentId: environmentId, ifToken: token.accessToken) }
+    }
+
+    /// Drops everything, relay tokens and stored tokens included (sign-out, account switch).
     public func reset() async {
         generation += 1
         cache = [:]
+        store?.deleteAll(keepingAccount: nil)
         for p in pending.values { p.task.cancel() }
         pending = [:]
         await relay.resetTokenCache()
@@ -194,38 +235,67 @@ public actor T3ConnectAuthorizer {
 
     /// A socket URL for the environment over its tunnel or `directEndpoint` (a learned route).
     /// A cached token gets 3 s to mint a ticket; if that fails on the tunnel, or the direct route
-    /// refuses the token, a fresh token replaces it (service.ts:488-534).
+    /// refuses the token, a fresh token replaces it once (service.ts:488-534, 705-760). A cached token
+    /// carries no descriptor, so it is read beside the ticket and a failed ticket abandons it (service.ts:711-724).
     public func authorizeSocket(environmentId: String, directEndpoint: DirectRoute? = nil) async throws -> T3ConnectSocket {
+        var checked: EnvironmentDescriptor?
         if let directEndpoint {
             // A saved LAN address can belong to another machine on another network (service.ts:142-181).
             let descriptor = try await descriptor(httpBaseUrl: directEndpoint.httpBaseUrl)
             guard descriptor.environmentId == environmentId else {
                 throw T3ConnectError.environmentMismatch(expected: environmentId, actual: descriptor.environmentId)
             }
+            checked = descriptor
         }
+        let direct = checked
         var (token, fromCache) = try await selectToken(environmentId: environmentId, rejected: nil)
         if fromCache {
-            do {
-                return try await socket(token, direct: directEndpoint, timeout: Self.cachedSocketTimeout)
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch let error as DPoPError {
-                throw error
-            } catch {
-                // An unreachable direct address says nothing about the token; keep it for the tunnel.
-                if directEndpoint != nil, !Self.isEnvironmentAuthInvalid(error) { throw error }
-                token = try await self.token(environmentId: environmentId, rejected: token.accessToken)
-            }
+            if let opened = try await reuse(token, directEndpoint: directEndpoint, direct: direct) { return opened }
+            token = try await self.token(environmentId: environmentId, rejected: token.accessToken)
         }
         do {
             return try await socket(token, direct: directEndpoint, timeout: Self.requestTimeout)
         } catch {
             // A direct address that refuses the socket says nothing about the token.
-            if directEndpoint == nil || error is DPoPError, cache[environmentId]?.token.accessToken == token.accessToken {
-                cache[environmentId] = nil
-            }
+            if directEndpoint == nil || error is DPoPError { drop(environmentId, token) }
             throw error
         }
+    }
+
+    /// A socket for a cached token, or nil when the route refused it and a fresh token should replace it. Returning
+    /// nil cancels the descriptor read before the fresh exchange starts.
+    private func reuse(_ token: T3ConnectToken, directEndpoint: DirectRoute?, direct: EnvironmentDescriptor?) async throws -> T3ConnectSocket? {
+        async let reading = descriptor(for: token, known: direct)
+        var opened: T3ConnectSocket
+        do {
+            opened = try await socket(token, direct: directEndpoint, timeout: Self.cachedSocketTimeout)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as DPoPError {
+            throw error
+        } catch {
+            // An unreachable direct address says nothing about the token; keep it for the tunnel.
+            if directEndpoint != nil, !Self.isEnvironmentAuthInvalid(error) { throw error }
+            return nil
+        }
+        let descriptor = try await reading
+        opened.token.serverVersion = descriptor.serverVersion
+        opened.token.serverCapabilities = Self.capabilities(descriptor)
+        return opened
+    }
+
+    /// The descriptor for a reused token: the direct route's, already read, or the tunnel's.
+    private func descriptor(for token: T3ConnectToken, known: EnvironmentDescriptor?) async throws -> EnvironmentDescriptor {
+        if let known { return known }
+        let descriptor = try await descriptor(httpBaseUrl: token.endpoint.httpBaseUrl)
+        guard descriptor.environmentId == token.environmentId else {
+            throw T3ConnectError.environmentMismatch(expected: token.environmentId, actual: descriptor.environmentId)
+        }
+        return descriptor
+    }
+
+    static func capabilities(_ descriptor: EnvironmentDescriptor) -> Set<String> {
+        Set(descriptor.capabilities.compactMap { $0.value.boolValue == true ? $0.key : nil })
     }
 
     /// The tunnel origin the environment's current token was issued for: HTTP calls go there, wherever its

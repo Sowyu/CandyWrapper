@@ -37,23 +37,24 @@ public struct T3ConnectMachine: Sendable, Equatable {
 }
 
 /// The signed-in T3 Connect account: Clerk session, relay client and the connect authorizer, plus the
-/// account-level calls Settings needs (discovery, deregister, sign-out cleanup). The Clerk client token
-/// and the DPoP key live in the Keychain; relay and environment tokens stay in memory.
+/// account-level calls Settings needs (discovery, deregister, sign-out cleanup). The Clerk client token,
+/// the DPoP key and the environment tokens live in the Keychain; relay tokens stay in memory.
 public actor T3ConnectAccount {
     public nonisolated let clerk: ClerkClient
     public nonisolated let relay: RelayClient
     public nonisolated let authorizer: T3ConnectAuthorizer
 
-    public init(clerk: ClerkClient, relay: RelayClient, identity: ClientIdentity, send: HTTPSend? = nil) {
+    public init(clerk: ClerkClient, relay: RelayClient, identity: ClientIdentity, send: HTTPSend? = nil, store: ConnectTokenStore? = nil) {
         self.clerk = clerk
         self.relay = relay
-        authorizer = T3ConnectAuthorizer(relay: relay, tokens: clerk, identity: identity, send: send)
+        authorizer = T3ConnectAuthorizer(relay: relay, tokens: clerk, identity: identity, send: send, store: store)
     }
 
     /// T3's production Clerk and relay with the Keychain stores.
     public static func production(identity: ClientIdentity, device: ClerkDeviceInfo) throws -> T3ConnectAccount {
         let key = try DPoPKeyStore().loadOrCreate()
-        return T3ConnectAccount(clerk: ClerkClient(device: device), relay: try RelayClient(key: key), identity: identity)
+        return T3ConnectAccount(clerk: ClerkClient(device: device), relay: try RelayClient(key: key), identity: identity,
+                                store: ConnectTokenStore())
     }
 
     /// The signed-in account, or nil.
@@ -112,7 +113,7 @@ public actor T3ConnectAccount {
         await authorizer.forget(environmentId: environmentId)
     }
 
-    /// Sign-out (managedAuth.tsx:46-57): the Clerk session goes, then every relay and environment token,
+    /// Sign-out (managedAuth.tsx:46-57): the Clerk session goes, then every relay and environment token, stored ones too,
     /// then the catalog's relay routes. Machines reached only through T3 Connect are forgotten. Returns
     /// what the catalog removed and changed, for the app to close their sessions.
     @discardableResult

@@ -101,6 +101,12 @@ final class T3ConnectController {
             loaded = true
             environments.t3Connect = account?.authorizer
             changed()
+            // Stored environment tokens whose account is no longer the signed-in one go at launch.
+            switch (account, signedIn) {
+            case (let account?, let user?): if let id = user.userId { await account.authorizer.keepStoredTokens(forAccount: id) }
+            case (let account?, nil): await account.authorizer.keepStoredTokens(forAccount: nil)
+            case (nil, _): if !fake { ConnectTokenStore().deleteAll(keepingAccount: nil) }
+            }
             if signedIn != nil { refreshMachines(); loadProfile() }
         }
     }
@@ -225,8 +231,9 @@ final class T3ConnectController {
         // Clerk ended the last session server-side and another account signed in: the old account's
         // relay routes would be refused forever (managedAuth.tsx:46-57 drops them on an account switch).
         if let userId = clerkAccount.userId {
-            let catalog = environments.catalog, environments = self.environments
+            let catalog = environments.catalog, environments = self.environments, authorizer = account?.authorizer
             Task {
+                await authorizer?.keepStoredTokens(forAccount: userId)
                 guard let result = try? await Task.detached(operation: { try catalog.removeRelay(keepingAccount: userId) }).value,
                       !result.removed.isEmpty || !result.updated.isEmpty else { return }
                 await environments.appliedRelayRemoval(removed: result.removed, updated: result.updated)
