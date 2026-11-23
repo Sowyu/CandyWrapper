@@ -204,6 +204,14 @@ public final class HoverSync: NSResponder {
             let passive = hit.map { h in popups.contains { $0.isPassive && h.isDescendant(of: $0.container) } } ?? false
             let hitLayer = passive ? nil : hit.map { stackKey(of: $0, in: content) }
             collect(content, point: point, window: window, content: content, hitLayer: hitLayer, into: &now)
+            // AppKit hit-tests subviews that sit outside an unclipped parent's bounds, like Redesign's right panel
+            // reaching up into the top band, but the walk above stops at the parent's edge. The hit view's chain
+            // covers those.
+            var view = hit
+            while let v = view, v !== content {
+                if !v.isHiddenOrHasHiddenAncestor { collectOwn(v, point: point, window: window, content: content, hitLayer: hitLayer, hit: true, into: &now) }
+                view = v.superview
+            }
         }
         // While a button is down AppKit sends enter and exit only to areas that ask for it; keep the rest as they are.
         if buttonsDown {
@@ -250,22 +258,29 @@ public final class HoverSync: NSResponder {
     /// Walks the views whose bounds hold the point and gathers their managed areas that hold it too.
     private func collect(_ view: NSView, point: NSPoint, window: NSWindow, content: NSView, hitLayer: [Int]?,
                          into result: inout [Key: Entry]) {
+        guard view.bounds.contains(view.convert(point, from: nil)) else { return }
+        collectOwn(view, point: point, window: window, content: content, hitLayer: hitLayer, into: &result)
+        for sub in view.subviews where !sub.isHidden {
+            collect(sub, point: point, window: window, content: content, hitLayer: hitLayer, into: &result)
+        }
+    }
+
+    /// Gathers `view`'s own managed areas that hold the point. `hit` marks a view on the hit-tested chain: AppKit's
+    /// `visibleRect` clips it to its ancestors' bounds even where it draws and takes clicks, so its bounds stand in.
+    private func collectOwn(_ view: NSView, point: NSPoint, window: NSWindow, content: NSView, hitLayer: [Int]?,
+                            hit: Bool = false, into result: inout [Key: Entry]) {
         let local = view.convert(point, from: nil)
-        guard view.bounds.contains(local) else { return }
         var ordinals: [ObjectIdentifier: Int] = [:]
         for area in view.trackingAreas where Self.isManaged(area, on: view) {
             guard let owner = area.owner as? NSResponder else { continue }
             let ownerID = ObjectIdentifier(owner)
             let ordinal = ordinals[ownerID, default: 0]
             ordinals[ownerID] = ordinal + 1
-            let rect = area.options.contains(.inVisibleRect) ? view.visibleRect : area.rect
+            let rect = area.options.contains(.inVisibleRect) ? (hit ? view.bounds : view.visibleRect) : area.rect
             guard rect.contains(local), isActive(area, view: view, window: window) else { continue }
             // Chromium hovers only what is under the top layer: a popup, dialog or palette covers what lies below it.
             if let hitLayer, Self.isAbove(hitLayer, stackKey(of: view, in: content)) { continue }
             result[Key(owner: ownerID, view: ObjectIdentifier(view), ordinal: ordinal)] = Entry(owner: owner, view: view, area: area)
-        }
-        for sub in view.subviews where !sub.isHidden {
-            collect(sub, point: point, window: window, content: content, hitLayer: hitLayer, into: &result)
         }
     }
 
