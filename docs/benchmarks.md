@@ -279,3 +279,90 @@ Sizes: the official `T3-Code-0.1.1-nightly.20261017.3234-arm64.dmg` is 163,473,7
 - The user's live T3 and its agents ran the whole time, and the user may have watched over Screen Sharing, so WindowServer sat near 40% CPU.
 - The official all-loaded scroll set ran once. CandyWrapper ran it twice because the first set showed slow frames.
 - Energy Impact for the official app came out lower than on 2026-10-11 (46.5 against 85.1). The 2026-10-11 turns differed by 55% between runs, so treat that row as rough.
+
+## README refresh against Nightly 5258 (2026-11-25)
+
+The same side by side as 2026-10-17, on the Mac mini M2 Pro (32 GB, macOS 27.2.1, one 1920x1080 display at 60 Hz and 1x). The official app was T3 Code (Nightly) 0.1.13-nightly.20261125.5258 from its GitHub DMG. CandyWrapper was commit 3844946 (version 1.18.3, build 93), built Release with the perf flags of `scripts/perf-review` (bundle id `dev.candywrapper.perf`, URL scheme `candywrapper-perf`, no update feed) and signed ad hoc. Only one app ran at a time, the official app first, and the 1-minute load average sat between 1.0 and 2.5 during the windows. Every number here comes from a different Mac than the 2026-10-17 run, an M4, so compare the two apps with each other and not with the older section.
+
+### Setup
+
+- Data: `sbs-home-seed` wasn't on this Mac, and `perf-home-pristine` here holds one thread ("Say Pong", a real Haiku run with three turns) instead of 38. I copied it to `~/CandyWrapper-research/sbs5258-seed` (database through `sqlite3 .backup`) and added 48 small threads of one to three question and reply pairs plus "Seeded 2000 messages" (1,000 pairs, replies 20 to 80 words, every fifth with a list, every ninth with a Swift code block), so the sidebar has 50 threads as before. I wrote them as legacy v1 rows in `projection_threads` and `projection_thread_messages` under the existing "No project" project. T3's `LegacyV1ThreadImporter` still runs on 5258: one start of the 5258 server on the seed logged `importedThreadCount: 49, importedMessageCount: 2092` for the shells and transcripts, and the database then held 50 v2 threads and 2,196 messages. I stopped that server and copied the seed to `sbs5258-official` and `sbs5258-candy`.
+- The official app ran from `~/CandyWrapper-research/apps/T3-Code-5258.app` with `T3CODE_HOME` on its copy, `T3CODE_DISABLE_AUTO_UPDATE=1` and `T3CODE_TELEMETRY_ENABLED=false`, through a copy of `scripts/measure-launch.swift` that adds the update flag. Its bundled server listened on 3774. Chromium keeps its profile in `~/Library/Application Support/t3code-v2` whatever the home, which didn't exist before this run. Nothing signed in.
+- CandyWrapper's server was the 5258 runtime from `t3-0.1.13-nightly.20261125.5258-darwin-arm64.tar.gz`, unpacked into `~/CandyWrapper-research/runtimes` and started on port 47396 with `SANDBOX_DIR=~/CandyWrapper-research/sbs5258-candy SANDBOX_PORT=47396 scripts/sandbox-server 0.1.13-nightly.20261125.5258`. The app ran through `scripts/run-app --server ... --fake-t3-connect` with `CANDY_LAUNCH_TIMING=1`, after `defaults delete dev.candywrapper.perf`.
+- The sandbox `session.token` works on both copies, so `scripts/perf/turn.swift` drove turns on either server.
+- Tools: `scripts/procstat.swift`, `scripts/perf/probe.swift`, `scripts/perf/turn.swift`, `powermetrics --samplers tasks --show-process-energy -f plist`, and `scripts/perf/frames.swift`, new and committed this time. `frames` follows the 2026-10-11 method: a ScreenCaptureKit stream of a screen region that keeps the display time of every frame whose pixels changed, with HID pixel scroll events every 8 ms, or `a` key presses about 600 ms apart counted at the first frame whose change is wider than 4 px. A slow frame is a gap over 20 ms.
+- Both apps used dark themes, each its default.
+
+### Raw numbers
+
+Launch. The official sidebar time is the end of the first `environment.orchestration.shellSnapshot` span after spawn, CandyWrapper's is the `live sidebar` mark. Official window times come from `measure-launch`. CandyWrapper's first window time is its `window built` mark and the relaunches use `probe window`.
+
+| | Window | Sidebar data |
+|---|---|---|
+| Official, first launch on the copy | 2.94 s | 3.84 s |
+| Official, relaunch 2, 3 and 4 | 0.55, 0.53, 0.52 s | 1.23, 1.20, 1.19 s |
+| CandyWrapper, first launch of the new build | 0.26 s | 0.44 s |
+| CandyWrapper, relaunch 2 and 3 | 0.28, 0.27 s (built 0.19, 0.19 s) | 0.32, 0.33 s |
+
+The official window now shows about 0.65 s before its sidebar has data, while its server starts. CandyWrapper's server was already running.
+
+Idle, two 60 s windows with "Say Pong" open, the composer focused and the window frontmost (procstat, and powermetrics 12 x 5 s over the same minute):
+
+| Process | CPU | Interrupt/s | Pkg idle/s | Energy Impact | Footprint |
+|---|---|---|---|---|---|
+| Official main | 0.32, 0.28% | 3.18, 2.95 | 0.00, 0.05 | 0.26, 0.34 | 94, 95 MB |
+| Official GPU | 1.35, 1.32% | 63.3, 63.2 | 0.55, 0.62 | 1.64, 1.62 | 63 MB |
+| Official renderer | 0.73, 0.63% | 4.93, 4.57 | 0.05, 0.03 | 1.68, 1.02 | 180, 187 MB |
+| Official network | 0.02, 0.02% | 0.37, 0.35 | 0.00, 0.03 | 0.02, 0.02 | 7.6 MB |
+| Official app total | 2.42, 2.25% | 71.8, 71.0 | | 3.60, 3.00 | 344, 352 MB |
+| Official bundled server | 0.54, 0.50% | 19.7, 20.0 | 0.27, 0.30 | 1.11, 0.76 | 204, 206 MB |
+| CandyWrapper | 0.01, 0.01% | 0.40, 0.42 | 0.00, 0.00 | 0.00, 0.00 | 51.0, 51.1 MB |
+| CandyWrapper's server | 0.89, 0.48% | 16.8, 16.5 | 0.37, 0.47 | 4.75, 0.26 | 268 MB |
+
+The official GPU process still wakes 63 times a second for the blinking caret. CandyWrapper woke 0.4 times a second, against 0.03 to 0.07 on 2026-10-17. I didn't trace where those wakeups come from.
+
+Streaming, the `turn2` story prompt on a fresh `claude-haiku-5-5` thread made by `turn create` and opened in the app from Cmd+K (CPU from `probe rusage` across the turn, Energy Impact as the mean of the 2 s powermetrics samples inside it):
+
+| Turn | Length | App CPU | App Energy | Server CPU | Server Energy |
+|---|---|---|---|---|---|
+| Official 1 | 19.6 s | 18.38% | 138.1 | 7.64% | 61.2 |
+| Official 2 | 19.8 s | 18.69% | 150.1 | 7.76% | 79.1 |
+| CandyWrapper 1 | 15.9 s | 2.27% | 13.2 | 10.41% | 88.0 |
+| CandyWrapper 2 | 22.3 s | 1.94% | 9.4 | 9.34% | 51.2 |
+
+Official app CPU splits into renderer 12.3 and 12.9%, GPU process 5.7 and 5.4%, main 0.3 and 0.3%. After a turn the official processes held 403 and 410 MB, and CandyWrapper 63 MB.
+
+Memory with "Seeded 2000 messages" opened from Cmd+K, 30 s after opening it. Both apps had already run their two turns, so the sidebar held 52 threads:
+
+| State | Official | CandyWrapper |
+|---|---|---|
+| As opened | 353 MB (main 98, renderer 182, GPU 66, network 8) | 60.7 MB |
+| All 2,000 messages loaded | 401 MB (main 99, renderer 237, GPU 57, network 8), after about 50 clicks on "Load earlier turns" until the button was gone | 85.0 MB, after scrolling to message 1 |
+
+Scrolling at 60 Hz, a 400 x 200 pt part of the timeline, from message 1 downward, five runs of 300 events (three at 20 px and two at 60 px per event):
+
+| Client | Gaps | Over 20 ms | Longest |
+|---|---|---|---|
+| Official | 715 | 0 | 16.7 ms |
+| CandyWrapper | 707 | 0 | 16.7 ms |
+
+The 2026-10-17 run had 11 slow CandyWrapper frames of 1,426. None showed this time.
+
+Keypress to glyph in the "Say Pong" composer, end to end, two runs of 20 keys each, pooled:
+
+| App | Median | Range |
+|---|---|---|
+| Official | 45.0 ms (runs 42.1, 44.9) | 26.9 to 85.8 ms |
+| CandyWrapper | 49.9 ms (runs 49.8, 49.7) | 24.1 to 76.8 ms |
+
+These runs add a random 0 to 17 ms to each 600 ms gap. My first runs used a fixed 600 ms, which is exactly 36 frames at 60 Hz, so every press in a run landed on the same frame phase and the run medians jumped between phases (official 41.3 and 50.9 ms, CandyWrapper 44.7 and 50.5 ms). `frames key` now always adds the offset. In both apps the first press, which also removes the placeholder, took 63 to 86 ms.
+
+Sizes: the official `T3-Code-0.1.13-nightly.20261125.5258-arm64.dmg` is 246,027,624 bytes, and its app is 576,904 KiB (563 MB) by `du -sk` inside the mounted DMG. `CandyWrapper-1.18.3-arm64.dmg` is 23,728,920 bytes and its app is 42,872 KiB (41.9 MB).
+
+### Caveats
+
+- The user's live T3 and its agents ran the whole time, with the live server near 8% CPU and a Claude process near 12% at the end. Each window still started under load 2.5. The first official launch started at load 2.5, right after the Release build finished.
+- Neither launch is cold: I didn't run `sudo purge`.
+- On this macOS, powermetrics' per-process `energy_impact_per_s` matched procstat's mW column for every process I compared, and the official turns read about 144 here against 46.5 on 2026-10-17. Compare Energy Impact only within this section.
+- One official and one CandyWrapper turn each ran longer than the other (19.6 against 19.8 s, 15.9 against 22.3 s). The Claude provider sends the reply as one final item, so the "streaming" turn is mostly the working state.
+- Real turns in this run: four for the benchmark and four on the sandbox for the README screenshots, all `claude-haiku-5-5`.
