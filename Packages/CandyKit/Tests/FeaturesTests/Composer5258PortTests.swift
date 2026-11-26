@@ -31,4 +31,22 @@ struct Composer5258PortTests {
         #expect(abs(tall.intrinsicContentSize.height - (8 + 16 + 4 + 192)) < 0.5)
     }
 
+    /// 2.5, #37122: a caret move onto a trigger leaves the menu shut, a move within the open token keeps it, and a move
+    /// off it closes it.
+    @Test func caretMovesNeverOpenSuggestions() {
+        var state = ComposerTriggerState()
+        let path = ComposerTrigger(kind: .path, query: "fo", rangeStart: 0, rangeEnd: 3)
+        state.follow(path)
+        #expect(state.trigger == nil)
+        state.set(path)
+        #expect(state.trigger == path)
+        let longer = ComposerTrigger(kind: .path, query: "f", rangeStart: 0, rangeEnd: 2)
+        state.follow(longer)
+        #expect(state.trigger == longer)
+        state.follow(nil)
+        #expect(state.trigger == nil)
+        state.follow(path)
+        #expect(state.trigger == nil)
+    }
+
 }

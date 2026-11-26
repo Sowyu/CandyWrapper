@@ -2989,6 +2989,7 @@ final class ComposerController {
     private func armFreshSession(_ key: String) {
         freshSessionArms[key] = UUID()
         updateFreshSessionBanner()
+        refresh()
     }
 
     /// With `arm`, clears only that arm, so a send never consumes one made while it was in flight.
@@ -2996,6 +2997,7 @@ final class ComposerController {
         guard let current = freshSessionArms[key], arm == nil || arm == current else { return }
         freshSessionArms[key] = nil
         updateFreshSessionBanner()
+        refresh()
     }
 
     /// `freshSessionBannerItem` (ComposerFreshSession.tsx at 4928); an approval's feedback goes to that approval, so
@@ -6605,7 +6607,9 @@ extension ComposerController {
            ServerSettingsValues(serverConfigs[environmentId]?.settings.raw).resolveIdleCompaction(instanceId: pickers.current.instanceId?.rawValue ?? "claudeAgent") == "off" {
             dismissed = true
         }
-        let tokens = ComposerCompaction.resumeTokens(usage: contextWindow, driver: provider?.driver, dismissed: dismissed,
+        // The fresh session `/clear` armed inherits no context window, so it offers no compaction (ChatView.tsx at 5258, #39133).
+        let freshSessionPending = freshSessionAvailable && draftKey.map { freshSessionArms[$0] != nil } == true
+        let tokens = ComposerCompaction.resumeTokens(usage: contextWindow, driver: provider?.driver, dismissed: dismissed || freshSessionPending,
                                                      compactDisabled: gate.disabled, hasHeldQueuedRuns: held,
                                                      multipleModels: pickers.currentMultiple != nil, now: now)
         composer.compactBeforeSendTokens = tokens

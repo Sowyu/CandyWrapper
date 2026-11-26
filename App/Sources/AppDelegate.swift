@@ -1065,6 +1065,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cmd+, : the settings pages, Connections first while it is the only one built. T3 lands on General.
     @objc func openSettings(_ sender: Any?) {
         mainWindow?.makeKeyAndOrderFront(nil)
+        // Cmd+, closes an open model picker or permissions menu, which would otherwise float over Settings
+        // (ChatComposer.tsx and ComposerContextPermissions.tsx at 5258, #29282).
+        if let mainWindow { PopupHost.host(for: mainWindow).closeAll() }
         settings?.open()
     }
 

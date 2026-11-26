@@ -439,7 +439,7 @@ public final class ComposerView: DSView {
         addSubview(outline)
 
         editor.onTextChange = { [weak self] in self?.textChanged() }
-        editor.onSelectionChange = { [weak self] in self?.onCaretChange?() }
+        editor.onSelectionChange = { [weak self] in self?.onCaretChange?(false) }
         editor.chipLook = chipLook
         editor.onSuggestionKey = { [weak self] accept in
             guard let self, suggestionOffered, let suggestion = promptSuggestion else { return false }
@@ -541,8 +541,8 @@ public final class ComposerView: DSView {
         get { editor.onPasteFragment }
         set { editor.onPasteFragment = newValue }
     }
-    /// An edit or a caret move (the menu controller follows the trigger).
-    var onCaretChange: (() -> Void)?
+    /// An edit (true) or a caret move alone (false); the menu controller follows the trigger.
+    var onCaretChange: ((Bool) -> Void)?
 
     private var sendMode: ComposerLogic.SendMode {
         ComposerLogic.sendMode(running: runState.canInterrupt, alternate: alternateHeld, steerByDefault: steerByDefault, canSteer: !isCompacting)
@@ -768,7 +768,7 @@ public final class ComposerView: DSView {
         refresh(prompt: prompt)
         relayoutHeight()
         onTextChange?(prompt)
-        onCaretChange?()
+        onCaretChange?(true)
     }
 
     private func relayoutHeight() {
