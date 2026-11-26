@@ -364,7 +364,8 @@ extension SettingsController {
                     environmentLabel: environments.label(env), faviconPath: p.faviconPath, projectIcon: p.projectIcon,
                     scripts: p.scripts.compactMap(ProjectScript.init),
                     legacy: ProjectSettings.Legacy(defaultModelSelection: p.defaultModelSelection.flatMap { try? JSONValue(encoding: $0) },
-                                                   defaultThreadEnvMode: p.defaultThreadEnvMode))
+                                                   defaultThreadEnvMode: p.defaultThreadEnvMode),
+                    trackedFolders: p.trackedFolders ?? [])
             }, icon: ProjectIconSource(g.representative),
                threadCount: g.members.reduce(0) { $0 + threads[($1.id.environmentId ?? "") + "\u{0}" + EnvironmentScope.localId(of: $1.id.rawValue), default: 0] },
                pinned: g.members.contains { $0.pinnedAt != nil },

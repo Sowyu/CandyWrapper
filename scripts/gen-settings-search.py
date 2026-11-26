@@ -138,8 +138,8 @@ UNPORTED_PATHS = {"/settings/voice", "/settings/secrets"}
 UNPORTED_IDS = {"screen-reader-announcements", "simlock-hosts",
                 "worktree-fast-checkout", "keep-awake-while-agents-work", "ghq-clone-layout", "welcome-page", "text-generators",
                 "device-sources",
-                # 5258 rows not drawn yet: workflows (no Workflows page) and project repositories.
-                "workflows-beta", "workflow-skipped-runs", "project-repositories"}
+                # 5258 rows not drawn yet: workflows (no Workflows page).
+                "workflows-beta", "workflow-skipped-runs"}
 
 
 def swift_string(literal):

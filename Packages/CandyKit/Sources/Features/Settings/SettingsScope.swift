@@ -35,10 +35,13 @@ public struct SettingsScopeProject: Equatable, Sendable {
         public var projectIcon: JSONValue?
         public var scripts: [ProjectScript]
         public var legacy: ProjectSettings.Legacy
+        /// `ProjectShell.trackedFolders` (5258 project.ts:56-65), the project's own copy of its folder list.
+        public var trackedFolders: [ProjectTrackedFolder] = []
 
         public init(environmentId: String, projectId: String, title: String, workspaceRoot: String, environmentLabel: String? = nil,
                     faviconPath: String? = nil, projectIcon: JSONValue? = nil, scripts: [ProjectScript] = [],
-                    legacy: ProjectSettings.Legacy = .init()) {
+                    legacy: ProjectSettings.Legacy = .init(), trackedFolders: [ProjectTrackedFolder] = []) {
+            self.trackedFolders = trackedFolders
             self.environmentId = environmentId; self.projectId = projectId; self.title = title; self.workspaceRoot = workspaceRoot
             self.environmentLabel = environmentLabel; self.faviconPath = faviconPath; self.projectIcon = projectIcon; self.scripts = scripts
             self.legacy = legacy
