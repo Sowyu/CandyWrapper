@@ -535,10 +535,10 @@ public enum SidebarListBuilder {
             .map(\.0)
     }
 
-    /// The prompt's first line, trimmed (Sidebar.tsx:844-847).
-    // ponytail: mentions show their raw text; T3 swaps context references for their labels, add with composer mentions
+    /// The prompt's first line, trimmed, with context links by label and file links by name (SidebarDraftBlock.tsx:87-94
+    /// at 5258).
     static func draftPreview(_ prompt: String) -> String {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = ComposerInlineTokens.previewText(prompt).trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
     }
 

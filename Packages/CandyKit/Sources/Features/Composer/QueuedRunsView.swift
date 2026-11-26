@@ -217,7 +217,7 @@ private final class ModernQueuedRowView: DSView {
         let presentation = item.message.map(UserMessagePresentation.resolve)
         let attribution = presentation?.attribution
         folded = attribution == .automation || attribution == .agent
-        text.text = ComposerInlineTokens.citationsToPlainText(ComposerInlineTokens.contextLabels(item.text)).trimmingCharacters(in: .whitespacesAndNewlines)
+        text.text = ComposerInlineTokens.previewText(item.text).trimmingCharacters(in: .whitespacesAndNewlines)
         text.color = Themed.color(editing ? \.foreground : \.mutedForeground)
         let label = attribution == .automation ? "Automation" : item.message?.senderThreadId.flatMap { owner?.senderThreadTitles[$0] ?? owner?.threadTitle?(ThreadId($0)) } ?? "Agent"
         let cleanLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)

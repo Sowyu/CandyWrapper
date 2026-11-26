@@ -619,6 +619,27 @@ public enum ComposerInlineTokens {
         return ns as String
     }
 
+    /// `composerFileLinksToPlainText` (shared composerInlineTokens.ts at 5258, #40924): each `@`-file link reads as its
+    /// file name, as its chip does. The composer reads a link as a mention only before whitespace, so one may end the text.
+    public static func fileLinksToPlainText(_ text: String) -> String {
+        guard text.contains("](") else { return text }
+        let ns = NSMutableString(string: text)
+        for t in collect(text + " ").reversed() {
+            guard case .mention(let path) = t.kind, t.source.hasPrefix("[") else { continue }
+            let trimmed = path.replacingOccurrences(of: #"[/\\]+$"#, with: "", options: .regularExpression)
+            let base = trimmed.isEmpty ? path : trimmed.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? trimmed
+            ns.replaceCharacters(in: t.range, with: base)
+        }
+        return ns as String
+    }
+
+    /// One-line previews of a prompt (queued rows, stashed prompts, sidebar drafts): context links by label, file links
+    /// by name, citations as their quotes (QueuedRunsControl.tsx:273-279, ComposerStashMenu.tsx:20-27,
+    /// SidebarDraftBlock.tsx:87-94 at 5258).
+    public static func previewText(_ text: String) -> String {
+        citationsToPlainText(fileLinksToPlainText(contextLabels(text)))
+    }
+
     /// `knownModel` adds the editor's model references (`collectModelTokens`, composer-editor-mentions.ts at 4928): one the
     /// server lists, followed by whitespace like `$skill`, outside other tokens and math. Nil leaves them text.
     public static func collect(_ text: String, knownModel: ((_ instanceId: String, _ model: String) -> Bool)? = nil) -> [ComposerInlineToken] {

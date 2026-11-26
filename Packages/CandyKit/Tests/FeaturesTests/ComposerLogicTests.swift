@@ -99,6 +99,16 @@ struct ComposerLogicTests {
         #expect(L.queuedSteerTip(state, .init(runId: nil, messageId: nil, text: "hello")) == "Send into the current turn")
     }
 
+    /// `composerFileLinksToPlainText` (composerInlineTokens.ts at 5258, #40924): previews show a file link by name.
+    @Test func previewsShowFileMentionsByName() {
+        let link = ComposerInlineTokens.fileLink("/repo/src/app.ts")
+        #expect(ComposerInlineTokens.previewText("look at \(link)") == "look at app.ts")
+        #expect(ComposerInlineTokens.previewText("\(link) and \(ComposerInlineTokens.fileLink("/repo/README.md")) now") == "app.ts and README.md now")
+        // A plain Markdown link keeps its text.
+        #expect(ComposerInlineTokens.previewText("see [docs](https://x.dev) ok") == "see [docs](https://x.dev) ok")
+        #expect(SidebarListBuilder.draftPreview("fix \(link)\nmore") == "fix app.ts")
+    }
+
     /// `supportsSteering` and `threadCanSteer` (threadWorkflows.ts at 5258, #40767): a restart needs interrupt support,
     /// and a session that cannot steer queues every send.
     @Test func sessionsThatCannotSteerQueue() {
