@@ -6,6 +6,18 @@ import T3Protocol
 /// Selection rows from Nightly 4928: #23957 (modelSelection.test.ts "composer fallback to another instance of the
 /// same driver") and #36621 (composerDraftStore.test.ts, base traits belong to the base model).
 @MainActor struct ComposerSelection4928Tests {
+    /// #41814: a queued edit's key holds the run's model as an explicit pick, and reading it back gives the same selection.
+    @Test func explicitSelectionRoundTrips() {
+        let store = ComposerSelectionStore(defaults: nil)
+        let pick = ModelSelection(instanceId: Self.fallback, model: "claude-opus-5-5", selections: Self.effort("high"))
+        store.setExplicitSelection("t#queued-edit:r", pick)
+        #expect(store.drafts["t#queued-edit:r"]?.explicit == true)
+        let back = store.pickedSelection("t#queued-edit:r")
+        #expect(back.map { ComposerSelectionStore.pickMatchesThread($0, pick) } == true)
+        store.didSend("t#queued-edit:r")
+        #expect(store.pickedSelection("t#queued-edit:r") == nil)
+    }
+
     static func provider(_ id: String, driver: String, enabled: Bool = true, models: [(slug: String, aliases: [String])]) throws -> ServerProvider {
         let effort: [String: Any] = ["id": "effort", "label": "Effort", "type": "select",
                                      "options": ["medium", "high", "xhigh"].map { ["id": $0, "label": $0, "isDefault": $0 == "medium"] }]

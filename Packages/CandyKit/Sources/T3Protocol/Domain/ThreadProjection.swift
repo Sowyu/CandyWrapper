@@ -215,6 +215,9 @@ public struct ConversationMessage: Codable, Hashable, Sendable, Identifiable {
     public var scheduledTaskId: String?
     /// The script a provider-native workflow runs, not prose (orchestrationV2.ts:1095-1099).
     public var workflowScript: Bool?
+    /// The message named no model, so it runs on the thread's selection when it starts
+    /// (`followsThreadSelection`, orchestrationV2.ts:1532-1533 at 5258).
+    public var followsThreadSelection: Bool?
     /// `OrchestrationMessageContext`; a sent guest message carries `guest` here (composerContext.ts:257-272 at 3669).
     public var context: JSONValue?
 }

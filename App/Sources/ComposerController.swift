@@ -2039,7 +2039,8 @@ final class ComposerController {
         // Redesign's strip never holds Permissions, so the composer keeps its chip there.
         pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip && strip.showsPermissions
         pickers.workspaceModelsScanning = workspaceSkillsScanning
-        pickers.update(draftKey: draftKey ?? "", context: context)
+        // A queued edit picks its own model, apart from the thread's (`queuedRunEditDraftId`, useQueuedRunEdit.ts at 5258).
+        pickers.update(draftKey: queuedEdit?.pickerKey ?? draftKey ?? "", context: context)
         updateStripPermissions()
         panel.hero.offersScratch = scratchEnvironment?() != nil
         strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }
@@ -3086,7 +3087,8 @@ final class ComposerController {
     /// #31739: a model or effort pick on a started thread saves on the thread at once, so the next turn from any
     /// client runs on it (useApplyThreadModelPick.ts at 4928). Draft reconciliation drops the pick once it lands.
     private func applyThreadModelPick() {
-        guard let id = openThreadId, let supervisor = shell?.supervisor,
+        // A queued edit's pick rides on its `queued-run.edit`, never on the thread (#41814).
+        guard queuedEdit == nil, let id = openThreadId, let supervisor = shell?.supervisor,
               let pick = pickers.store.modelPickToApply(pickers.draftKey, pickers.context) else { return }
         Task { [weak self] in
             do {
@@ -3223,9 +3225,15 @@ final class ComposerController {
         guard let runId = item.runId, case .thread(let threadId) = target, queuedEdit == nil, !queueBusy,
               ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count) == nil else { return }
         flushPrompt()
-        queuedEdits.begin(thread: threadId, run: runId, text: item.text)
+        // The edit opens on the run's model unless its message followed the thread's pick (useQueuedRunEdit.ts:306-312 at 5258).
+        let message = projection?.messages.first(where: { $0.id == item.messageId })
+        let follows = message?.followsThreadSelection == true
+        let runModel = projection?.runs.first(where: { $0.id == runId })?.modelSelection
+        let edit = queuedEdits.begin(thread: threadId, run: runId, text: item.text, followsThreadSelection: follows,
+                                     originalModel: follows ? shellThread?.modelSelection : runModel)
+        if !follows, let runModel { pickers.store.setExplicitSelection(edit.pickerKey, runModel) } else { pickers.store.didSend(edit.pickerKey) }
         watchQueuedEdit(threadId)
-        if let message = projection?.messages.first(where: { $0.id == item.messageId }) {
+        if let message {
             for record in message.context?["records"]?.arrayValue ?? [] {
                 if let id = record["contextId"]?.stringValue { menuState.records[id] = record }
             }
@@ -3241,6 +3249,7 @@ final class ComposerController {
     private func endEdit() {
         guard let edit = queuedEdit else { return }
         queuedEdits.end(edit.threadId)
+        pickers.store.didSend(edit.pickerKey)
         stopQueuedEditWatch(edit.threadId)
         loadPrompt()
     }
@@ -3279,8 +3288,16 @@ final class ComposerController {
         guard let edit = queuedEdits.takeExited(id, queuedRuns: runs) else { return }
         stopQueuedEditWatch(id)
         let key = id.rawValue, saved = prompts[id.rawValue] ?? ""
-        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText, threadPrompt: saved)
-        if recovery == .kept { prompts[key] = edit.text; scheduleSave() }
+        // queuedMessageEdit.ts:121-126, 150-154 at 5258: a changed model counts as an edit and moves to the thread's draft.
+        let pick = pickers.store.pickedSelection(edit.pickerKey)
+        let modelChanged = pick.map { p in edit.originalModel.map { !ComposerSelectionStore.pickMatchesThread(p, $0) } ?? true } ?? false
+        pickers.store.didSend(edit.pickerKey)
+        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText, threadPrompt: saved, modelChanged: modelChanged)
+        if recovery == .kept {
+            prompts[key] = edit.text
+            if modelChanged, let pick { pickers.store.setExplicitSelection(key, pick) }
+            scheduleSave()
+        }
         if target == .thread(id), questionRequestId == nil { loadPrompt() }
         if recovery != .clean { report(.queuedEditLeft(kept: recovery == .kept), key: nil) }
     }
@@ -3295,6 +3312,11 @@ final class ComposerController {
             "threadId": .string(edit.threadId.localId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
         ]
         if let context = ComposerContext.messageContext(prompt: text, records: contextRecords(for: text)) { fields["context"] = context }
+        // The model goes along unless the message follows the thread and the edit made no pick (useQueuedRunEdit.ts:505-508 at 5258).
+        if !edit.followsThreadSelection || pickers.store.drafts[edit.pickerKey]?.explicit == true,
+           pickers.draftKey == edit.pickerKey, let selection = pickers.current.modelSelection {
+            fields["modelSelection"] = ThreadSession.encode(selection)
+        }
         let command = JSONValue.object(fields)
         queueBusy = true
         refresh()
@@ -3307,6 +3329,7 @@ final class ComposerController {
                 if let key { threadErrors.set(key, nil) }
                 queueBusy = false
                 if queuedEdits.finishSave(claim, succeeded: true) {
+                    pickers.store.didSend(edit.pickerKey)
                     stopQueuedEditWatch(edit.threadId)
                     if target == .thread(edit.threadId) { loadPrompt() }
                 }

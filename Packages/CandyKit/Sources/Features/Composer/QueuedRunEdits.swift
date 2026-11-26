@@ -10,6 +10,13 @@ public struct QueuedRunEdits {
         public let threadId: ThreadId
         public let originalText: String
         public var text: String
+        /// The message named no model, so the edit shows the thread's pick and only an explicit pick is saved
+        /// (useQueuedRunEdit.ts:306-312, 505-508 at 5258, #41814).
+        public var followsThreadSelection = false
+        /// The model the edit opened on; a different pick counts as an edit when the run leaves the queue.
+        public var originalModel: ModelSelection?
+        /// The edit's own model picks live under this key, apart from the thread's (`queuedRunEditDraftId`).
+        public var pickerKey: String { "\(threadId.rawValue)#queued-edit:\(runId.rawValue)" }
     }
     private var edits: [ThreadId: Edit] = [:]
     private var saves: [ThreadId: UUID] = [:]
@@ -17,8 +24,10 @@ public struct QueuedRunEdits {
     public func edit(_ thread: ThreadId) -> Edit? { edits[thread] }
     public func isSaving(_ thread: ThreadId) -> Bool { saves[thread] != nil }
     @discardableResult
-    public mutating func begin(thread: ThreadId, run: RunId, text: String) -> Edit {
-        let edit = Edit(runId: run, threadId: thread, originalText: text, text: text)
+    public mutating func begin(thread: ThreadId, run: RunId, text: String, followsThreadSelection: Bool = false,
+                               originalModel: ModelSelection? = nil) -> Edit {
+        let edit = Edit(runId: run, threadId: thread, originalText: text, text: text,
+                        followsThreadSelection: followsThreadSelection, originalModel: originalModel)
         edits[thread] = edit
         return edit
     }
