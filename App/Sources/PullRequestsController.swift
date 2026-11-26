@@ -1063,6 +1063,10 @@ final class ThreadPullRequestsController {
 
     /// Threads whose details card lists every link (`Show N more`).
     private var expandedCards: Set<ThreadId> = []
+    private var expandedIssueCards: Set<ThreadId> = []
+    /// Linked issues' `issues.detail` for the card rows, per normalized issue key, for the current thread.
+    private var cardIssues: [String: IssueDetail] = [:]
+    private var cardIssuesTried: Set<String> = []
     private var cardKey: String?
 
     /// The details card's pull request rows (ThreadDetailsPrRows.tsx, ThreadDetailsPrRow.tsx): the
@@ -1235,6 +1239,8 @@ final class ThreadPullRequestsController {
             cardDetailsThread = thread.id
             cardDetails = [:]
             cardDetailsTried = []
+            cardIssues = [:]
+            cardIssuesTried = []
         }
         let env = thread.id.environmentId ?? ""
         let shown = current.map { current in [current] + (expanded ? ThreadPullRequests.lines(links).map(\.link).filter { $0.key.id != current.key.id } : []) } ?? []
@@ -1242,7 +1248,8 @@ final class ThreadPullRequestsController {
         // The capability can arrive after the first rows.
         let canWatch = thread.id.environmentId.map { capabilities.has($0, "threadPullRequestWatch") } ?? false
         let key = "\(thread.id.rawValue)|\(expanded)|" + links.map { "\($0.key.id):\($0.snapshot?.state.rawValue ?? "-"):\($0.snapshot?.isDraft == true):\($0.snapshot?.title ?? ""):\($0.watch != nil)" }.joined(separator: ",")
-            + "|\(thread.linkedPullRequest?.url ?? "")|\(canWatch)"
+            + "|\(thread.linkedPullRequest?.url ?? "")|\(canWatch)|\(expandedIssueCards.contains(thread.id))|"
+            + (thread.issues?.values ?? []).map { "\($0.issueKey.normalized):\($0.title)" }.joined(separator: ",")
         guard key != cardKey else { return }
         cardKey = key
         func row(number: Int, title: String?, state: PullRequestState?, isDraft: Bool, link: ThreadPullRequestLink? = nil,
@@ -1272,20 +1279,76 @@ final class ThreadPullRequestsController {
                         rows.append(row(number: link.number, title: link.snapshot?.title, state: link.snapshot?.state, isDraft: link.snapshot?.isDraft ?? false, link: link) { [weak self] in self?.open(link) })
                     }
                 }
-                let toggle = DetailsRowControl(kind: .row)
-                toggle.icons = [(expanded ? IconName.minus : .plus).definition]
-                toggle.text = expanded ? "Show less" : "Show \(rest.count) more"
-                toggle.action = { [weak self] in
+                rows.append(moreToggle(expanded: expanded, remaining: rest.count) { [weak self] in
                     guard let self else { return }
                     if self.expandedCards.contains(thread.id) { self.expandedCards.remove(thread.id) } else { self.expandedCards.insert(thread.id) }
                     self.sync()
-                }
-                rows.append(toggle)
+                })
             }
         } else if let legacy = thread.linkedPullRequest {
             rows.append(row(number: legacy.number, title: nil, state: nil, isDraft: false) { [weak self] in self?.openCurrentPullRequest() })
         }
+        rows += issueCardRows(thread, env: env)
         panel.lazyDetailsCard.set(\.pullRequestRows, rows)
+    }
+
+    /// `ThreadDetailsMoreButton` (ThreadDetailsControl.tsx:112-141 at 5258): a muted ghost row with
+    /// `ChevronDownIcon` or `ChevronUpIcon`, "Show N more" or "Show less".
+    private func moreToggle(expanded: Bool, remaining: Int, toggle: @escaping @MainActor @Sendable () -> Void) -> NSView {
+        let r = DetailsRowControl(kind: .row)
+        r.icons = [(expanded ? IconName.chevronUp : .chevronDown).definition]
+        r.text = expanded ? "Show less" : "Show \(remaining) more"
+        r.setAccessibilityExpanded(expanded)
+        r.action = toggle
+        return r
+    }
+
+    /// `ThreadDetailsIssueRows` compact (ThreadDetailsIssueRows.tsx:147-190 at 5258, #39232, #42771): the
+    /// first linked issue, the rest only while expanded, then the toggle. Each shown row reads its
+    /// `issues.detail` for the state glyph, the live title and the comment count, on servers with issues.
+    private func issueCardRows(_ thread: ThreadShell, env: String) -> [NSView] {
+        let links = thread.issues?.values ?? []
+        guard let first = links.first else { return [] }
+        let expanded = expandedIssueCards.contains(thread.id)
+        let shown = expanded ? links : [first]
+        let reads = capabilities.has(env, "issues")
+        func row(_ link: ThreadIssueLink) -> NSView {
+            let key = link.issueKey.normalized
+            if reads { loadCardIssue(link, env: env) }
+            let d = cardIssues[key]
+            let state = d?.state
+            let r = ThreadDetailsIssueRowView()
+            r.set(displayKey: link.displayKey, title: d?.title ?? link.title,
+                  trackerIcon: IssueListLogic.trackerIcon(link.tracker), trackerName: IssueListLogic.providerName(link.tracker),
+                  stateIcon: state.map(IssueListLogic.icon), stateColor: state.map(IssueListLogic.color), stateName: state?.name,
+                  commentCount: d?.commentCount ?? 0)
+            r.open.action = { [weak self] in self?.openIssue(link) }
+            return r
+        }
+        var rows = shown.map(row)
+        if links.count > 1 {
+            rows.append(moreToggle(expanded: expanded, remaining: links.count - 1) { [weak self] in
+                guard let self else { return }
+                if self.expandedIssueCards.contains(thread.id) { self.expandedIssueCards.remove(thread.id) } else { self.expandedIssueCards.insert(thread.id) }
+                self.cardKey = nil
+                self.sync()
+            })
+        }
+        return rows
+    }
+
+    private func loadCardIssue(_ link: ThreadIssueLink, env: String) {
+        let key = link.issueKey.normalized
+        guard cardIssues[key] == nil, !cardIssuesTried.contains(key) else { return }
+        cardIssuesTried.insert(key)
+        let thread = cardDetailsThread
+        Task { [weak self] in
+            guard let self, let d = try? await self.environments.request(env, "issues.detail", .object(link.ref.json)).decode(as: IssueDetail.self) else { return }
+            guard self.cardDetailsThread == thread else { return }
+            self.cardIssues[key] = d
+            self.cardKey = nil
+            self.sync()
+        }
     }
 
     /// `threadPullRequestPanelTarget`: the current link, else the legacy link or the branch's PR.

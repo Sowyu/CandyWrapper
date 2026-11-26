@@ -78,6 +78,31 @@ struct MarkdownTests {
         #expect(list.items.first?.blocks == [paragraph("<task> do it </task>")])
     }
 
+    /// #29261: the HDL samples of T3's syntaxHighlighting.test.ts (5258) get keywords and comments, by fence and extension.
+    @Test func highlightsHardwareLanguages() {
+        func kinds(_ code: String, _ language: String) -> [String: CodeTokenKind] {
+            let u = Array(code.utf16)
+            var out: [String: CodeTokenKind] = [:]
+            for t in CodeHighlighter.tokens(code, language: language) {
+                out[String(decoding: u[t.range.location..<t.range.upperBound], as: UTF16.self)] = t.kind
+            }
+            return out
+        }
+        for hint in ["verilog", "v", "vh"] {
+            let v = kinds("module top(input wire clk);\n  reg [7:0] q; // count\nendmodule", hint)
+            #expect(v["module"] == .keyword && v["// count"] == .comment && v["reg"] == .storage, "\(hint)")
+        }
+        for hint in ["systemverilog", "system-verilog", "sv", "svh"] {
+            let sv = kinds("module top(input logic clk);\n  always_ff @(posedge clk) q <= 8'd1; // count\nendmodule", hint)
+            #expect(sv["always_ff"] == .keyword && sv["logic"] == .storage && sv["// count"] == .comment, "\(hint)")
+        }
+        for hint in ["vhdl", "vhd"] {
+            let vhdl = kinds("ENTITY top is\n  port (clk : in std_logic); -- clock\nend entity;", hint)
+            #expect(vhdl["ENTITY"] == .keyword && vhdl["-- clock"] == .comment, "\(hint)")
+        }
+        #expect(UnifiedDiff.language(forPath: "src/top.vhdl") == "vhdl")
+    }
+
     /// Token classes Shiki gives these snippets with pierre-light (dumped from T3's bundled highlighter).
     @Test func highlightsLikeShiki() {
         func kinds(_ code: String, _ language: String) -> [String: CodeTokenKind] {

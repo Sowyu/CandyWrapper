@@ -171,3 +171,68 @@ public final class ThreadDetailsPrRowView: DSView {
         number.color = Themed.color(\.mutedForeground)
     }
 }
+
+/// A linked issue on the card, `LinkedIssueRow` compact (ThreadDetailsIssueRows.tsx:107-133 at 5258): the
+/// state glyph and a two-line title in the `title` part, then `h-5 gap-1.5 ps-9 pe-2.5 text-xs` with the
+/// key, the tracker's mark and the comment count, `pb-1.5` under it.
+public final class ThreadDetailsIssueRowView: DSView {
+    public func preferredHeight(forWidth width: CGFloat) -> CGFloat { open.preferredHeight(forWidth: width) + 20 + 6 }
+    public let open = DetailsRowControl(kind: .row)
+    private let key = LabelView("", font: TL.tabular(12))
+    private var tracker = IconView(name: .ticket, size: 12)
+    private let commentIcon = IconView(name: .messageSquare, size: 12)
+    private let comments = LabelView("", font: TL.tabular(12))
+
+    public init() {
+        super.init(frame: .zero)
+        open.wrapsText = true
+        for l in [key, comments] { l.lineHeight = 16 }
+        [open, key, tracker, commentIcon, comments].forEach(addSubview)
+        setAccessibilityRole(.group)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    /// `commentCount` of 0 or an unread detail hides the count (:65-77).
+    public func set(displayKey: String, title: String, trackerIcon: IconName, trackerName: String,
+                    stateIcon: IconName?, stateColor: NSColor?, stateName: String?, commentCount: Int) {
+        open.icons = [(stateIcon ?? .circleDot).definition]
+        open.iconColor = stateColor
+        open.text = title
+        open.setAccessibilityLabel("Issue \(displayKey): \(title)")
+        key.text = displayKey
+        tracker.removeFromSuperview()
+        tracker = IconView(name: trackerIcon, size: 12)
+        tracker.setAccessibilityLabel(trackerName)
+        addSubview(tracker)
+        commentIcon.isHidden = commentCount <= 0
+        comments.isHidden = commentCount <= 0
+        comments.text = "\(commentCount)"
+        comments.setAccessibilityLabel(commentCount == 1 ? "1 comment" : "\(commentCount) comments")
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    public override func layout() {
+        super.layout()
+        let titleHeight = open.preferredHeight(forWidth: bounds.width)
+        open.frame = NSRect(x: 0, y: 0, width: bounds.width, height: titleHeight)
+        let mid = titleHeight + 10
+        var x: CGFloat = 36
+        let kw = ceil(key.textWidth)
+        key.frame = NSRect(x: x, y: mid - 8, width: min(kw, max(0, bounds.width - 10 - x)), height: 16)
+        x += kw + 6
+        tracker.frame = NSRect(x: x, y: mid - 6, width: 12, height: 12)
+        x += 12 + 6
+        commentIcon.frame = NSRect(x: x, y: mid - 6, width: 12, height: 12)
+        comments.frame = NSRect(x: x + 14, y: mid - 8, width: ceil(comments.textWidth), height: 16)
+    }
+
+    public override func updateLayer() {
+        let muted = Themed.color(\.mutedForeground)
+        key.color = muted
+        comments.color = muted
+        tracker.strokeColor = muted
+        commentIcon.strokeColor = muted
+    }
+}

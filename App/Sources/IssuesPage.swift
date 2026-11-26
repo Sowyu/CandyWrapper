@@ -175,8 +175,15 @@ final class IssuesPageController {
             guard let self, self.visible, self.page.window?.isKeyWindow == true else { return event }
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             if mods == .command, event.charactersIgnoringModifiers == "f" { self.page.focusSearch(); return nil }
-            if ActiveKeymap.resolve(event, context: KeybindingContext()) == "rightPanel.toggle" {
+            let command = ActiveKeymap.resolve(event, context: KeybindingContext())
+            if command == "rightPanel.toggle" {
                 if !event.isARepeat { self.togglePanel() }
+                return nil
+            }
+            // `rightPanel.close` closes the active tab; with the panel shut the key keeps its native meaning
+            // (#42417, IssuesPage.tsx:487-497 at 5258).
+            if command == "rightPanel.close", self.container.panelState.isOpen, let id = self.container.panelState.activeSurfaceId {
+                if !event.isARepeat { self.container.mutate { $0.close(id) } }
                 return nil
             }
             return event

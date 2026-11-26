@@ -35,15 +35,18 @@ enum ComposerCodeLanguages {
         ("sql", "SQL"),
         ("svelte", "Svelte"),
         ("swift", "Swift"),
+        ("systemverilog", "SystemVerilog"),
         ("toml", "TOML"),
         ("tsx", "TSX"),
         ("typescript", "TypeScript"),
+        ("verilog", "Verilog"),
+        ("vhdl", "VHDL"),
         ("vue", "Vue"),
         ("xml", "XML"),
         ("yaml", "YAML"),
         ("zig", "Zig"),
     ]
-    static let aliases = ["cs": "csharp", "c++": "cpp", "js": "javascript", "md": "markdown", "py": "python", "rb": "ruby", "rs": "rust", "sh": "bash", "shell": "bash", "ts": "typescript", "yml": "yaml", "text": "", "plaintext": "", "txt": ""]
+    static let aliases = ["cs": "csharp", "c++": "cpp", "js": "javascript", "md": "markdown", "py": "python", "rb": "ruby", "rs": "rust", "sh": "bash", "shell": "bash", "sv": "systemverilog", "system-verilog": "systemverilog", "ts": "typescript", "yml": "yaml", "text": "", "plaintext": "", "txt": ""]
     static func language(_ info: String) -> String { info.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? "" }
     static func label(_ info: String) -> String {
         let id = language(info)

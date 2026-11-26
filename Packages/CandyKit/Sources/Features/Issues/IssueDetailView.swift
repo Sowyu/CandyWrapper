@@ -169,9 +169,10 @@ public final class IssueDetailView: DSView {
         stack.frame = bounds
         ghost?.frame = bounds
         failure?.frame = bounds
-        // `absolute inset-x-0 bottom-0 px-3 pb-3`.
+        // `absolute inset-x-0 bottom-0 px-3` over the chat composer's bottom inset, `sm:h-[calc(env(safe-area-inset-bottom)+1.25rem)]`,
+        // so the two cards line up side by side (#39994, IssueCommentComposer.tsx at 5258).
         let ch = composer.height(forWidth: bounds.width - 24)
-        composer.frame = NSRect(x: 12, y: bounds.height - 12 - ch, width: max(0, bounds.width - 24), height: ch)
+        composer.frame = NSRect(x: 12, y: bounds.height - 20 - ch, width: max(0, bounds.width - 24), height: ch)
     }
 }
 

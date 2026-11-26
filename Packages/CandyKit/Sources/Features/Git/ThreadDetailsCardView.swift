@@ -762,7 +762,10 @@ public final class ThreadDetailsCardView: DSView {
     private var versionRows: [NSView] { versionRows(density) }
 
     private func rowHeight(_ row: NSView) -> CGFloat {
-        row === gitActions ? gitActions.preferredHeight : (row as? ThreadDetailsPrRowView).map { $0.preferredHeight(forWidth: max(1, bounds.width - 18)) } ?? 32
+        if row === gitActions { return gitActions.preferredHeight }
+        let width = max(1, bounds.width - 18)
+        return (row as? ThreadDetailsPrRowView)?.preferredHeight(forWidth: width)
+            ?? (row as? ThreadDetailsIssueRowView)?.preferredHeight(forWidth: width) ?? 32
     }
 
     public var preferredHeight: CGFloat { preferredHeight(density) }

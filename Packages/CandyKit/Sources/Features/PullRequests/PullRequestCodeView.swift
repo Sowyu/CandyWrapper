@@ -16,6 +16,10 @@ public final class PullRequestCodeView: DSView {
     private let list = DiffListView()
     private let scroll: ScrollAreaView
     private let status = LabelView("", font: DSFont.ui(12))
+    /// Hiding test files left no file: `px-4 py-5 text-sm text-muted-foreground gap-2`, the count, then
+    /// "Show test files" (#42573, PullRequestCodeTab.tsx:1768-1777 at 5258).
+    private let allTestsHidden = LabelView("", font: DSFont.ui(14), color: Themed.color(\.mutedForeground))
+    private let showTests = DiffInlineButton("Show test files", size: 14)
     private let footer = LabelView("", font: DSFont.ui(12))
     private let footerRetry = ButtonView("Retry", variant: .outline, size: .xs)
     private let orphanToggle = LinkLabel()
@@ -107,6 +111,11 @@ public final class PullRequestCodeView: DSView {
         hiddenTestsLink.underlines = false
         hiddenTestsLink.isHidden = true
         hiddenTestsLink.onClick = { [weak self] in self?.setHideTests(false) }
+        allTestsHidden.lineHeight = 20
+        allTestsHidden.isHidden = true
+        showTests.action = { [weak self] in self?.setHideTests(false) }
+        addSubview(allTestsHidden)
+        addSubview(showTests)
         hideTestsToggle.iconSize = 14
         hideTestsToggle.isHidden = true
         hideTestsToggle.setAccessibilityLabel("Hide test files")
@@ -175,7 +184,7 @@ public final class PullRequestCodeView: DSView {
         self.nextCursor = nextCursor
         self.moreLoading = moreLoading
         self.moreError = moreError
-        scope.title = commit.flatMap { oid in commits.first { $0.oid == oid }?.messageHeadline } ?? "All commits"
+        updateScopeTitle()
         scope.isHidden = commits.isEmpty
         if patches != self.patches {
             self.patches = patches
@@ -494,6 +503,16 @@ public final class PullRequestCodeView: DSView {
         needsLayout = true
     }
 
+    /// A selected commit's headline, or below the `@xl` container width (36rem) its short id in `font-mono`
+    /// (#42573, PullRequestCodeTab.tsx:1471-1478 at 5258).
+    private func updateScopeTitle() {
+        let picked = commit.flatMap { oid in commits.first { $0.oid == oid } }
+        let short = picked != nil && bounds.width < 576
+        let title = picked.map { short ? String($0.oid.prefix(7)) : $0.messageHeadline } ?? "All commits"
+        if scope.title != title { scope.title = title }
+        if scope.monospaced != short { scope.monospaced = short }
+    }
+
     private func updateCounts() {
         let files = "\(paths.count) \(paths.count == 1 ? "file" : "files")" + (nextCursor == nil ? "" : "+")
         var viewed = ""
@@ -501,13 +520,24 @@ public final class PullRequestCodeView: DSView {
             viewed = "  ·  \(PullRequestDetailLogic.countViewed(paths, states: states, overlay: overlay)) / \(paths.count) "
             viewed += store == "environment" ? "viewed in T3 Code" : "viewed"
         }
-        hiddenTestsLink.isHidden = hiddenTestFileCount == 0
         hiddenTestsLink.text = "\(hiddenTestFileCount) test \(hiddenTestFileCount == 1 ? "file" : "files") hidden"
-        // Without hidden tests the line stays one label, as before.
-        counts.text = hiddenTestsLink.isHidden ? files + viewed : files + "  ·  "
-        viewedCounts.text = hiddenTestsLink.isHidden || viewed.isEmpty ? "" : "·  " + viewed.dropFirst(5)
-        viewedCounts.isHidden = viewedCounts.text.isEmpty
+        countsText = (files, viewed)
+        applyCounts()
         needsLayout = true
+    }
+
+    private var countsText = ("", "")
+    /// The hidden test files link shows from the `@2xl` container width (42rem) and only beside files
+    /// (#42573, PullRequestCodeTab.tsx:1490-1505 at 5258).
+    private var hiddenTestsShown: Bool { hiddenTestFileCount > 0 && (!paths.isEmpty || nextCursor != nil) && bounds.width >= 672 }
+
+    private func applyCounts() {
+        let (files, viewed) = countsText
+        // Without hidden tests the line stays one label, as before.
+        let text = hiddenTestsShown ? files + "  ·  " : files + viewed
+        if counts.text != text { counts.text = text }
+        viewedCounts.text = !hiddenTestsShown || viewed.isEmpty ? "" : "·  " + viewed.dropFirst(5)
+        viewedCounts.isHidden = viewedCounts.text.isEmpty
     }
 
     private func showScopeMenu() {
@@ -529,12 +559,18 @@ public final class PullRequestCodeView: DSView {
         toolbarFill.frame = CGRect(x: 0, y: 0, width: w, height: 40)
         rule.frame = CGRect(x: 0, y: 40, width: w, height: 1)
         CATransaction.commit()
+        updateScopeTitle()
+        applyCounts()
         var x: CGFloat = 16
+        var right = w - 16
+        // The commit menu gives way first (`shrink-[999]`, #39875): the counts keep their width.
+        let countsWidth = ceil(counts.textWidth) + (hiddenTestsShown ? ceil(hiddenTestsLink.textWidth) + 1 : 0)
+        let controls: CGFloat = (paths.isEmpty ? 0 : 36) + (hideTestsToggle.isHidden ? 0 : 36)
         if !scope.isHidden {
-            let sw = min(256, ceil(scope.intrinsicContentSize.width))
+            let room = w - 32 - controls - 12 - countsWidth
+            let sw = max(0, min(256, ceil(scope.intrinsicContentSize.width), room))
             scope.frame = NSRect(x: x, y: 8, width: sw, height: 24); x += sw + 12
         }
-        var right = w - 16
         // `fileKeys.length > 0`: the toggle sits last, after Hide test files.
         treeToggle.isHidden = paths.isEmpty
         if !treeToggle.isHidden {
@@ -543,7 +579,8 @@ public final class PullRequestCodeView: DSView {
         if !hideTestsToggle.isHidden {
             hideTestsToggle.frame = NSRect(x: right - 28, y: 6, width: 28, height: 28); right -= 28 + 8
         }
-        if hiddenTestsLink.isHidden {
+        hiddenTestsLink.isHidden = !hiddenTestsShown
+        if !hiddenTestsShown {
             counts.frame = NSRect(x: x, y: 12, width: max(0, right - x), height: 16)
         } else {
             let cw = ceil(counts.textWidth), lw = ceil(hiddenTestsLink.textWidth) + 1
@@ -586,6 +623,17 @@ public final class PullRequestCodeView: DSView {
         let paneW = filePane.isHidden ? 0 : filePane.place(in: NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top)), host: self)
         scroll.frame = NSRect(x: 0, y: top, width: w - paneW, height: max(0, bounds.height - top - footerH))
         status.frame = NSRect(x: 16, y: top + 24, width: max(0, w - 32), height: 16)
+        let onlyTests = hiddenTestFileCount > 0 && paths.isEmpty && nextCursor == nil && status.isHidden && unavailable == nil
+        allTestsHidden.isHidden = !onlyTests
+        showTests.isHidden = !onlyTests
+        if onlyTests {
+            allTestsHidden.text = hiddenTestsLink.text
+            let lw = min(ceil(allTestsHidden.textWidth) + 1, max(0, w - 32))
+            allTestsHidden.frame = NSRect(x: 16, y: top + 20, width: lw, height: 20)
+            let bw = showTests.intrinsicContentSize.width
+            let fits = 16 + lw + 8 + bw <= w - 16
+            showTests.frame = NSRect(x: fits ? 16 + lw + 8 : 16, y: fits ? top + 22 : top + 20 + 20 + 8 + 2, width: bw, height: 18)
+        }
         unavailable?.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top))
         footer.isHidden = footerH == 0
         let rw = footerRetry.isHidden ? 0 : ceil(footerRetry.intrinsicContentSize.width) + 8

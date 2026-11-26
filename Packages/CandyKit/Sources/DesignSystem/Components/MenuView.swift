@@ -597,13 +597,18 @@ public final class MenuPopupView: DSView, PopupContent, PressDragMenu, HoverSync
         if openSubmenu == nil { highlightedIndex = nil }
     }
 
-    public override func mouseDown(with event: NSEvent) {}
+    /// The search row is a `label` around the field (#33110, ui/menu.tsx:83 at 5258), so its padding focuses it too.
+    public override func mouseDown(with event: NSEvent) {
+        guard let searchInput, convert(event.locationInWindow, from: nil).y < clip.frame.minY + headerHeight else { return }
+        window?.makeFirstResponder(searchInput)
+    }
 
     public override func mouseUp(with event: NSEvent) {
         if let i = rowIndex(at: convert(event.locationInWindow, from: nil)) { activate(i) }
     }
 
     public override func resetCursorRects() {
+        if searchInput != nil { addCursorRect(NSRect(x: 0, y: 0, width: bounds.width, height: clip.frame.minY + headerHeight), cursor: .iBeam) }
         for row in rows where row.item.isSelectable && style != .autocomplete { addCursorRect(convert(row.frame, from: clip), cursor: .pointingHand) }
     }
 }

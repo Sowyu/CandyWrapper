@@ -420,18 +420,18 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 2e6b05011f | #24888 | fix(web): terminal Powerline caps and slants fill their cells | terminal | n/a (SwiftTerm draws it) † |
 | 2f7b7f03e3 | #42824 | fix(web): issue number in the Issue panel follows 'Open links in' | issues | ported 7835705c |
 | 3336504f31 | #42445 | fix(preview): agent recordings keep refining the frame while the page is idle | browser | n/a (recording compositor, CW records nothing in the client), diff read 2026-11-25 |
-| 3373a78606 | #42872 | fix(web): update terminal labels when the language changes | terminal | port (5.3) † |
+| 3373a78606 | #42872 | fix(web): update terminal labels when the language changes | terminal | n/a (CW has no translations: General settings says other languages are not available), diff stat read 2026-11-25 |
 | 338352dee2 | #39833 | fix(web): spreadsheet scrollbars are visible in dark mode | files | n/a (QuickLook previews) † |
 | 356dff3352 | #40783 | fix(web): RTF previews respect hidden character formatting | files | n/a (QuickLook previews) † |
 | 3571f28cca | #40816 | fix(web): Usage Limits no longer shows a stale scrollbar | usage | n/a (web scrollbar) † |
 | 369b46900c | #42480 | fix(web): Enter saves the default viewport size and skipped runs kept | settings | port (1.8) † |
-| 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | port (2.6) † |
+| 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | ported 4b07f98d (short commit id below 36rem, the hidden-tests link from 42rem, the only-hidden-tests state), diff read 2026-11-25 |
 | 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | left: workspace HTML previews keep their page across agent commands (S, browser preview) |
 | 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | ported a6197a0d (step line and note; summary line not yet) |
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
 | 3d4fd8346e | #42563 | fix(web): long Pull Requests author and label filters no longer end in a broken character | other | n/a (Swift Characters) † |
-| 3d54dc96f9 | #33110 | fix(web): focus popup search from anywhere in its row | shell | port (10.6) † |
+| 3d54dc96f9 | #33110 | fix(web): focus popup search from anywhere in its row | shell | ported d39a9a88 (menus with a search field and the branch picker; the other hand-built comboboxes in Sidebar, Settings and Composer still focus only on the field), diff read 2026-11-25 |
 | 3dd4f14280 | #41932 | fix(web): IME keys no longer cancel or send a pull request review reply | pull requests | port (1.3) † |
 | 3ea709e8bd | #39470 | fix(web): keep revealed folder in view while restored folders load | files | port (3.4) † |
 | 3fb76f1be8 | #41945 | fix(web): issue links in HTML renders open in the issue panel | issues | ported 7835705c (chat and HTML render issue links open the issue panel) |
@@ -441,7 +441,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 43d9d67140 | #32768 | fix(web): an IME Escape no longer clears a typed font family | settings | ported cb5edfe1 (an IME Esc passes to the input method) |
 | 43e0b37382 | #42179 | fix(web): PR Summary tab keeps its scroll and comment order when you switch right-panel tabs | pull requests | port (2.6) † |
 | 4568a1b741 | #42932 | fix(web): unsupported file preview no longer calls extensionless filenames a file type | files | port (3.4) † |
-| 457a52eb0a | #42312 | fix(web): opening a resolved PR comment keeps its toggle under the cursor | pull requests | port (2.6) † |
+| 457a52eb0a | #42312 | fix(web): opening a resolved PR comment keeps its toggle under the cursor | pull requests | already (CW's opened resolved card puts nothing before the toggle; it has no Resolve button there), diff read 2026-11-25 |
 | 45c011e218 | #42875 | fix(web): reopening a closed pull request tab keeps saved list filters | shell | left: CW remembers closed thread panel tabs only, not Pull Requests or Issues page tabs (M) |
 | 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | ported a6197a0d (words; no hourglass icon) |
 | 46eb376dda | #41677 | fix(web): a new price row mapped to a model asks for its model ID | settings | port (1.8) † |
@@ -485,14 +485,14 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 6f8282c2c8 | #41837 | fix(web): an IME Escape no longer blurs the file editor | files | port (1.3) † |
 | 6f94a06384 | #23346 | fix(vcs): explain checkout failures caused by local changes | git | ported 32cc3467 |
 | 7105792176 | #42201 | fix(web): notebook previews show a progress bar's last frame | files | n/a (QuickLook previews) † |
-| 721542cac7 | #39994 | fix(web): the issue comment composer lines up with the chat composer | issues | port (2.6) † |
+| 721542cac7 | #39994 | fix(web): the issue comment composer lines up with the chat composer | issues | ported 59500419 (20pt bottom inset), diff read 2026-11-25 |
 | 732c7126c1 | #41595 | fix(web): RTF previews show a bold, italic or underlined emoji as one character | files | n/a (QuickLook previews) † |
 | 7380740efe | #42499 | fix(web): pooled limit refill shows when it lands again | usage | ported 8f1d707d |
-| 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables; stroked T3 icons stay default) |
+| 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables) and 57524d5b (the 18 stroked and 24px symbols: video, documents, Java, TOML, diff, XML and the rest) |
 | 73bb8ece1f | #41228 | fix(web): accept TIFF files containing standard IFD tag type 13 (SubIFDs) | files | n/a (QuickLook previews) † |
 | 75443857dc | #42085 | fix(web): Settings text typed before Navigation: Back is saved | shell | port (10.2) † |
 | 77c230e456 | #41511 | fix(web): notebook previews show errors saved without a traceback | files | n/a (QuickLook previews, diff read 2026-11-25) |
-| 77d299cc1c | #29438 | fix(web): closing the last open pull request clears it from the list | pull requests | port (2.6) † |
+| 77d299cc1c | #29438 | fix(web): closing the last open pull request clears it from the list | pull requests | already (PullRequestsPage resets the priority groups to empty whenever the feed answers no rows, project errors or not), diff read 2026-11-25 |
 | 784da01b29 | #41749 | fix(web): Esc in Find in PDF clears it without closing the sheet | files | port (3.5) † |
 | 7913360b2e | #41876 | fix(server): saving a voice key reference needs provider management | settings | port (1.8) † |
 | 7922611cee | #37978 | fix(i18n): correct wrong and ambiguous Simplified Chinese strings | other | n/a (translation strings) † |
@@ -546,7 +546,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 9fde959ac0 | #38799 | feat(web): choose which projects the issues list shows | issues | ported 93e4e41a |
 | a0ef9d8d95 | #39574 | fix(web): editable file drag selection no longer breaks across virtualized scroll windows | other | n/a (server only, wire) † |
 | a149bdc4f6 | #42321 | fix(web): Voice Models language menu resets its search filter on close | settings | port (1.8) † |
-| a2231ca59b | #42417 | fix(web): Cmd/Ctrl+W closes the active tab on the Issues page | issues | port (2.6) † |
+| a2231ca59b | #42417 | fix(web): Cmd/Ctrl+W closes the active tab on the Issues page | issues | ported 59500419, diff read 2026-11-25 |
 | a23085273f | #33279 | fix(web): adding the last snooze option no longer reorders rows mid-edit | settings | port (1.8) † |
 | a3001b33fe | #40468 | fix(web): RTF previews break the line at TextEdit soft line breaks | files | n/a (QuickLook previews) † |
 | a5d86e6382 | #41844 | fix(web): Push on the default branch no longer commits files changed while confirming | git | ported eda2a88d |
@@ -561,7 +561,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | ac3af66f21 | #41901 | fix(web): a copied issue or pull request error no longer ends in a broken character | other | n/a (Swift Characters) † |
 | acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | port (1.8) † |
 | aced664ed9 | #39024 | fix(client-runtime): prefer newer completed compaction over stale liveUsage | other | n/a (server only, wire) † |
-| ae926f6579 | #41852 | fix(web): Cmd/Ctrl+F opens the browser find bar while a pull request is maximized | shell | port (10.5) † |
+| ae926f6579 | #41852 | fix(web): Cmd/Ctrl+F opens the browser find bar while a pull request is maximized | shell | n/a (CW's Pull Requests page has no right panel to maximize over its list), diff read 2026-11-25 |
 | b042e4ee75 | #42722 | fix(web): hide the right panel add-surface menu when no surfaces are available | shell | already (Device is always available beside a thread, so the + menu is never empty), diff read 2026-11-25 |
 | b125918f4b | #42718 | fix(web): xlsx previews no longer fail on cells truncated mid-emoji | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | b2d51f35bb | #42224 | fix(web): a held Esc closing a nested menu or dialog no longer closes Usage or Settings | shell | already (AppRouteModalView ignores Esc repeats), diff read 2026-11-25 |
@@ -639,8 +639,8 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f60c747568 | #39815 | fix(web): open PDF attachments no longer reload while the agent works | files | port (3.5) † |
 | f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | ported cb5edfe1 |
 | f82de6567c | #41775 | fix(web): restoring a saved model mapping clears its typed prices | settings | port (1.8) † |
-| f89883c568 | #39875 | fix(web): a long commit name no longer runs under the PR code tab's icons | pull requests | port (2.6) † |
-| f8f4a0b057 | #29261 | feat: Verilog, SystemVerilog, and VHDL code is syntax highlighted | composer | port (3.6) † |
+| f89883c568 | #39875 | fix(web): a long commit name no longer runs under the PR code tab's icons | pull requests | ported 4b07f98d (the commit menu gives way before the counts), diff read 2026-11-25 |
+| f8f4a0b057 | #29261 | feat: Verilog, SystemVerilog, and VHDL code is syntax highlighted | composer | ported 17a38daa (CW's own highlighter gets two profiles), diff read 2026-11-25 |
 | f9f34aab78 | #41361 | fix(web): start without WebAssembly by initialising Words in a guard | shell | n/a (web only) † |
 | fa2ee196b5 | #41539 | fix(web): archived threads settings stay responsive with thousands of threads | settings | ported c82cac6d |
 | fa9f154e1b | #41949 | fix(web): the Cite button appears when a selection ends on a file chip's icon in Firefox | files | port (3.4) † |
@@ -711,6 +711,8 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 1.3 is partly ported (cb5edfe1): settings search fields clear on Esc and an IME Esc reaches the input method. The rows outside Settings (Files, PR, diff comments, dictation, right panel sheet) and the font family, voice and custom model rows stay open.
 
 ## Corrections from the panels port (2026-11-25)
+
+- #41073 (not in the table, 7103527dcc): T3 resolves a PR description's relative file link against the PR checkout before it opens the Files panel. CW's PR markdown has no `onOpenFile`, so its file links never open the panel at all and go to the editor. Left: wire PR markdown to the thread's Files panel with the checkout-relative path (M).
 
 - 2.5: #26760 is not `n/a`. CW never had T3's review order (`orderDiffFiles` was already in 4928's web client), so the Code tab now runs `orderDiffFilesForReview` (da18c3b2).
 - 3.5: #39497 changes the web picture-in-picture's PDF embedding, not the file preview. CW never embeds preview PDFs.

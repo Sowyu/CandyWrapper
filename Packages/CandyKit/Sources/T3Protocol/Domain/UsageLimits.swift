@@ -102,9 +102,25 @@ public struct UsageLimitSourceAccount: Hashable, Sendable {
     public var plan: String?
     /// The workspace whose quota this is, from 2994 on (0be20c86c, providerUsageLimits.ts:96).
     public var workspaceId: String?
+    /// The models the hub routes to this account; nil when the hub's list was unreadable (5258 providerUsageLimits.ts:81-82).
+    public var models: [String]?
     public var usageLimits: ProviderUsageLimits
-    public init(id: String, driver: String, email: String? = nil, plan: String? = nil, workspaceId: String? = nil, usageLimits: ProviderUsageLimits) {
-        self.id = id; self.driver = driver; self.email = email; self.plan = plan; self.workspaceId = workspaceId; self.usageLimits = usageLimits
+    public init(id: String, driver: String, email: String? = nil, plan: String? = nil, workspaceId: String? = nil, models: [String]? = nil,
+                usageLimits: ProviderUsageLimits) {
+        self.id = id; self.driver = driver; self.email = email; self.plan = plan; self.workspaceId = workspaceId; self.models = models
+        self.usageLimits = usageLimits
+    }
+}
+
+/// `HttpQuotaAccount` (5258 providerUsageLimits.ts:87-100): a user-hosted quota endpoint's account, tied to one
+/// provider instance when it names one.
+public struct HttpQuotaAccount: Hashable, Sendable {
+    public var id: String
+    public var label: String
+    public var providerInstanceId: String?
+    public var windows: [UsageLimitWindow]
+    public init(id: String, label: String, providerInstanceId: String? = nil, windows: [UsageLimitWindow]) {
+        self.id = id; self.label = label; self.providerInstanceId = providerInstanceId; self.windows = windows
     }
 }
 
@@ -115,21 +131,36 @@ public struct UsageLimitSourceSnapshot: Hashable, Sendable {
     public var checkedAt: String
     public var accounts: [UsageLimitSourceAccount]
     public var error: String?
-    public init(id: String, label: String, checkedAt: String = "", accounts: [UsageLimitSourceAccount], error: String? = nil) {
+    /// `cliproxy` or `http` (5258 providerUsageLimits.ts:107-119).
+    public var kind: String
+    /// The hub's origin, which also serves the agents sent through it.
+    public var origin: String?
+    /// An `http` source's accounts.
+    public var quotaAccounts: [HttpQuotaAccount]
+    public init(id: String, label: String, checkedAt: String = "", accounts: [UsageLimitSourceAccount], error: String? = nil,
+                kind: String = "cliproxy", origin: String? = nil, quotaAccounts: [HttpQuotaAccount] = []) {
         self.id = id; self.label = label; self.checkedAt = checkedAt; self.accounts = accounts; self.error = error
+        self.kind = kind; self.origin = origin; self.quotaAccounts = quotaAccounts
     }
 
     public static func list(_ json: JSONValue?) -> [UsageLimitSourceSnapshot] {
         (json?.arrayValue ?? []).compactMap { s in
-            guard let id = s["id"]?.stringValue, s["kind"]?.stringValue == "cliproxy", let label = s["label"]?.stringValue else { return nil }
+            let kind = s["kind"]?.stringValue
+            guard let id = s["id"]?.stringValue, kind == "cliproxy" || kind == "http", let label = s["label"]?.stringValue else { return nil }
             let accounts = (s["accounts"]?.arrayValue ?? []).compactMap { a -> UsageLimitSourceAccount? in
                 guard let id = a["id"]?.stringValue, let driver = a["driver"]?.stringValue,
                       let limits = ProviderUsageLimits(json: a["usageLimits"]) else { return nil }
                 return UsageLimitSourceAccount(id: id, driver: driver, email: a["email"]?.stringValue, plan: a["plan"]?.stringValue,
-                                               workspaceId: a["workspaceId"]?.stringValue, usageLimits: limits)
+                                               workspaceId: a["workspaceId"]?.stringValue,
+                                               models: a["models"]?.arrayValue?.compactMap(\.stringValue), usageLimits: limits)
+            }
+            let quotas = (s["quotaAccounts"]?.arrayValue ?? []).compactMap { a -> HttpQuotaAccount? in
+                guard let id = a["id"]?.stringValue, let label = a["label"]?.stringValue else { return nil }
+                let windows = (a["windows"]?.arrayValue ?? []).compactMap(UsageLimitWindow.init(json:))
+                return HttpQuotaAccount(id: id, label: label, providerInstanceId: a["providerInstanceId"]?.stringValue, windows: windows)
             }
             return UsageLimitSourceSnapshot(id: id, label: label, checkedAt: s["checkedAt"]?.stringValue ?? "", accounts: accounts,
-                                            error: s["error"]?.stringValue)
+                                            error: s["error"]?.stringValue, kind: kind!, origin: s["origin"]?.stringValue, quotaAccounts: quotas)
         }
     }
 }
@@ -725,4 +756,98 @@ public enum UsageLimitsLogic {
         for u in email.utf16 { hash = hash &* 31 &+ Int32(u) }
         return Int(abs(Int64(hash)) % 360)
     }
+}
+
+/// The thread details card's limits (5258 components/chat/ThreadDetailsUsage.logic.ts, #30778, #41291).
+public enum ThreadDetailsLimits: Equatable, Sendable {
+    case instance(ProviderUsageLimits)
+    case pool([UsageLimitPoolWindow])
+}
+
+extension UsageLimitsLogic {
+    /// `instanceHubs` (5258 usageLimits.ts:907-913): the hubs whose origin is the instance's endpoint.
+    public static func instanceHubs(_ provider: ServerProvider, _ sources: [UsageLimitSourceSnapshot]) -> [UsageLimitSourceSnapshot] {
+        guard let endpoint = provider.auth?["endpoint"]?.stringValue else { return [] }
+        return sources.filter { $0.origin == endpoint }
+    }
+
+    /// `hubRoutes` (5258 usageLimits.ts:916-939): the hub accounts that serve a model, those that list it, else
+    /// every account of the driver.
+    public static func hubRoutes(_ sources: [UsageLimitSourceSnapshot], driver: String, model: String?) -> (UsageLimitSourceAccount) -> Bool {
+        // Claude Code's 1M-context suffix is not part of the model id a hub routes.
+        let full = model?.replacingOccurrences(of: #"\[1m\]$"#, with: "", options: [.regularExpression, .caseInsensitive])
+        // A thinking suffix such as "gpt-5.2(high)" routes by its base model when one lists it.
+        let base = full?.replacingOccurrences(of: #"\([^)]*\)$"#, with: "", options: .regularExpression)
+        func lists(_ id: String?) -> Bool { sources.contains { $0.accounts.contains { $0.models?.contains(id ?? "") == true } } }
+        let slug = lists(base) ? base : full
+        func listed(_ a: UsageLimitSourceAccount) -> Bool { slug.map { a.models?.contains($0) == true } ?? false }
+        let serving = Set(sources.flatMap { $0.accounts.filter(listed).map(\.driver) })
+        // Aliases such as "opus" are listed by no hub, so no listing falls back to the driver.
+        if serving.isEmpty { return { $0.driver == driver && $0.models?.isEmpty != true } }
+        // An account whose model list was unreadable may serve the model too.
+        return { a in a.models != nil ? listed(a) : serving.contains(a.driver) || a.driver == driver }
+    }
+
+    /// `resolveThreadDetailsLimits` (5258 ThreadDetailsUsage.logic.ts:26-45): the instance's own limits, or for an
+    /// instance sent to a hub that reads none of its own, the pool of the accounts the hub spends on its model.
+    public static func threadDetailsLimits(instanceId: String?, model: String?, providers: [ServerProvider],
+                                           sources: [UsageLimitSourceSnapshot], nowMs: Int64) -> ThreadDetailsLimits? {
+        guard let provider = providers.first(where: { $0.instanceId.rawValue == instanceId }) else { return nil }
+        // ponytail: the report keeps 4928's driver match, not 5258's hub routing (usageLimits.ts:941-1070); the card
+        // reads only this instance's entry, so routing changes nothing here. Port it with the Usage page's hub view.
+        let report = UsageLimitsLogic.report(instanceId: provider.instanceId.rawValue, providers: providers, sources: sources, nowMs: nowMs)
+        guard let own = report?.accounts.first(where: { $0.instanceId == provider.instanceId.rawValue })?.limits ?? provider.usageLimits else {
+            return nil
+        }
+        let hubs = instanceHubs(provider, sources)
+        if notice(own) == nil || hubs.isEmpty { return .instance(own) }
+        return hubPool(driver: provider.driver, model: model, providers: providers, hubs: hubs, nowMs: nowMs) ?? .instance(own)
+    }
+
+    /// `hubPool` (5258 ThreadDetailsUsage.logic.ts:74-111).
+    static func hubPool(driver: String, model: String?, providers: [ServerProvider], hubs: [UsageLimitSourceSnapshot], nowMs: Int64) -> ThreadDetailsLimits? {
+        let routes = hubRoutes(hubs, driver: driver, model: model)
+        let routed = hubs.map { s -> UsageLimitSourceSnapshot in var s = s; s.accounts = s.accounts.filter(routes); return s }
+        let readable = routed.flatMap(\.accounts).filter { notice($0.usageLimits) == nil }
+        guard !readable.isEmpty else { return nil }
+        // A signed-in login joins only as a fresher reading of an account the hub routes to.
+        let signedIn = providers.filter { p in
+            readable.contains { a in
+                a.driver == p.driver && a.workspaceId == authWorkspace(p) && a.email != nil && a.email?.lowercased() == authEmail(p)?.lowercased()
+            }
+        }
+        let env = UsageLimitsEnvironment(environmentId: "thread-details", label: "", providers: signedIn, sources: routed)
+        let pools = UsageLimitsLogic.pools(accounts([env]), nowMs: nowMs)
+        return pools.isEmpty ? nil : .pool(pools.flatMap(displayWindows))
+    }
+
+    /// `resolveThreadHttpQuotas` (5258 ThreadDetailsUsage.logic.ts:47-64): an `http` source's windows for this instance.
+    public static func threadHttpQuotas(instanceId: String?, sources: [UsageLimitSourceSnapshot]) -> [(key: String, accountLabel: String, window: UsageLimitWindow)] {
+        guard let instanceId else { return [] }
+        return sources.filter { $0.kind == "http" }.flatMap { s in
+            s.quotaAccounts.filter { $0.providerInstanceId == instanceId }.flatMap { a in
+                a.windows.map { (key: "\(s.id)|\(a.id)|\($0.id)", accountLabel: a.label, window: $0) }
+            }
+        }
+    }
+
+    /// `nextPoolReset` (5258 ThreadDetailsUsage.logic.ts:66-72): a pooled window skips resets that restore nothing.
+    public static func nextPoolReset(_ w: UsageLimitPoolWindow, nowMs: Int64) -> UsageLimitPoolWindow.Reset? {
+        let pooled = w.members.count > 1
+        return w.resets.first { $0.at > nowMs && (!pooled || $0.restoresPercent > 0) }
+    }
+
+    /// `poolSources` (5258 ThreadDetailsUsage.logic.ts:113-119): the hubs the pool reads, and whether a login joins.
+    public static func poolSources(_ w: UsageLimitPoolWindow) -> (hubs: [String], signedIn: Bool) {
+        var hubs: [String] = []
+        for m in w.members where m.account.environments.isEmpty {
+            if let l = m.account.sourceLabel, !hubs.contains(l) { hubs.append(l) }
+        }
+        return (hubs, w.members.contains { !$0.account.environments.isEmpty })
+    }
+}
+
+extension UsageLimitPoolWindow {
+    /// `members`: the columns whose account reports this window.
+    public var members: [Column] { columns.filter { $0.window != nil } }
 }

@@ -188,6 +188,14 @@ public final class BranchPickerView: DSView, PickerPopupBody {
         maybeLoadMore()
     }
 
+    /// `ComboboxSearchInput` is a `label` (#33110, ui/combobox.tsx:109 at 5258): its padding focuses the field.
+    public override func mouseDown(with event: NSEvent) {
+        guard convert(event.locationInWindow, from: nil).y < Self.searchHeight else { return super.mouseDown(with: event) }
+        window?.makeFirstResponder(search)
+    }
+
+    public override func resetCursorRects() { addCursorRect(NSRect(x: 0, y: 0, width: bounds.width, height: Self.searchHeight), cursor: .iBeam) }
+
     public override func scrollWheel(with event: NSEvent) {
         scrollOffset = min(max(0, scrollOffset - event.scrollingDeltaY), maxScroll)
         needsLayout = true
