@@ -125,6 +125,9 @@ public enum ThemeRuntime {
     public private(set) static var ditherPicture: URL?
     public nonisolated static func isDither(dark: Bool) -> Bool { dark ? ditherFlags.dark : ditherFlags.light }
     nonisolated(unsafe) private static var ditherFlags = (light: false, dark: false)
+    /// This app's name where copy means the client: CandyWrapper under Redesign. The default themes keep T3's wording,
+    /// which their fidelity tests pin.
+    public nonisolated static func appName(dark: Bool) -> String { isDither(dark: dark) ? "CandyWrapper" : "T3 Code" }
     /// Whether project and account avatars without a picture draw `PixelSprites`: Redesign with "Project avatars" on Sprites.
     public nonisolated static func drawsSprites(dark: Bool) -> Bool { isDither(dark: dark) && spritesOn }
     nonisolated(unsafe) private static var spritesOn = true

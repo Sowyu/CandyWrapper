@@ -394,6 +394,7 @@ extension SettingsController {
     /// `useAvailableSettingsSearchItems` for this client.
     func searchAvailability() -> SettingsSearchAvailability {
         var a = SettingsSearchAvailability()
+        a.redesign = isDither
         a.hasEnvironment = !environments.environmentIds.isEmpty
         a.hasThreadAutoSettlement = environments.environmentIds.contains { composer?.config($0)?.capabilities.contains("threadAutoSettlement") == true }
         a.hasCloudPublicConfig = t3.loaded

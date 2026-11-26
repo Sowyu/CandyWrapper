@@ -88,7 +88,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             guard let self else { return }
             let lib = self.themes
             if let redesignNotice {
-                let message = Self.redesignNotice(lib.redesignAppearances)
+                let message = Self.redesignNotice(lib.redesignAppearances, under: self.underlyingName())
                 redesignNotice.isHidden = message == nil
                 if let message, redesignNotice.message != message { redesignNotice.message = message; self.onHeightChange?() }
             }
@@ -102,8 +102,9 @@ public final class AppearanceSettingsView: SettingsPageBase {
             // Rebuilt only when what the cards show changed. The cards are compared as values: a dictionary's
             // description changes order between equal instances, so a string key rebuilt them on every refresh.
             let custom = lib.customThemes + lib.environmentThemes.filter { theme in !lib.customThemes.contains { $0.id == theme.id } }
-            let next = ThemeGridContent(picked: [lib.pickedModes(nil)] + (Self.gridBuiltIns + custom).map { lib.pickedModes($0.id) },
-                                        custom: custom.map(ThemeCardDefinition.init), accent: ThemeRuntime.ditherAccent.id)
+            let next = ThemeGridContent(picked: [self.ringed(nil)] + (Self.gridBuiltIns + custom).map { self.ringed($0.id) },
+                                        custom: custom.map(ThemeCardDefinition.init), accent: ThemeRuntime.ditherAccent.id,
+                                        redesign: Self.ordered(lib.redesignAppearances))
             guard next != shown, let grid else { return }
             shown = next
             grid.cards = self.themeCards(custom)
@@ -116,18 +117,36 @@ public final class AppearanceSettingsView: SettingsPageBase {
         return s
     }
 
-    private var themes: ThemeLibrary { ThemeLibrary.shared }
+    /// Tests render the grid from their own library.
+    var themes = ThemeLibrary.shared
 
-    /// The grid's built-in cards: Redesign has none, since Settings > Redesign turns it on and off.
+    /// The grid's built-in cards: Redesign has none, since Settings > Redesign turns it on and off. While it is on, a
+    /// Redesign card leads the grid to show where it paints, and opens that page (`redesignCard`).
     static let gridBuiltIns = ThemeDefinition.pickerBuiltIns.filter { !$0.isDither }
 
-    /// The line under the Theme heading while Redesign paints an appearance; nil while it is off.
-    static func redesignNotice(_ on: Set<ThemeAppearance>) -> String? {
+    /// The line under the Theme heading while Redesign paints an appearance; nil while it is off. `under` names the
+    /// theme that shows when Redesign is off, which no card rings while Redesign paints both appearances.
+    static func redesignNotice(_ on: Set<ThemeAppearance>, under: String? = nil) -> String? {
         switch on.count {
         case 0: nil
         case 1: "Redesign is on in \(on.first!.rawValue) mode, so the theme you pick here shows in \(on.first!.other.rawValue) mode and when Redesign is off."
-        default: "Redesign is on, so the theme you pick here shows when Redesign is off."
+        default: under.map { "Redesign is on. When you turn it off, you get \($0). Pick a theme here to change that." }
+            ?? "Redesign is on, so the theme you pick here shows when Redesign is off."
         }
+    }
+
+    static func ordered(_ modes: Set<ThemeAppearance>) -> [ThemeAppearance] { ThemeAppearance.allCases.filter(modes.contains) }
+
+    /// A card's rings: the appearances it shows on screen. Redesign's card takes the ones Redesign paints.
+    private func ringed(_ cardId: String?) -> [ThemeAppearance] {
+        let on = themes.redesignAppearances
+        return themes.pickedModes(cardId).filter { !on.contains($0) }
+    }
+
+    /// The theme or themes under Redesign, by card name: "Ocean", or "Ocean in light mode and Ember in dark mode".
+    private func underlyingName() -> String {
+        let names = ThemeAppearance.allCases.map { a in themes.underlyingOwnerCard(a).flatMap { themes.definition($0)?.label } ?? ThemeCardDefinition.standard.label }
+        return names[0] == names[1] ? names[0] : "\(names[0]) in light mode and \(names[1]) in dark mode"
     }
 
     /// What the theme grid shows: each card's picked modes and the saved and published cards.
@@ -136,17 +155,31 @@ public final class AppearanceSettingsView: SettingsPageBase {
         var custom: [ThemeCardDefinition]
         /// Redesign's card draws the accent, so a new accent rebuilds the cards.
         var accent = ""
+        /// The appearances Redesign paints; its card shows while any does.
+        var redesign: [ThemeAppearance] = []
+    }
+
+    /// Redesign's card while it is on: rings where it paints, and a click opens Settings > Redesign, the one place that
+    /// turns it on and off.
+    private func redesignCard(_ on: [ThemeAppearance]) -> ThemeLibraryCardView {
+        let open: @MainActor @Sendable () -> Void = { [weak self] in self?.context.openSection?(.redesign) }
+        let card = ThemeLibraryCardView(card: ThemeCardDefinition(ThemeDefinition.dither), picked: on, actions: .init(use: open, useMode: { _ in open() }))
+        TooltipController.attach(to: card, text: "Open Redesign settings")
+        card.setAccessibilityHelp("Redesign is on. Opens Redesign settings.")
+        return card
     }
 
     private func themeCards(_ custom: [ThemeDefinition]) -> [ThemeLibraryCardView] {
         let lib = themes
         let appearance = lib.resolvedAppearance
         let editor = ThemeEditorController.shared
-        var cards = [ThemeLibraryCardView(card: .standard, picked: lib.pickedModes(nil), actions: .init(
+        let redesign = Self.ordered(lib.redesignAppearances)
+        var cards = redesign.isEmpty ? [] : [redesignCard(redesign)]
+        cards.append(ThemeLibraryCardView(card: .standard, picked: ringed(nil), actions: .init(
             use: { lib.keepingRedesign { lib.useStandard() } }, useMode: { a in lib.keepingRedesign { lib.assignHalf(a, nil) } },
-            duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: nil, seedName: "T3 Code copy", initialAppearance: appearance)) }))]
+            duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: nil, seedName: "T3 Code copy", initialAppearance: appearance)) })))
         for theme in Self.gridBuiltIns {
-            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: .init(
+            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: ringed(theme.id), actions: .init(
                 use: { lib.keepingRedesign { lib.setTheme(theme.id) } }, useMode: { a in lib.keepingRedesign { lib.assignHalf(a, theme.id) } },
                 duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: theme.id, seedName: "\(theme.label) copy", initialAppearance: appearance)) })))
         }
@@ -160,7 +193,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             if !lib.customThemes.contains(where: { $0.id == theme.id }) {
                 actions.edit = nil; actions.export = nil; actions.remove = nil
             }
-            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: lib.pickedModes(theme.id), actions: actions))
+            cards.append(ThemeLibraryCardView(card: ThemeCardDefinition(theme), picked: ringed(theme.id), actions: actions))
         }
         return cards
     }
@@ -239,12 +272,6 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  key: "appearanceContrast", range: 50...200, step: 5, reset: "contrast")
         let glass = sliderRow("setting-glass-opacity", "Higher values make menus, dialogs, and the composer more solid.",
                               key: "glassOpacity", range: 10...100, step: 5, reset: "glass opacity")
-        // Redesign's surfaces are solid, so with Redesign in both appearances the slider changes nothing.
-        binder.add { [weak glass] in
-            let solid = ThemeRuntime.isDither(dark: true) && ThemeRuntime.isDither(dark: false)
-            let reason = solid ? "Redesign's menus, dialogs and composer are solid. Glass opacity applies to the other themes." : nil
-            if glass?.inertReason != reason { glass?.inertReason = reason }
-        }
         let modern = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         let nightly = context.runtimeUpdate?.channel != .latest
         let artworkOptions: [(String, String)] = !modern ? [("artwork", "Artwork"), ("pill", "Version pill"), ("none", "None")]
@@ -288,50 +315,75 @@ public final class AppearanceSettingsView: SettingsPageBase {
             var interface: [NSView & SettingsGroupRow] = [contrast, glass, width, htmlWidth, threadDetailsRow()]
             if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
                 // AppearanceSettingsPanel.tsx:275-306 at 3824: the effort row sits between chat width and math.
-                let effort = clientSelect("effort-display", "Show reasoning effort in the composer as its name, such as High, or as bars.", key: "effortDisplay",
-                                          options: [("label", "Word (default)"), ("bars", "Bars")], width: 160, reset: "effort display", hideIndicator: false)
-                (effort.control as? SelectView)?.valueLabels = ["Word", "Bars"]
-                interface.append(effort)
+                interface.append(effortRow())
             }
             interface += [math, appIconRow(), appIconAppearanceRow(), advanced]
             return section("appearance-interface", "Interface", interface)
         }
-        return section("appearance-interface", "Interface", [contrast, glass, identification, diff, strip, width, htmlWidth, threadDetailsRow(), math,
-                                                              appIconRow(), appIconAppearanceRow()])
+        var rows: [NSView & SettingsGroupRow] = [contrast, glass, identification, diff, strip, width, htmlWidth, threadDetailsRow(), math,
+                                                 appIconRow(), appIconAppearanceRow()]
+        // Redesign's composer uses the same model button, which reads Effort display (ComposerPickers.swift:192).
+        if !modern { rows.insert(effortRow(), at: 8) }
+        // This branch also builds the default themes' partial pages, which keep every row.
+        return section("appearance-interface", "Interface", modern ? rows : redesignRows(rows))
+    }
+
+    private func effortRow() -> SettingsRowView {
+        let effort = clientSelect("effort-display", "Show reasoning effort in the composer as its name, such as High, or as bars.", key: "effortDisplay",
+                                  options: [("label", "Word (default)"), ("bars", "Bars")], width: 160, reset: "effort display", hideIndicator: false)
+        (effort.control as? SelectView)?.valueLabels = ["Word", "Bars"]
+        return effort
+    }
+
+    /// Redesign leaves out the rows that change nothing on its surfaces (`SettingsSearch.hiddenUnderRedesign`), anchors
+    /// too. Settings builds the page again when Redesign comes on or goes off, so a row comes back with its stored value.
+    private func redesignRows(_ rows: [NSView & SettingsGroupRow]) -> [NSView & SettingsGroupRow] {
+        let hidden = SettingsSearch.hiddenUnderRedesign.compactMap { anchors[$0] }
+        SettingsSearch.hiddenUnderRedesign.forEach { anchors[$0] = nil }
+        return rows.filter { row in !hidden.contains { $0 === row } }
     }
 
     /// `ThreadDetailsItemsRow` (4928 settings/ThreadDetailsItemsRow.tsx:17-63, #26904): "N of 12 on" opens the
     /// card's items menu, with a reset while any differs from the default.
     // ponytail: the row has no search entry until gen-settings-search.py reads 4928's `msg()` titles
+    /// Redesign has no details card: the same items show and hide the header's actions menu, its change totals and the
+    /// Thread details dropdown, so the row says that and counts only the items Redesign shows.
     private func threadDetailsRow() -> SettingsRowView {
-        let total = ThreadDetailsItems.all.count
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let offered = ThreadDetailsItems.items(redesign: redesign)
+        let total = offered.count
         let trigger = ButtonView("", variant: .outline, size: .sm).menuTrigger()
         trigger.trailingIcon = .chevronDown
         trigger.justifiesBetween = true
         trigger.frame.size.width = 160  // `sm:w-40`
-        let r = row(nil, title: "Thread details", detail: "Choose what the thread details card shows. You can also right-click the card.",
-                    control: trigger)
+        let detail = redesign ? Self.redesignThreadDetailsDetail : "Choose what the thread details card shows. You can also right-click the card."
+        let r = row(nil, title: "Thread details", detail: detail, control: trigger)
         anchors["thread-details-items"] = r
         let slot = ResetSlot(label: "thread details")
         slot.tooltip = "Reset thread details to default"
         r.accessories = [slot]
-        slot.action = { [weak self] in self?.context.writeClient?(ThreadDetailsItems.reset) }
+        slot.action = { [weak self] in
+            guard let self else { return }
+            self.context.writeClient?(ThreadDetailsItems.reset(self.client, redesign: redesign))
+        }
         trigger.action = { [weak self, weak trigger] in
             guard let self, let trigger else { return }
-            let items = ThreadDetailsItems.menuItems(settings: { [weak self] in self?.client ?? .defaults },
+            let items = ThreadDetailsItems.menuItems(redesign: redesign, settings: { [weak self] in self?.client ?? .defaults },
                                                      write: { [weak self] patch in self?.context.writeClient?(patch) })
             MenuPopupView.show(items, from: trigger, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
         }
         binder.add(read: { [weak self] () -> [String: Bool] in self.map { ThreadDetailsItems.visibility($0.client) } ?? [:] },
                    update: { [weak trigger, weak slot, weak r] shown in
-            let enabled = ThreadDetailsItems.all.filter { shown[$0.id] == true }.count
+            let enabled = offered.filter { shown[$0.id] == true }.count
             trigger?.title = "\(enabled) of \(total) on"
             trigger?.setAccessibilityLabel("Thread details: \(enabled) of \(total) on")
-            slot?.isShown = !ThreadDetailsItems.isDefault(shown)
+            slot?.isShown = !ThreadDetailsItems.isDefault(shown, redesign: redesign)
             r?.needsLayout = true
         })
         return r
     }
+
+    static let redesignThreadDetailsDetail = "Choose what the header's actions menu, its change totals and the Thread details dropdown show. You can also right-click the dropdown."
 
     private func sliderRow(_ id: String, _ detail: String, key: String, range: ClosedRange<Double>, step: Double, reset: String,
                            unit: String = "%", outputWidth: CGFloat = 48) -> SettingsRowView {
@@ -353,8 +405,13 @@ public final class AppearanceSettingsView: SettingsPageBase {
 
     // MARK: Motion
 
+    /// Under Redesign, 0 ms keeps its own motion for the right panel and terminal (`RedesignMotion.panel`, ThreadPanelView
+    /// `setPanelState` and `setTerminal`) and opens the sidebar at once; a longer time slides all three over it.
+    static let redesignMotionDetail = "At 0 ms the right panel and terminal use Redesign's own motion and the sidebar opens at once. Longer times slide all three."
+
     private func motionSection() -> SettingsSectionView {
-        let r = sliderRow("panel-animations", "Set how fast panels open and close.", key: "panelAnimationDurationMs", range: 0...400, step: 25,
+        let detail = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? Self.redesignMotionDetail : "Set how fast panels open and close."
+        let r = sliderRow("panel-animations", detail, key: "panelAnimationDurationMs", range: 0...400, step: 25,
                           reset: "panel animations", unit: "ms", outputWidth: 64)
         (r.control as? SettingsSliderControl)?.slider.setAccessibilityLabel("Panel animation duration")
         // `grid-cols-[7rem_13rem] gap-4` (SettingsPanels.tsx:1466): the preview, then the output and slider.
@@ -384,6 +441,8 @@ public final class AppearanceSettingsView: SettingsPageBase {
     private func typographySection() -> SettingsSectionView {
         let s = SettingsSectionView(title: "Typography", rows: (isAdvanced ? advancedRows : simpleRows) + [wordWrap])
         anchors["typography"] = s
+        // "Separate fonts" is the Advanced switch in this section's header.
+        anchors["separate-fonts"] = s
         let header = AdvancedToggleView(switchView: advancedSwitch)
         advancedSwitch.isOn = isAdvanced
         advancedSwitch.setAccessibilityLabel("Show advanced typography settings")
