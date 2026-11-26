@@ -84,9 +84,10 @@ public final class BetaSettingsView: SettingsPageBase {
             guard let self, let suggestions else { return }
             suggestions.isHidden = !self.context.scope.allStore("promptSuggestionsEnabled")
         }
+        let (workflows, skippedRuns) = workflowRows()
         let feedback = agentFeedbackRow()
         // #33131 removed the Legacy features section: plan mode and the context window indicator.
-        items = [section("beta", "Beta", [folders, multiline, guest, linked, suggestions, feedback]), candySection()]
+        items = [section("beta", "Beta", [folders, multiline, guest, linked, workflows, skippedRuns, suggestions, feedback]), candySection()]
         binder.refresh()
     }
 
@@ -116,6 +117,37 @@ public final class BetaSettingsView: SettingsPageBase {
                 : modes.first { $0.value == mode }?.detail ?? modes[0].detail
         }
         return row
+    }
+
+    static let workflowsDetail = "Run multi-step workflows from files in the workflows folder of this server's T3 home. Open them from the command palette. While off, nothing in that folder runs; runs wait until it is on again."
+
+    /// `WorkflowsRow` and `WorkflowSkippedRunsRow` (5258 LabsSettingsPanel.tsx:212-290, e414cfd4be #38882, c6162da7ec
+    /// #42353). Servers before 5258 don't store the switch, so it waits for one that does; the number shows only
+    /// while workflows are on.
+    private func workflowRows() -> (SettingsRowView, SettingsRowView) {
+        let workflows = serverSwitch("workflows-beta", Self.workflowsDetail, key: "workflowsEnabled", reset: nil, label: "Workflows")
+        let field = NumberFieldView(value: 500, size: .sm)
+        field.range = 0 ... 10_000
+        // `w-24`.
+        field.frame.size = NSSize(width: 96, height: 28)
+        field.setAccessibilityLabel("Skipped runs kept")
+        let kept = row("workflow-skipped-runs",
+                       detail: "How many skipped runs each workflow keeps in its history. Older skipped runs are deleted; runs that did something are always kept.",
+                       control: SettingsControlGroup([field]))
+        _ = bindServerRow(kept, keys: ["workflowSkippedRunsKept"], reset: "skipped runs kept")
+        field.onChange = { [weak self] value in
+            guard let self, value.rounded() == value, self.context.scope.isMixed(["workflowSkippedRunsKept"]) || value != self.server["workflowSkippedRunsKept"].doubleValue else { return }
+            self.context.patchServer(["workflowSkippedRunsKept": .number(value)])
+        }
+        binder.add { [weak self, weak workflows, weak kept, weak field] in
+            guard let self, let workflows, let kept, let field else { return }
+            workflows.isHidden = !self.context.scope.allStore("workflowsEnabled")
+            kept.isHidden = workflows.isHidden || !self.server.bool("workflowsEnabled")
+            // ponytail: a mixed scope shows the first value, not T3's empty "Mixed" field; add a placeholder to
+            // NumberFieldView when someone edits several machines at once here.
+            if !field.isFirstResponderInside { field.value = self.server["workflowSkippedRunsKept"].doubleValue ?? 500 }
+        }
+        return (workflows, kept)
     }
 
     private func candySection() -> SettingsSectionView {
