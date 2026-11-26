@@ -585,7 +585,9 @@ public struct ThreadMenuItem: Sendable, Equatable {
     public var separatorBefore = false
     public var checked: Bool?
     public var children: [ThreadMenuItem] = []
-    /// One line under the label and as its tooltip, saying what the item does.
+    /// Muted text after the label, like a snooze preset's time. Menus draw it in the shortcut column
+    /// (contextMenuFallback.ts:490-498), native menus as "label (detail)" (ElectronMenu.ts:81-83), and the
+    /// palette as the row's second line (CommandPaletteThreadActions.tsx:100-107).
     public var detail: String?
     /// The row's tooltip alone, without the line under the label.
     public var tooltip: String?
@@ -645,7 +647,7 @@ public enum ThreadActionMenu {
                 items.append(.init("unsnooze", "Wake thread"))
             } else {
                 items.append(.init("snooze", "Snooze", disabled: !s.canSnoozeNow,
-                                   children: s.snoozePresets.map { .init("snooze:\($0.id)", "\($0.label) (\($0.whenLabel))") }
+                                   children: s.snoozePresets.map { .init("snooze:\($0.id)", $0.label, detail: $0.whenLabel) }
                                        + [.init("snooze:custom", "Custom…", separatorBefore: true)]))
             }
         }
@@ -665,8 +667,9 @@ public enum ThreadActionMenu {
         if s.canTurnIntoProject { items.append(.init("turn-into-project", "Turn into project", disabled: s.isRunning)) }
         if s.supportsAutoSettleOptOut {
             items.append(.init("auto-settle", "Auto-settle behavior", children: [
-                .init("auto-settle:enabled", "Enabled", checked: s.autoSettleEnabled),
-                .init("auto-settle:disabled", "Disabled", checked: !s.autoSettleEnabled),
+                // threadActionMenu.logic.ts:270-279 (5258).
+                .init("auto-settle:enabled", "Follow settings", checked: s.autoSettleEnabled),
+                .init("auto-settle:disabled", "Never", checked: !s.autoSettleEnabled),
             ]))
         }
         var copy: [ThreadMenuItem] = [.init("copy-path", "Path")]

@@ -1,4 +1,5 @@
 import Testing
+import T3Protocol
 @testable import Features
 
 /// A send waits for pasted images to finish preparing (T3 5258 ComposerHeldSendBanner.tsx, #40672).
@@ -29,5 +30,26 @@ struct ComposerHeldSendTests {
         #expect(composer.primary.face != .busy)
         _ = composer.onHeldSendEscape?()
         #expect(cancelled == 1)
+    }
+}
+
+/// preparingComposerImages.ts:193-205 (5258): a model, provider, access or plan mode change cancels a held send.
+@MainActor
+struct ComposerHeldSendSelectionTests {
+    @Test func aPickChangesTheHeldSelection() throws {
+        let pickers = try Screen3824Fixtures.pickers()
+        let held = pickers.heldSendSelection
+        var notified = 0
+        pickers.onChange = { _ in notified += 1 }
+        pickers.update()
+        #expect(pickers.heldSendSelection == held)
+        let other = try #require(pickers.current.runtimeModeOptions.first { $0 != pickers.current.runtimeMode })
+        pickers.store.setRuntimeMode("3824", other)
+        pickers.update()
+        #expect(pickers.heldSendSelection != held)
+        let access = pickers.heldSendSelection
+        pickers.select(ProviderInstanceId(rawValue: "codex"), model: "gpt-6-astra")
+        #expect(notified > 0)
+        #expect(pickers.heldSendSelection != access)
     }
 }

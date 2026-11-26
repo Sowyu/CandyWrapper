@@ -37,5 +37,7 @@ struct PaletteThreadActionsTests {
         #expect(snooze?.isDisabled == true)
         guard case .submenu(let page)? = snooze?.action else { Issue.record("Snooze is a submenu"); return }
         #expect(page.groups[0].items.allSatisfy { $0.isDisabled })
+        // CommandPaletteThreadActions.tsx:100-107: the preset's time is the row's description.
+        #expect(page.groups[0].items.first?.title == "Later" && page.groups[0].items.first?.description == "6:00 PM")
     }
 }

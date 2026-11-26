@@ -64,6 +64,19 @@ public final class ComposerPickers {
     public var workspaceModelsScanning = false { didSet { if workspaceModelsScanning != oldValue { modelPicker?.workspaceModelsScanning = workspaceModelsScanning } } }
 
     public var currentMultiple: [ModelSelection]? { supportsMultipleModels ? multipleSelections[draftKey] : nil }
+    /// What a held send compares: a change to any of it cancels the send (`holdComposerSend`,
+    /// preparingComposerImages.ts:193-205 at 5258, and the fan-out at ChatComposer.tsx:763-768).
+    public struct HeldSendSelection: Equatable {
+        let instanceId: ProviderInstanceId?
+        let modelSelection: ModelSelection?
+        let runtimeMode: RuntimeMode
+        let interactionMode: InteractionMode
+        let multiple: [ModelSelection]?
+    }
+    public var heldSendSelection: HeldSendSelection {
+        HeldSendSelection(instanceId: current.instanceId, modelSelection: current.modelSelection, runtimeMode: current.runtimeMode,
+                          interactionMode: current.interactionMode, multiple: currentMultiple)
+    }
     /// The fan-out changed (models added, removed or cleared).
     public final var onMultipleChange: (@MainActor () -> Void)?
 

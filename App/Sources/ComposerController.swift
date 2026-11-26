@@ -343,7 +343,7 @@ final class ComposerController {
     /// The response each thread's draft replies to (`replyTo` in composerDraftStore.ts at 4928), saved to `composer.replyTo.v1`.
     private var replyTargets: [String: JSONValue] { get { shared.replyTargets } _modify { yield &shared.replyTargets } }
     /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
-    private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
+    private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool, selection: ComposerPickers.HeldSendSelection)] = [:]
     /// Finished images are going into the draft, which is not an edit that cancels a held send (`joinPreparedImagesToDraft`).
     private var joiningPreparedImages = false
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
@@ -486,6 +486,11 @@ final class ComposerController {
         panel.errorBanner.onOpenURL = { url in NSWorkspace.shared.open(url) }
         composer.historyMessages = { [weak self] in self?.historyMessages() ?? [] }
         pickers.onChange = { [weak self] _ in
+            // A model, provider, access or plan mode change drops a held send (preparingComposerImages.ts:193-205).
+            if let self, let key = self.draftKey, let held = self.sendAfterPreparing[key], self.pickers.draftKey == key,
+               held.selection != self.pickers.heldSendSelection {
+                self.cancelHeldSend(key)
+            }
             self?.updateStripPermissions()
             self?.composer.needsLayout = true
             self?.onTargetChange?()
@@ -2079,7 +2084,7 @@ final class ComposerController {
         // A send now would leave a still-compressing image out of the turn, so it waits and goes once they finish
         // (#37547, ChatComposer.tsx `useSubmitAfterPreparingImages` at 4928).
         if let key = draftKey, (preparingImages[key] ?? 0) > 0 {
-            sendAfterPreparing[key] = (mode, background)
+            sendAfterPreparing[key] = (mode, background, pickers.heldSendSelection)
             updateHeldSend()
             return
         }
