@@ -1,0 +1,65 @@
+{
+ "component": "sidebar-update-capsule",
+ "sourceVersion": "v0.1.13-nightly.20261125.5258",
+ "source": "apps/web/src/components/sidebar/SidebarUpdateCapsule.tsx",
+ "states": [
+  "rest"
+ ],
+ "themes": [
+  "light",
+  "dark"
+ ],
+ "cases": [
+  {
+   "name": "capsule.slow",
+   "html": "<div data-app-sidebar class=\"bg-sidebar text-sidebar-foreground\" style=\"width:150px;box-shadow:0 0 0 8px var(--sidebar)\"><ul class=\"flex w-full min-w-0 flex-row items-center gap-1\" style=\"width:150px\"><li data-slot=\"sidebar-menu-item\" data-sidebar=\"menu-item\" class=\"group/menu-item relative @container/sidebar-update ml-auto flex min-w-8 flex-1\"><div class=\"relative ml-auto flex h-8 w-8 shrink-0 items-center justify-end rounded-full bg-sidebar-control-surface text-sidebar-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none @min-[5rem]/sidebar-update:w-full ring-1 ring-warning/40 ring-inset\"><button type=\"button\" class=\"absolute inset-0 cursor-pointer rounded-full outline-hidden ring-ring hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset\"></button><span class=\"pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs @min-[5rem]/sidebar-update:block\"><span class=\"\">studio</span><span class=\"text-warning tabular-nums\"> 4m</span></span><span class=\"pointer-events-none relative grid size-8 shrink-0 place-items-center\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-arrow-up size-4\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <path d=\"m16 12-4-4-4 4\" />\n  <path d=\"M12 16V8\" /></svg></span></div></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "mode": "slow",
+    "label": "studio",
+    "elapsed": "4m",
+    "width": "150"
+   }
+  },
+  {
+   "name": "capsule.failed",
+   "html": "<div data-app-sidebar class=\"bg-sidebar text-sidebar-foreground\" style=\"width:150px;box-shadow:0 0 0 8px var(--sidebar)\"><ul class=\"flex w-full min-w-0 flex-row items-center gap-1\" style=\"width:150px\"><li data-slot=\"sidebar-menu-item\" data-sidebar=\"menu-item\" class=\"group/menu-item relative @container/sidebar-update ml-auto flex min-w-8 flex-1\"><div class=\"relative ml-auto flex h-8 w-8 shrink-0 items-center justify-end rounded-full bg-sidebar-control-surface text-sidebar-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none @min-[5rem]/sidebar-update:w-full ring-1 ring-destructive/40 ring-inset\"><button type=\"button\" class=\"absolute inset-0 cursor-pointer rounded-full outline-hidden ring-ring hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset\"></button><span class=\"pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs @min-[5rem]/sidebar-update:block\"><span class=\"text-destructive\">alvin failed</span></span><button type=\"button\" class=\"relative hidden shrink-0 cursor-pointer pr-3 pl-1.5 text-xs underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-current @min-[5rem]/sidebar-update:block\">Retry</button><span class=\"pointer-events-none relative grid size-8 shrink-0 place-items-center @min-[5rem]/sidebar-update:hidden\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-arrow-up size-4\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <path d=\"m16 12-4-4-4 4\" />\n  <path d=\"M12 16V8\" /></svg></span></div></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "mode": "failed",
+    "label": "alvin failed",
+    "width": "150"
+   }
+  },
+  {
+   "name": "capsule.countdown",
+   "html": "<div data-app-sidebar class=\"bg-sidebar text-sidebar-foreground\" style=\"width:200px;box-shadow:0 0 0 8px var(--sidebar)\"><ul class=\"flex w-full min-w-0 flex-row items-center gap-1\" style=\"width:200px\"><li data-slot=\"sidebar-menu-item\" data-sidebar=\"menu-item\" class=\"group/menu-item relative @container/sidebar-update ml-auto flex min-w-8 flex-1\"><div class=\"relative ml-auto flex h-8 w-8 shrink-0 items-center justify-end rounded-full bg-sidebar-control-surface text-sidebar-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none @min-[12rem]/sidebar-update:w-full\"><button type=\"button\" class=\"absolute inset-0 cursor-pointer rounded-full outline-hidden ring-ring hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset\"></button><span class=\"pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs @min-[12rem]/sidebar-update:block\"><span class=\"\">Restart in 9s</span></span><button type=\"button\" class=\"relative hidden shrink-0 cursor-pointer pr-3 pl-1.5 text-xs underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-current @min-[12rem]/sidebar-update:block\">Later</button><span class=\"pointer-events-none relative grid size-8 shrink-0 place-items-center @min-[12rem]/sidebar-update:hidden rounded-full text-xs font-medium tabular-nums ring-1 ring-current/22 ring-inset\">9s</span></div></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "mode": "countdown",
+    "label": "Restart in 9s",
+    "width": "200"
+   }
+  },
+  {
+   "name": "capsule.countdown.narrow",
+   "html": "<div data-app-sidebar class=\"bg-sidebar text-sidebar-foreground\" style=\"width:120px;box-shadow:0 0 0 8px var(--sidebar)\"><ul class=\"flex w-full min-w-0 flex-row items-center gap-1\" style=\"width:120px\"><li data-slot=\"sidebar-menu-item\" data-sidebar=\"menu-item\" class=\"group/menu-item relative @container/sidebar-update ml-auto flex min-w-8 flex-1\"><div class=\"relative ml-auto flex h-8 w-8 shrink-0 items-center justify-end rounded-full bg-sidebar-control-surface text-sidebar-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none @min-[12rem]/sidebar-update:w-full\"><button type=\"button\" class=\"absolute inset-0 cursor-pointer rounded-full outline-hidden ring-ring hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset\"></button><span class=\"pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs @min-[12rem]/sidebar-update:block\"><span class=\"\">Restart in 9s</span></span><button type=\"button\" class=\"relative hidden shrink-0 cursor-pointer pr-3 pl-1.5 text-xs underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-current @min-[12rem]/sidebar-update:block\">Later</button><span class=\"pointer-events-none relative grid size-8 shrink-0 place-items-center @min-[12rem]/sidebar-update:hidden rounded-full text-xs font-medium tabular-nums ring-1 ring-current/22 ring-inset\">9s</span></div></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "mode": "countdown",
+    "label": "Restart in 9s",
+    "width": "120"
+   }
+  },
+  {
+   "name": "capsule.narrow",
+   "html": "<div data-app-sidebar class=\"bg-sidebar text-sidebar-foreground\" style=\"width:60px;box-shadow:0 0 0 8px var(--sidebar)\"><ul class=\"flex w-full min-w-0 flex-row items-center gap-1\" style=\"width:60px\"><li data-slot=\"sidebar-menu-item\" data-sidebar=\"menu-item\" class=\"group/menu-item relative @container/sidebar-update ml-auto flex min-w-8 flex-1\"><div class=\"relative ml-auto flex h-8 w-8 shrink-0 items-center justify-end rounded-full bg-sidebar-control-surface text-sidebar-foreground transition-[width] duration-200 ease-out motion-reduce:transition-none @min-[5rem]/sidebar-update:w-full\"><button type=\"button\" class=\"absolute inset-0 cursor-pointer rounded-full outline-hidden ring-ring hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset\"></button><span class=\"pointer-events-none relative hidden min-w-0 flex-1 truncate pl-3 text-xs @min-[5rem]/sidebar-update:block\"><span class=\"\">1 of 2 updated</span></span><span class=\"pointer-events-none relative grid size-8 shrink-0 place-items-center\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-arrow-up size-4\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\" />\n  <path d=\"m16 12-4-4-4 4\" />\n  <path d=\"M12 16V8\" /></svg></span></div></li></ul></div>",
+   "wrapperStyle": "display:block",
+   "native": {
+    "mode": "progress",
+    "label": "1 of 2 updated",
+    "width": "60"
+   }
+  }
+ ]
+}

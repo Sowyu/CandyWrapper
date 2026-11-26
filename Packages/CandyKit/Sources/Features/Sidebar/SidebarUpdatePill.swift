@@ -34,15 +34,38 @@ public final class SidebarUpdatePillView: ControlView {
     public var run: (tooltip: String, installsLocal: Bool)? { didSet { if run?.tooltip != oldValue?.tooltip || run?.installsLocal != oldValue?.installsLocal { refresh() } } }
     public var onEverything: (() -> Void)?
 
+    /// The pass as a capsule (`SidebarUpdateCapsule`), nil while no pass shows. The sidebar sizes the pill to
+    /// `capsuleWidth(available:)` while it is set.
+    public var capsule: SidebarUpdateCapsule? { didSet { if capsule != oldValue { capsuleChanged(from: oldValue) } } }
+    /// Later, Retry or Dismiss, from the capsule's link or its popover.
+    public var onCapsuleAction: ((SidebarUpdateCapsule.Action) -> Void)?
+    /// The popover's ghost Dismiss beside Retry.
+    public var onCapsuleDismiss: (() -> Void)?
+    /// The popover's Restart to update, once this app's download waits.
+    public var onCapsuleRestart: (() -> Void)?
+    /// The capsule grew or shrank: the sidebar lays the row out again.
+    public var onCapsuleLayoutChange: (() -> Void)?
+    let capsuleFill = CAShapeLayer()
+    let capsuleHover = CAShapeLayer()
+    let capsuleRing = CAShapeLayer()
+    let capsuleLabel = LabelView("", font: DSFont.ui(12))
+    let capsuleLink = SidebarUpdateCapsuleLink()
+    let countdownLabel = LabelView("", font: DSFont.ui(12, weight: .medium).monospacedDigits)
+    let countdownRing = CAShapeLayer()
+    var capsulePopup: OpenPopup?
+    /// The capsule's drawn width, to animate from.
+    var drawnCapsuleWidth: CGFloat?
+    var labelShown = false
+
     /// Covers the app, server and provider checks together.
     public var isCheckingForUpdates = false { didSet { if isCheckingForUpdates != oldValue { refresh() } } }
     private var shownIcon: IconStatus?
     private let decoration = BoxDecorationLayer()
-    private let iconBox = DSView()
+    let iconBox = DSView()
     private var glyph: IconView?
     private var spinner: SpinnerView?
-    private let ringTrack = CAShapeLayer()
-    private let ringArc = CAShapeLayer()
+    let ringTrack = CAShapeLayer()
+    let ringArc = CAShapeLayer()
     private let dotRing = CALayer()
     private let dot = CALayer()
     private let badge = CALayer()
@@ -74,6 +97,27 @@ public final class SidebarUpdatePillView: ControlView {
             l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
             iconBox.layer?.addSublayer(l)
         }
+        for l in [capsuleFill, capsuleHover, capsuleRing, countdownRing] {
+            l.actions = ["path": NSNull(), "fillColor": NSNull(), "strokeColor": NSNull(), "hidden": NSNull(), "frame": NSNull(),
+                         "bounds": NSNull(), "position": NSNull()]
+            l.isHidden = true
+            layer?.insertSublayer(l, at: 0)
+        }
+        capsuleRing.fillColor = nil
+        capsuleRing.lineWidth = 1
+        countdownRing.fillColor = nil
+        countdownRing.lineWidth = 1
+        // Fill under hover under the ring, all under the icon.
+        layer?.insertSublayer(capsuleRing, at: 0)
+        layer?.insertSublayer(capsuleHover, at: 0)
+        layer?.insertSublayer(capsuleFill, at: 0)
+        capsuleLabel.lineHeight = 16
+        countdownLabel.lineHeight = 16
+        countdownLabel.alignment = .center
+        for v in [capsuleLabel, countdownLabel] as [NSView] { v.isHidden = true; addSubview(v) }
+        capsuleLink.isHidden = true
+        capsuleLink.onPress = { [weak self] in self?.runCapsuleAction() }
+        addSubview(capsuleLink)
         setAccessibilityRole(.button)
         refresh()
     }
@@ -117,22 +161,23 @@ public final class SidebarUpdatePillView: ControlView {
     }
     var isInteractionDisabled: Bool { disabled || isActionPending || run != nil }
     /// During a run the tooltip shows its progress instead of release notes.
-    var showsReleaseNotes: Bool { !showCheckIcon && run == nil && DesktopUpdateLogic.showsReleaseNotesPopover(showUpdateDetails: showUpdateDetails, update) }
+    var showsReleaseNotes: Bool { !showCheckIcon && run == nil && capsule == nil && DesktopUpdateLogic.showsReleaseNotesPopover(showUpdateDetails: showUpdateDetails, update) }
 
     private func stateChanged(from old: DesktopUpdateState?) {
         refresh()
     }
 
-    private func refresh() {
+    func refresh() {
         let status = iconStatus
         if status != shownIcon { rebuildIcon(status) }
         updateProgress(animated: true)
         let text = tooltipText
         // `<Tooltip disabled={showReleaseNotesPopover}>`: an empty text never opens.
-        tooltip.text = showsReleaseNotes ? "" : text
+        // The capsule has no tooltip: its label and popover say it (SidebarUpdateCapsule.tsx:133-145).
+        tooltip.text = showsReleaseNotes || capsule != nil ? "" : text
         tooltip.variant = showUpdateDetails ? .glass : .default
-        setAccessibilityLabel(text)
-        setAccessibilityEnabled(!isInteractionDisabled)
+        setAccessibilityLabel(capsule?.accessibilityLabel ?? text)
+        setAccessibilityEnabled(capsule != nil || !isInteractionDisabled)
         if showsReleaseNotes {
             tooltip.hide()
         } else {
@@ -159,7 +204,7 @@ public final class SidebarUpdatePillView: ControlView {
         restyle()
     }
 
-    private func restyle() {
+    func restyle() {
         var box = BoxStyle()
         box.radius = 16
         box.border = nil
@@ -181,8 +226,14 @@ public final class SidebarUpdatePillView: ControlView {
             color = fg
         }
         if state.focusVisible { box.shadows = [BoxShadow(spread: 2, color: Themed.color(\.ring))] }
+        if capsule != nil {
+            // The capsule's own shapes draw the surface, so it can grow without stretching a drawn box.
+            box.fill = nil
+            color = fg
+            restyleCapsule()
+        }
         decoration.boxStyle = box
-        alphaValue = disabled && !showUpdateIconState ? 0.6 : 1
+        alphaValue = disabled && !showUpdateIconState && capsule == nil ? 0.6 : 1
         glyph?.strokeColor = color
         spinner?.color = color
         let cg = color.cgColor(in: self)
@@ -198,12 +249,15 @@ public final class SidebarUpdatePillView: ControlView {
     public override func layout() {
         super.layout()
         decoration.layout(boxSize: bounds.size)
-        iconBox.frame = NSRect(x: (bounds.width - 16) / 2, y: (bounds.height - 16) / 2, width: 16, height: 16)
+        // `justify-end`: the icon keeps the capsule's right end while it grows or shrinks.
+        let iconSide = min(bounds.width, bounds.height)
+        let iconArea = NSRect(x: bounds.width - iconSide, y: 0, width: iconSide, height: bounds.height)
+        iconBox.frame = NSRect(x: iconArea.midX - 8, y: (bounds.height - 16) / 2, width: 16, height: 16)
         glyph?.frame = iconBox.bounds
         spinner?.frame = iconBox.bounds
         // The ring: a 32px SVG, r 14, turned -90deg so it starts at the top and runs clockwise.
         let ring = CGMutablePath()
-        ring.addArc(center: CGPoint(x: bounds.midX, y: bounds.midY), radius: 14, startAngle: .pi / 2, endAngle: .pi / 2 - 2 * .pi, clockwise: true)
+        ring.addArc(center: CGPoint(x: iconArea.midX, y: iconArea.midY), radius: 14, startAngle: .pi / 2, endAngle: .pi / 2 - 2 * .pi, clockwise: true)
         for l in [ringTrack, ringArc] { l.frame = bounds; l.path = ring }
         // iconBox is flipped like every DSView: y runs down, as in CSS.
         dotRing.frame = CGRect(x: 10, y: -4, width: 10, height: 10); dotRing.cornerRadius = 5      // ring-2 around a size-1.5 dot
@@ -211,6 +265,7 @@ public final class SidebarUpdatePillView: ControlView {
         badge.frame = CGRect(x: 8, y: 8, width: 14, height: 14); badge.cornerRadius = 7            // ring-2 ring-background
         badgeFill.frame = CGRect(x: 10, y: 10, width: 10, height: 10); badgeFill.cornerRadius = 5  // -right-1 -bottom-1 size-2.5
         badgeCheck?.frame = NSRect(x: 11, y: 11, width: 8, height: 8)
+        layoutCapsule(iconArea: iconArea)
     }
 
     /// `DesktopUpdateStatusIcon` (DesktopUpdateStatusIcon.tsx:102-126). T3 remounts it on a status change.
@@ -274,12 +329,13 @@ public final class SidebarUpdatePillView: ControlView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { closeNotes() } else { refresh() }
+        if window == nil { closeNotes(); closeCapsulePopover() } else { refresh() }
     }
 
     // MARK: Action (SidebarUpdatePill.tsx:176-289)
 
     public override func performAction() {
+        if capsule != nil { toggleCapsulePopover(); return }
         guard !isInteractionDisabled else { return }
         if showsEverything { onEverything?(); return }
         if showsServerNotice { onShowServerUpdates?(); return }
@@ -293,7 +349,7 @@ public final class SidebarUpdatePillView: ControlView {
     }
 
     public override func resetCursorRects() {
-        addCursorRect(bounds, cursor: isInteractionDisabled ? .operationNotAllowed : .pointingHand)
+        addCursorRect(bounds, cursor: capsule == nil && isInteractionDisabled ? .operationNotAllowed : .pointingHand)
     }
 
     // MARK: Release notes popover (openOnHover, closeDelay 150, side top, center; :352-415)

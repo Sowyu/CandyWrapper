@@ -117,6 +117,7 @@ public final class SidebarContentView: DSView {
     /// `SidebarUpdatePill` at the end of the utility row (SidebarChrome.tsx:234). T3 renders it only in the
     /// desktop app (SidebarUpdatePill.tsx:111-113); hidden until the app shows it.
     public let updatePill = SidebarUpdatePillView()
+    private var ditherPillWidth: CGFloat = 28
 
     public var actions = SidebarActions() { didSet { wireActions() } }
     public private(set) var snapshot: ShellSnapshot?
@@ -282,6 +283,7 @@ public final class SidebarContentView: DSView {
             addSubview(v)
         }
         providerUpdatePill.onVisibilityChange = { [weak self] in self?.needsLayout = true }
+        updatePill.onCapsuleLayoutChange = { [weak self] in self?.needsLayout = true }
         list.registerForDraggedTypes([.fileURL, .sidebarThreads])
         list.onVisibleRowsChange = { [weak self] in self?.scheduleLabelTimer() }
         list.onToggleShelf = { [weak self] in self?.toggleShelf($0) }
@@ -1261,15 +1263,25 @@ public final class SidebarContentView: DSView {
         if accountFooter {
             for b in [settingsButton, pullRequestsButton, issuesButton, usageButton] { b.isHidden = true }
             // The update button sits inside the row at its right, a quiet 28pt control (the user, 2026-10-22).
-            accountRow.trailingReserve = updatePill.isHidden ? 0 : 28 + 4
+            // A pass grows it into a capsule: up to its label, leaving the name at least 96pt
+            // ponytail: fixed 96pt floor for the name, measure the name if a long one truncates too early
+            ditherPillWidth = updatePill.capsuleWidth(available: max(28, w - 2 * SidebarAccountRowView.inset - 46 - 96 - 8), side: 28)
+            accountRow.trailingReserve = updatePill.isHidden ? 0 : ditherPillWidth + 4
             accountRow.frame = NSRect(x: SidebarAccountRowView.inset, y: menuTop, width: max(0, w - 2 * SidebarAccountRowView.inset),
                                       height: SidebarAccountRowView.height)
         }
         backButton.isHidden = !isOnUtilityPage
         // `SidebarMenu` is a `gap-1` row; Back is `flex-1`, the update pill `ml-auto shrink-0`.
-        let pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
-        let rowEnd = w - 8 - pillRoom
         let noticeInRow = !accountFooter && !undoNotice.isHidden
+        var pillRoom: CGFloat = updatePill.isHidden ? 0 : 32 + 4
+        // A pass's capsule sits in a `@container/sidebar-update ml-auto flex min-w-8 flex-1` item (SidebarUpdatePill.tsx:445),
+        // so it shares the row's free width with Back and the undo notice.
+        if updatePill.capsule != nil, !updatePill.isHidden, !accountFooter {
+            let start = isOnUtilityPage ? 8 : fx
+            let flex: CGFloat = 1 + (isOnUtilityPage ? 1 : 0) + (noticeInRow ? 1 : 0)
+            pillRoom = max(32, (w - 8 - start - (flex - 1) * 4) / flex) + 4
+        }
+        let rowEnd = w - 8 - pillRoom
         // Back and the notice are both `flex-1 min-w-0`, so they split the row.
         let backWidth = max(0, noticeInRow ? (rowEnd - 8 - 4) / 2 : rowEnd - 8)
         backButton.frame = NSRect(x: 8, y: menuTop, width: backWidth, height: 32)
@@ -1278,9 +1290,10 @@ public final class SidebarContentView: DSView {
             undoNotice.frame = NSRect(x: x, y: menuTop + 4, width: max(0, rowEnd - x), height: 24)
         }
         if accountFooter {
-            updatePill.frame = NSRect(x: w - 8 - 8 - 28, y: menuTop + (SidebarAccountRowView.height - 28) / 2, width: 28, height: 28)
+            updatePill.frame = NSRect(x: w - 8 - 8 - ditherPillWidth, y: menuTop + (SidebarAccountRowView.height - 28) / 2, width: ditherPillWidth, height: 28)
         } else {
-            updatePill.frame = NSRect(x: w - 8 - 32, y: menuTop, width: 32, height: 32)
+            let pw = updatePill.capsule == nil ? 32 : updatePill.capsuleWidth(available: max(32, pillRoom - 4), side: 32)
+            updatePill.frame = NSRect(x: w - 8 - pw, y: menuTop, width: pw, height: 32)
         }
         scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
