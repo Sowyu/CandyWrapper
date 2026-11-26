@@ -578,6 +578,12 @@ public final class DitherArtView: NSView {
 
     /// Tests render on the main thread, so they never wait with theme globals applied.
     var rendersInlineForTesting = false
+    /// Flower render jobs started and cancelled before they finished, and, while `holdsFlowerJobsForTesting`, the
+    /// inline jobs waiting for the test to run them, so a test sees what a slow render overlaps.
+    var flowerJobsForTesting = 0
+    var flowerCancelsForTesting = 0
+    var holdsFlowerJobsForTesting = false
+    var heldFlowerJobsForTesting: [() -> Void] = []
 
     /// The picture's art. Runs on any thread.
     private nonisolated static func render(_ request: DitherArt.Request) -> DitherArtImage {
@@ -788,6 +794,13 @@ extension DitherArtView {
         flowerTarget = FlowerKey(placement: target, full: full, dark: dark)
         flowerFloorTop = stage.floorTop
         flowerResizing = resizing
+        // A drag's first step started a render for an area the drag has already left: it stops, and the set for where
+        // the drag ends renders when it settles.
+        if resizing, let job = flowerJob, flowerWanted != flowerTarget {
+            if !job.cancelled { flowerCancelsForTesting += 1 }
+            job.cancel()
+            flowerJob = nil; flowerWanted = nil; flowerJobParts = []; flowerJobOpening = nil
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         flower.backgroundColor = Self.flowerInk(palette, dark: dark)
         flowerHost.opacity = Self.flowerOpacity(dark: dark)
@@ -930,7 +943,9 @@ extension DitherArtView {
         let need = neededFlowerParts()
         guard !need.isEmpty else { return }
         if flowerWanted == target, flowerJobParts.isSuperset(of: need), flowerJobOpening == flowerOpening || !need.contains(.opening) { return }
-        renderFlower(target, need.union(flowerWanted == target ? flowerJobParts : []), opening: flowerOpening)
+        // Only what is missing now: a running job's finished parts are kept in `flowerCodes`, and a part it was making
+        // that the page no longer wants (a plain bloom once the opening's geometry came) would render for nothing.
+        renderFlower(target, need, opening: flowerOpening)
     }
 
     /// The cell codes for `key`, kept for the two keys used last: the new thread's and a thread's, when a right panel
@@ -948,28 +963,42 @@ extension DitherArtView {
 
     /// Renders `parts` of `key` off the main thread, across the cores, each handed over as it lands.
     private func renderFlower(_ key: FlowerKey, _ parts: FlowerParts, opening: LotusArt.Opening? = nil) {
+        if let old = flowerJob, !old.cancelled { flowerCancelsForTesting += 1 }
         flowerJob?.cancel()
         let job = FlowerJob()
         flowerJob = job
+        flowerJobsForTesting += 1
         flowerWanted = key
         let parts = opening == nil ? parts.subtracting([.opening, .flight]) : parts
         flowerJobParts = parts
         flowerJobOpening = opening
         let codes = flowerCodes(for: key)
         if rendersInlineForTesting {
-            var phases = Self.flowerPhases(key, parts, opening: opening, fieldT: fieldT, job: job, codes: codes)
-            while let phase = phases.next() { receiveFlower(phase, key: key, job: job) }
-            receiveFlower(.done, key: key, job: job)
+            let fieldT = fieldT
+            let run = { [weak self] in
+                var phases = Self.flowerPhases(key, parts, opening: opening, fieldT: fieldT, job: job, codes: codes)
+                while let phase = phases.next() { self?.receiveFlower(phase, key: key, job: job) }
+                self?.receiveFlower(.done, key: key, job: job)
+            }
+            if holdsFlowerJobsForTesting { heldFlowerJobsForTesting.append(run) } else { run() }
             return
         }
         let deliver: @Sendable (FlowerPhase) -> Void = { [weak self] phase in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.receiveFlower(phase, key: key, job: job) } }
         }
         let fieldT = fieldT
+        // What shows first (the open still, the opening, a bloom) renders at once; the new thread's loop, two thirds of
+        // the work and wanted only once they have played, renders after them at utility, which can run on the
+        // efficiency cores.
         DispatchQueue.global(qos: .userInitiated).async {
-            var phases = Self.flowerPhases(key, parts, opening: opening, fieldT: fieldT, job: job, codes: codes)
+            var phases = Self.flowerPhases(key, parts.subtracting(.idle), opening: opening, fieldT: fieldT, job: job, codes: codes)
             while let phase = phases.next() { deliver(phase) }
-            deliver(.done)
+            guard parts.contains(.idle), !job.cancelled else { deliver(.done); return }
+            DispatchQueue.global(qos: .utility).async {
+                var loop = Self.flowerPhases(key, .idle, opening: opening, fieldT: fieldT, job: job, codes: codes)
+                while let phase = loop.next() { deliver(phase) }
+                deliver(.done)
+            }
         }
     }
 

@@ -356,4 +356,95 @@ struct FlowerArtTests {
         art.windowIsActiveOverride = false; art.syncMotion()
         #expect(!art.flowerIdlingForTesting)
     }
+
+    /// Render jobs, and frames rendered from the model, for a fixed run of stage reports while each job is still
+    /// running when the next report comes (as a slow render is), so a job restarted or a part rendered for nothing shows
+    /// in the counts. The CPU the Flower costs is these frames; the counts hold it, not a timing.
+    @Test func eachStageRendersItsFramesOnce() throws {
+        try DitherArtView.$flowerSamples.withValue(1) { try countsJobs() }
+    }
+
+    private func countsJobs() throws {
+        let previous = ThemeRuntime.input, motion = Motion.reducedOverride, patience = DitherArtView.bloomPatience
+        defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion; DitherArtView.bloomPatience = patience }
+        DitherArtView.bloomPatience = 600
+        Motion.reducedOverride = false
+        let (art, page, window, _) = try setUp()
+        defer { window.contentView = nil; DitherArtView.setEmphasis(nil, from: page); DitherArtView.clearFlowerStage(from: page) }
+        art.holdsFlowerJobsForTesting = true
+        func drain() { while !art.heldFlowerJobsForTesting.isEmpty { art.heldFlowerJobsForTesting.removeFirst()() } }
+        func land() {
+            art.openingFly?.cancel(); art.openingFly = nil
+            art.bloomEnds = -1000
+            art.fly()
+            art.openingLand?.cancel()
+            art.land()
+        }
+        func quiet(width: CGFloat? = nil) {
+            // Left alone: layout passes, the same stage again, the motion re-synced.
+            for _ in 0..<5 { art.needsLayout = true; art.layoutSubtreeIfNeeded(); art.refresh(); art.syncMotion() }
+            stage(page, width: width, floorTop: 100)
+        }
+
+        // The new-thread page: its stage before the composer's top, then a top too high for the opening, then the real
+        // one, all while the first job runs.
+        DitherArtView.setEmphasis(.hero, from: page)
+        stage(page)
+        stage(page, floorTop: Self.noOpening)
+        stage(page, floorTop: 100)
+        DitherArtView.flowerOpened(from: page)
+        drain()
+        #expect(art.openingPlaying)
+        land()
+        quiet()
+        drain()
+        let o = try #require(art.flowerOpening)
+        let heroFrames = 1 + LotusArt.openingBloomPoses().count + LotusArt.flightFrames(o).count + LotusArt.idlePoses().count
+        #expect(art.flowerFramesRendered == heroFrames)
+        #expect(art.flowerJobsForTesting == 3)
+        #expect(art.flowerIdlingForTesting)
+
+        // A thread opens on the same area: one job, its bloom.
+        var jobs = art.flowerJobsForTesting
+        DitherArtView.setEmphasis(.thread, from: page)
+        stage(page, kind: .thread)
+        DitherArtView.flowerOpened(from: page)
+        drain()
+        art.endBloom()
+        #expect(art.flowerJobsForTesting == jobs + 1)
+        #expect(art.flowerFramesRendered == heroFrames + LotusArt.bloomPoses().count)
+
+        // Switching threads and back to the new thread: frames from the kept codes, one job a switch, none rendered.
+        jobs = art.flowerJobsForTesting
+        DitherArtView.flowerOpened(from: page); drain(); art.endBloom()
+        DitherArtView.flowerOpened(from: page); drain(); art.endBloom()
+        DitherArtView.setEmphasis(.hero, from: page)
+        stage(page, floorTop: 100)
+        DitherArtView.flowerOpened(from: page)
+        drain()
+        quiet()
+        drain()
+        #expect(art.flowerJobsForTesting == jobs + 3)
+        #expect(art.flowerFramesRendered == heroFrames + LotusArt.bloomPoses().count)
+        #expect(art.flowerCancelsForTesting == 2)
+
+        // A drag: its first step starts a render, which the second stops; the shown frame scales through the rest and
+        // one set renders when it ends.
+        jobs = art.flowerJobsForTesting
+        let cancels = art.flowerCancelsForTesting, end = page.bounds.width - 60
+        stage(page, width: page.bounds.width - 10, floorTop: 100)
+        #expect(art.flowerJobsForTesting == jobs + 1)
+        stage(page, width: page.bounds.width - 20, floorTop: 100)
+        #expect(art.flowerCancelsForTesting == cancels + 1 && art.flowerJob == nil)
+        for w in stride(from: page.bounds.width - 30, through: end, by: -10) { stage(page, width: w, floorTop: 100) }
+        #expect(art.flowerJobsForTesting == jobs + 1)
+        art.settleFlower()
+        drain()
+        quiet(width: end)
+        drain()
+        #expect(art.flowerJobsForTesting == jobs + 2)
+        #expect(art.flowerCancelsForTesting == cancels + 1)
+        #expect(art.flowerSet?.key == art.flowerTarget && art.flowerSet?.idle.isEmpty == false)
+        print("flower-jobs: \(art.flowerJobsForTesting) jobs, \(art.flowerCancelsForTesting) cancelled, \(art.flowerFramesRendered) frames kept")
+    }
 }
