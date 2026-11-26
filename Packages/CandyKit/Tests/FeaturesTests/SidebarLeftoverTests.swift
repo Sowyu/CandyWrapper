@@ -247,7 +247,12 @@ struct SidebarLeftoverTests {
         // Results from before this client looked, and dismissed ones, stay hidden.
         #expect(SidebarProviderUpdatePillModel.resolve([provider("codex", "failed", finished: "2026-09-01T00:00:00.000Z")], visibleAfter: after, dismissed: []) == nil)
         #expect(SidebarProviderUpdatePillModel.resolve([provider("claudeAgent", "failed", finished: "2026-10-10T02:00:00.000Z", latest: "2.0.0")],
-                                                       visibleAfter: after, dismissed: [failed!.key]) == nil)
+                                                       visibleAfter: after, dismissed: Set(failed!.dismissKeys)) == nil)
+        // #39636: a dismissed failure is not recounted when another provider fails later.
+        let later = SidebarProviderUpdatePillModel.resolve([provider("claudeAgent", "failed", finished: "2026-10-10T02:00:00.000Z", latest: "2.0.0"),
+                                                            provider("codex", "failed", finished: "2026-10-10T03:00:00.000Z")],
+                                                           visibleAfter: after, dismissed: Set(failed!.dismissKeys))
+        #expect(later?.title == "Codex update failed" && later?.dismissKeys.count == 1)
     }
 
     /// T3 f15aa815f3: an update on a non-default instance shows past the default instance's idle or older state.
