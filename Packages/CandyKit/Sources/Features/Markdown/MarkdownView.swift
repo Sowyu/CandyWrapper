@@ -235,6 +235,10 @@ public final class MarkdownView: DSView {
     /// "Open in integrated browser": an HTML or PDF file as a signed asset URL in a new tab (`openFileInPreview`).
     public static var onOpenFileInBrowser: ((FileLinkMeta) -> Void)?
     public static weak var linkHandler: MarkdownLinkHandler?
+    /// The hover card a thread chip shows in place of its "Open thread" tooltip (5258 ThreadContextChip.tsx:15,
+    /// ThreadChipHoverCard.tsx, #38895): the sidebar's card with the project, branch, model and pull requests. The app
+    /// answers by the chip's `openThread` destination, nil for a thread it cannot describe.
+    public static var threadHoverCard: (@MainActor (String) -> SidebarThreadHoverCardModel?)?
     private var hoveredChip: Int? {
         didSet {
             guard hoveredChip != oldValue else { return }
@@ -1681,6 +1685,15 @@ private final class ContextChipHitView: NSView, HoverSyncClient {
     var chip: MarkdownContextChip? {
         didSet {
             tooltip.text = chip?.tooltip ?? ""
+            if case .openThread(let destination)? = chip?.action, let card = MarkdownView.threadHoverCard {
+                let text = tooltip.text
+                tooltip.content = { () -> NSView & PopupContent in
+                    if let model = card(destination) { return SidebarThreadHoverCardView(model) }
+                    return TooltipView(text)
+                }
+            } else {
+                tooltip.content = nil
+            }
             setAccessibilityRole(chip?.isInteractive == true ? .button : .staticText)
             window?.invalidateCursorRects(for: self)
         }

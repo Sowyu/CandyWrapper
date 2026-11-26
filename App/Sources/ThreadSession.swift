@@ -777,6 +777,34 @@ final class ThreadController {
             let destination = "t3-thread://v2/\(shell.id.environmentId ?? env)/\(shell.id.localId.rawValue)"
             return MarkdownContextChips.LinkedThread(title: shell.title, project: project.map(ProjectIconSource.init), destination: destination)
         }
+        // `ThreadChipHoverCard` (5258 components/ThreadChipHoverCard.tsx:18-90, #38895): the project, the branch, the
+        // model alone (`getTriggerDisplayModelName`), and the pull requests, in the sidebar's card.
+        MarkdownView.threadHoverCard = { [weak self, weak sidebar] destination in
+            guard let self, let env = self.openThreadId?.environmentId, let snapshot = sidebar?.snapshot,
+                  let link = ThreadLink(href: destination) ?? ThreadLink(href: "t3-thread://v1/\(destination)") else { return nil }
+            guard let shell = ThreadLinkResolution.resolve(link, messageEnvironmentId: env, threads: snapshot.threads + snapshot.archivedThreads) else {
+                guard let meta = self.linkMetadataThread(link, env: env, projects: snapshot.projects) else { return nil }
+                var card = SidebarThreadHoverCardModel(title: meta.title)
+                card.projectIcon = meta.project
+                card.projectLabel = meta.project?.title
+                return card
+            }
+            var card = SidebarThreadHoverCardModel(title: shell.title)
+            if let project = snapshot.projects.first(where: { $0.id == shell.projectId }) {
+                card.projectLabel = project.title
+                card.projectIcon = ProjectIconSource(project)
+            }
+            card.branch = shell.branch
+            if let threadEnv = shell.id.environmentId, let providers = self.composer.config(threadEnv)?.providers {
+                let instance = SidebarModel.shellRuntime(shell) != nil ? shell.providerInstanceId : shell.modelSelection.instanceId
+                if let entry = ProviderCatalog(providers).entry(instance) {
+                    let model = entry.model(shell.modelSelection.model).map(ModelNames.trigger) ?? shell.modelSelection.model.trimmingCharacters(in: .whitespaces)
+                    if !model.isEmpty { card.provider = (entry.driver, model) }
+                }
+            }
+            if !(shell.pullRequests ?? []).isEmpty { card.pullRequests = SidebarPullRequestBadge(shell) }
+            return card
+        }
         panel.model.onOpenScheduledTask = { [weak self] taskId in
             guard let self, let env = self.openThreadId?.environmentId else { return }
             self.automations.openSettings?(env, taskId)
