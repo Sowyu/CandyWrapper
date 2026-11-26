@@ -65,7 +65,9 @@ final class WelcomePageContent: DSView {
     private let startWithout = ButtonView("Start without an agent", variant: .ghostMuted)
     private let hint = LabelView("Set up one agent to start.", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let start = ButtonView("Start")
-    private let notice = LabelView("T3 Code collects anonymous usage data to improve the app. To opt out, see the",
+    // T3's line says T3 Code collects anonymous usage data. That is false here: the app sends none and starts its
+    // servers with telemetry off (docs/decisions.md, 2026-11-25).
+    private let notice = LabelView("CandyWrapper sends no usage data, and servers it starts have T3's telemetry off. See T3's",
                                    font: DSFont.ui(11), color: Themed.color(\.mutedForeground, 0.7))
     private let privacy = WelcomeLinkView("privacy policy")
     private let period = LabelView(".", font: DSFont.ui(11), color: Themed.color(\.mutedForeground, 0.7))
