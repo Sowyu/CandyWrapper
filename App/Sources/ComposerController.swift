@@ -1670,6 +1670,8 @@ final class ComposerController {
         // An open queued edit keeps its text out of the thread's prompt.
         if let edit = queuedEdit {
             queuedEdits.update(edit.threadId, text: text)
+            // Deleting a queued file's last chip removes it, an undo brings it back. Parsed only when chips are bound.
+            if edit.hasBoundChips, queuedEdits.reconcile(edit.threadId, referenced: Set(ComposerContext.referencedIds(text))) { refresh() }
             return
         }
         guard let key = draftKey else { return }
@@ -2281,7 +2283,11 @@ final class ComposerController {
             text = ComposerReply.prompt(text, replyingTo: reply)
         }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let edit = queuedEdit { if !trimmed.isEmpty { saveEdit(edit, text: trimmed, steer: mode == .steer) }; return }
+        // An edit with only attachments left still saves (useQueuedRunEdit.ts:475-481 at 5258).
+        if let edit = queuedEdit {
+            if !trimmed.isEmpty || !edit.existingAttachments.isEmpty { saveEdit(edit, text: trimmed, steer: mode == .steer) }
+            return
+        }
         let attachments = currentAttachments
         // Typed in full, `/usage-limits` is answered here from the Limits snapshot; the agent never sees it.
         if attachments.isEmpty, usageLimitsOffered, UsageLimitsLogic.isUsageLimitsCommand(trimmed) {
@@ -3386,8 +3392,17 @@ final class ComposerController {
         return edit.existingAttachments.compactMap { a in
             guard let id = a["id"]?.stringValue else { return nil }
             return ComposerImageShelfView.Tile(id: id, name: a["name"]?.stringValue ?? "Attachment", status: .ready,
-                                               fileURL: a["type"]?.stringValue == "image" ? queuedImageFiles[id] : nil, removable: false)
+                                               fileURL: a["type"]?.stringValue == "image" ? queuedImageFiles[id] : nil)
         }
+    }
+
+    /// `removeEditingAttachment` (useQueuedRunEdit.ts:390-410 at 5258): local until the save, with its chips.
+    private func removeQueuedAttachment(_ id: String) {
+        guard let edit = queuedEdit else { return }
+        let chips = queuedEdits.removeAttachment(edit.threadId, id: id)
+        let prompt = chips.reduce(composer.text) { Self.removingReferences(to: $1, in: $0) }
+        if prompt != composer.text { composer.text = prompt; remember(prompt) }
+        refresh()
     }
 
     /// The kept queued attachment a chip of the edit's text points at.
@@ -3475,7 +3490,18 @@ final class ComposerController {
             "type": .string("queued-run.edit"), "commandId": .string(UUID().uuidString.lowercased()),
             "threadId": .string(edit.threadId.localId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
         ]
-        if let context = ComposerContext.messageContext(prompt: text, records: contextRecords(for: text)) { fields["context"] = context }
+        // The attachments replace the message's: the kept ones, then the new (useQueuedRunEdit.ts:150-196 at 5258).
+        let promptRecords = ComposerContext.messageContext(prompt: text, records: contextRecords(for: text))?["records"]?.arrayValue ?? []
+        guard let payload = QueuedRunEdits.savePayload(claim, staged: [], promptRecords: promptRecords) else {
+            _ = queuedEdits.finishSave(claim, succeeded: false)
+            if let key = draftKey { threadErrors.set(key, "Retry or remove failed uploads before saving.") }
+            refresh()
+            return
+        }
+        if text.isEmpty { text = ComposerAttachmentRules.attachmentOnlyPrompt }
+        fields["text"] = .string(text)
+        fields["attachments"] = .array(payload.attachments)
+        if !payload.records.isEmpty { fields["context"] = .object(["version": .number(1), "records": .array(payload.records)]) }
         // The model goes along unless the message follows the thread and the edit made no pick (useQueuedRunEdit.ts:505-508 at 5258).
         if !edit.followsThreadSelection || pickers.store.drafts[edit.pickerKey]?.explicit == true,
            pickers.draftKey == edit.pickerKey, let selection = pickers.current.modelSelection {
@@ -4473,6 +4499,7 @@ extension ComposerController {
         }
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
         composer.queuedShelf.onExpand = { [weak self] id in self?.expandQueuedImage(id) }
+        composer.queuedShelf.onRemove = { [weak self] id in self?.removeQueuedAttachment(id) }
         panel.model.onOpenAttachment = { [weak self] file, download in self?.openSentAttachment(file, download: download) }
         panel.model.onRollbackCheckpoint = { [weak self] checkpoint, scope in self?.rollBack(checkpointId: checkpoint, scopeId: scope) }
         panel.model.onReplyToResponse = { [weak self] message, projected in self?.replyToResponse(message, projected) }
