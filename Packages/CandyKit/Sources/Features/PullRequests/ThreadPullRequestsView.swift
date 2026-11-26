@@ -342,6 +342,8 @@ public final class LinkPullRequestDialog {
         link.isEnabled = !pending && resolvable
         link.title = pending ? "Linking..." : "Link"
         cancel.isEnabled = !pending
+        // `readOnly={pending}` (5258 LinkPullRequestDialog.tsx, 7e0d1cb9ba #42548).
+        input.isReadOnly = pending
         preview.color = Themed.color(\.mutedForeground)
         error.color = Themed.color(\.destructiveForeground)
         (dialog.panelContent.first as? Fields)?.invalidateIntrinsicContentSize()
