@@ -70,7 +70,8 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         case mcpApp(McpAppEntry)
         /// The images the agent opened in the tool group above, kept in view while the group is folded
         /// (`viewed-images`, MessagesTimeline.logic.ts:589-595, 718-727 at 4928, #30473).
-        case viewedImages(paths: [String])
+        /// `pending` holds the paths only running reads opened (#42921).
+        case viewedImages(paths: [String], pending: Set<String> = [])
     }
 
     public struct WorkToggle: Sendable, Hashable {
@@ -928,8 +929,11 @@ public enum TimelineRows {
         }
         /// `viewedImagesRows`: follows every tool group, folded or open, that viewed an image.
         func appendViewedImages(_ groupId: String, _ createdAt: T3Timestamp?, _ grouped: [WorkLogEntry]) {
-            let paths = WorkLog.viewedImagePaths(grouped)
-            if !paths.isEmpty { rows.append(TimelineRow(id: "\(groupId):viewed-images", createdAt: createdAt, kind: .viewedImages(paths: paths))) }
+            let images = WorkLog.viewedImages(grouped)
+            if !images.isEmpty {
+                let kind = TimelineRow.Kind.viewedImages(paths: images.map(\.path), pending: Set(images.filter(\.pending).map(\.path)))
+                rows.append(TimelineRow(id: "\(groupId):viewed-images", createdAt: createdAt, kind: kind))
+            }
         }
         // `zenAnswerLanded` (L:1872-1877): the ended run's answer already shows, so no working row follows it.
         let endedRunId = input.latestRun?.turnEnded == true ? input.latestRun?.runId : nil

@@ -4,8 +4,8 @@ import T3Protocol
 
 /// The media preview (chat/ExpandedImageDialog.tsx, ui/dialog.tsx `variant="media"`): a `bg-black/75`
 /// backdrop over the window, the image at most `92vw - 96px` wide and `min(86vh, 100vh - 160px)`
-/// tall in a `rounded-lg bg-background shadow-2xl ring-1 ring-border/70` frame, a `media-close`
-/// button 40pt above its right edge, the name and "(i/n)" under it in `text-xs text-white/80`, and
+/// tall in a `rounded-lg bg-background shadow-2xl ring-1 ring-border/70` frame, a 32pt `media-close`
+/// button at the popup's top end (`mediaControlsPlacement="inside"`, ExpandedImageDialog.tsx:178-205), the name and "(i/n)" under it in `text-xs text-white/80`, and
 /// `media-navigation` chevrons at the popup's sides when there is more than one image. Arrow keys
 /// move, Escape and a click on the backdrop close. Each image decodes at the size it is shown.
 
@@ -42,7 +42,7 @@ public final class ExpandedImagePreviewView: DSView {
     private let frameView = DSView()
     private let image = AsyncImageView()
     private let caption = LabelView("", font: DSFont.ui(12), color: NSColor.white.withAlphaComponent(0.8))
-    private let close = ButtonView(nil, icon: .x, variant: .mediaClose, size: .iconXs)
+    private let close = ButtonView(nil, icon: .x, variant: .mediaClose, size: .icon)
     private let previous = ButtonView(nil, icon: .chevronLeft, variant: .mediaNavigation, size: .icon)
     private let next = ButtonView(nil, icon: .chevronRight, variant: .mediaNavigation, size: .icon)
     /// `ZoomableImage` (chat/ZoomableImage.tsx:11-142): 1 to 8 times the fitted size. The frame grows with the zoom up
@@ -294,7 +294,6 @@ public final class ExpandedImagePreviewView: DSView {
         frameView.frame = inner.insetBy(dx: -1, dy: -1)
         image.frame = NSRect(x: 1 - scroll.x, y: 1 - scroll.y, width: scaled.width, height: scaled.height)
         details?.frame = inner
-        close.frame = NSRect(x: inner.maxX - 24, y: inner.minY - 40, width: 24, height: 24)
         // `flex items-center justify-center gap-1.5`: the name, then the button, centered as a pair.
         let row = inner.maxY + 8
         if let contents {
@@ -306,6 +305,12 @@ public final class ExpandedImagePreviewView: DSView {
             caption.frame = NSRect(x: inner.minX, y: row, width: inner.width, height: 16)
         }
         let popupX = ((w - popupWidth) / 2).rounded()
+        // The viewport pads `pt-[min(52px + 1.5rem, 50dvh)] pb-6` (dialog.tsx:163-168, the macOS titlebar is 52,
+        // windowControlsOverlay.ts:11) and centers the `h-full max-h-[92vh]` popup in that row. The × sits at its
+        // `end-0 top-0` (ExpandedImageDialog.tsx:198).
+        let top = min(76, h / 2), rowHeight = max(0, h - top - 24)
+        let popupTop = (top + (rowHeight - min(rowHeight, h * 0.92)) / 2).rounded()
+        close.frame = NSRect(x: popupX + popupWidth - 32, y: popupTop, width: 32, height: 32)
         previous.frame = NSRect(x: popupX, y: (h / 2 - 16).rounded(), width: 32, height: 32)
         next.frame = NSRect(x: popupX + popupWidth - 32, y: (h / 2 - 16).rounded(), width: 32, height: 32)
     }

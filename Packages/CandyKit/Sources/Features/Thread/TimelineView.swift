@@ -403,7 +403,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     /// An open work row whose entry shows the image: its tool output, or the file it viewed.
     private static func showsImage(_ item: TimelineItem, key: String) -> Bool {
-        if case .viewedImages(let paths) = item.row.kind { return key.hasPrefix("media-file:") && paths.contains { key.hasSuffix($0) } }
+        if case .viewedImages(let paths, _) = item.row.kind { return key.hasPrefix("media-file:") && paths.contains { key.hasSuffix($0) } }
         guard case .work(let entries, _, _) = item.row.kind else { return false }
         return entries.contains { e in
             guard item.ui.expandedEntries.contains(e.id) else { return false }

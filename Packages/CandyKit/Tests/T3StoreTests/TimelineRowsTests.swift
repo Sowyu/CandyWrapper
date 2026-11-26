@@ -42,7 +42,7 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
                                           tone: .tool, viewedImagePath: path, itemType: .dynamicTool, toolLifecycleStatus: .completed))
         }
         let derived = rows([read("a", 1, "/w/one.png"), read("b", 2, "/w/two.png"), read("c", 3, "/w/one.png")]) { $0.expandedRunIds = ["turn-1"] }
-        let images = derived.compactMap { row -> [String]? in if case .viewedImages(let paths) = row.kind { paths } else { nil } }
+        let images = derived.compactMap { row -> [String]? in if case .viewedImages(let paths, _) = row.kind { paths } else { nil } }
         #expect(images == [["/w/one.png", "/w/two.png"]])
         #expect(derived.last?.id.hasSuffix(":viewed-images") == true)
     }

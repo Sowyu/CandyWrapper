@@ -193,6 +193,20 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(WorkLog.toolGroupAction(entry { $0.itemType = .dynamicTool; $0.viewedImagePath = "/workspace/reference.png" }) == .read)
     }
 
+    /// presentation.ts:469-520 (#42921, #42265): running reads mark their image pending, failed ones drop it, and a
+    /// finished read of the same image settles it.
+    @Test func viewedImagesSkipFailedAndHoldRunningReads() {
+        func read(_ id: String, _ path: String, _ status: ToolLifecycleStatus) -> WorkLogEntry {
+            entry(id) { $0.itemType = .dynamicTool; $0.viewedImagePath = path; $0.toolLifecycleStatus = status }
+        }
+        let group = [read("a", "/w/a.png", .inProgress), read("b", "/w/b.png", .failed), read("c", "/w/c.png", .inProgress),
+                     read("d", "/w/c.png", .completed), read("e", "/w/e.png", .completed)]
+        #expect(WorkLog.viewedImages(group).map { "\($0.path) \($0.pending)" } == ["/w/a.png true", "/w/c.png false", "/w/e.png false"])
+        #expect(WorkLog.viewedImagePaths(group) == ["/w/c.png", "/w/e.png"])
+        #expect(WorkLog.viewedImagePath(group[0]) == nil)
+        #expect(WorkLog.viewedImagePath(group[1]) == nil)
+    }
+
     @Test func t3SummariesCountEffects() {
         let calls = (1...2).map { i in
             entry("send-\(i)") {

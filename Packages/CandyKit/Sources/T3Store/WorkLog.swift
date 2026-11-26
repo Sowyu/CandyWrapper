@@ -202,9 +202,15 @@ public enum WorkLog {
         }
     }
 
-    /// `workEntryViewedImagePath` (client-runtime/src/work-log/presentation.ts:477-493): the item's viewed image,
-    /// else a read whose detail is one image path.
+    /// `workEntryViewedImagePath` (client-runtime/src/work-log/presentation.ts:469-474): the item's viewed image, else a
+    /// read whose detail is one image path. A failed or running call has none: its file may not exist yet (#42921), and
+    /// failed reads stay out of the viewed-image previews (#42265).
     public static func viewedImagePath(_ e: WorkLogEntry) -> String? {
+        e.toolLifecycleStatus == .failed || e.toolLifecycleStatus == .inProgress ? nil : viewedImagePathOf(e)
+    }
+
+    /// `viewedImagePathOf` (presentation.ts:476-492).
+    static func viewedImagePathOf(_ e: WorkLogEntry) -> String? {
         if let path = e.viewedImagePath { return path }
         // The row pass asks this of every work entry on each update, so the extension test, which rejects nearly all of
         // them without copying, goes first.
@@ -229,11 +235,22 @@ public enum WorkLog {
         }
     }
 
-    /// `workEntriesViewedImagePaths` (4928 client-runtime/src/work-log/presentation.ts:451-455): the distinct images a
-    /// tool group opened, in viewing order.
+    /// `workEntriesViewedImagePaths` (presentation.ts:495-499): the distinct images a tool group opened, in viewing
+    /// order, without the ones only a running read opened.
     public static func viewedImagePaths(_ entries: [WorkLogEntry]) -> [String] {
-        var seen = Set<String>()
-        return entries.compactMap(viewedImagePath).filter { seen.insert($0).inserted }
+        viewedImages(entries).filter { !$0.pending }.map(\.path)
+    }
+
+    /// `workEntriesViewedImages` (presentation.ts:507-520): every distinct image a tool group opened, `pending` when
+    /// only running reads opened it, so the row draws a loading frame instead of asking for the file.
+    public static func viewedImages(_ entries: [WorkLogEntry]) -> [(path: String, pending: Bool)] {
+        var order: [String] = [], pending: [String: Bool] = [:]
+        for entry in entries where entry.toolLifecycleStatus != .failed {
+            guard let path = viewedImagePathOf(entry) else { continue }
+            if pending[path] == nil { order.append(path) }
+            pending[path] = (pending[path] ?? true) && entry.toolLifecycleStatus == .inProgress
+        }
+        return order.map { ($0, pending[$0] ?? false) }
     }
 
     /// `isWorkspaceImagePreviewPath` (packages/shared/src/filePreview.ts:76-85,182-184).

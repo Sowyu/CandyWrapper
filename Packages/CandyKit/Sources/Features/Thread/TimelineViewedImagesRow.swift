@@ -5,37 +5,45 @@ import T3Store
 /// `ViewedImagesTimelineRow` (4928 chat/TimelineWorkEntryRow.tsx:250-282, #30473): the images a tool group opened,
 /// below the group whether it is folded or open, `flex flex-wrap items-start gap-2 px-0.5` in `pb-2`. Each is a
 /// `ChatMarkdownAssetImage` at most 10rem tall. Clicking one opens the viewer on all of them (#34333).
-/// A file that fails to load leaves the row, as viewed files do in open work rows here.
+/// A file that fails to load leaves the row, as viewed files do in open work rows here. An image only a running read
+/// opened holds the loading frame without asking for the file, which may not exist yet (5258
+/// TimelineWorkEntryRow.tsx:265-278, `pending` in ChatMarkdownMedia.tsx:411-440, #42921).
 final class ViewedImagesRowView: TimelineRowView {
     static let maxHeight: CGFloat = 160
     private static let gap: CGFloat = 8
     private static let inset: CGFloat = 2
 
     private var images: [WorkImage] = []
+    private var pending: Set<String> = []
     private var imageViews: [String: AsyncImageView] = [:]
     private var contentVisible = true
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
-        guard case .viewedImages(let paths) = item.row.kind else { return }
+        guard case .viewedImages(let paths, let pendingPaths) = item.row.kind else { return }
         let root = context?.workspaceRoot
+        pending = []
         images = paths.compactMap { path in
             guard case .workspaceFile(let file) = MarkdownImageSource.classify(path, workspaceRoot: root) else { return nil }
-            return .file(file, workspaceRoot: root)
+            let image = WorkImage.file(file, workspaceRoot: root)
+            if pendingPaths.contains(path) { pending.insert(image.key) }
+            return image
         }
         needsLayout = true
     }
 
-    /// The images still shown: a failed file takes no space.
-    private var shown: [WorkImage] { images.filter { !MarkdownImages.failed.contains($0.key) } }
+    /// The images still shown: a failed file takes no space. A pending one never failed, since nothing asked for it.
+    private var shown: [WorkImage] { images.filter { pending.contains($0.key) || !MarkdownImages.failed.contains($0.key) } }
 
-    /// `ChatMarkdownImage`: a 16:9 slot until the size is known, then the image's box with its 1px frame.
-    private static func box(_ image: WorkImage, width: CGFloat) -> (size: CGSize, settled: Bool) {
-        if let natural = MarkdownImages.sizes[image.key] {
-            return (MarkdownImages.displaySize(natural: natural, maxWidth: width, border: 1, maxHeight: maxHeight), true)
+    /// `ChatMarkdownImage`: a 16:9 slot until the size is known, then the image's box with its 1px frame. The slot is
+    /// `unsizedImageFrameStyle` (ChatMarkdownMedia.tsx:92-95): `min(100%, 30rem, 10rem * 16 / 9)` wide, so it stays
+    /// 16:9 at the 10rem cap.
+    private func box(_ image: WorkImage, width: CGFloat) -> (size: CGSize, settled: Bool) {
+        if !pending.contains(image.key), let natural = MarkdownImages.sizes[image.key] {
+            return (MarkdownImages.displaySize(natural: natural, maxWidth: width, border: 1, maxHeight: Self.maxHeight), true)
         }
-        let w = min(width, MarkdownStyle.imageMaxWidth)
-        return (CGSize(width: w, height: min(w * 9 / 16, maxHeight)), false)
+        let w = min(width, MarkdownStyle.imageMaxWidth, Self.maxHeight * 16 / 9)
+        return (CGSize(width: w, height: w * 9 / 16), false)
     }
 
     /// Wraps the boxes into lines like `flex-wrap items-start`.
@@ -44,7 +52,7 @@ final class ViewedImagesRowView: TimelineRowView {
         var out: [(WorkImage, CGRect, Bool)] = []
         var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0
         for image in shown {
-            let (size, settled) = Self.box(image, width: inner)
+            let (size, settled) = box(image, width: inner)
             if x > 0, x + size.width > inner { x = 0; y += lineHeight + Self.gap; lineHeight = 0 }
             out.append((image, CGRect(x: Self.inset + x, y: y, width: size.width, height: size.height), settled))
             x += size.width + Self.gap
@@ -64,19 +72,38 @@ final class ViewedImagesRowView: TimelineRowView {
         guard contentVisible, !isHiddenOrHasHiddenAncestor else { release(); return }
         var kept = Set<String>()
         for (image, frame, settled) in frames(width: bounds.width) {
-            kept.insert(image.key)
-            let view = imageViews[image.key] ?? make(image)
-            imageViews[image.key] = view
+            let isPending = pending.contains(image.key)
+            // A pending image gets its own view, so the one that loads once the read ends starts fresh.
+            let viewKey = isPending ? "pending:" + image.key : image.key
+            kept.insert(viewKey)
+            let view = imageViews[viewKey] ?? make(image)
+            imageViews[viewKey] = view
             view.frame = settled ? frame.insetBy(dx: 1, dy: 1) : frame
             view.layer?.cornerRadius = settled ? 9 : 10
             view.requestedSide = Int((max(min(bounds.width, MarkdownStyle.imageMaxWidth), Self.maxHeight) * (window?.backingScaleFactor ?? 2)).rounded(.up))
-            view.set(key: image.key, fallbackText: "", loader: image.loader)
-            view.setAccessibilityLabel("Preview " + image.alt)
+            // `bg-muted/60 rounded-lg border border-border/40` until pixels arrive (ChatMarkdownMedia.tsx:31,177-181).
+            // Redesign shows its loading skeleton there instead, as its Markdown images do.
+            let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+            view.skeleton = redesign
+            view.layer?.backgroundColor = settled || redesign ? nil : Themed.color(\.muted, 0.6).cgColor(in: self)
+            view.layer?.borderColor = Themed.color(\.border, 0.4).cgColor(in: self)
+            view.layer?.borderWidth = settled || redesign ? 0 : 1
+            view.set(key: viewKey, fallbackText: "", loader: isPending ? Self.held : image.loader)
+            view.setAccessibilityLabel(isPending ? "Loading image" : "Preview " + image.alt)
         }
         for (key, view) in imageViews where !kept.contains(key) {
             view.removeFromSuperview(); imageViews[key] = nil
         }
         window?.invalidateCursorRects(for: self)
+    }
+
+    /// A pending image's loader: it never asks for the file and holds the loading state until the read ends and the
+    /// view is replaced, which cancels it. The one long sleep never wakes while idle.
+    private static let held: AsyncImageView.Loader = { _ in try? await Task.sleep(for: .seconds(31_536_000)); return nil }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
     }
 
     private func make(_ image: WorkImage) -> AsyncImageView {
@@ -96,7 +123,7 @@ final class ViewedImagesRowView: TimelineRowView {
             self.needsLayout = true
         }
         view.onContextMenu = { [weak self, weak view] event, source in
-            guard let self, let key = view?.key, let image = self.images.first(where: { $0.key == key }) else { return }
+            guard let self, let key = view?.key, !key.hasPrefix("pending:"), let image = self.images.first(where: { $0.key == key }) else { return }
             var openFile: (() -> Void)?
             if case .file(_, let relative?)? = image.reference, let open = MarkdownImages.openInFileViewer { openFile = { open(relative) } }
             MediaAttachmentContextMenu.show(name: image.alt, load: image.loader, event: event, view: source, reference: image.reference, openFile: openFile)
@@ -107,7 +134,7 @@ final class ViewedImagesRowView: TimelineRowView {
 
     @objc private func expand(_ gesture: NSClickGestureRecognizer) {
         guard let window, let view = gesture.view as? AsyncImageView, view.image != nil, let key = view.key else { return }
-        let gallery = shown
+        let gallery = shown.filter { !pending.contains($0.key) }
         guard let index = gallery.firstIndex(where: { $0.key == key }) else { return }
         let items = gallery.map { image -> ExpandedImagePreviewView.Item in
             let item = ExpandedImagePreviewView.Item(key: image.key, name: image.alt, cacheable: image.cacheable, load: image.loader, reference: image.reference)
@@ -139,6 +166,7 @@ final class ViewedImagesRowView: TimelineRowView {
         super.prepareForReuse()
         release()
         images = []
+        pending = []
     }
 
     private func release() {
