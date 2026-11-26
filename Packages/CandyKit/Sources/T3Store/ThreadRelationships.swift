@@ -35,6 +35,22 @@ public struct ThreadRelationshipRow: Sendable, Equatable {
 
 /// The fields of `OrchestrationV2Subagent` (orchestrationV2.ts:663-701) the Lineage rows read; the
 /// projection keeps subagents as JSON.
+/// `OrchestrationV2RemoteTaskChild` (5258 contracts orchestrationV2.ts:1011-1031): a task delegated to a linked
+/// environment, whose thread lives there and has no child thread here.
+public struct RemoteTaskChild: Sendable, Equatable, Hashable {
+    public let environmentId: String
+    public let threadId: String
+    /// The linked environment's name.
+    public let label: String
+    public init(environmentId: String, threadId: String, label: String) {
+        self.environmentId = environmentId; self.threadId = threadId; self.label = label
+    }
+    public init?(_ json: JSONValue?) {
+        guard let e = json?["environmentId"]?.stringValue, let t = json?["threadId"]?.stringValue else { return nil }
+        self.init(environmentId: e, threadId: t, label: json?["label"]?.stringValue ?? e)
+    }
+}
+
 public struct ProjectedSubagent: Sendable, Equatable {
     public let id: String
     public let childThreadId: ThreadId?
@@ -58,6 +74,10 @@ public struct ProjectedSubagent: Sendable, Equatable {
     /// The model the task ran on: `executedModel`, else `modelSelection.model` (orchestrationV2.ts:944-946). Nil
     /// when the record has neither; `model` is then the one asked for.
     public var ranModel: String? = nil
+    /// Set on a task delegated to a linked environment.
+    public var remoteChild: RemoteTaskChild? = nil
+    /// The task's own title; nil where `title` fell back to the prompt.
+    public var ownTitle: String? = nil
 
     public init(id: String, childThreadId: ThreadId?, origin: String, driver: String, providerInstanceId: String, title: String,
                 model: String?, status: String, progress: String?, result: String?, startedAt: T3Timestamp?, completedAt: T3Timestamp?) {
@@ -86,6 +106,8 @@ public struct ProjectedSubagent: Sendable, Equatable {
         nativeTaskStrong = ref?["strength"]?.stringValue == "strong" && ref?["nativeId"]?.stringValue != nil
         ranModel = [json["executedModel"]?.stringValue, json["modelSelection"]?["model"]?.stringValue]
             .compactMap { $0 }.first { !$0.isEmpty }
+        remoteChild = RemoteTaskChild(json["remoteChild"])
+        ownTitle = json["title"]?.stringValue
     }
 
     /// `liveSubagent` (ThreadRelationshipsControl.tsx:177-194): while the child thread has a live run, the
@@ -409,10 +431,12 @@ public enum ThreadRelationships {
             public let relationship: String
             /// A workflow coordinator's phases and members (2994 servers), which the row unfolds into.
             public var workflow: SubagentWorkflowGroup? = nil
+            /// A task delegated to a linked environment (`RemoteSubagentRow`, 5258 ThreadRelationshipsControl.tsx:294-377).
+            public var remote: RemoteTaskChild? = nil
             public var failed: Bool { status == "failed" || status == "error" }
             /// Stop shows on hover for an app-owned task that started and still works.
             public var canStop: Bool {
-                guard let agent else { return false }
+                guard let agent, remote == nil else { return false }
                 return agent.origin == "app_owned" && agent.startedAt != nil && ["pending", "running", "waiting"].contains(agent.status)
             }
         }
@@ -509,9 +533,21 @@ public enum ThreadRelationships {
             else if settledStatuses.contains(r.edge.status ?? "") { out.previous.append(row) }
             else { out.active.append(row) }
         }
+        // Tasks delegated to linked environments join the active agents or the previous ones (#41798,
+        // ThreadRelationshipsControl.tsx:651-670 at 5258). Their threads live there, so no edge or shell names them.
+        for agent in agents {
+            guard let remote = agent.remoteChild else { continue }
+            let id = ThreadId(remote.threadId)
+            let edge = ThreadRelationshipEdge(sourceThreadId: threadId, targetThreadId: id, kind: .subagent, status: agent.status)
+            var row = Lineage.Row(threadId: id, edge: edge, status: agent.status, isParent: false, isSubagent: true, isMergeTarget: false,
+                                  missing: true, title: subagentDisplayTitle(agent.ownTitle ?? "Subagent"), agent: agent, child: nil,
+                                  relationship: "Subagent")
+            row.remote = remote
+            if settledStatuses.contains(agent.status) { out.previous.append(row) } else { out.active.append(row) }
+        }
         // Subagents without a child thread yet have no row; they still count.
         out.runningCount = agents.filter { $0.childThreadId == nil && $0.status == "running" }.count
-            + out.active.filter { $0.edge.status == "running" }.count
+            + out.active.filter { $0.edge.status == "running" && $0.remote == nil }.count
         return out
     }
 

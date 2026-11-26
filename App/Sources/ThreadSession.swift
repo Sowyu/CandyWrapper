@@ -876,6 +876,21 @@ final class ThreadController {
             return try await environments.request(env, method, payload)
         }
         lineage.openThread = { [weak self] id in self?.open(id) }
+        // `useLinkedThreadOpener` (5258 state/linkedThreadView.ts:29-82): in place once this client is connected to
+        // the task's environment, else read only through the open thread's environment.
+        lineage.remoteReadsLinked = { [weak self] remote in
+            guard let self else { return true }
+            return !(environments.session(remote.environmentId) != nil && environments.hasShell(remote.environmentId))
+        }
+        lineage.openRemote = { [weak self] remote, title, parent in
+            guard let self, let via = parent.environmentId else { return }
+            if environments.session(remote.environmentId) != nil, environments.hasShell(remote.environmentId) {
+                open(ThreadId(remote.threadId).scoped(to: remote.environmentId))
+                return
+            }
+            openLinkedThread(LinkedThreadSurfaceTarget(viaEnvironmentId: via, environmentId: remote.environmentId, threadId: remote.threadId,
+                                                       label: environments.label(remote.environmentId) ?? remote.label, title: title))
+        }
         lineage.guest.canOperate = { [weak environments] env in environments?.canOperate(env) ?? true }
         lineage.openThreadInTab = { [weak self] id in
             if let inTab = self?.sidebar?.onOpenInNewTab { inTab(id) } else { self?.open(id) }
