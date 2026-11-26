@@ -72,7 +72,9 @@ public enum TerminalAttachEvent: Sendable, Equatable {
     case exited(code: Int?, signal: Int?)
     case closed
     case error(String)
-    case cleared
+    /// The server cleared the scrollback. `pendingControlSequence` is the start of a control sequence the clear split,
+    /// so the rest of it, in the next output, still parses as a sequence (5258 contracts terminal.ts, #42810).
+    case cleared(pendingControlSequence: String = "")
     case restarted(TerminalSessionSnapshot)
     case activity(hasRunningSubprocess: Bool, label: String, cols: Int? = nil, rows: Int? = nil)
     /// A kind this build does not know; skipped.
@@ -91,7 +93,7 @@ public enum TerminalAttachEvent: Sendable, Equatable {
         case "exited":
             self = .exited(code: json["exitCode"]?.intValue, signal: json["exitSignal"]?.intValue)
         case "closed": self = .closed
-        case "cleared": self = .cleared
+        case "cleared": self = .cleared(pendingControlSequence: json["pendingControlSequence"]?.stringValue ?? "")
         case "error": self = .error(json["message"]?.stringValue ?? "Terminal error")
         case "activity":
             guard case .bool(let running)? = json["hasRunningSubprocess"] else { return nil }

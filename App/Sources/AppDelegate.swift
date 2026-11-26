@@ -373,6 +373,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installQuitHold(window: window, layout: layout)
         openIn = OpenInController(card: threads.panel.lazyDetailsCard, pill: threads.panel.header.pill, git: threads.git, environments: environments, composer: threads.composer,
                                   shortcuts: shortcuts)
+        threads.files.openIn = openIn
+        // The repository sections follow the git target and whether its folder is a repository.
+        let gitRender = threads.git.onRender
+        threads.git.onRender = { [weak threads] in gitRender?(); threads?.repositories.render() }
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
             threads?.openCitedFile(meta) { meta in if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) } }
         }

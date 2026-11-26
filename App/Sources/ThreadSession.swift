@@ -662,6 +662,7 @@ final class ThreadController {
     private(set) var automations: ThreadAutomationsController!
     private var checkoutStatus: SidebarCheckoutStatus!
     private(set) var lineage: ThreadLineageController!
+    private(set) var repositories: RepositorySectionsController!
     private(set) var sideChats: SideChatController!
     private(set) var linkedThreads: LinkedThreadController!
     /// `peerLinks.names` per environment, as the open thread's links read them (5258 state/peerLinks.ts:48-52).
@@ -809,6 +810,7 @@ final class ThreadController {
             if sidebar.state.hiddenThreadTags[env] != tags { sidebar.state.hiddenThreadTags[env] = tags }
         }
         lineage = ThreadLineageController(panel: panel)
+        repositories = RepositorySectionsController(panel: panel, sidebar: sidebar, environments: environments, git: git)
         sideChats = SideChatController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         sideChats.parentId = { [weak self] in self?.openThreadId }
         linkedThreads = LinkedThreadController(panel: panel, environments: environments)
@@ -876,6 +878,21 @@ final class ThreadController {
             return try await environments.request(env, method, payload)
         }
         lineage.openThread = { [weak self] id in self?.open(id) }
+        // `useLinkedThreadOpener` (5258 state/linkedThreadView.ts:29-82): in place once this client is connected to
+        // the task's environment, else read only through the open thread's environment.
+        lineage.remoteReadsLinked = { [weak self] remote in
+            guard let self else { return true }
+            return !(environments.session(remote.environmentId) != nil && environments.hasShell(remote.environmentId))
+        }
+        lineage.openRemote = { [weak self] remote, title, parent in
+            guard let self, let via = parent.environmentId else { return }
+            if environments.session(remote.environmentId) != nil, environments.hasShell(remote.environmentId) {
+                open(ThreadId(remote.threadId).scoped(to: remote.environmentId))
+                return
+            }
+            openLinkedThread(LinkedThreadSurfaceTarget(viaEnvironmentId: via, environmentId: remote.environmentId, threadId: remote.threadId,
+                                                       label: environments.label(remote.environmentId) ?? remote.label, title: title))
+        }
         lineage.guest.canOperate = { [weak environments] env in environments?.canOperate(env) ?? true }
         lineage.openThreadInTab = { [weak self] id in
             if let inTab = self?.sidebar?.onOpenInNewTab { inTab(id) } else { self?.open(id) }
@@ -1369,7 +1386,7 @@ final class ThreadController {
             session?.end()
             session = nil
             setCost(nil)
-            lineage.update(threadId: nil, projection: nil)
+            lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
             terminal.show(nil)
             scripts.show(nil)
             files.show(nil)
@@ -1539,7 +1556,7 @@ final class ThreadController {
         files.show(id)
         let kept = force ? nil : (takeRetained(id) ?? keepAlive?.take(id))
         // Held rows keep their lineage header and footer; the first projection resets them.
-        if !keepRows || shell == nil { lineage.update(threadId: id, projection: nil) }
+        if !keepRows || shell == nil { lineage.update(threadId: id, projection: nil); repositories?.update(threadId: id, projection: nil) }
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: force ? nil : environments.threadCache)
         var observedLink: ThreadLinkedPullRequest?
         session.onProjection = { [weak self] projection, onlyStreamingText in
@@ -1557,7 +1574,9 @@ final class ThreadController {
                 self.panel.proactiveLinkedPullRequestKey = thread.flatMap { self.pullRequests.proactiveKey($0) }
             }
             self?.composer.projectionChanged(projection, threadId: id)
+            if let projection { self?.files.workspaceMutated(TurnDiffs.workspaceMutationId(projection), threadId: id) }
             self?.lineage.update(threadId: id, projection: projection)
+            self?.repositories.update(threadId: id, projection: projection)
             self?.setCost(projection, id: id)
         }
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
@@ -1637,7 +1656,7 @@ final class ThreadController {
         previous?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -1857,7 +1876,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -2008,7 +2027,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -2124,7 +2143,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -2189,7 +2208,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)

@@ -115,4 +115,14 @@ public enum OpenInEditors {
     public static func showsPicker(hasProject: Bool, environmentId: String?, primaryId: String?) -> Bool {
         hasProject && environmentId != nil && environmentId == primaryId
     }
+
+    /// `FileManagerAction` (5258 OpenInPicker.logic.ts:27-37, #41877): the file manager opens folders and shows a
+    /// file in its folder. A path whose read has not settled may be either, and a file needs the server's reveal
+    /// support, so both wait.
+    public enum FileManagerAction: Sendable, Equatable { case open, reveal, unavailable }
+
+    public static func fileManagerAction(isFolder: Bool, isSettled: Bool, canReveal: Bool) -> FileManagerAction {
+        if isFolder { return .open }
+        return isSettled && canReveal ? .reveal : .unavailable
+    }
 }

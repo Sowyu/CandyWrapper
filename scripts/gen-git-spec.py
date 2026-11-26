@@ -105,6 +105,28 @@ def card(machine_kind, env_label, branch, quick_label, quick_icon, plus, minus):
             f'<div class="flex w-full flex-col"><div class="flex min-w-0 w-full flex-col items-stretch"><span class="flex min-w-0">{branch_btn}</span></div></div>'
             f'{split}{changes}</div></section></div></div></div>')
 
+def repositories_card(env_label, repos):
+    """The card of a thread in a plain folder that tracks repositories (5258 ThreadDetailsPanel.tsx:185-305): the run
+    context, then Version Control with one collapsed RepositorySection per repository
+    (ThreadRepositorySections.tsx:104-142) and no Initialize Git."""
+    run = control("select", '<span class="inline-flex shrink-0 items-center gap-0.5">'
+                  f'<span class="inline-flex shrink-0">{machine("mac-mini", ICON)}</span>'
+                  f'<span class="inline-flex shrink-0">{lucide("folder", ICON)}</span></span>{panel_label(env_label)}')
+    rows = ""
+    for name, branch, plus, minus in repos:
+        counts = (f'<span class="ml-auto flex shrink-0 items-baseline gap-2 ps-2 font-mono tabular-nums">'
+                  f'<span class="text-diff-addition-foreground">+{plus}</span><span class="text-diff-deletion-foreground">-{minus}</span></span>')
+        rows += (f'<div role="group" aria-label="Repository {name}" class="flex flex-col">'
+                 + control("row", f'{lucide("chevron-right", CHEVRON_PANEL)}<span class="flex min-w-0 flex-1 items-baseline gap-1.5">'
+                           f'<span class="max-w-2/3 shrink-0 truncate">{name}</span>'
+                           f'<span class="min-w-0 truncate font-normal text-muted-foreground">{branch}</span>{counts}</span>')
+                 + '</div>')
+    section = "px-2 pt-2 pb-2.5"
+    return ('<div class="dropdown-glass isolate contain-paint grid max-h-full grid-rows-[minmax(0,1fr)] overflow-hidden rounded-3xl" '
+            'style="width:264px"><div><div>'
+            f'<section class="{section}"><div class="flex flex-col"><div class="flex w-full flex-col">{run}</div></div></section>'
+            f'<section class="{section} border-t border-border/65"><div class="flex flex-col">{rows}</div></section></div></div></div>')
+
 def toolbar_trigger(icon_html, label, extra):
     plain_chevron = lucide("chevron-down", "size-3 shrink-0 opacity-50")
     return f'<button type="button" class="{CONTROL_XS.replace(" min-w-0 max-w-full", "")} {extra}">{icon_html}{context_label(label)}{plain_chevron}</button>'
@@ -171,6 +193,8 @@ cases = [
      "native": {"kind": "card", "env": "This Mac", "branch": "main", "quick": "Commit", "icon": "gitCommitHorizontal", "plus": "4", "minus": "0"}},
     {"name": "card.push", "html": card("mac-mini", "This Mac", "feature/demo", "Push", "cloud-upload", 12, 3),
      "native": {"kind": "card", "env": "This Mac", "branch": "feature/demo", "quick": "Push", "icon": "cloudUpload", "plus": "12", "minus": "3"}},
+    {"name": "card.repositories", "html": repositories_card("This Mac", [("repo-a", "main", 2, 0), ("repo-b", "feature/demo", 14, 3)]),
+     "native": {"kind": "repositories", "env": "This Mac"}},
     {"name": "menu.publish", "html": git_menu([("Commit", "git-commit-horizontal", False), ("Publish repository...", "cloud-upload", False)], 248),
      "wrapperStyle": "display:inline-block;--available-height:600px", "native": {"kind": "menu", "variant": "publish"}},
     {"name": "menu.remote", "html": git_menu([("Commit", "git-commit-horizontal", True), ("Push", "cloud-upload", False)], 248),

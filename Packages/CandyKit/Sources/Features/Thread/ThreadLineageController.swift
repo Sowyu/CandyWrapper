@@ -35,6 +35,10 @@ public final class ThreadLineageController {
     public var openThread: ((ThreadId) -> Void)?
     /// Opens a scoped thread id in a new tab where Redesign has tabs, else like `openThread`.
     public var openThreadInTab: ((ThreadId) -> Void)?
+    /// Opens a task's thread on a linked environment, with its title and the open thread (`useLinkedThreadOpener`).
+    public var openRemote: ((RemoteTaskChild, String, ThreadId) -> Void)?
+    /// True when that thread opens read only through the open thread's environment, not in place.
+    public var remoteReadsLinked: ((RemoteTaskChild) -> Bool)?
     public var localVisit: ((ThreadId) -> T3Timestamp?)?
     public var acknowledgeWake: ((ThreadId, T3Timestamp) -> Void)?
     /// The composer's model for the next send.
@@ -91,6 +95,11 @@ public final class ThreadLineageController {
                 return ProviderBadge.make(entry, in: catalog, size: .small, overhang: 3, ring: Themed.color(\.card))
             }
             section.onOpen = { [weak self] id in self?.open(id) }
+            section.onOpenRemote = { [weak self] remote, title in
+                guard let self, let threadId = self.threadId else { return }
+                self.openRemote?(remote, title, threadId)
+            }
+            section.remoteReadsLinked = { [weak self] remote in self?.remoteReadsLinked?(remote) ?? true }
             section.onMerge = { [weak self] in self?.merge() }
             section.onStop = { [weak self] id in self?.stop(id) }
             section.onStopWorkflow = { [weak self] id, coordinator in self?.stopWorkflow(id, coordinator: coordinator) }

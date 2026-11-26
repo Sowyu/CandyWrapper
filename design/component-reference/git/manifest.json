@@ -7,6 +7,10 @@
     "height" : 167,
     "width" : 264
   },
+  "card.repositories" : {
+    "height" : 135,
+    "width" : 264
+  },
   "dialog.commit" : {
     "height" : 577.5,
     "width" : 512

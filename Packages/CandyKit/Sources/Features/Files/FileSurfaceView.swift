@@ -118,6 +118,11 @@ public final class FileSurfaceView: DSView {
         set { UserDefaults.standard.set(newValue, forKey: Self.explorerKey); explorerToggle.isPressed = newValue; needsLayout = true }
     }
 
+    /// The header's "Open in" picker after the crumbs (FilePreviewPanel.tsx:1605-1619); the owner shows it and
+    /// fills it, since it knows the environment and the editors.
+    public let openIn = FileOpenInPicker()
+    public var showsOpenIn = false { didSet { if showsOpenIn != oldValue { openIn.isHidden = !showsOpenIn; needsLayout = true } } }
+
     /// `wordWrap`, default on.
     public var wrap = true { didSet { wrapToggle.isPressed = wrap; code?.wrap = wrap } }
 
@@ -142,7 +147,8 @@ public final class FileSurfaceView: DSView {
         notice.isHidden = true
         noticeBar.isHidden = true
         for l in [noticeBar, asideBorder] { l.actions = ["frame": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
-        [crumbs, renderToggle, wrapToggle, explorerToggle, notice].forEach(addSubview)
+        [crumbs, renderToggle, wrapToggle, explorerToggle, notice, openIn].forEach(addSubview)
+        openIn.isHidden = true
         explorerHandle.isHidden = true
         configureExplorerHandle()
         attachmentCrumbs.isHidden = true
@@ -180,6 +186,53 @@ public final class FileSurfaceView: DSView {
     public func setContent(_ content: Content) {
         self.content = content
         rebuildBody()
+        onContentChange?()
+    }
+    /// After each `setContent`: the owner's header parts that follow the read, like the Open in picker's Finder entry.
+    public var onContentChange: (@MainActor () -> Void)?
+
+    /// A turn changed the workspace and the open file read again: an unchanged read keeps the view as it is
+    /// (#39736), a changed one replaces it at the same scroll offset, as T3's re-rendered preview keeps its place.
+    /// Returns whether anything changed.
+    @discardableResult
+    public func followChange(_ next: Content) -> Bool {
+        switch (content, next) {
+        case let (.text(a, at, ab, ae), .text(b, bt, bb, be)) where a == b && at == bt && ab == bb && ae == be: return false
+        case let (.asset(a), .asset(b)) where a == b: return false
+        default: break
+        }
+        let origin = body.flatMap(Self.firstScrollView)?.contentView.bounds.origin
+        setContent(next)
+        if let origin, let scroll = body.flatMap(Self.firstScrollView) {
+            layoutSubtreeIfNeeded()
+            scroll.contentView.scroll(to: origin)
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+        return true
+    }
+
+    private static func firstScrollView(_ view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        for sub in view.subviews { if let found = firstScrollView(sub) { return found } }
+        return nil
+    }
+
+    /// A file past 64 MB, downloaded to `file` (nil past 256 MB): the paged plain viewer replaces the 1 MB preview
+    /// (5258 LargeFilePreview.tsx:38-41). Ignored once the surface shows something else.
+    public func showLargeText(file: URL?, sizeBytes: Int) {
+        guard case .text(let preview, true, sizeBytes, _) = content, attachment == nil else {
+            if let file { try? FileManager.default.removeItem(at: file) }
+            return
+        }
+        loadTask?.cancel()
+        body?.removeFromSuperview()
+        code = nil
+        notice.isHidden = true
+        let view = LargeTextFileView(file: file, sizeBytes: sizeBytes, preview: preview)
+        addSubview(view)
+        body = view
+        updateActions()
+        needsLayout = true
     }
 
     /// The text the editor holds now (unsaved edits included).
@@ -394,7 +447,7 @@ public final class FileSurfaceView: DSView {
         explorerToggle.isHidden = attachmentMode || path.hasPrefix("/") || isDirectory
         // Save once there is a file, Remove and Close when the owner offers them.
         let copy = Self.copyAction(content, attachment: attachment != nil, fullTextLoading: fullTextLoading,
-                                   copied: (copiedUntil ?? .distantPast) > Date())
+                                   copied: (copiedUntil ?? .distantPast) > Date(), largeText: body is LargeTextFileView)
         copyButton.isHidden = copy == nil
         copyButton.icon = copy == "Copied" ? .check : .copy
         let copyLabel = copy ?? "Copy contents"
@@ -435,16 +488,24 @@ public final class FileSurfaceView: DSView {
     /// when it is whole and not empty (5258 FilePreviewPanel.tsx:1400-1409 and 1652-1659, 07fe456146 #34769), and while a
     /// large file's whole text downloads (`LargeFileActions`, :1965-2001). An attachment copies what it shows
     /// (AttachmentFilePreview.tsx:462).
-    static func copyAction(_ content: Content, attachment: Bool, fullTextLoading: Bool, copied: Bool) -> String? {
+    static func copyAction(_ content: Content, attachment: Bool, fullTextLoading: Bool, copied: Bool, largeText: Bool = false) -> String? {
         guard case .text(let text, let truncated, _, _) = content else { return nil }
+        if largeText { return copied ? "Copied" : "Copy contents" }
         if !attachment, truncated ? !fullTextLoading : text.isEmpty { return nil }
         if copied { return "Copied" }
         return truncated && attachment ? "Copy preview" : "Copy contents"
     }
 
     private func copyContents() {
-        guard case .text(let text, let truncated, _, _) = content else { return }
-        if truncated, attachment == nil {
+        guard case .text(var text, let truncated, _, _) = content else { return }
+        if let large = body as? LargeTextFileView {
+            // `text-copy-before-loaded` (previewFailureMessages.ts:35).
+            guard large.isIndexed, case .success(let whole) = large.copyText() else {
+                onCopyFailed?("Could not read file", "Wait for the file to finish loading before copying.")
+                return
+            }
+            text = whole
+        } else if truncated, attachment == nil {
             onCopyFailed?("Could not read file", "The file is still loading. Try again in a moment.")
             return
         }
@@ -472,6 +533,11 @@ public final class FileSurfaceView: DSView {
         for t in [closeButton, removeButton, saveButton, explorerToggle, copyButton, wrapToggle, renderToggle] as [NSView] where !t.isHidden {
             t.frame = NSRect(x: right - 28, y: buttonY, width: 28, height: 28)
             right -= 28 + 8
+        }
+        if !openIn.isHidden {
+            let width = openIn.intrinsicContentSize.width
+            openIn.frame = NSRect(x: right - width, y: buttonY, width: width, height: 28)
+            right -= width + 8
         }
         crumbs.frame = NSRect(x: 12, y: 0, width: max(0, right - 12 + 8 - 8), height: h)
         attachmentCrumbs.frame = NSRect(x: 12, y: 0, width: max(0, right - 12), height: h)

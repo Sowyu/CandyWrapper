@@ -73,4 +73,29 @@ private func leaf(_ name: String, _ path: String, _ a: Int, _ d: Int) -> TurnDif
             == .turn(GetTurnDiffInput(threadId: projection.thread.id, fromTurnCount: 2, toTurnCount: 3, ignoreWhitespace: false)))
         #expect(TurnDiffs.sortedForPanel(summaries).map(\.checkpointTurnCount) == [3, 2, 1])
     }
+
+    /// `deriveWorkspaceMutationId` (5258 threadDetail.test.ts): settled workspace-touching items move it, running
+    /// ones and messages do not.
+    @Test func workspaceMutationIdFollowsSettledWork() {
+        let empty = decode(ThreadProjection.self, """
+            {"thread":{"id":"thread-1","title":"T"},"runs":[],"attempts":[],"nodes":[],"subagents":[],
+             "providerSessions":[],"providerThreads":[],"providerTurns":[],"runtimeRequests":[],"messages":[],"plans":[],
+             "turnItems":[],"checkpointScopes":[],"checkpoints":[],"contextHandoffs":[],"contextTransfers":[],
+             "visibleTurnItems":[],"updatedAt":"2026-01-01T00:00:00.000Z"}
+            """)
+        func with(_ items: [TurnItem]) -> ThreadProjection {
+            var p = empty
+            p.visibleTurnItems = items.enumerated().map { ProjectedTurnItem(local: $1, position: $0) }
+            return p
+        }
+        #expect(TurnDiffs.workspaceMutationId(empty) == nil)
+        let ran = turnItem(#"{"id":"c1","type":"command_execution","ordinal":1}"#)
+        let running = turnItem(#"{"id":"c2","type":"file_change","ordinal":2,"status":"running"}"#)
+        let message = turnItem(#"{"id":"m1","type":"assistant_message","ordinal":3,"text":"done"}"#)
+        let first = TurnDiffs.workspaceMutationId(with([ran]))
+        #expect(first != nil)
+        #expect(TurnDiffs.workspaceMutationId(with([ran, running, message])) == first)
+        let edited = turnItem(#"{"id":"c2","type":"file_change","ordinal":2}"#)
+        #expect(TurnDiffs.workspaceMutationId(with([ran, edited, message])) != first)
+    }
 }

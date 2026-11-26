@@ -152,7 +152,8 @@ final class ThreadLineageRowView: ControlView {
 
     init(_ row: ThreadRelationships.Lineage.Row, driver: String?, providerName: String, nowMs: Int64,
          mergeEnabled: Bool, mergeBusy: Bool, mergeTooltip: String, mergeLabel: String, stopping: Bool,
-         workflowExpanded: Bool = false, canStopWorkflow: Bool = false, badge: ProviderBadge? = nil, dotOnTop: Bool = false) {
+         workflowExpanded: Bool = false, canStopWorkflow: Bool = false, badge: ProviderBadge? = nil, dotOnTop: Bool = false,
+         remoteHint: String? = nil) {
         self.row = row
         super.init(frame: .zero)
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
@@ -232,7 +233,12 @@ final class ThreadLineageRowView: ControlView {
         scalesWhenPressed = true
         setAccessibilityLabel("\(row.title) \(ThreadRelationships.statusLabel(row.status))")
         let hint = "Open \(row.relationship.lowercased()) in this chat"
-        if !row.isMergeTarget {
+        if let remoteHint {
+            // `LineageTooltipContent` with the title and where it opens (ThreadRelationshipsControl.tsx:366-375).
+            let t = TooltipController.attach(to: self, text: "\(row.title)\n\(remoteHint)")
+            t.placement = PopupPlacement(side: .left, align: .center, sideOffset: 4)
+            t.delay = 0.2
+        } else if !row.isMergeTarget {
             // Agents get the subagent hover card (SubagentTooltipContent), the rest the hint.
             let t = TooltipController.attach(to: self, text: row.agent == nil ? hint : "")
             if let agent = row.agent {
@@ -248,6 +254,12 @@ final class ThreadLineageRowView: ControlView {
     /// One trailing item (:448-462): an agent with a known time shows only that; otherwise the status label,
     /// except on the merge target, whose status sits after its merge button.
     static func trailingText(_ row: ThreadRelationships.Lineage.Row, nowMs: Int64) -> String? {
+        // A linked environment's task: "on {label} · " and its elapsed time, else its status (:349-363).
+        if let remote = row.remote, let a = row.agent {
+            let elapsed = row.failed ? nil
+                : ThreadRelationships.subagentElapsedMs(status: a.status, startedAt: a.startedAt, completedAt: a.completedAt, nowMs: nowMs)
+            return "on \(remote.label) · " + (elapsed.map { ThreadRelationships.compactElapsed(seconds: Double($0) / 1000) } ?? ThreadRelationships.statusLabel(row.status))
+        }
         if let a = row.agent, !row.failed,
            let ms = ThreadRelationships.subagentElapsedMs(status: a.status, startedAt: a.startedAt, completedAt: a.completedAt, nowMs: nowMs) {
             return ThreadRelationships.compactElapsed(seconds: Double(ms) / 1000)
@@ -335,7 +347,8 @@ final class ThreadLineageRowView: ControlView {
             right = rule.frame.minX - 11
         }
         if !trailing.isHidden {
-            let w = ceil(trailing.textWidth)
+            // A remote task's "on {label} · time" takes at most half the row (`max-w-1/2`).
+            let w = min(ceil(trailing.textWidth), row.remote == nil ? .greatestFiniteMagnitude : (bounds.width / 2).rounded(.down))
             trailing.frame = NSRect(x: right - w, y: midY - 8, width: w, height: 16)
             right -= w + 10
         }
@@ -364,6 +377,10 @@ public final class ThreadLineageSectionView: DSView {
     public var providerBadge: ((String) -> ProviderBadge?)?
     public var anyInstanceBadge = false { didSet { if anyInstanceBadge != oldValue { rebuild() } } }
     public var onOpen: ((ThreadId) -> Void)?
+    /// Opens a linked environment's task thread, titled; in place when connected there, else read only.
+    public var onOpenRemote: ((RemoteTaskChild, String) -> Void)?
+    /// True when a remote task's thread opens read only through this environment (`opener.mode === "linked"`).
+    public var remoteReadsLinked: ((RemoteTaskChild) -> Bool)?
     public var onMerge: (() -> Void)?
     public var onStop: ((ThreadId) -> Void)?
     /// Stops a workflow: the row's thread and the coordinator subagent's id (`orchestration.stopWorkflow`).
@@ -481,8 +498,11 @@ public final class ThreadLineageSectionView: DSView {
                                              mergeTooltip: mergeTooltip, mergeLabel: mergeLabel, stopping: stopping,
                                              workflowExpanded: turning == r.threadId ? !open : open, canStopWorkflow: canStopWorkflow,
                                              badge: (r.agent?.providerInstanceId ?? r.child?.providerInstanceId.rawValue).flatMap { providerBadge?($0) },
-                                             dotOnTop: anyInstanceBadge)
-                v.action = { [weak self] in self?.onOpen?(r.threadId) }
+                                             dotOnTop: anyInstanceBadge,
+                                             remoteHint: r.remote.map { remoteReadsLinked?($0) == false ? "Open on \($0.label)" : "Read the thread on \($0.label)" })
+                v.action = { [weak self] in
+                    if let remote = r.remote { self?.onOpenRemote?(remote, r.title) } else { self?.onOpen?(r.threadId) }
+                }
                 v.merge?.action = { [weak self] in self?.onMerge?() }
                 if let workflow = r.workflow {
                     v.stop?.action = { [weak self] in self?.onStopWorkflow?(r.threadId, workflow.coordinatorId) }

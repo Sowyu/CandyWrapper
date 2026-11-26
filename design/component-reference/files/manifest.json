@@ -3,6 +3,10 @@
     "height" : 40,
     "width" : 480
   },
+  "file-header-open-in" : {
+    "height" : 40,
+    "width" : 480
+  },
   "files" : {
     "height" : 236,
     "width" : 480

@@ -257,6 +257,22 @@ import Testing
         #expect(ThreadRelationships.modelSlugName("my-model") == "my-model")
         #expect(ThreadRelationships.subagentElapsedMs(status: "completed", startedAt: "2026-01-01T00:00:00.000Z", completedAt: nil, nowMs: 5) == nil)
     }
+
+    /// #41798: a task delegated to a linked environment is a Lineage row there, active or previous by its status,
+    /// with no Stop (5258 ThreadRelationshipsControl.tsx:294-377, 651-670).
+    @Test func remoteSubagentsJoinActiveAndPrevious() {
+        func agent(_ id: String, _ status: String, title: String? = nil) -> String {
+            let t = title.map { ",\"title\":\"\($0)\"" } ?? ""
+            return #"{"id":"\#(id)","status":"\#(status)","origin":"app_owned","driver":"codex","providerInstanceId":"codex","startedAt":"2026-11-25T10:00:00.000Z","childThreadId":null,"remoteChild":{"environmentId":"env-b","threadId":"t-\#(id)","label":"Studio Mac"}\#(t)}"#
+        }
+        let p = projection("parent", subagents: "[\(agent("a", "running", title: "Fix the build")),\(agent("b", "completed"))]")
+        let lineage = ThreadRelationships.lineage(threadId: "parent", threads: [thread("parent")], projection: p)
+        #expect(lineage.active.map(\.title) == ["Fix the build"])
+        #expect(lineage.active.first?.remote == RemoteTaskChild(environmentId: "env-b", threadId: "t-a", label: "Studio Mac"))
+        #expect(lineage.active.first?.canStop == false)
+        #expect(lineage.previous.map(\.title) == ["Subagent"])
+        #expect(lineage.runningCount == 1)
+    }
 }
 
 @Suite struct SecretRequestsTests {

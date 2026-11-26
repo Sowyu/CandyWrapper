@@ -407,7 +407,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | cbc3057f59 | #42921 | fix(web,mobile): a running Read's image shows a loading frame, not "Image unavailable" | thread | ported 255b7394 (a running Read's image holds the 16:9 loading frame without asking for the file; Redesign shows its skeleton) |
 | 7d8c03fd99 | #42948 | fix(terminal): keep other input out of large bracketed pastes | other | n/a (terminal, other agent) |
 | a3a4592cf5 | #42897 | fix(web): release terminal reply ownership when the drawer closes | other | n/a (terminal, other agent) |
-| 67918f51cc | #42919 | fix(web): Show more in Thread Details keeps every repository listed | thread | left: repository sections need T3's thread-repositories runtime (task folders, pins, a git control per repository). L, about 2 h |
+| 67918f51cc | #42919 | fix(web): Show more in Thread Details keeps every repository listed | thread | partly ported: read-only repository sections 767f4a2a, Redesign home 660f941f, reference 1cb8d0b5; git control per repository, pins and task folders left (plan atop T3Store/ThreadRepositories.swift) |
 | 2891419b93 | #42886 | fix(web): localize terminal excerpt line ranges | composer | nothing to port: English only, and CW's chip already reads "{terminal} line N" or "lines N-M" (ComposerMenus.swift:859) |
 | 83a7c75b88 | #42889 | fix(web,mobile): adding a project from a draft's picker no longer leaves the draft behind | palette | ported df350067 |
 | e045a127e7 | #42882 | fix(web): web search result links follow Open links in | thread | ported 3f79fad2 |
@@ -462,14 +462,14 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | ported 0edefb34 |
 | 3d9a14d4da | #41875 | fix(web): IME keys no longer trigger or close the prompt stash menu | composer | n/a (AppKit handles IME) |
 | 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | n/a (CW has no reference sources, so the card is always typed) |
-| d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | left for the files agent: the change is in the file preview's Open in picker (`fileManagerActionForPath`, FilePreviewPanel.tsx), which is FilesController's. Small |
+| d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | ported e6e5a990 with the file header Open in picker |
 | 14ea095b0a | #41663 | feat(web): add an HTML preview width setting separate from chat width | thread | ported bc4d8e34 (wide 72rem and full, centered on the lane and clear of the details card; unit tested, not seen on screen: no HTML preview in the sandboxes) |
 | 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | already: a `.thread` change sets `followsEnd` before the anchor is taken, so the restore and every later footer change land at the end (test `aSwitchedThreadOpensAtItsEndWithoutLandingShort`) |
 | 4162207ddd | #29771 | fix(web): file menu opens remote files over SSH instead of on the server | thread | n/a (web icons, wire A18) |
 | 8ef195587d | #33030 | fix(web): tell update-all users where to update desktop servers it can't reach | sidebar | ported b4ba8432 |
 | d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | ported 8337eb04 |
 | d572ce9afe | #41814 | fix(chat): preserve model choices when editing queued messages | composer | ported 31975590 |
-| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | left: CW has no remote subagent row at all (`RemoteSubagentRow`, ThreadRelationshipsControl.tsx:298-380 at 5258): decode `remoteChild` on subagents, list them "on <label>" with the elapsed time, open the linked thread (M) |
+| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | ported 5b7a5913: `RemoteSubagentRow` with "on {machine} · elapsed", opening in place or read only |
 | c5918e5d24 | #41803 | fix(web): align composer banner details with status text | composer | already: CW's details button shares the 24pt row with the text, so it is centered |
 | eecb58c6d6 | #41769 | fix: approvals and hosted pairing show what is being approved | composer | ported 956f0e5a for the approval half; `draftSupportedRuntimeModes` is the composer's (2.x), hosted pairing the other note's |
 | 46f360d8dd | #41722 | fix(client): a link to a newly linked machine's thread opens without a reload | thread | ported 7c048ec6: a link naming a machine the cached peerLinks.names lack reads the names once more (`refreshNamesLacking`) |

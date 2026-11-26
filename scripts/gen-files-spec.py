@@ -154,6 +154,23 @@ header = (f'<div data-preview-panel-mode="inline" style="width:{W}px" class="fle
           + crumb("demo-repo", first=True) + crumb("src") + crumb("answer.ts", current=True) + "</div></div>"
           + toggle(lucide("wrap-text", "size-3.5"), True) + toggle(lucide("folder-tree", "size-3.5"), True) + "</div></div>")
 
+# The header's Open in picker at 5258 (FilePreviewPanel.tsx:1605-1619, OpenInPicker.tsx:254-361 with `compact`):
+# a Group of an outline xs button holding Zed's mark, a GroupSeparator and an outline icon-xs chevron. Group and
+# separator classes are group.tsx and separator.tsx at 5258, as scripts/gen-layout-spec.py copies them.
+GROUP = ("flex w-fit *:focus-visible:z-1 has-[>[data-slot=group]]:gap-2 *:has-focus-visible:z-1 dark:*:[[data-slot=button]:hover~[data-slot=separator]:not([data-slot]:hover~[data-slot=separator]~[data-slot=separator]),[data-slot][data-pressed]~[data-slot=separator]:not([data-slot][data-pressed]~[data-slot=separator]~[data-slot=separator])]:before:bg-input/64 dark:*:[[data-slot=separator]:has(~[data-slot=button]:hover):not(:has(~[data-slot=separator]~[data-slot]:hover)),[data-slot=separator]:has(~[data-slot][data-pressed]):not(:has(~[data-slot=separator]~[data-slot][data-pressed]))]:before:bg-input/64 "
+         "*:[[data-slot]~[data-slot]:not([data-slot=separator])]:before:-start-[0.5px] *:data-slot:not-data-[slot=separator]:has-[~[data-slot]]:before:-end-[0.5px] *:pointer-coarse:after:min-w-auto *:data-slot:has-[~[data-slot]]:rounded-e-none *:data-slot:has-[~[data-slot]]:border-e-0 *:data-slot:has-[~[data-slot]]:before:rounded-e-none *:[[data-slot]~[data-slot]]:rounded-s-none *:[[data-slot]~[data-slot]]:border-s-0 *:[[data-slot]~[data-slot]]:before:rounded-s-none")
+GROUP_SEP = ("[[data-slot=input-control]:focus-within+&,[data-slot=input-group]:focus-within+&,[data-slot=select-trigger]:focus-visible+*+&,[data-slot=number-field]:focus-within+input+&]:-translate-x-px pointer-events-none relative z-2 bg-input before:absolute before:inset-0 dark:before:bg-input/32 shrink-0 w-px self-stretch")
+ZED = ('<svg fill="none" viewBox="0 0 96 96" aria-hidden="true" class="size-3.5 text-foreground opacity-100"><path fill="currentColor" fill-rule="evenodd" '
+       'd="M9 6a3 3 0 0 0-3 3v66H0V9a9 9 0 0 1 9-9h80.379c4.009 0 6.016 4.847 3.182 7.682L43.055 57.187H57V51h6v7.688a4.5 4.5 0 0 1-4.5 4.5H37.055L26.743 73.5H73.5V36h6v37.5a6 6 0 0 1-6 6H20.743L10.243 90H87a3 3 0 0 0 3-3V21h6v66a9 9 0 0 1-9 9H6.621c-4.009 0-6.016-4.847-3.182-7.682L52.757 39H39v6h-6v-7.5a4.5 4.5 0 0 1 4.5-4.5h21.257l10.5-10.5H22.5V60h-6V22.5a6 6 0 0 1 6-6h52.757L85.757 6H9Z" clip-rule="evenodd"></path></svg>')
+open_in = (f'<div role="group" data-slot="group" aria-label="Open in editor" class="{GROUP}">'
+           + button("outline", "xs", ZED + '<span class="sr-only">Open</span>', label="Open file in preferred editor")
+           + f'<div data-slot="separator" data-orientation="vertical" role="separator" class="{GROUP_SEP}"></div>'
+           + button("outline", "icon-xs", lucide("chevron-down", "size-4"), label="Choose editor") + "</div>")
+header_open_in = (f'<div data-preview-panel-mode="inline" style="width:{W}px" class="flex flex-col bg-background"><div class="{SUB}">'
+          '<div class="min-w-0 flex-1"><div class="flex h-full w-max min-w-full items-center text-xs">'
+          + crumb("demo-repo", first=True) + crumb("src") + crumb("answer.ts", current=True) + "</div></div>"
+          + open_in + toggle(lucide("wrap-text", "size-3.5"), True) + toggle(lucide("folder-tree", "size-3.5"), True) + "</div></div>")
+
 # --- Launcher -----------------------------------------------------------------------------------
 KBD = "pointer-events-none inline-flex h-5 min-w-5 select-none items-center justify-center gap-1 rounded bg-muted px-1 font-medium font-sans text-muted-foreground text-xs [&_svg:not([class*='size-'])]:size-3"
 ACTIONS = [("Browser", "earth", "B", False), ("Terminal", "square-terminal", "T", False), ("Files", "files", "F", True),
@@ -179,6 +196,7 @@ cases = [
     {"name": "tabs", "html": tabs, "native": {"case": "tabs"}, "wrapperStyle": f"display:block;width:{W}px"},
     {"name": "files", "html": files, "native": {"case": "files"}, "wrapperStyle": f"display:block;width:{W}px"},
     {"name": "file-header", "html": header, "native": {"case": "file-header"}, "wrapperStyle": f"display:block;width:{W}px"},
+    {"name": "file-header-open-in", "html": header_open_in, "native": {"case": "file-header-open-in"}, "wrapperStyle": f"display:block;width:{W}px"},
     {"name": "launcher", "html": launcher, "native": {"case": "launcher"}, "wrapperStyle": f"display:block;width:{W}px"},
 ]
 spec = {"component": "files", "source": "apps/web/src/components/RightPanelTabs.tsx, components/files/",
