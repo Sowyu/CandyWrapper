@@ -45,6 +45,16 @@ struct SidebarModelTests {
         #expect(ProjectMonogramView.identity("candywrapper").monogram == "CR")
     }
 
+    /// A settle or snooze waiting to sync reads "Pending" in place of the row's status (#24917).
+    @Test func aWaitingChangeReadsPending() {
+        let snapshot = SidebarPreview.referenceSnapshot()
+        var state = SidebarListState()
+        state.pendingSync = [snapshot.threads[6].id]
+        let rows = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: nowMs).compactMap { if case .row(let r) = $0 { r } else { nil } }
+        #expect(rows.filter(\.isPendingSync).map(\.statusLabel) == ["Pending"])
+        #expect(rows.filter { !$0.isPendingSync }.allSatisfy { $0.statusLabel != "Pending" })
+    }
+
     @Test func nextLabelChangeAimsAtTheNextStep() {
         let items = SidebarListBuilder.items(snapshot: SidebarPreview.referenceSnapshot(), state: SidebarListState(), nowMs: nowMs)
         let rows = items.compactMap { if case .row(let r) = $0 { r } else { nil } }

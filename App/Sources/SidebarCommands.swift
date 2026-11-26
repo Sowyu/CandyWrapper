@@ -409,7 +409,7 @@ final class SidebarCommands {
         Task {
             defer { settling.remove(id) }
             do {
-                try await environments.dispatch(id, ThreadCommands.settle(id.localId), optimistic: .settle)
+                try await environments.dispatchTriage(id, .settle)
             } catch {
                 ledger.finish(claim)
                 fail("Failed to settle thread", error)
@@ -419,6 +419,8 @@ final class SidebarCommands {
             showUndo(.settled, claim) { [weak self] in
                 guard let self else { return }
                 let title = "Failed to undo settle"
+                // A settle still waiting to sync is undone on this device alone, pin and snooze included.
+                if self.environments.cancelWaitingTriage(id, type: "settle") { return }
                 guard await self.attempt(title, { try await self.environments.dispatch(id, ThreadCommands.unsettle(id.localId), optimistic: .unsettle) }) else { return }
                 if wasPinned {
                     guard await self.attempt(title, { try await self.environments.dispatch(id, ThreadCommands.pin(id.localId, orderKey: pinKey), optimistic: .pin(orderKey: pinKey)) }) else { return }
@@ -434,6 +436,7 @@ final class SidebarCommands {
 
     func unsettle(_ id: ThreadId) {
         ledger.invalidate("settle", id.rawValue)
+        if environments.cancelWaitingTriage(id, type: "settle") { return }
         Task {
             do { try await environments.dispatch(id, ThreadCommands.unsettle(id.localId), optimistic: .unsettle) } catch {
                 fail("Failed to un-settle thread", error)
@@ -443,6 +446,7 @@ final class SidebarCommands {
 
     private func unsnooze(_ id: ThreadId) {
         ledger.invalidate("snooze", id.rawValue)
+        if environments.cancelWaitingTriage(id, type: "snooze") { return }
         Task {
             do { try await environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) } catch {
                 fail("Failed to wake thread", error)
@@ -482,7 +486,7 @@ final class SidebarCommands {
         let claim = ledger.begin("snooze", id.rawValue)
         let until = T3Timestamp(wake)
         do {
-            try await environments.dispatch(id, ThreadCommands.snooze(id.localId, until: until.raw), optimistic: .snooze(until: until))
+            try await environments.dispatchTriage(id, .snooze(until: until.raw))
         } catch {
             ledger.finish(claim)
             if reportFailure { fail("Failed to snooze thread", error) }
@@ -490,6 +494,7 @@ final class SidebarCommands {
         }
         showUndo(.snoozed, claim) { [weak self] in
             guard let self else { return }
+            if self.environments.cancelWaitingTriage(id, type: "snooze") { return }
             _ = await self.attempt("Failed to wake thread", { try await self.environments.dispatch(id, ThreadCommands.unsnooze(id.localId), optimistic: .unsnooze) })
         }
         if routeThreadId == id, let now = shell(id), SidebarModel.effectiveSnoozed(self.presented(now), nowMs: nowMs) { navigate?() }
