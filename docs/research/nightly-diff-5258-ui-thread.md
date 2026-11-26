@@ -409,7 +409,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 8783b9d2ea | #42880 | fix(web): Restart agent session toast says the conversation is kept | palette | ported 2995f10a |
 | 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | already: `layoutMinimap` takes the gutter from `laneFrame.x`, the measured lane offset |
 | 19a6e5b57b | #42856 | fix(web): clicking outside a citation comment keeps its dictation | thread | n/a here: same composer citation editor |
-| 3a63e0ca37 | #42771 | fix(web): expanding linked issues no longer hides thread details sections | thread | ported COMMIT (issue rows sit in their own list; the other sections stay) |
+| 3a63e0ca37 | #42771 | fix(web): expanding linked issues no longer hides thread details sections | thread | ported d414425c (issue rows sit in their own list; the other sections stay) |
 | f99eceb76d | #42755 | fix(web): reasoning previews no longer cut emojis in half | thread | already: Swift slices previews by character, so no surrogate pair splits |
 | d38dcccef8 | #42707 | fix(web): project actions menu re-reads t3.json each time it opens | thread | port (1.18) |
 | 9eaac040de | #42697 | test(web): sidebar shift guard tests no longer race the click against fake time | sidebar | n/a (test only) |
@@ -429,7 +429,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | n/a (web canvas worker; CW prepares images with ImageIO off the main thread) |
 | 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | left: offline outbox (large) |
 | dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | ported d11002d4 (not seen on screen: the sandbox turn used Bash grep) |
-| 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | ported COMMIT (the card's quota rows; snapshots' `http` sources decode; the Usage page's quota section is still left) |
+| 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | ported d414425c (the card's quota rows; snapshots' `http` sources decode; the Usage page's quota section is still left) |
 | 924d9c1fff | #42386 | feat(projects): worktree layout commands run only once a person approves them | composer | ported 41958980 |
 | eb7cc44727 | #42309 | fix(web): showing or hiding a requested secret keeps the caret in place | thread | ported f15f9c8d |
 | 571ed76fc3 | #42275 | fix(web): sidebar issue and pull request badges share one component | sidebar | port (3.7) |
@@ -550,7 +550,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | e7b1b88bef | #37274 | fix(web): IME composition replaces selected text beside chips | composer | n/a (AppKit handles IME) |
 | 46ee2fc7ff | #35185 | feat(web): sidebar New starts the thread in the scoped project | sidebar | ported 11e1c196 |
 | 1d975f53ea | #39488 | feat(web): click the Tab hint to use the suggested prompt | composer | ported 0a35f251 |
-| c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | ported COMMIT (the card's hub pool; the report keeps 4928's driver match, see the ponytail in UsageLimits.swift) |
+| c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | ported d414425c (the card's hub pool; the report keeps 4928's driver match, see the ponytail in UsageLimits.swift) |
 | 342b58a79f | #30644 | feat(web): add a composerEmpty keybinding condition | composer | ported 4871c2c9 |
 | 285558eb10 | #34027 | feat(desktop): dictate on this Mac with Apple Speech | composer | n/a (desktop IPC, wire A19) |
 | 669d8941e2 | #39921 | feat: sign in to an agent's MCP server from its warning | thread | ported ca680ce9 (seen offscreen only: no sandbox MCP server needs a login) |
@@ -573,7 +573,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | dcf158c591 | #39415 | feat(server): setting and managed policy to turn off the preview tunnel | other | n/a (preview tunnel, wire A10) |
 | 420d1b5900 | #39393 | feat(desktop): forward another environment's ports to this machine | palette | n/a (desktop IPC, wire A19) |
 | 296f9131f7 | #39340 | fix(web): Cmd+W closes the browser tab when the page has focus | other | n/a (browser tabs, other agent) |
-| b111b6310a | #39232 | fix(web): collapse extra linked issues in thread details | thread | ported COMMIT (compact issue rows with state, key, tracker and comments; the first row, the rest behind Show N more) |
+| b111b6310a | #39232 | fix(web): collapse extra linked issues in thread details | thread | ported d414425c (compact issue rows with state, key, tracker and comments; the first row, the rest behind Show N more) |
 | 98af8803fe | - | refactor(web): share restart countdown seconds in update capsule | sidebar | n/a (refactor) |
 | f0f9de46c6 | - | fix(web): localize compact restart countdown | sidebar | port (3.6) |
 | 40c1e861ee | - | fix(web): keep sidebar update control readable when narrow | sidebar | port (3.6) |
