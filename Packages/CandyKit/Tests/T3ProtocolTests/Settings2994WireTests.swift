@@ -30,6 +30,8 @@ struct Settings2994WireTests {
         #expect(StorageCleanupReport.formatBytes(0) == "0 B")
         #expect(StorageCleanupReport.formatBytes(1023) == "1023 B")
         #expect(StorageCleanupReport.formatBytes(1536) == "1.50 KB")
+        #expect(StorageCleanupReport.formatBytes(9.996 * 1024) == "10.0 KB")
+        #expect(StorageCleanupReport.formatBytes(99.96 * 1024) == "100 KB")
         #expect(StorageCleanupReport.formatBytes(15 * 1024) == "15.0 KB")
         #expect(StorageCleanupReport.formatBytes(150 * 1024 * 1024) == "150 MB")
         // #26067 (formatBytes.test.ts at 4928): the unit is picked after rounding.
