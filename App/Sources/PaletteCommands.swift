@@ -589,8 +589,9 @@ final class PaletteCommands {
                             + group.members.flatMap { [$0.title, $0.workspaceRoot] } + [locationLabel(group.representative.id.environmentId)],
                          title: group.label, description: projectDescription(group), icon: .folder,
                          action: .run({ [weak self] in
-                             // The open thread's own member when it is in this group, else the group's project.
-                             let member = current.flatMap { id in group.members.first { $0.id == id } } ?? group.representative
+                             // The open thread's own member when it is in this group and not archived, else the group's
+                             // project (`isPickableProjectMember`, CommandPalette.tsx:896-911 at 5258, #38984).
+                             let member = current.flatMap { id in group.members.first { $0.id == id && $0.archivedAt == nil } } ?? group.representative
                              self?.newThread(in: member)
                          }, keepOpen: false))
             entry.projectIcon = ProjectIconSource(group.representative)
