@@ -475,11 +475,13 @@ final class WorkRowView: WorkRowBase {
             details[i].isHidden = !open || detail.blocks.isEmpty || thought || failedError != nil
             while failures.count <= i { failures.append(nil) }
             let retry = failedError?.runId.flatMap { item.ui.retryRunIds.contains($0) ? $0 : nil }
-            if let failedError, failedError.message != nil || retry != nil {
+            let verify = e.projectedItem?.item.failureVerificationURL.flatMap(SafeExternalURL.parse)
+            if let failedError, failedError.message != nil || retry != nil || verify != nil {
                 let view = failures[i] ?? WorkFailureView()
                 if failures[i] == nil { failures[i] = view; addSubview(view) }
                 view.isHidden = false
                 view.message = failedError.message
+                view.verificationURL = verify
                 if let retry {
                     view.onRetry = { [weak self] in self?.context.model?.onRetryWorkspacePreparation?(retry) }
                 } else {
@@ -604,9 +606,13 @@ final class WorkRowView: WorkRowBase {
 
 /// Below a failed error's line (MessagesTimeline.tsx:5451-5468): the failure message `ms-7 py-1 text-sm
 /// leading-relaxed text-foreground/80`, then for a failed workspace preparation an outline xs Retry `ms-7 pb-1`.
+/// A failed Antigravity turn adds an outline xs "Verify Google account" link before Retry, with the external-link glyph
+/// after its label (TimelineWorkEntryRow.tsx:397-407 at 5258, #41210). It opens the system browser.
 final class WorkFailureView: DSView {
     private let text = TextBlockView("", font: TL.font(14), lineHeight: 22.75, color: TL.c(\.foreground, 0.8))
     private let retry = ButtonView("Retry", icon: .rotateCcw, variant: .outline, size: .xs)
+    private let verify = ButtonView("Verify Google account", variant: .outline, size: .xs)
+    var verificationURL: URL? { didSet { verify.isHidden = verificationURL == nil; needsLayout = true } }
     private static let inset: CGFloat = 28
 
     var message: String? { didSet { text.text = message ?? ""; text.isHidden = message == nil; needsLayout = true } }
@@ -619,6 +625,10 @@ final class WorkFailureView: DSView {
         addSubview(text)
         addSubview(retry)
         retry.isHidden = true
+        verify.trailingIcon = .externalLink
+        verify.isHidden = true
+        verify.action = { [weak self] in if let url = self?.verificationURL { NSWorkspace.shared.open(url) } }
+        addSubview(verify)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -628,14 +638,16 @@ final class WorkFailureView: DSView {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        textHeight(width) + (onRetry == nil ? 0 : 24 + 4)
+        textHeight(width) + (verificationURL == nil ? 0 : 24 + 4) + (onRetry == nil ? 0 : 24 + 4)
     }
 
     override func layout() {
         super.layout()
         let th = textHeight(bounds.width)
         text.frame = NSRect(x: Self.inset, y: 4, width: max(0, bounds.width - Self.inset), height: max(0, th - 8))
-        retry.frame = NSRect(x: Self.inset, y: th, width: retry.intrinsicContentSize.width, height: 24)
+        verify.frame = NSRect(x: Self.inset, y: th, width: verify.intrinsicContentSize.width, height: 24)
+        let ry = th + (verificationURL == nil ? 0 : 24 + 4)
+        retry.frame = NSRect(x: Self.inset, y: ry, width: retry.intrinsicContentSize.width, height: 24)
     }
 }
 
