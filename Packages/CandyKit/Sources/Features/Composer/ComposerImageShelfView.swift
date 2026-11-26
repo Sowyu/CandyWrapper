@@ -306,10 +306,14 @@ public final class ComposerImageShelfView: DSView {
         public var id: String
         public var name: String
         public var status: ComposerFileRow.Status
-        public var fileURL: URL
+        /// Nil draws the name in place of a picture: a queued message's file, or its image before the server copy
+        /// arrives (`ComposerQueuedAttachmentRow`, ComposerAttachmentStrip.tsx at 5258).
+        public var fileURL: URL?
         public var source: JSONValue?
-        public init(id: String, name: String, status: ComposerFileRow.Status, fileURL: URL, source: JSONValue? = nil) {
-            self.id = id; self.name = name; self.status = status; self.fileURL = fileURL; self.source = source
+        /// False hides the remove button.
+        public var removable = true
+        public init(id: String, name: String, status: ComposerFileRow.Status, fileURL: URL?, source: JSONValue? = nil, removable: Bool = true) {
+            self.id = id; self.name = name; self.status = status; self.fileURL = fileURL; self.source = source; self.removable = removable
         }
     }
 
@@ -409,10 +413,17 @@ public final class ComposerImageShelfView: DSView {
                     addSubview(view, positioned: .below, relativeTo: remove); details = view
                 }
             }
-            let url = tile.fileURL
-            image.set(key: url.path, fallbackText: tile.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: true, measurementKey: url.path) }
-            image.onContextMenu = { event, view in
-                MediaAttachmentContextMenu.show(name: tile.name, load: { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }, event: event, view: view)
+            remove.isHidden = !tile.removable
+            if let url = tile.fileURL {
+                image.set(key: url.path, fallbackText: tile.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: true, measurementKey: url.path) }
+                image.onContextMenu = { event, view in
+                    MediaAttachmentContextMenu.show(name: tile.name, load: { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }, event: event, view: view)
+                }
+            } else {
+                // `px-1 text-center text-3xs text-secondary-label`.
+                // ponytail: one truncated line where T3 wraps the name in the tile; a wrapping label if long names show up
+                image.set(key: "name:" + tile.id, fallbackText: tile.name, loader: nil)
+                image.onContextMenu = nil
             }
             if isSnapShot != (tile.source != nil) {
                 isSnapShot = tile.source != nil

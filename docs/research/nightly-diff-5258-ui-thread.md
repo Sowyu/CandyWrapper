@@ -211,7 +211,7 @@ The "Tab" kbd hint after a prompt suggestion is now a `button` with `aria-label`
 - @-file mentions show by name in the stash menu, queued rows and sidebar drafts (#40924).
 - CW: partly. `Features/Composer/QueuedRunEdits.swift`, `Features/Composer/QueuedRunsView.swift` and `Features/Composer/ComposerLogic.swift` (which has the steering capabilities) exist.
 - Ported (port-composer): #40316 and #40767 in 357ba3b8, #40924 in 9ff295a2, #41814 in 31975590 (the edit picks under its own key, `followsThreadSelection` decodes, `queued-run.edit` carries `modelSelection`).
-- Correction (port-composer): CW's queued edit has never had T3's 4928 baseline for attachments or replies. It edits text only, `queued-run.edit` goes without `attachments`, so the server keeps them, and a reply stays an inline reference in the edit's text. So #40763 has nothing to fix here: a reply can only change by editing that text. Left: attachments in queued edits, the 4928 baseline plus #40945 (large, 726 lines in T3), and the reply shown above the composer while editing (small).
+- Correction (port-composer): CW's queued edit has never had T3's 4928 baseline for attachments or replies. It edits text only, `queued-run.edit` goes without `attachments`, so the server keeps them, and a reply stays an inline reference in the edit's text. So #40763 has nothing to fix here: a reply can only change by editing that text. Attachments in queued edits, the 4928 baseline plus #40945, ported in 4ed68104, c363ed65, ab65ea34 and 5f5259d5. The reply shown above the composer while editing is 29a57ed6.
 - Commits: 87554a7b86 #40945, d572ce9afe #41814, d834a4e117 #40763, c3a330d834 #40767, c385377544 #40316, 9de4ec1bfa #40924.
 
 ### 2.4 Paste and drop (medium, default look: no)
@@ -319,7 +319,7 @@ Numbered thread jumps and next/previous thread include unsent drafts (#39968): d
 - A worktree thread of a project with tracked folders keeps its branch when git says the folder is no repository (#35925, components/Sidebar.logic.ts).
 - Snooze labels follow the app language (#39494).
 - Commits: bcb9217e8e #26661, 5812320a6a #41258, 42d2387285 #31545, 92199680cc #41365, 78de041d48 #24917, 9331811180 #41885, 60863edc41 #35925, 67f17528f2 #39494.
-- Ported (port-composer) in fa78d3d4: #41365, #31545, #41258, #26661. Correction: #35925's sidebar rule needs nothing, CW never drops a thread's branch on a non-repository status (T3's `withoutRemovedCheckout` is an older gap the other way). #39494 needs nothing, CW is English only. Left: #24917 offline settle and snooze, an outbox of 1,171 lines (large). #41885 ported in 0edefb34: CW's sort order already matched, so the change is the drop plan, where every Active row now has a key.
+- Ported (port-composer) in fa78d3d4: #41365, #31545, #41258, #26661. Correction: #35925's sidebar rule needs nothing, CW never drops a thread's branch on a non-repository status (T3's `withoutRemovedCheckout` is an older gap the other way). #39494 needs nothing, CW is English only. #24917 ported in fbe79242, d3afab61 and e3bf0a8f. #41885 ported in 0edefb34: CW's sort order already matched, so the change is the drop plan, where every Active row now has a key.
 
 ### 3.6 Update capsule in narrow sidebars (medium to large with the capsule itself, default look: yes, redesign)
 
@@ -432,7 +432,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | ea63274413 | #42489 | chore(deps): bump vite-plus to 1.8.0 | other | n/a (dependency bump) |
 | 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | ported 7a0e6330 (an MCP app whose first message is not its document's port gets no bridge and shows T3's "needs a newer server" line; tested in a live web view) |
 | c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | n/a (web canvas worker; CW prepares images with ImageIO off the main thread) |
-| 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | left: offline outbox (large), not started this pass |
+| 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | ported fbe79242, d3afab61, e3bf0a8f. The outbox lives in the app's defaults (`threadTriageOutbox.v1`, per bundle id) and drains from the live shell event |
 | dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | ported d11002d4 (not seen on screen: the sandbox turn used Bash grep) |
 | 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | ported d414425c (the card's quota rows; snapshots' `http` sources decode; the Usage page's quota section is still left) |
 | 924d9c1fff | #42386 | feat(projects): worktree layout commands run only once a person approves them | composer | ported 41958980 |
@@ -502,7 +502,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 67f17528f2 | #39494 | fix(web): snooze labels follow the app language | sidebar | nothing to port: English only |
 | c7df7004af | #41021 | fix(web): a photo picked on a phone attaches even when the composer collapses | composer | n/a (phone photo picker) |
 | 55880c41b4 | #40986 | fix(client-runtime): count ambiguous projects in chat file links | thread | ported dd1cfae1 |
-| 87554a7b86 | #40945 | fix(web): editing a queued message keeps its attachment chips resolved | composer | left: attachments in queued edits (large), not started this pass. The reply half is 29a57ed6 |
+| 87554a7b86 | #40945 | fix(web): editing a queued message keeps its attachment chips resolved | composer | ported with the 4928 baseline in 4ed68104, c363ed65, ab65ea34, 5f5259d5. The reply half is 29a57ed6 |
 | 7ddc81d639 | #40905 | fix(web): tool calls stay grouped after a usage-limit pause again | thread | ported 00aa8a70 |
 | 9de4ec1bfa | #40924 | fix(web,mobile): @-file mentions show by name in message previews, not as raw links | composer | ported 9ff295a2 |
 | 2c4310eb06 | #40909 | fix(web): pasting a chat message with text and a picture keeps both | composer | ported 8337eb04 |

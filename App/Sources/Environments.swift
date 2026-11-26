@@ -42,6 +42,9 @@ final class Environments {
     private var shells = MergedShell()
     /// Sidebar commands not yet reflected in their environment's shell (settle, snooze, pin).
     private var optimistic = OptimisticThreadOverlay()
+    /// Settles and snoozes made while their environment was offline, sent when its shell is live again (#24917).
+    private var triage = ThreadTriageOutbox.load()
+    private var drainingTriage: Set<String> = []
     /// Registration order, the primary first. The merge follows it; sorting doesn't depend on it.
     private var order: [String] = []
     private let iconRoutes = IconRoutes()
@@ -82,6 +85,8 @@ final class Environments {
         self.sidebar = sidebar
         self.catalog = catalog
         self.cache = cache
+        // Changes that waited through a relaunch read "Pending" until their environment syncs.
+        defer { publishTriagePending() }
         ssh.onTunnelExit = { [weak self] target in
             guard let self, let saved = self.saved.first(where: { $0.sshTarget?.stateKey == target.stateKey }) else { return }
             self.drop(saved.environmentId)
@@ -628,6 +633,7 @@ final class Environments {
         onLiveShell?(id, nil)
         optimistic.remove(environmentId: id)
         shells.remove(id)
+        if removing.contains(id), !triage.pending(environmentId: id).isEmpty { triage.remove(environmentId: id); triage.save(); publishTriagePending() }
         iconRoutes.set(id, nil)
         order.removeAll { $0 == id }
         publishEnvironments()
@@ -665,6 +671,7 @@ final class Environments {
                 previous?(snapshot)
                 guard let self, let session, self.entries[id]?.session === session else { return }
                 self.onLiveShell?(id, snapshot)
+                self.drainTriage(id, snapshot)
                 if id == self.primaryId { LaunchTiming.mark("live sidebar") }
                 if id != self.primaryId { Task { await self.cache.noteChanged(snapshot, environmentId: id) } }
             }
@@ -683,7 +690,8 @@ final class Environments {
         guard entries[id] != nil else { return }
         entries[id]?.snapshot = snapshot
         optimistic.reconcile(environmentId: id, snapshotSequence: snapshot.snapshotSequence)
-        shells.set(optimistic.apply(snapshot, environmentId: id), environmentId: id)
+        // The waiting changes go under the optimistic ones, as T3 wraps the outbox's snapshot (threadCommands.ts at 5258).
+        shells.set(optimistic.apply(triage.apply(snapshot, environmentId: id), environmentId: id), environmentId: id)
         merge()
     }
 
@@ -745,6 +753,107 @@ final class Environments {
         } catch {
             if let token { optimistic.cancel(token); reapplyOptimistic(env) }
             throw error
+        }
+    }
+
+    // MARK: Offline settle and snooze
+
+    /// Settle or snooze. When the environment is not connected, the change waits on this device, shows at once and
+    /// reads "Pending" (`queueWhenOffline`, threadTriageOutbox.ts:230-246 at 5258). A send that goes through replaces
+    /// any waiting change, since the server now has the newer decision.
+    func dispatchTriage(_ threadId: ThreadId, _ action: ThreadTriageOutbox.Action) async throws {
+        guard let env = threadId.environmentId else { throw CommandError.notConnected }
+        let local = threadId.localId
+        // Judged against the thread as the user saw it when acting.
+        let seen = entries[env]?.snapshot?.threads.first { $0.id == local }
+        let commandId = ThreadCommands.newCommandId()
+        let token = optimistic.begin(action.update, threadId: local, environmentId: env)
+        reapplyOptimistic(env)
+        do {
+            let result = try await request(env, "orchestration.dispatchCommand", Self.triageCommand(local, action, commandId: commandId))
+            if let sequence = ThreadCommands.sequence(result) { optimistic.confirm(token, sequence: sequence) } else { optimistic.cancel(token) }
+            forgetTriage(env, local)
+            reapplyOptimistic(env)
+        } catch {
+            optimistic.cancel(token)
+            if isUnavailable(error, env), let seen, triage.queue(action, thread: seen, environmentId: env, commandId: commandId) {
+                triageChanged(env)
+                return
+            }
+            reapplyOptimistic(env)
+            throw error
+        }
+    }
+
+    /// Un-settle or Wake. A waiting change of that kind is removed first; offline that is the whole undo, and true
+    /// means nothing needs sending (`cancelQueued`, threadTriageOutbox.ts:248-298 at 5258).
+    func cancelWaitingTriage(_ threadId: ThreadId, type: String) -> Bool {
+        guard let env = threadId.environmentId,
+              triage.cancel(environmentId: env, threadId: threadId.localId.rawValue, type: type) else { return false }
+        triageChanged(env)
+        return entries[env]?.state?.phase != .connected
+    }
+
+    /// The thread's waiting change, if any, is out of date once a newer decision reached the server.
+    func forgetTriage(_ env: String, _ local: ThreadId) {
+        guard triage.pendingThreads(environmentId: env).contains(local.rawValue) else { return }
+        triage.forget(environmentId: env, threadId: local.rawValue)
+        triageChanged(env)
+    }
+
+    /// Not connected, so the server never saw the command (`EnvironmentRpcUnavailableError`).
+    private func isUnavailable(_ error: Error, _ env: String) -> Bool {
+        if error is CommandError { return true }
+        guard let rpc = error as? RPCClientError, rpc.isTransport else { return false }
+        return entries[env]?.state?.phase != .connected
+    }
+
+    private static func triageCommand(_ local: ThreadId, _ action: ThreadTriageOutbox.Action, commandId: String) -> JSONValue {
+        switch action {
+        case .settle: ThreadCommands.settle(local, commandId: commandId)
+        case .snooze(let until): ThreadCommands.snooze(local, until: until, commandId: commandId)
+        }
+    }
+
+    private func triageChanged(_ env: String) {
+        triage.save()
+        publishTriagePending()
+        reapplyOptimistic(env)
+    }
+
+    /// The threads whose change waits, scoped, for the sidebar's "Pending".
+    private func publishTriagePending() {
+        let pending = Set(triage.entries.map { ThreadId($0.threadId).scoped(to: $0.environmentId) })
+        if sidebar?.state.pendingSync != pending { sidebar?.state.pendingSync = pending }
+    }
+
+    /// Sends the waiting changes once the environment's shell is live (`replay`, threadTriageOutbox.ts:128-150 at
+    /// 5258), from the live shell's own event, never a timer. The live shell wins: a change whose thread moved
+    /// meanwhile is dropped. A send that fails for the connection stays for the next live shell, any other failure
+    /// drops it. Each goes under its stored command id, which the server answers only once.
+    private func drainTriage(_ env: String, _ snapshot: ShellSnapshot) {
+        guard !drainingTriage.contains(env), !triage.pending(environmentId: env).isEmpty,
+              entries[env]?.state?.phase == .connected else { return }
+        let plan = triage.replay(snapshot, environmentId: env)
+        for entry in plan.drop { triage.forget(commandId: entry.commandId) }
+        if !plan.drop.isEmpty { triageChanged(env) }
+        guard !plan.send.isEmpty else { return }
+        drainingTriage.insert(env)
+        Task { [weak self] in
+            for entry in plan.send {
+                // Undone on this device while an earlier change went out.
+                guard let self, self.triage.entries.contains(where: { $0.commandId == entry.commandId }) else { continue }
+                let local = ThreadId(entry.threadId)
+                do {
+                    _ = try await self.dispatch(local.scoped(to: env), Self.triageCommand(local, entry.action, commandId: entry.commandId),
+                                                optimistic: entry.action.update)
+                } catch {
+                    if error is CommandError || (error as? RPCClientError)?.isTransport == true { continue }
+                }
+                self.triage.forget(commandId: entry.commandId)
+                self.triageChanged(env)
+            }
+            self?.drainingTriage.remove(env)
         }
     }
 

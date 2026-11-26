@@ -30,6 +30,9 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var isPreparing = false
     public var isUnread: Bool
     public var isWoke: Bool
+    /// A settle or snooze made offline waits to sync: the status slot reads "Pending" (#24917,
+    /// SidebarThreadRow.tsx:164-176, 1098 at 5258).
+    public var isPendingSync = false
     public var isPinned: Bool
     public var recedes: Bool
     public var isActive: Bool
@@ -84,7 +87,8 @@ public struct SidebarRowModel: Equatable, Sendable {
 
     /// The status slot text as T3 renders it, for tests and accessibility.
     public var statusLabel: String? {
-        switch topStatus {
+        if isPendingSync { return "Pending" }
+        return switch topStatus {
         case .working: isPreparing ? "Setting up" : isGoal ? "Goal" : "Working"
         case .waiting: "Waiting"
         case .approval: "Approval"
@@ -373,6 +377,8 @@ public struct SidebarListState: Equatable, Sendable {
     public var capabilities = SidebarModel.Capabilities(threadSettlement: true, threadSnooze: true)
     /// Visits recorded on this device, for servers without `lastVisitedAt`.
     public var localVisits: [ThreadId: T3Timestamp] = [:]
+    /// Threads with a settle or snooze waiting to sync (`pendingSyncAtom`).
+    public var pendingSync: Set<ThreadId> = []
     public var environments = SidebarEnvironments()
     /// Scoped thread id to its terminals running a subprocess, from `subscribeTerminalMetadata`.
     public var terminalProcesses: [ThreadId: Int] = [:]
@@ -421,6 +427,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.settledRange == b.settledRange
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
             && a.hiddenThreadTags == b.hiddenThreadTags && a.titleTypings == b.titleTypings
+            && a.pendingSync == b.pendingSync
     }
 }
 
@@ -796,6 +803,7 @@ public enum SidebarListBuilder {
             pullRequestBadge: SidebarPullRequestBadge(shell),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
         model.dither = state.dither
+        model.isPendingSync = state.pendingSync.contains(shell.id)
         model.titleTyping = state.titleTypings[shell.id]
         if state.dither, section == .settled {
             // Redesign's Settled shows full rows, a step dimmer than active ones, with when each settled.

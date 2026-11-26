@@ -718,7 +718,16 @@ final class SidebarCardRowView: SidebarRowBase {
         pin.isHidden = !showsPin(r) || capyRow && (r.inProjectSection || hovered)
 
         let showActions = hovered
-        if let top = r.topStatus {
+        statusLabel.font = SB.font(12, r.isPendingSync ? .regular : .medium)
+        // `PendingSyncLabel`'s tooltip (SidebarThreadRow.tsx:164-176 at 5258).
+        statusLabel.setTooltip(r.isPendingSync ? "Waiting to sync with its environment" : nil)
+        if r.isPendingSync {
+            // `text-xs text-secondary-label`, no icon and no time (SidebarThreadRow.tsx:1620-1621 at 5258).
+            statusIcon.set(nil, color: .clear)
+            statusLabel.text = "Pending"
+            statusLabel.color = SB.c(\.secondaryLabel)
+            duration.text = ""
+        } else if let top = r.topStatus {
             let color = SB.status(top)
             statusLabel.text = r.statusLabel ?? ""
             statusLabel.color = color
@@ -736,8 +745,8 @@ final class SidebarCardRowView: SidebarRowBase {
             duration.font = SB.tabular(12)
         }
         // Working and waiting show the grid and a muted timer whose digits roll, without the word.
-        let waitingGrid = capyRow && r.topStatus == .waiting
-        let grid = capyRow && r.topStatus == .working || waitingGrid
+        let waitingGrid = capyRow && !r.isPendingSync && r.topStatus == .waiting
+        let grid = capyRow && !r.isPendingSync && r.topStatus == .working || waitingGrid
         if grid {
             statusIcon.set(nil, color: .clear)
             statusLabel.text = ""
@@ -1182,8 +1191,14 @@ final class SidebarSlimRowView: SidebarRowBase {
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
         issueBadge.badge = r.issueBadge
-        let woke = r.isWoke && r.snoozeLabel == nil
-        if let snooze = r.snoozeLabel {
+        let woke = r.isWoke && r.snoozeLabel == nil && !r.isPendingSync
+        time.setTooltip(r.isPendingSync ? "Waiting to sync with its environment" : nil)
+        if r.isPendingSync {
+            // SidebarThreadRow.tsx:1414-1417 at 5258: `text-xs` in the secondary label color.
+            time.text = "Pending"
+            time.color = SB.c(\.secondaryLabel)
+            time.font = SB.font(12)
+        } else if let snooze = r.snoozeLabel {
             time.text = snooze
             // Redesign: the accent, as the Snoozed header has it, where T3 has its info blue.
             let tone = r.dither ? SB.c(\.primary) : SB.c(\.infoForeground)
