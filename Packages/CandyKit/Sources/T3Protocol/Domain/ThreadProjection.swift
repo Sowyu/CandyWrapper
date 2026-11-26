@@ -62,6 +62,13 @@ public struct AppThread: Codable, Hashable, Sendable, Identifiable {
     public var issues: [ThreadIssueLink] { (try? raw["issues"]?.decode(as: LenientArray<ThreadIssueLink>.self))?.values ?? [] }
     /// The workflow run this thread is an agent step of (5258 orchestrationV2.ts:521).
     public var workflowRun: WorkflowOrigin? { try? raw["workflowRun"]?.decode(as: WorkflowOrigin.self) }
+    /// Repositories a completed rewind left as they were, because none had a snapshot to go back to
+    /// (5258 orchestrationV2.ts:579-587, multi-repository projects).
+    public var rollbackUnrestored: RollbackUnrestored? { try? raw["rollbackUnrestored"]?.decode(as: RollbackUnrestored.self) }
+    public struct RollbackUnrestored: Decodable, Hashable, Sendable {
+        public var requestId: String
+        public var repositories: [String]
+    }
     /// 4928 orchestrationV2.ts:535.
     public var lastTitleRegeneration: LastTitleRegeneration? { try? raw["lastTitleRegeneration"]?.decode(as: LastTitleRegeneration.self) }
 
@@ -126,6 +133,10 @@ public struct Run: Codable, Hashable, Sendable, Identifiable {
     public var workspacePreparation: JSONValue?
     /// The run a manual continuation (Resume) continues (5258 orchestrationV2.ts:840).
     public var manualContinuationOfRunId: RunId?
+    /// The JSON Schema of the result the run was asked to return as data, and that result once the server accepted it
+    /// (`{value, submittedAt}`, written by `run.output-submitted`), 5258 orchestrationV2.ts:813-819, 858, 2255.
+    public var outputSchema: JSONValue?
+    public var output: JSONValue?
 }
 
 /// `OrchestrationV2RunAttempt` (orchestrationV2.ts:597-619).

@@ -156,3 +156,81 @@ public enum LinkRequestAnswer {
         return best.flatMap { hintRank($0.element.label, hint) < 4 ? $0.element.id : nil }
     }
 }
+
+// MARK: - 5258 linked thread reads and pairing (peerLink.ts:39-42, 69-73, 112-226, rpc.ts:605-610, 963-1020;
+// T3 commits 1cb3a8c753, d7f6b3efca, 6f644f6e91, 8e8ff9b243, f6d941fa4f, 28706aceb6)
+
+/// `PeerLinkName` (peerLink.ts:39-42): a link's name only, for a client that may read threads here but not manage
+/// access. `peerLinks.names` answers `{links: [PeerLinkName]}`.
+public struct PeerLinkName: Codable, Hashable, Sendable {
+    public var environmentId: String
+    public var label: String
+}
+
+/// `PeerLinkRemoveResult` (:66-71). `endedThere`: the peer ended the link's session; older servers never ask it to.
+public struct PeerLinkRemoveResult: Codable, Hashable, Sendable {
+    public var removed: Bool
+    public var endedThere: Bool?
+}
+
+/// `PeerLinkClientPairingResult` (:157-178), the answer of `pairClient` and `pairLink`: a credential this client
+/// pairs with directly, or why it can't (`link_access`, `version`, `refused` or `unreachable`).
+public struct PeerLinkClientPairingResult: Codable, Hashable, Sendable {
+    /// `credential` or `unsupported`.
+    public var type: String
+    public var environmentId: String
+    public var label: String
+    public var urls: [String]
+    public var credential: String?
+    public var expiresAt: T3Timestamp?
+    public var reason: String?
+}
+
+/// RPC tags and payloads for reading a linked environment's threads through this one.
+public enum PeerLinkRPC {
+    public static let list = "peerLinks.list"
+    public static let names = "peerLinks.names"
+    public static let link = "peerLinks.link"
+    public static let unlink = "peerLinks.unlink"
+    public static let answerRequest = "peerLinks.answerRequest"
+    /// Streams the same items as `orchestration.subscribeThread` for the linked thread (rpc.ts:989-994).
+    public static let subscribeThread = "peerLinks.subscribeThread"
+    /// Answers a `ThreadHistoryPage` (rpc.ts:996-1000).
+    public static let threadHistoryPage = "peerLinks.threadHistoryPage"
+    /// Answers like `orchestration.getTurnItem` (rpc.ts:1002-1006).
+    public static let threadItem = "peerLinks.threadItem"
+    /// Both need `access:write` plus the access they hand out (clientRpcPermissions.ts:105-106, 132-139).
+    public static let pairClient = "peerLinks.pairClient"
+    public static let pairLink = "peerLinks.pairLink"
+
+    /// `ExecutionEnvironmentCapabilities` gates (environment.ts:195-200).
+    public static let threadStreamCapability = "linkThreadStream"
+    public static let clientPairingCapability = "linkClientPairing"
+    public static let pairingForLinkCapability = "linkPairingForLink"
+
+    /// `PeerLinkThreadReadError` (:121-140) carries `reason` (`disabled`, `unknown_link`, `expired`, `rejected`,
+    /// `unreachable`, `thread_not_found`, `incompatible`), the link's `label` and a `message` in words.
+    public static let threadReadErrorTag = "PeerLinkThreadReadError"
+
+    /// `PeerLinkThreadInput` (:95-100): the linked environment and its thread.
+    public static func threadInput(environmentId: String, threadId: ThreadId) -> JSONValue {
+        .object(["environmentId": .string(environmentId), "threadId": .string(threadId.rawValue)])
+    }
+    /// `PeerLinkThreadHistoryInput` (:102-107): `cursor` is the snapshot's or the previous page's `historyCursor`.
+    public static func historyInput(environmentId: String, threadId: ThreadId, cursor: String) -> JSONValue {
+        .object(["environmentId": .string(environmentId), "threadId": .string(threadId.rawValue), "cursor": .string(cursor)])
+    }
+    /// `PeerLinkThreadItemInput` (:109-115): `revision` only keys the client cache.
+    public static func itemInput(environmentId: String, threadId: ThreadId, itemId: TurnItemId, revision: String? = nil) -> JSONValue {
+        var o: [String: JSONValue] = ["environmentId": .string(environmentId), "threadId": .string(threadId.rawValue),
+                                      "itemId": .string(itemId.rawValue)]
+        if let revision { o["revision"] = .string(revision) }
+        return .object(o)
+    }
+    /// `pairClient` (:142-143).
+    public static func pairClientInput(environmentId: String) -> JSONValue { .object(["environmentId": .string(environmentId)]) }
+    /// `pairLink` (:145-149): `access` is `read-only`, `operate` or `full-access`.
+    public static func pairLinkInput(environmentId: String, access: String) -> JSONValue {
+        .object(["environmentId": .string(environmentId), "access": .string(access)])
+    }
+}

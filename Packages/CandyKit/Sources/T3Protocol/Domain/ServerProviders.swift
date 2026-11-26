@@ -258,6 +258,9 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     /// `subProviders` (4928, contracts server.ts): the backends `models` run on, in order, matched by
     /// `ServerProviderModel.subProvider`. Pickers group models under them.
     public var subProviders: [SubProvider]?
+    /// Set for the one failed check that follows a ready one: pickers keep offering `models` (5258 server.ts:282-283,
+    /// T3 commit 1a42ba1b5f).
+    public var modelsRetained: Bool?
     public var slashCommands: [ServerProviderSlashCommand] = []
     public var skills: [ServerProviderSkill] = []
     public var workspaceSnapshots: [ServerProviderWorkspaceSnapshot]?
@@ -309,7 +312,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case supportsConversationRollback, reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
-        case status, message, availability, unavailableReason, models, subProviders, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
+        case status, message, availability, unavailableReason, models, subProviders, modelsRetained, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
         case updateState, versionAdvisory, compatibilityAdvisory, setup, nativeSessions, configurableProviders, runtimePaths
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
@@ -339,6 +342,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         unavailableReason = try? c.decodeIfPresent(String.self, forKey: .unavailableReason)
         models = try c.decodeIfPresent([ServerProviderModel].self, forKey: .models) ?? []
         subProviders = try? c.decodeIfPresent([SubProvider].self, forKey: .subProviders)
+        modelsRetained = try? c.decodeIfPresent(Bool.self, forKey: .modelsRetained)
         // Lenient: a malformed entry drops the list, never the provider.
         slashCommands = (try? c.decodeIfPresent([ServerProviderSlashCommand].self, forKey: .slashCommands)) ?? []
         skills = (try? c.decodeIfPresent([ServerProviderSkill].self, forKey: .skills)) ?? []
@@ -605,5 +609,25 @@ extension ModelSelection {
         default:
             return []
         }
+    }
+}
+
+/// MCP sign-in from a thread (5258 provider.ts:44-86, rpc.ts:526-527, T3 commit 669d8941e2). Both need
+/// `providers:manage` (clientRpcPermissions.ts:24-25). A `system_notice` with `mcpSignIn` offers it.
+public enum McpSignInRPC {
+    public static let start = "provider.mcpSignIn.start"
+    public static let complete = "provider.mcpSignIn.complete"
+    public static let errorTag = "ProviderMcpSignInError"
+
+    /// `start` answers `{authorizationUrl, signedInAt}`: the page to approve on, or null with the time the server
+    /// found it already signed in.
+    public static func startInput(threadId: ThreadId, providerThreadId: String, server: String) -> JSONValue {
+        .object(["threadId": .string(threadId.rawValue), "providerThreadId": .string(providerThreadId), "server": .string(server)])
+    }
+
+    /// `complete` takes the address the browser landed on after approving and answers `{signedInAt}`.
+    public static func completeInput(threadId: ThreadId, providerThreadId: String, server: String, callbackUrl: String) -> JSONValue {
+        .object(["threadId": .string(threadId.rawValue), "providerThreadId": .string(providerThreadId), "server": .string(server),
+                 "callbackUrl": .string(callbackUrl)])
     }
 }

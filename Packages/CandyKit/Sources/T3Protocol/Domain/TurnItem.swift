@@ -182,6 +182,15 @@ public struct TurnItem: Codable, Hashable, Sendable, Identifiable {
     public var secretRequestFields: [SecretRequestField]? {
         type == .secretRequest ? try? self["fields"]?.decode(as: [SecretRequestField].self) : nil
     }
+    /// `assistant_message.delivery`: `async` when the provider sent it mid-turn, apart from the answer (5258 :1940).
+    public var assistantDelivery: String? { type == .assistantMessage ? string("delivery") : nil }
+    /// `system_notice.mcpSignIn.server`: the MCP server this notice offers a sign-in for (5258 :1774, :2051). Start it
+    /// with `McpSignInRPC.start`.
+    public var mcpSignInServer: String? { type == .systemNotice ? self["mcpSignIn"]?["server"]?.stringValue : nil }
+    /// `error.failure.verificationUrl`: the Google account check a failed Antigravity turn links to (5258 :1750).
+    public var failureVerificationURL: String? { type == .error ? self["failure"]?["verificationUrl"]?.stringValue : nil }
+    /// `approval_request.pushHooks`: the repository hooks a push would run, on agents below Full access (5258 :2021).
+    public var approvalPushHooks: JSONValue? { type == .approvalRequest ? self["pushHooks"] : nil }
     /// `command_execution.completionWake`: the provider wakes the agent when the command finishes (:1802).
     public var completionWake: String? { string("completionWake") }
 

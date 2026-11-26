@@ -395,6 +395,19 @@ public struct ThreadTurnDiff: Codable, Hashable, Sendable {
     public var threadId: ThreadId
     public var fromTurnCount: Int
     public var toTurnCount: Int
+    /// The thread folder's own patch; empty when that folder is not a Git repository (5258).
+    public var diff: String
+    /// Tracked repositories that changed in the range (5258 checkpointDiff.ts:42). Absent when the thread has none.
+    public var repositories: [ThreadTurnRepositoryDiff]?
+}
+
+/// `ThreadTurnRepositoryDiff` (5258 checkpointDiff.ts:24-33): one tracked repository's patch, with paths relative
+/// to that repository. `repositoryPath` matches the checkpoint scope's; `relativePath` is the repository folder from
+/// the thread's cwd, `/`-separated, and may start with `../`.
+public struct ThreadTurnRepositoryDiff: Codable, Hashable, Sendable {
+    public var name: String
+    public var repositoryPath: String
+    public var relativePath: String
     public var diff: String
 }
 

@@ -19,6 +19,21 @@ public struct ProjectShell: Codable, Hashable, Sendable, Identifiable {
     public var archivedAt: T3Timestamp?
     public var createdAt: T3Timestamp
     public var updatedAt: T3Timestamp
+    /// Folders the project works in besides `workspaceRoot` (5258 orchestrationProject.ts:24, project.ts:56-75).
+    /// Absent on 4928 servers, which means a single-folder project.
+    public var trackedFolders: [ProjectTrackedFolder]?
+}
+
+/// `ProjectTrackedFolder` (5258 project.ts:56-65). Paths are absolute on the project's environment. `discovered`:
+/// the server found this repository inside the project folder and keeps it in step with the disk.
+public struct ProjectTrackedFolder: Codable, Hashable, Sendable {
+    public var path: String
+    public var name: String
+    public var discovered: Bool?
+
+    public init(path: String, name: String, discovered: Bool? = nil) {
+        self.path = path; self.name = name; self.discovered = discovered
+    }
 }
 
 /// `RepositoryIdentity` (packages/contracts/src/environment.ts:229-258).
