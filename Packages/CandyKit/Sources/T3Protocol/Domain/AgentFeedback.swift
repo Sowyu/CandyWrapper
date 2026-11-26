@@ -6,7 +6,7 @@ import Foundation
 //
 // The agent's `t3_feedback` tool does not wait for the card: it answers `{status: "awaiting_approval"}` at once and
 // tells the agent not to wait (apps/server/src/feedback/FeedbackService.ts:214, FeedbackReport.ts:58-66). So an
-// unanswered card never holds a turn. `feedback_request` stays out of `TurnItemType.known` until a card draws it.
+// unanswered card never holds a turn. `FeedbackRequestRowView` draws the card.
 
 /// `AgentFeedbackTrace` (agentFeedback.ts:13-33): built by the server from the thread's stored items.
 public struct AgentFeedbackTrace: Codable, Hashable, Sendable {

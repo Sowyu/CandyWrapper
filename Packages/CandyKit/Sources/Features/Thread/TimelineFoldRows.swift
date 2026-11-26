@@ -339,6 +339,7 @@ final class EventRowView: TimelineRowView {
                 : (.line, .muted, .brandT3Wordmark, "Created thread" + (title.map { " · \($0)" } ?? ""), nil)
         case .secretRequest: return (.card, .muted, .lock, item.title ?? "Secret request", nil)
         case .linkRequest: return (.card, .muted, .link, item.title ?? "Link request", nil)
+        case .feedbackRequest: return (.card, .muted, .messageSquare, FeedbackRequests.title, nil)
         case .error:
             let (label, detail) = WorkLog.providerErrorPresentation(item)
             let tone: Tone = item.status.rawValue == "completed" ? .success : item.status.rawValue == "running" ? .warning : .danger

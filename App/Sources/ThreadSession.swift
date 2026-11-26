@@ -836,6 +836,23 @@ final class ThreadController {
                 return SecretRequests.genericFailure
             }
         }
+        // An agent's feedback report (5258 FeedbackRequestCard.tsx:91-117): `agentFeedback.answerRequest` on the thread's
+        // environment, which needs `orchestration:operate`.
+        panel.model.answerFeedback = { [weak self] input in
+            guard let env = self?.openThreadId?.environmentId, let environments = self?.environments else { return FeedbackRequests.genericFailure }
+            do {
+                _ = try await environments.request(env, AgentFeedbackRPC.answerRequest, input)
+                return nil
+            } catch let error as RPCClientError where error.typedError?.tag == AgentFeedbackRPC.errorTag {
+                return AgentFeedbackRPC.failure(error.typedError?.fields["reason"]?.stringValue) ?? error.typedError?.message ?? FeedbackRequests.genericFailure
+            } catch {
+                return FeedbackRequests.genericFailure
+            }
+        }
+        panel.model.canAnswerFeedback = { [weak self] in
+            guard let self, let env = self.openThreadId?.environmentId else { return false }
+            return self.environments.canOperate(env)
+        }
         // An agent's link request (LinkRequestCard.tsx at 3814): Decline answers in place, Review opens the link dialog,
         // and both go to `peerLinks.answerRequest` on the thread's environment.
         panel.model.canAnswerLinkRequests = { [weak self] in

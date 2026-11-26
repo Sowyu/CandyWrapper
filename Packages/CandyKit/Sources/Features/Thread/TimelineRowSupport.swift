@@ -107,6 +107,8 @@ final class TimelineContext {
     /// Markdown views, as the heights the timeline caches with them do.
     // ponytail: one small entry per answer the reader toggled, never trimmed; trim with `measured` if it ever shows
     var markdownChoices: [String: MarkdownView.LayoutChoices] = [:]
+    /// Settled feedback request rows whose report is open, by row id (FeedbackRequestCard.tsx:50-70).
+    var feedbackExpanded: Set<String> = []
     var now: () -> Date = Date.init
 
     let htmlCache = HtmlRenderWebCache()

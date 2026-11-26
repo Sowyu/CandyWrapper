@@ -37,7 +37,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// Distance from the top that asks for older history.
     static let nearTop: CGFloat = 600
 
-    enum Kind: Hashable { case approval, user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, linkRequest, htmlRender, mcpApp, viewedImages }
+    enum Kind: Hashable { case approval, user, workflowOpening, assistant, meta, plan, work, toggle, live, thinking, working, turnFold, attemptFold, compaction, event, subagent, secret, feedback, linkRequest, htmlRender, mcpApp, viewedImages }
 
     let context = TimelineContext()
     let scrollView = TimelineScrollView()
@@ -1059,7 +1059,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         case .attemptFold: .attemptFold
         case .contextCompaction: .compaction
         case .event(let p, _, _):
-            p.item.type == .secretRequest ? .secret : p.item.type == .linkRequest ? .linkRequest : p.item.type == .subagent ? .subagent : .event
+            p.item.type == .secretRequest ? .secret : p.item.type == .feedbackRequest ? .feedback : p.item.type == .linkRequest ? .linkRequest : p.item.type == .subagent ? .subagent : .event
         case .htmlRender: .htmlRender
         case .mcpApp: .mcpApp
         case .viewedImages: .viewedImages
@@ -1106,6 +1106,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         case .event: EventRowView()
         case .subagent: SubagentCardRowView()
         case .secret: SecretRequestRowView()
+        case .feedback: FeedbackRequestRowView()
         case .linkRequest: LinkRequestRowView()
         case .htmlRender: HtmlRenderRowView()
         case .mcpApp: McpAppRowView()

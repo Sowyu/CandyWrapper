@@ -43,6 +43,8 @@ public struct TurnItemType: OpenStringEnum {
     public static let secretRequest: Self = "secret_request"
     /// An agent asked the user to link another environment (orchestrationV2.ts:1514-1540 at 3814).
     public static let linkRequest: Self = "link_request"
+    /// An agent asks to send a problem report to the T3 team (orchestrationV2.ts:1897-1907 at 5258).
+    public static let feedbackRequest: Self = "feedback_request"
     public static let subagent: Self = "subagent"
     public static let dynamicTool: Self = "dynamic_tool"
     public static let notification: Self = "notification"
@@ -52,7 +54,7 @@ public struct TurnItemType: OpenStringEnum {
         "user_input_request", "file_change", "command_execution", "file_search", "web_search",
         "approval_request", "checkpoint", "run_interrupt_request", "run_interrupt_result",
         "system_notice", "error", "compaction", "handoff", "fork", "thread_created",
-        "secret_request", "subagent", "dynamic_tool", "notification", "link_request",
+        "secret_request", "subagent", "dynamic_tool", "notification", "link_request", "feedback_request",
     ]
 
     /// Unknown types are dropped from projections and turn `turn-item.updated` into an

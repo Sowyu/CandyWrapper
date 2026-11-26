@@ -51,6 +51,22 @@ import T3Protocol
         #expect(SecretRequests.link(url: "javascript:alert(1)", reason: "") == nil)
     }
 
+    /// feedbackRequest.test.ts at 5258: the card's display, fields and outline lines.
+    @Test func feedbackRequestPresentation() throws {
+        #expect(FeedbackRequests.display(status: "pending", visibility: "local") == .pending)
+        #expect(FeedbackRequests.display(status: "pending", visibility: "inherited") == .pendingElsewhere(label: "Waiting in the original thread"))
+        #expect(FeedbackRequests.display(status: "cancelled", visibility: "local") == .answered(sent: false, label: "Closed without sending"))
+        let trace = try JSONDecoder().decode(AgentFeedbackTrace.self, from: Data(#"{"turns":2,"textTurns":2,"truncated":false,"entries":[{"turn":1,"type":"user","length":5,"text":"Hello"},{"turn":1,"type":"tool","tool":"t3_thread_read","outcome":"error","durationMs":1500},{"turn":2,"type":"user","length":1,"text":"y"}]}"#.utf8))
+        var preview = try JSONDecoder().decode(AgentFeedbackPreview.self, from: Data(#"{"kind":"bug","subject":"t3_thread_read","expected":"Items.","actual":"None.","workaround":""}"#.utf8))
+        preview.trace = trace
+        #expect(FeedbackRequests.fields(preview).map(\.label) == ["Kind", "About", "Expected", "Happened"])
+        #expect(FeedbackRequests.traceLines(trace).map(\.line) == ["Turn 1 · You · 5 characters", "Turn 1 · t3_thread_read · error · 1.5 s", "Turn 2 · You · 1 character"])
+        let older = try JSONDecoder().decode(AgentFeedbackTrace.self, from: Data(#"{"turns":5,"textTurns":1,"truncated":false,"entries":[{"turn":4,"type":"user","length":5,"text":"Hello"},{"turn":5,"type":"tool","tool":"shell","outcome":"ok"}]}"#.utf8))
+        #expect(FeedbackRequests.traceSummary(older) == "Outline of 5 recent turns, message text of the last 2 turns")
+        #expect(FeedbackRequests.conversationHint(older) == "Adds the text of your messages and the agent's replies in the last 2 turns.")
+        #expect(TurnItemType.feedbackRequest.isKnown)
+    }
+
     @Test func multiFieldSecretRequestsAnswerValues() throws {
         let item = turnItem(#"{"id":"item","threadId":"thread","type":"secret_request","label":"Login","reason":"","delivery":"file","secretStatus":"pending","fields":[{"name":"email","label":"Email","secret":false},{"name":"password","label":"Password"}]}"#)
         let fields = try #require(item.secretRequestFields)
