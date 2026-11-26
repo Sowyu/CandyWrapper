@@ -42,8 +42,39 @@ public enum ThreadPreview {
         return threadOrder.compactMap { byThread[$0] }
     }
 
-    /// The recorded thread whose title starts with `prefix`.
+    /// The recorded thread whose title starts with `prefix`, or the math thread for `mathThread`.
     public static func projection(titled prefix: String) throws -> ThreadProjection? {
-        try projections().last { $0.thread.title.hasPrefix(prefix) }
+        if mathThread.hasPrefix(prefix), prefix.count >= 4 { return try mathProjection() }
+        return try projections().last { $0.thread.title.hasPrefix(prefix) }
+    }
+
+    /// A thread of formulas for looking at math on screen: the markdown thread with its title and texts replaced.
+    /// Render math must be on (`mathRenderingEnabled`).
+    public static let mathThread = "Math preview"
+    static let mathPrompt = "Show some math."
+    static let mathReply = """
+    Inline: $\\frac{a+b}{c}$, $x_i^2$, $\\sqrt{x^2+1}$, $\\sqrt[3]{8}$, $\\sum_{i=1}^{n} x_i$, $\\int_0^\\infty e^{-x}\\,dx$, \
+    $\\alpha + \\beta = \\gamma$, $\\hat{x} + \\vec{v} + \\bar{y}$ and $\\mathbb{R}^n$ in one line of text.
+
+    $$\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2} \\qquad \\int_a^b f(x)\\,dx$$
+
+    $$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix} \\qquad f(x) = \\begin{cases} x & x \\ge 0 \\\\ -x & x < 0 \\end{cases}$$
+
+    Bad TeX: $x + \\foo{y}$ and $\\frac{a}{$ here.
+
+    Wide: $a_1 + a_2 + a_3 + a_4 + a_5 + a_6 + a_7 + a_8 + a_9 + a_{10} + a_{11} + a_{12} + a_{13} + a_{14} + a_{15} + a_{16} + a_{17} + a_{18} + a_{19} + a_{20} + a_{21} + a_{22} + a_{23} + a_{24}$ ends.
+    """
+
+    static func mathProjection() throws -> ThreadProjection? {
+        guard let base = try projection(titled: markdownThread),
+              let reply = base.messages.last(where: { $0.role == "assistant" })?.text,
+              let prompt = base.messages.first(where: { $0.role == "user" })?.text else { return nil }
+        let encoder = JSONEncoder()
+        func quoted(_ s: String) throws -> String { String(decoding: try encoder.encode(s), as: UTF8.self) }
+        var json = String(decoding: try encoder.encode(base), as: UTF8.self)
+        for (old, new) in [(reply, mathReply), (prompt, mathPrompt), (base.thread.title, mathThread)] {
+            json = json.replacingOccurrences(of: try quoted(old), with: try quoted(new))
+        }
+        return try JSONDecoder().decode(ThreadProjection.self, from: Data(json.utf8))
     }
 }
