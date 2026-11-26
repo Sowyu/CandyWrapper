@@ -285,6 +285,12 @@ public struct Keymap: Sendable, Equatable {
         return nil
     }
 
+    /// `isSidebarToggleShortcut` (web keybindings.ts:415-423, #34588): a focused terminal owns Ctrl chords, like
+    /// tmux's Ctrl+B prefix, so `sidebar.toggle` bound to one leaves the key to the terminal. Cmd+B still toggles.
+    public static func leavesKeyToTerminal(_ command: String?, _ stroke: KeyStroke, context: KeybindingContext) -> Bool {
+        command == "sidebar.toggle" && stroke.ctrl && context["terminalFocus"]
+    }
+
     /// `shortcutForContext` (web keybindings.ts:108-124): with a send that needs a modifier, a plain
     /// Mod+Enter `composer.sendAlternate` would clash with send, so it reads as Mod+Shift+Enter. Saved
     /// and remapped rules stay as they are.
