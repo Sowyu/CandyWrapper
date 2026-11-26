@@ -25,7 +25,8 @@ public struct PaletteEntry {
     public var dragThread: ThreadId?
     /// Why the row matched when its title shows no match ("Branch: fix-sidebar"), set by `filter`.
     public var matchHint: PaletteScoring.SearchMatchHint?
-    public var icon: IconName
+    /// Nil draws no glyph, as T3 does for a thread action whose menu icon the palette does not map.
+    public var icon: IconName?
     public var isDisabled = false
     public var note: String?
     public var noteAfterTitle = false
@@ -77,7 +78,7 @@ public struct PaletteEntry {
     }
 
     public init(value: String, searchTerms: [String], title: String, titleEmphasis: String? = nil, description: String? = nil,
-                match: String? = nil, timestamp: String? = nil, icon: IconName, isDisabled: Bool = false,
+                match: String? = nil, timestamp: String? = nil, icon: IconName?, isDisabled: Bool = false,
                 note: String? = nil, shortcutCommand: String? = nil, secondary: Bool = false, action: Action) {
         self.value = value; self.searchTerms = searchTerms; self.title = title; self.titleEmphasis = titleEmphasis
         self.description = description; self.match = match; self.timestamp = timestamp
