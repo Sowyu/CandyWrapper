@@ -1358,7 +1358,7 @@ final class SidebarCommands {
             strip.leadingAccessory = band.bandLeading
             strip.trailingAccessory = band.bandTrailing
         } else {
-            strip.leadingAccessory = threads.panel.titlePill
+            strip.leadingAccessory = threads.linkedThreads.bandTitle ?? threads.panel.titlePill
             strip.trailingAccessory = threads.panel.header.pill
         }
     }

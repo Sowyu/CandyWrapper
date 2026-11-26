@@ -192,6 +192,14 @@ public final class DitherArtView: NSView {
         for art in arts.allObjects { art.refresh() }
     }
 
+    /// A page laid over the thread panel (no active thread, an unavailable or linked thread) calls this when it joins or
+    /// leaves a window or changes appearance: under Redesign it lies on the art with the pages' scrim, as Pull requests
+    /// does, instead of covering it with a flat ground that leaves a strip of the thread's bright art in the band.
+    @MainActor
+    public static func syncOverlayPage(_ source: NSView) {
+        setEmphasis(source.window != nil && ThemeRuntime.isDither(dark: source.effectiveAppearance.isDark) ? .page : nil, from: source)
+    }
+
     /// A page joined or left the window, as the thread panel and a utility page trade places: every art takes the scrim
     /// of what shows now. Before, the last page's scrim stayed until something else redrew the art.
     @MainActor

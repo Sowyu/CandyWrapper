@@ -686,6 +686,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         layout.tabStrip.trailingAccessory = self.threads?.panel.header.pill
         // The thread's breadcrumb pill sits at the band's left end, the header pill's twin.
         layout.tabStrip.leadingAccessory = self.threads?.panel.titlePill
+        // A linked thread's page puts its title there while it shows, as a thread does.
+        self.threads?.linkedThreads.onBandTitle = { [weak layout, weak threads = self.threads] pill in
+            layout?.tabStrip.leadingAccessory = pill ?? threads?.panel.titlePill
+        }
         ditherTabs = DitherTabsController(layout: layout, sidebar: sidebar, history: history, current: currentRoute,
                                           newThread: { [weak palette] opened in palette?.newThreadFromSidebar(shift: true, then: opened) })
         commands.historyBack = { [weak history] in history?.back() ?? false }

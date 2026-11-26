@@ -23,6 +23,10 @@ final class LinkedThreadController {
     var openConnected: ((ThreadId) -> Void)?
     /// Enter code: Settings > Connections with the add dialog prefilled (`addEnvironmentPrefillAtom`).
     var addWithCode: ((String?) -> Void)?
+    /// Redesign: the page's title pill while the page shows, nil once it leaves, for the tab strip to hold.
+    var onBandTitle: ((DitherStripLeading?) -> Void)?
+    /// The shown page's title pill, which the strip gets back after a utility page closes over it.
+    var bandTitle: DitherStripLeading? { page?.page?.bandTitle }
 
     @MainActor private final class Shown {
         let target: LinkedThreadSurfaceTarget
@@ -67,6 +71,7 @@ final class LinkedThreadController {
         page = s
         start(s)
         host.addSubview(view)
+        onBandTitle?(view.bandTitle)
     }
 
     /// Leaves the page: its stream ends, so nothing runs for it once another route shows.
@@ -75,6 +80,7 @@ final class LinkedThreadController {
         s.session?.end()
         s.page?.removeFromSuperview()
         page = nil
+        onBandTitle?(nil)
     }
 
     private func show(_ target: LinkedThreadSurfaceTarget?) {
