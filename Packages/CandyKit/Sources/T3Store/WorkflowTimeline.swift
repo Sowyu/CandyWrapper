@@ -50,7 +50,7 @@ public enum WorkflowTimeline {
     /// `QUICK_STEP_MS` (:539): a step this short is bookkeeping between the parts of a run that take time.
     static let quickStepMs: Double = 1000
 
-    static func ms(_ iso: String) -> Double { T3Timestamp.parseEpochMs(iso).map(Double.init) ?? 0 }
+    public static func ms(_ iso: String) -> Double { T3Timestamp.parseEpochMs(iso).map(Double.init) ?? 0 }
 
     /// `buildWorkflowTimeline` (:584-668): beats in order, quick steps between two beats folded into one row, and an
     /// invoked run in place of the two steps that started and awaited it.

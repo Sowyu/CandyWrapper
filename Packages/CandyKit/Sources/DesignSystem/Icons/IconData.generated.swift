@@ -105,6 +105,7 @@ public enum IconName: String, CaseIterable, Sendable {
     case hash
     case history
     case home
+    case hourglass
     case image
     case inbox
     case info
@@ -369,6 +370,7 @@ extension IconName {
         case .hash: return "hash"
         case .history: return "history"
         case .home: return "home"
+        case .hourglass: return "hourglass"
         case .image: return "image"
         case .inbox: return "inbox"
         case .info: return "info"
@@ -1183,6 +1185,13 @@ extension IconName {
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8")),
                 IconElement(.path(d: "M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z")),
+            ])
+        case .hourglass:
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M5 22h14")),
+                IconElement(.path(d: "M5 2h14")),
+                IconElement(.path(d: "M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22")),
+                IconElement(.path(d: "M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2")),
             ])
         case .image:
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [

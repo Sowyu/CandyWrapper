@@ -110,6 +110,22 @@ struct WorkflowsFidelityTests {
             if n["reason"] == "true" { card.choose(WorkflowRuns.read(question("needs")).choices[1]) }
             card.frame.size.height = card.height(forWidth: size.width)
             return card
+        case "timeline":
+            // gen-workflows-spec.py's `STEPS`, one line of each state.
+            let t = WorkflowTimelineView(frame: NSRect(origin: .zero, size: size))
+            let lines: [WorkflowTimelineLine] = [
+                .init(tone: .done, name: "checkout · install", duration: "0.4s"),
+                .init(tone: .done, name: "review", aside: "Two files need a test.", duration: "1m 12s"),
+                .init(tone: .failed, name: "build", aside: "exit 1", asideFailed: true, duration: "9.7s"),
+                .init(tone: .input, name: "approve", verb: "Asks you", verbTone: .input, duration: "12s", selected: true),
+                .init(tone: .working, name: "fix", verb: "working", duration: "34s"),
+                .init(tone: .quiet, name: "wait-window", verb: "wakes in 5m", verbTone: .quiet, duration: "2m 0s"),
+                .init(tone: .ended, name: "Cancelled", aside: "Stopped by hand"),
+            ]
+            t.set(items: lines.enumerated().map { .init(parts: [.row($1, key: "\($0)")]) }, live: false)
+            t.frame.size.height = t.height(forWidth: size.width)
+            t.layoutSubtreeIfNeeded()
+            return t
         default:
             throw Skip()
         }

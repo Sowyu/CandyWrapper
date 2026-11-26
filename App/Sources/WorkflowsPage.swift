@@ -21,6 +21,8 @@ final class WorkflowsPageController {
     private var detailTask: Task<Void, Never>?
     private var detailKey: (runId: String, key: String?)?
     var openSettingsLabs: () -> Void = {}
+    /// Opens a thread by its environment and its own id.
+    var openThread: (_ environmentId: String, _ threadId: String) -> Void = { _, _ in }
 
     init(environments: Environments, config: @escaping (String) -> ServerProviderConfig?) {
         self.environments = environments
@@ -32,6 +34,13 @@ final class WorkflowsPageController {
         page.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
         page.onAnswer = { [weak self] runId, name, choice, reason, done in self?.answer(runId, name, choice, reason, done) }
         page.onCancelRun = { [weak self] runId in self?.confirmCancel(runId) }
+        page.onResume = { [weak self] runId, done in self?.resume(runId, done) }
+        // ponytail: an agent's thread opens in the thread view, not in T3's pane beside the run (WorkflowPane.tsx);
+        // port the pane when reading a transcript beside its run matters.
+        page.onOpenThread = { [weak self] t in
+            guard let self, let env = t.environmentId ?? self.subscribedEnvironment else { return }
+            self.openThread(env, t.threadId)
+        }
         _ = environments.observe { [weak self] in self?.sync() }
     }
 
@@ -144,6 +153,20 @@ final class WorkflowsPageController {
                 _ = try await supervisor.request(WorkflowsRPC.answer, payload: WorkflowsRPC.answerInput(runId: runId, name: name, choice: choice, reason: reason))
                 done(nil)
             } catch {
+                done(Self.message(error))
+            }
+        }
+    }
+
+    /// `resumeRun` (WorkflowRunFeed.tsx:259-265): `workflows.resume`, and a toast when it fails.
+    private func resume(_ runId: String, _ done: @escaping @MainActor (String?) -> Void) {
+        guard let env = subscribedEnvironment, let supervisor = environments.session(env)?.supervisor else { return done("Not connected.") }
+        Task { [weak self] in
+            do {
+                _ = try await supervisor.request(WorkflowsRPC.resume, payload: WorkflowsRPC.runInput(runId))
+                done(nil)
+            } catch {
+                self?.page.toasts.show(ToastView(title: "Could not resume the run", message: Self.message(error), kind: .error))
                 done(Self.message(error))
             }
         }

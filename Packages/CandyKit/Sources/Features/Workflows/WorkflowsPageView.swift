@@ -34,6 +34,10 @@ public final class WorkflowsPageView: DSView {
     /// Answers a question; the completion gets an error message on failure.
     public var onAnswer: ((_ runId: String, _ name: String, _ choice: String, _ reason: String?, _ done: @escaping @MainActor (String?) -> Void) -> Void)?
     public var onCancelRun: ((String) -> Void)?
+    /// Resumes a paused run (`workflows.resume`); the completion gets an error message on failure.
+    public var onResume: ((String, @escaping @MainActor (String?) -> Void) -> Void)?
+    /// Opens an agent's or a question's thread.
+    public var onOpenThread: ((WorkflowThreadTarget) -> Void)?
     /// Opens the definition files (WorkflowsPage.tsx:243-248); the button shows only while it is set and the page
     /// has an environment.
     public var onOpenDefinitions: (() -> Void)? { didSet { needsLayout = true } }
@@ -114,6 +118,9 @@ public final class WorkflowsPageView: DSView {
         feed.onOpenURL = { [weak self] in self?.onOpenURL?($0) }
         feed.onAnswer = { [weak self] a, b, c, d, e in self?.onAnswer?(a, b, c, d, e) }
         feed.onCancelRun = { [weak self] in self?.onCancelRun?($0) }
+        feed.onResume = { [weak self] id, done in self?.onResume?(id, done) }
+        feed.onOpenThread = { [weak self] in self?.onOpenThread?($0) }
+        feed.onRepick = { [weak self] in self?.rebuildFeed() }
         rebuild()
     }
 
@@ -216,7 +223,31 @@ public final class WorkflowsPageView: DSView {
         let matching = l.shown.flatMap { node in detail?.run.runId == node.run.runId ? detail : nil }
         feed.set(node: l.shown, parent: l.parent, detail: matching, error: detailError, notHere: l.notHere, nowMs: TimestampFormat.nowMs())
         needsLayout = true
+        syncTick()
     }
+
+    // MARK: The clock
+
+    /// `useRunNowMs` (WorkflowRunFeed.tsx:122-131): a run under way is told to the second. The timer runs only while
+    /// the page is in a window and shows a run that has not ended; the feed then updates its times in place.
+    private var tick: Timer?
+
+    private func syncTick() {
+        let live = window != nil && !isHiddenOrHasHiddenAncestor && listing?.shown.map { $0.run.endedAt == nil } == true
+        if live, tick == nil {
+            let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.rebuildFeed() } }
+            t.tolerance = 0.1
+            RunLoop.main.add(t, forMode: .common)
+            tick = t
+        } else if !live {
+            tick?.invalidate()
+            tick = nil
+        }
+    }
+
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); syncTick() }
+    public override func viewDidHide() { super.viewDidHide(); syncTick() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); syncTick() }
 
     private func showEmpty(_ title: String, _ message: String, action: Bool = false, guide: Bool = false) {
         let e = EmptyView(title: title, message: message, icon: .workflow)
@@ -318,6 +349,8 @@ public final class WorkflowsPageView: DSView {
         let w = feedScroll.bounds.width
         // `mx-auto max-w-5xl px-5 pt-5 pb-10`.
         let fw = min(w, 1024)
+        // `@container/feed` is the scroll area; `@2xl` is 42rem.
+        feed.wide = w >= 672
         let fh = feed.height(forWidth: fw - 40)
         feed.frame = NSRect(x: (w - fw) / 2 + 20, y: 20, width: fw - 40, height: fh)
         feedDocument.frame = NSRect(x: 0, y: 0, width: w, height: max(feedScroll.bounds.height, fh + 60))
