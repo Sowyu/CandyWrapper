@@ -44,7 +44,17 @@ public enum AddProjectToMachine {
     /// The repository's remote URL from a project's repository identity: a fork's own remote first, so the copy
     /// clones the fork and not its upstream (AddProjectToMachineDialog.tsx:87-90, T3 0f74ff8e3a).
     public static func remoteUrl(_ project: ProjectShell?) -> String? {
-        project?.repositoryIdentity?.origin?.remoteUrl ?? project?.repositoryIdentity?.locator["remoteUrl"]?.stringValue
+        // An older server reports the remote as configured, login included (#41756, AddProjectToMachineDialog.tsx:111-116).
+        (project?.repositoryIdentity?.origin?.remoteUrl ?? project?.repositoryIdentity?.locator["remoteUrl"]?.stringValue)
+            .map(withoutCredentials)
+    }
+
+    /// `withoutRemoteUrlCredentials` (shared/cloneUrl.ts:35-43): an HTTP(S) remote loses its userinfo and its query;
+    /// an SSH URL keeps its user, which is part of the address.
+    public static func withoutCredentials(_ url: String) -> String {
+        guard url.range(of: "^https?://", options: [.regularExpression, .caseInsensitive]) != nil else { return url }
+        return url.replacingOccurrences(of: "^(https?://)[^/?#]*@", with: "$1", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: "\\?[^#]*", with: "", options: .regularExpression)
     }
 
     // MARK: Clone URLs (addProjectToMachine.ts:20-59)

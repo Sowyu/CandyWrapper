@@ -155,4 +155,12 @@ struct AddProjectToMachineTests {
         let fork = upstream + #","origin":{"canonicalKey":"github.com/me/r","remoteUrl":"https://github.com/me/r.git"}}"#
         #expect(A.remoteUrl(try project(fork)) == "https://github.com/me/r.git")
     }
+
+    /// #41756: a login in an HTTP(S) remote never reaches the clone; an SSH user stays.
+    @Test func remoteUrlDropsCredentials() {
+        #expect(AddProjectToMachine.withoutCredentials("https://user:tok@github.com/a/b.git?x=1#f") == "https://github.com/a/b.git#f")
+        #expect(AddProjectToMachine.withoutCredentials("HTTP://tok@host/r") == "HTTP://host/r")
+        #expect(AddProjectToMachine.withoutCredentials("git@github.com:a/b.git") == "git@github.com:a/b.git")
+        #expect(AddProjectToMachine.withoutCredentials("ssh://git@host/r?x") == "ssh://git@host/r?x")
+    }
 }
