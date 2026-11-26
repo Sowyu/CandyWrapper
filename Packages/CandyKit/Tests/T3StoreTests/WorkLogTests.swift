@@ -117,6 +117,11 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
         #expect(WorkLog.displayLabel(read, workspaceRoot: nil) == "Read src/env.ts")
         #expect(WorkLog.readOutput(read, workspaceRoot: nil) == "src/env.ts")
         #expect(WorkLog.readOutput(read, workspaceRoot: "/workspace/ohseearr") == "/workspace/ohseearr/src/env.ts")
+        // Home paths stay as written (filePathDisplay.ts, MessagesTimeline.logic.ts:231-251, #39146).
+        let home = entry(label: "Read") { $0.changedFiles = ["src/app.ts", "~/.claude/CLAUDE.md", "~\\.gitconfig"] }
+        #expect(WorkLog.readOutput(home, workspaceRoot: "/workspace/t3code") == "/workspace/t3code/src/app.ts\n~/.claude/CLAUDE.md\n~/.gitconfig")
+        #expect(formatWorkspaceRelativePath("~/.claude/CLAUDE.md", workspaceRoot: "/workspace/t3code") == "~/.claude/CLAUDE.md")
+        #expect(formatWorkspaceRelativePath("~\\.claude\\CLAUDE.md:3", workspaceRoot: "C:\\dev\\t3code") == "~/.claude/CLAUDE.md:3")
 
         let grep = entry(label: "Grep") {
             $0.itemType = .dynamicTool

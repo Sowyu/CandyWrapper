@@ -30,5 +30,9 @@ struct WorkspaceLinkLookupTests {
         let one = L.projectMatch("src/a.ts", searches: [("/p1", files("src/a.ts")), ("/p2", [])])
         #expect(one == "/p1/src/a.ts")
         #expect(L.projectMatch("src/a.ts", searches: [("/p1", files("src/a.ts")), ("/p2", files("src/a.ts"))]) == nil)
+        // 5258 #40986: a root left ambiguous by case still counts, so nothing opens.
+        #expect(L.projectMatch("handoff.txt", searches: [("/reports", files("notes/HANDOFF.txt")),
+                                                         ("/support", files("current/Handoff.txt", "archive/HANDOFF.txt"))]) == nil)
+        #expect(L.projectMatch("handoff.txt", searches: [("/own", []), ("/reports", files("notes/HANDOFF.txt"))]) == "/reports/notes/HANDOFF.txt")
     }
 }

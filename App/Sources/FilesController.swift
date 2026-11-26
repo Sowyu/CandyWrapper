@@ -238,9 +238,14 @@ final class FilesController {
 
     // MARK: Opening
 
+    /// Counts the files opened in this panel. A chat link's slow lookup opens nothing once it moved, so a file the
+    /// user opened from the picker meanwhile stays (`markUserAction`, 5258 ChatMarkdown.tsx, #39130).
+    private(set) var openRevision = 0
+
     /// `openFile` from the tree, breadcrumbs, the picker and chat links (`path:line`).
     func openFile(_ path: String, line: Int?) {
         guard threadId != nil, workspace != nil else { return }
+        openRevision += 1
         let relative = workspaceRelative(path)
         panel.mutatePanel { $0.openFile(relative, line: line); return [] }
     }
@@ -277,14 +282,17 @@ final class FilesController {
             return FileLinkMeta(filePath: path, targetPath: path + suffix, workspaceRelativePath: relative,
                                 basename: (path as NSString).lastPathComponent, line: meta.line, column: meta.column)
         }
-        if let own = WorkspaceLinkLookup.match(relative, cwd: ws.cwd, entries: await search(ws.cwd, query)) {
+        let ownEntries = await search(ws.cwd, query)
+        if let own = WorkspaceLinkLookup.match(relative, cwd: ws.cwd, entries: ownEntries) {
             return own == relative ? nil : link(WorkspaceLinkLookup.join(ws.cwd, own), relative: own)
         }
         let roots = otherRoots.filter { $0 != ws.cwd }
         guard !roots.isEmpty else { return nil }
         // Another project's file never replaces a thread-local file the search missed.
         if bare, !(await missing(literal)) { return nil }
-        var searches: [(root: String, entries: [WorkspaceLinkLookup.Entry])] = []
+        // The thread's own search counts too, so its ambiguous match keeps another project's file out (5258
+        // ChatMarkdown.tsx:928-929, #40986).
+        var searches: [(root: String, entries: [WorkspaceLinkLookup.Entry])] = [(ws.cwd, ownEntries)]
         for root in roots {
             guard let q = WorkspaceLinkLookup.query(relative, cwd: root) else { searches.append((root, [])); continue }
             searches.append((root, await search(root, q)))

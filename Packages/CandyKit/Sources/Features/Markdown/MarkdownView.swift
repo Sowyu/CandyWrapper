@@ -1030,12 +1030,18 @@ public final class MarkdownView: DSView {
     private func showTableCopy(_ table: MarkdownTable, button index: Int) {
         MenuPopupView.show([
             MenuItem("Copy as Markdown") { [weak self] in self?.copy(MarkdownLayout.tableMarkdown(table), button: index) },
-            MenuItem("Copy as CSV") { [weak self] in self?.copy(MarkdownLayout.tableCSV(table), button: index) }
+            MenuItem("Copy as CSV") { [weak self] in self?.copy(MarkdownLayout.tableCSV(table), button: index) },
+            // Plain-text targets get the markup, rich targets a table (MarkdownTable.tsx:46-52).
+            MenuItem("Copy as HTML") { [weak self] in
+                let html = MarkdownLayout.tableHTML(table)
+                self?.copy(html, html: "<meta charset=\"utf-8\">" + html, button: index)
+            }
         ], from: button(forControl: index) ?? self, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4))
     }
 
-    private func copy(_ text: String, button index: Int) {
+    private func copy(_ text: String, html: String? = nil, button index: Int) {
         NSPasteboard.general.clearContents()
+        if let html { NSPasteboard.general.setString(html, forType: .html) }
         guard NSPasteboard.general.setString(text, forType: .string) else { return }
         needsLayout = true
         // T3 swaps the icon to a check for 1.2s.
@@ -1174,7 +1180,7 @@ public final class MarkdownView: DSView {
             return (box, CGPoint(x: origin.x - dx, y: origin.y), offset)
         }
     }
-    private var selectionText: String { selectionBoxes.map { $0.box.text }.joined(separator: "\n") }
+    var selectionText: String { selectionBoxes.map { $0.box.text }.joined(separator: "\n") }
     private func selectionIndex(_ point: CGPoint) -> Int? {
         let boxes = selectionBoxes
         guard let hit = boxes.min(by: {
@@ -1182,6 +1188,26 @@ public final class MarkdownView: DSView {
         }) else { return nil }
         return hit.offset + hit.box.character(at: CGPoint(x: point.x - hit.origin.x, y: point.y - hit.origin.y))
     }
+    /// The character on the line under `point`, the text a reader keeps their place by when the lane rewraps
+    /// (`preserveReadingPosition`, 5258 lib/preserveReadingPosition.ts:37-60, #41184). Nil off the text.
+    func readingCharacter(at point: CGPoint) -> Int? {
+        guard selectionBoxes.contains(where: { point.y >= $0.origin.y && point.y < $0.origin.y + $0.box.height }) else { return nil }
+        return selectionIndex(point)
+    }
+
+    /// The top of the line holding `index` at the current width.
+    func readingLineTop(_ index: Int) -> CGFloat? {
+        for (box, origin, offset) in selectionBoxes {
+            let length = (box.text as NSString).length
+            guard index >= offset, index <= offset + length else { continue }
+            guard length > 0 else { return origin.y }
+            let local = min(index - offset, length - 1)
+            guard let span = box.spans(NSRange(location: local, length: 1)).first else { return origin.y }
+            return origin.y + box.lineTop(baseline: span.baseline)
+        }
+        return nil
+    }
+
     public func clearAssistantSelection() {
         let hadSelection = assistantRange != nil
         selectionAnchor = nil; assistantRange = nil
@@ -1241,7 +1267,7 @@ public final class MarkdownView: DSView {
     }
     /// The selection as copied: `selectionText` with each formula's TeX in place of its placeholder.
     /// A quote card spans its title, passage and comment boxes, and copies once for all of them.
-    private func copiedText(_ range: NSRange) -> String {
+    func copiedText(_ range: NSRange) -> String {
         var out = ""
         var lastCard: String?
         var newlines = 0
@@ -1249,6 +1275,8 @@ public final class MarkdownView: DSView {
             let length = (box.text as NSString).length
             let overlap = NSIntersectionRange(range, NSRange(location: offset, length: length))
             if overlap.length > 0 {
+                // One box's text copies bare; a copy across boxes keeps the list markers (#39150).
+                if let marker = box.copyMarker, overlap.length < range.length { out += String(repeating: "\n", count: newlines) + marker; newlines = 0 }
                 for piece in box.copyPieces(NSRange(location: overlap.location - offset, length: overlap.length)) {
                     // The same card's next box: no copy, and no line break inside the card.
                     if piece.card, piece.text == lastCard { newlines = 0; continue }

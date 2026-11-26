@@ -368,6 +368,7 @@ public final class MarkdownLayout: @unchecked Sendable {
 
     static func tableMarkdown(_ table: MarkdownTable) -> String { Builder.markdown(table) }
     static func tableCSV(_ table: MarkdownTable) -> String { Builder.csv(table) }
+    static func tableHTML(_ table: MarkdownTable) -> String { Builder.html(table) }
 
     struct Control {
         enum Action { case copy(String), copyTable(MarkdownTable), toggleWrap(Int), toggleDiagram(Int), retryDiagram(String), runShell(String) }
@@ -1053,6 +1054,18 @@ private struct Builder {
                     .foregroundColor: context.color])
                 out.items.append(.glyphs(marker, baselineRight: CGPoint(x: gutter, y: y + baseline)))
             }
+            // A copy across items keeps each item's marker: `1. ` or `- `, then `[x] ` for a task, and nested items
+            // indent after their parent's bullet (markdown-clipboard.ts:129-152, #39150).
+            let bullet = list.ordered ? "\(item.number ?? list.start + index). " : "- "
+            var first = true
+            for case .text(let box, _) in content.items {
+                if first {
+                    box.copyMarker = bullet + (item.task.map { $0 ? "[x] " : "[ ] " } ?? "")
+                    first = false
+                } else if let nested = box.copyMarker {
+                    box.copyMarker = String(repeating: " ", count: bullet.count) + nested
+                }
+            }
             out.add(content, at: CGPoint(x: gutter, y: y))
             y += content.height
             previousBottom = content.bottom
@@ -1606,6 +1619,47 @@ private struct Builder {
                 return text.contains(",") || text.contains("\"") ? "\"" + text.replacingOccurrences(of: "\"", with: "\"\"") + "\"" : text
             }.joined(separator: ",")
         }.joined(separator: "\n")
+    }
+
+    /// "Copy as HTML" (markdown-clipboard.ts:494-677, #33286): inline-styled, theme-independent `<table>` markup,
+    /// so mail and documents paste a real table. Cells are text: formulas copy as their TeX, a break as `<br>`,
+    /// and inline formatting and link targets are dropped. Header cells default to the start side.
+    static func html(_ table: MarkdownTable) -> String {
+        let cellStyle = "border:1px solid #d0d7de;padding:6px 12px;vertical-align:top"
+        let headerStyle = cellStyle + ";background-color:#f6f8fa;color:#1f2328;font-weight:600"
+        func escape(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
+        }
+        func content(_ runs: [InlineRun]) -> String {
+            let text = runs.map { $0.math?.copySource ?? $0.text }.joined()
+            // HTML collapses spaces, tabs and newlines inside a line; an explicit break stays a `<br>`.
+            return text.components(separatedBy: "\n").map { line in
+                escape(line.split(whereSeparator: { " \t\r\u{0C}".contains($0) }).joined(separator: " "))
+                    .replacingOccurrences(of: "\u{00A0}", with: "&nbsp;")
+            }.joined(separator: "<br>")
+        }
+        func cell(_ runs: [InlineRun], column: Int, header: Bool) -> String {
+            let align: String
+            switch column < table.alignments.count ? table.alignments[column] : .none {
+            case .left: align = "left"
+            case .center: align = "center"
+            case .right: align = "right"
+            case .none: align = header ? "left" : ""
+            }
+            let tag = header ? "th" : "td"
+            let style = (header ? headerStyle : cellStyle) + (align.isEmpty ? "" : ";text-align:" + align)
+            return "<\(tag) style=\"\(style)\">\(content(runs))</\(tag)>"
+        }
+        func row(_ cells: [[InlineRun]], header: Bool) -> String {
+            "    <tr>" + cells.enumerated().map { cell($1, column: $0, header: header) }.joined() + "</tr>"
+        }
+        var lines = ["<table dir=\"ltr\" style=\"border-collapse:collapse\">"]
+        if !table.header.isEmpty { lines += ["  <thead>", row(table.header, header: true), "  </thead>"] }
+        if table.rows.contains(where: { !$0.isEmpty }) {
+            lines += ["  <tbody>"] + table.rows.map { row($0, header: false) } + ["  </tbody>"]
+        }
+        return lines.count > 1 ? (lines + ["</table>"]).joined(separator: "\n") : ""
     }
 
     /// "Copy as Markdown" for a table. GFM splits a row at every unescaped pipe, but its math-aware parse keeps a

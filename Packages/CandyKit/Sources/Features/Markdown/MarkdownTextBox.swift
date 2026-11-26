@@ -68,6 +68,11 @@ final class MarkdownTextBox {
     /// Built on the first search, then kept with the box.
     private(set) lazy var findIndex: (text: String, sources: [NSRange]) = ThreadFindText.index(storage.textStorage ?? NSAttributedString())
 
+    /// The Markdown marker a copy that spans several boxes puts before this box when it is a list item's first text,
+    /// with the continuation indent of the items around it (markdown-clipboard.ts:129-152, #39150). Set once while
+    /// the layout is built.
+    var copyMarker: String?
+
     /// `range` of the text as copying puts it on the pasteboard: a formula's placeholder becomes its TeX.
     func copyText(_ range: NSRange) -> String { copyPieces(range).map(\.text).joined() }
 

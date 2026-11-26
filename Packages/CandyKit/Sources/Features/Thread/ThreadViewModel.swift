@@ -33,6 +33,8 @@ struct TimelineRowUI: Hashable {
     var workflowCoordinator: JSONValue?
     /// Runs of this row's preparation failures that a Retry can prepare again.
     var retryRunIds: Set<RunId> = []
+    /// MCP sign-in notices this row offers to answer, by entry id: whether the server signed in since the notice.
+    var mcpSignIn: [String: Bool] = [:]
     /// An open fold waits for its deferred work, or the last load failed (MessagesTimeline.tsx:1802-1840 at 4928).
     var deferredWorkLoading = false
     var deferredWorkFailed = false
@@ -145,6 +147,13 @@ public final class ThreadViewModel {
     public var onRespondToApproval: (@MainActor (JSONValue) -> Void)?
     public var respondingApprovalRequestIds: Set<String> = [] { didSet { if respondingApprovalRequestIds != oldValue { refreshItems() } } }
     public var canOperateThread = true { didSet { if canOperateThread != oldValue { refreshItems() } } }
+    /// Whether this client may sign MCP servers in on the thread's environment (`providers:manage`,
+    /// McpSignInAction.tsx:62-63). Without it the notice offers nothing.
+    public var canSignInMcp = false { didSet { if canSignInMcp != oldValue { refreshItems() } } }
+    /// When each MCP server last signed in, by `McpSignIn.key` (threadCommands.ts:205-228).
+    public var mcpSignedInAt: [String: Date] = [:] { didSet { if mcpSignedInAt != oldValue { refreshItems() } } }
+    /// "Sign in" on a notice: the thread, the provider thread and the server.
+    public var onMcpSignIn: (@MainActor (ThreadId, String, String) -> Void)?
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
     /// The open thread's environment's scheduled task titles by id (`scheduledTasksLive`): folded automation rows show them.
     public var scheduledTaskTitles: [String: String] = [:] { didSet { if scheduledTaskTitles != oldValue { refreshItems() } } }
@@ -599,6 +608,12 @@ public final class ThreadViewModel {
                 if let state = output(for: e) { ui.outputs[e.id] = state }
             }
             for e in entries { if let run = retryablePreparationRun(e) { ui.retryRunIds.insert(run) } }
+            if canSignInMcp {
+                for e in entries {
+                    guard let notice = e.projectedItem?.item, let server = notice.mcpSignInServer, notice.string("providerThreadId") != nil else { continue }
+                    ui.mcpSignIn[e.id] = McpSignIn.signedIn(noticeAt: notice.updatedAt.date, signedInAt: mcpSignedInAt[McpSignIn.key(notice.threadId, server)])
+                }
+            }
             let children = Set(entries.compactMap(SubagentCardPresentation.notificationChild))
             if !children.isEmpty {
                 ui.subagentRecords = projection?.subagents.filter { children.contains($0["childThreadId"]?.stringValue ?? "") } ?? []

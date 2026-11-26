@@ -245,12 +245,19 @@ public func formatWorkspaceRelativePath(_ pathWithPosition: String, workspaceRoo
             display = label
         } else if compare.hasPrefix(rootCompare + "/") {
             display = "\(label)/\(normalized.dropFirst(rootPath.count + 1))"
-        } else if !normalized.hasPrefix("/") {
+        } else if !isHostPath(normalized) {
             let relative = normalized.replacing(/^\.\/+/, with: "").replacing(/^\/+/, with: "")
             display = compare.hasPrefix(labelCompare) ? normalized : "\(label)/\(relative)"
         }
     }
     return display + suffix
+}
+
+/// `isHostPath` (packages/shared/src/path.ts:172-179): an absolute path, or a `~/` or `~\` home path the server
+/// expands, which never shows under the workspace folder (#39146).
+func isHostPath(_ path: String) -> Bool {
+    path.hasPrefix("/") || path.hasPrefix("\\\\") || path.contains(/^[A-Za-z]:(?:[\/\\]|$)/)
+        || path.hasPrefix("~/") || path.hasPrefix("~\\")
 }
 
 /// `fileBasename` (packages/shared/src/path.ts:85-92).

@@ -137,6 +137,11 @@ final class WorkLineView: DSView {
     /// (`text-foreground`, underlined on hover) and the closing quote (ThreadReadLabel, :3930-3958).
     private var threadLink: ThreadStatusLineAction?
     private let threadLinkClose = LabelView("\u{201D}", font: TL.font(14), color: TL.c(\.secondaryLabel))
+    /// An MCP sign-in notice's "Sign in" (`InlineButton`, medium foreground, underlined on hover) or "Signed in"
+    /// (`text-sm text-success-foreground`), `gap-1.5` after the label, which then only truncates
+    /// (McpSignInAction.tsx:106-125, TimelineWorkEntryRow.tsx:455-466, 595-640 at 5258).
+    private var signIn: ThreadStatusLineAction?
+    private var signedIn: LabelView?
 
 
     var showsTime = false { didSet { if showsTime != oldValue { time.alphaValue = showsTime ? 1 : 0; needsLayout = true } } }
@@ -166,7 +171,7 @@ final class WorkLineView: DSView {
     /// The row takes clicks (it toggles the entry), except on the line's own buttons.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
-        for control in [trailingAction, threadLink] {
+        for control in [trailingAction, threadLink, signIn] {
             if let control, !control.isHidden, control.frame.contains(local) { return control }
         }
         return nil
@@ -185,6 +190,33 @@ final class WorkLineView: DSView {
         trailingAction?.label.text = title ?? ""
         trailingAction?.setAccessibilityLabel(title)
         trailingAction?.action = action
+        needsLayout = true
+    }
+
+    /// The label's text runs past its frame (`scrollWidth > clientWidth`).
+    var labelCutOff: Bool { ceil(label.textWidth) + 1 > label.frame.width + 0.5 }
+
+    /// nil hides it, false offers Sign in, true says Signed in.
+    func setSignIn(_ state: Bool?, server: String, _ action: (@MainActor () -> Void)?) {
+        if state == false, signIn == nil {
+            let a = ThreadStatusLineAction()
+            a.label.font = TL.font(14, .medium)
+            a.label.lineHeight = 24
+            a.tone = .foreground
+            a.label.text = "Sign in"
+            addSubview(a)
+            signIn = a
+        }
+        if state == true, signedIn == nil {
+            let l = LabelView("Signed in", font: TL.font(14), color: TL.c(\.successForeground))
+            l.lineHeight = 24
+            addSubview(l)
+            signedIn = l
+        }
+        signIn?.isHidden = state != false
+        signIn?.action = action
+        signIn?.setAccessibilityLabel("Sign in to \(server)")
+        signedIn?.isHidden = state != true
         needsLayout = true
     }
 
@@ -262,7 +294,11 @@ final class WorkLineView: DSView {
             a.frame = NSRect(x: right - w, y: 0, width: w, height: h)
             right = a.frame.minX - 6
         }
-        label.frame = NSRect(x: 30, y: 0, width: max(0, min(ceil(label.textWidth) + 1, right - 30)), height: h)
+        let after: NSView? = signIn.flatMap { $0.isHidden ? nil : $0 } ?? signedIn.flatMap { $0.isHidden ? nil : $0 }
+        let afterWidth = (after as? ThreadStatusLineAction)?.preferredWidth ?? (after as? LabelView).map { ceil($0.textWidth) + 1 } ?? 0
+        let labelRoom = right - 30 - (after == nil ? 0 : afterWidth + 6)
+        label.frame = NSRect(x: 30, y: 0, width: max(0, min(ceil(label.textWidth) + 1, labelRoom)), height: h)
+        after?.frame = NSRect(x: label.frame.maxX + 6, y: 0, width: afterWidth, height: h)
         if let link = threadLink, !link.isHidden {
             // The three runs sit flush, as inline text does.
             let closeWidth = ceil(threadLinkClose.textWidth) + 1
@@ -379,15 +415,26 @@ final class WorkRowView: WorkRowBase {
     }
 
     /// The row opens: an inspector to show, or a thought with text (`canExpandProjectedItem`, :5552-5561).
+    /// A system notice with a message: its details repeat the row, so it expands only when the row cuts its text
+    /// off, and it shows no timestamp, so hovering never moves Sign in (TimelineWorkEntryRow.tsx:311-324, 517-519,
+    /// 645-648 at 5258, #40076).
+    private func isNotice(_ i: Int) -> Bool {
+        guard let item = entries[i].entry.projectedItem?.item else { return false }
+        return item.type == .systemNotice && item.string("message") != nil
+    }
+    private var noticeCutOff: Set<Int> = []
+
     private func expandable(_ i: Int) -> Bool {
         let e = entries[i].entry
         if Self.failedError(e) != nil { return false }
+        if isNotice(i), !noticeCutOff.contains(i) { return false }
         return !entries[i].detail.isEmpty || (e.itemType == .reasoning && !(e.detail?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))
     }
 
     override func configure(_ item: TimelineItem) {
         // The same row reconfigured in place: an entry's chevron turns instead of snapping.
         let sameRow = self.item?.id == item.id
+        if !sameRow { noticeCutOff = [] }
         super.configure(item)
         guard case .work(let grouped, let isGroup, let displayLabel) = item.row.kind else { return }
         isGroupBody = isGroup
@@ -460,9 +507,15 @@ final class WorkRowView: WorkRowBase {
             let readTitle = readTarget.flatMap { model?.threadTitle?($0) }
             l.setThreadLink(prefix: readTitle == nil ? nil : WorkLog.threadReadLabelPrefix(label), title: readTitle,
                             readTarget.map { id in { model?.onOpenThread?(id) } })
+            let notice = e.projectedItem?.item
+            let server = notice?.mcpSignInServer
+            l.setSignIn(item.ui.mcpSignIn[e.id], server: server ?? "", server.map { server in {
+                guard let notice, let providerThread = notice.string("providerThreadId") else { return }
+                model?.onMcpSignIn?(notice.threadId, providerThread, server)
+            } })
             if pinnedTime.count <= i { pinnedTime.append(false) }
-            pinnedTime[i] = severe
-            l.showsTime = hoveredEntry == i || severe
+            pinnedTime[i] = severe && !isNotice(i)
+            l.showsTime = (hoveredEntry == i && !isNotice(i)) || pinnedTime[i]
             while details.count <= i {
                 let d = WorkDetailView()
                 addSubview(d)
@@ -535,7 +588,9 @@ final class WorkRowView: WorkRowBase {
         let entry = y.flatMap { y in spans.prefix(entries.count).firstIndex { $0.contains(y) } }
         guard entry != hoveredEntry else { return }
         hoveredEntry = entry
-        for (i, l) in lines.enumerated() { l.showsTime = i == entry || (i < pinnedTime.count && pinnedTime[i]) }
+        for (i, l) in lines.enumerated() {
+            l.showsTime = (i == entry && !(i < entries.count && isNotice(i))) || (i < pinnedTime.count && pinnedTime[i])
+        }
     }
 
     private var rowPad: CGFloat { isGroupBody ? 0 : 2 }
@@ -576,6 +631,15 @@ final class WorkRowView: WorkRowBase {
             }
             y += rowPad
             lines[i].frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: 24)
+            if isNotice(i) {
+                lines[i].layoutSubtreeIfNeeded()
+                let cut = lines[i].labelCutOff
+                if cut != noticeCutOff.contains(i) {
+                    if cut { noticeCutOff.insert(i) } else { noticeCutOff.remove(i) }
+                    lines[i].expandable = expandable(i)
+                    lines[i].layoutSubtreeIfNeeded()
+                }
+            }
             y += 24
             if let f = failure(i) {
                 let fh = f.height(forWidth: bounds.width - 4)

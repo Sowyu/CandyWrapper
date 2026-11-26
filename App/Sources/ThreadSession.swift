@@ -507,9 +507,11 @@ final class ThreadController {
               let env = files.workspaceEnvironmentId else { open(meta); return }
         let threadProject = sidebar?.snapshot?.threads.first { $0.id == openThreadId }?.projectId
         let roots = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env && $0.id != threadProject }.map(\.workspaceRoot)
+        let revision = files.openRevision, thread = openThreadId
         Task { [weak self] in
             let found = await self?.files.citedFile(meta, otherRoots: roots)
-            guard let self, claimed == self.fileLookupSequence else { return }
+            // A later link, a file opened meanwhile or another thread wins (#39130).
+            guard let self, claimed == self.fileLookupSequence, revision == self.files.openRevision, thread == self.openThreadId else { return }
             open(found ?? meta)
         }
     }
@@ -848,6 +850,45 @@ final class ThreadController {
             } catch {
                 return FeedbackRequests.genericFailure
             }
+        }
+        // "Sign in" on an MCP notice (5258 McpSignInAction.tsx): `provider.mcpSignIn.start`, then `.complete` with the
+        // address the browser landed on. Both need `providers:manage`.
+        panel.model.onMcpSignIn = { [weak self] threadId, providerThreadId, server in
+            guard let self, let window = self.panel.window, let env = self.openThreadId?.environmentId else { return }
+            let environments = self.environments, model = self.panel.model, toasts = self.panel.toasts
+            @MainActor func message(_ error: Error) -> McpSignInDialog.Failure {
+                let text = ((error as? RPCClientError)?.typedError?.message ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
+                return McpSignInDialog.Failure(text.isEmpty ? "The environment request failed." : text)
+            }
+            @MainActor func signedIn(_ reply: JSONValue) {
+                guard let at = reply["signedInAt"]?.stringValue.flatMap({ T3Timestamp($0).date }) else { return }
+                let key = McpSignIn.key(threadId, server)
+                model.mcpSignedInAt[key] = max(model.mcpSignedInAt[key] ?? .distantPast, at)
+            }
+            let dialog = McpSignInDialog(server: server)
+            dialog.start = {
+                do {
+                    let reply = try await environments.request(env, McpSignInRPC.start,
+                                                               McpSignInRPC.startInput(threadId: threadId, providerThreadId: providerThreadId, server: server))
+                    signedIn(reply)
+                    return reply["authorizationUrl"]?.stringValue
+                } catch { throw message(error) }
+            }
+            dialog.complete = { url in
+                do {
+                    signedIn(try await environments.request(env, McpSignInRPC.complete, McpSignInRPC.completeInput(
+                        threadId: threadId, providerThreadId: providerThreadId, server: server, callbackUrl: url)))
+                } catch { throw message(error) }
+            }
+            dialog.openURL = { url in if let url = SafeExternalURL.parse(url) { NSWorkspace.shared.open(url) } }
+            let host = ModalHost.present(dialog, in: window)
+            host.onDismiss = { [weak dialog] in dialog?.cancelPending() }
+            dialog.onClose = { [weak host] in host?.close() }
+            dialog.onSignedIn = { [weak host] in
+                host?.close()
+                _ = toasts.show(ToastView(title: "Signed in to \(server)", message: nil, kind: .success))
+            }
+            dialog.begin()
         }
         panel.model.canAnswerFeedback = { [weak self] in
             guard let self, let env = self.openThreadId?.environmentId else { return false }

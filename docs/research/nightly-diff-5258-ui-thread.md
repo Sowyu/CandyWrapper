@@ -394,7 +394,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 83a7c75b88 | #42889 | fix(web,mobile): adding a project from a draft's picker no longer leaves the draft behind | palette | port (4.2) |
 | e045a127e7 | #42882 | fix(web): web search result links follow Open links in | thread | ported 3f79fad2 |
 | 8783b9d2ea | #42880 | fix(web): Restart agent session toast says the conversation is kept | palette | ported 2995f10a |
-| 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | port (1.10) |
+| 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | already: `layoutMinimap` takes the gutter from `laneFrame.x`, the measured lane offset |
 | 19a6e5b57b | #42856 | fix(web): clicking outside a citation comment keeps its dictation | thread | n/a here: same composer citation editor |
 | 3a63e0ca37 | #42771 | fix(web): expanding linked issues no longer hides thread details sections | thread | left: with b111b6310a |
 | f99eceb76d | #42755 | fix(web): reasoning previews no longer cut emojis in half | thread | already: Swift slices previews by character, so no surrogate pair splits |
@@ -422,13 +422,13 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 571ed76fc3 | #42275 | fix(web): sidebar issue and pull request badges share one component | sidebar | port (3.7) |
 | 921349decf | #42295 | fix(web): Mod+S stashes a side chat's prompt | composer | port (2.8) |
 | 51a721da44 | #42279 | fix(web): a held Esc in file or content search stops on the Command Palette | palette | ported 8a847157 |
-| 41675b3e4d | #42286 | fix(web): floating preview no longer covers the last timeline rows on a narrow chat | thread | port (1.10) |
+| 41675b3e4d | #42286 | fix(web): floating preview no longer covers the last timeline rows on a narrow chat | thread | n/a until CW has T3's floating preview frame over the chat (`chatCanvasLayout` `overlapsChat`); CW's lane has no such overlay |
 | ff7d03ddfd | #42265 | fix(client-runtime): omit failed image reads from viewed-image previews | thread | ported 255b7394 |
 | e9b227b021 | #42183 | fix(web): typing / or $ in the composer no longer waits for the suggestion menu to render | composer | n/a (React render timing) |
 | ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | ported 8a847157 |
 | 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | port (1.18) |
 | d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | port (3.6) |
-| 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394 (the 32pt media-close at the popup's top end; reference preview.rest still from 4928, recapture from 5258) |
+| 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394, reference recaptured from 5258 in the next commit with the popup's titlebar inset and centering |
 | 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | ported 98004311 |
 | 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | port (1.1) |
 | 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | port (3.8) |
@@ -446,7 +446,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | n/a (CW has no reference sources, so the card is always typed) |
 | d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | port (1.18) |
 | 14ea095b0a | #41663 | feat(web): add an HTML preview width setting separate from chat width | thread | left: needs the `htmlPreviewWidth` setting row (settings agent) before the lane can widen; default `chat` matches CW now. Medium |
-| 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | left unchecked: it fixes the web list's scroll anchoring during a thread swap; check CW's restore lands at the end without a jump. Small |
+| 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | already: a `.thread` change sets `followsEnd` before the anchor is taken, so the restore and every later footer change land at the end (test `aSwitchedThreadOpensAtItsEndWithoutLandingShort`) |
 | 4162207ddd | #29771 | fix(web): file menu opens remote files over SSH instead of on the server | thread | n/a (web icons, wire A18) |
 | 8ef195587d | #33030 | fix(web): tell update-all users where to update desktop servers it can't reach | sidebar | port (3.6) |
 | d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | port (2.4) |
@@ -474,16 +474,16 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 10765a4e47 | #41262 | fix(web): a refused desktop install shows as failed instead of downloaded | sidebar | n/a (desktop updater, Electron) |
 | 5812320a6a | #41258 | fix(web): quick clicks on different sidebar threads open each one | sidebar | port (3.5) |
 | 611410683b | #41242 | feat(cursor): show which step Cursor is in while a turn starts | thread | ported 3a1892b1 |
-| e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | port (1.10) |
+| e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | ported 7a68cd54 (the text line, not a contenteditable caret: CW's timeline has none) |
 | 69c1d53826 | #38884 | feat: workflows on web and mobile | thread | port (1.18) |
-| 7103527dcc | #41073 | fix(web): PR description file links resolve in the PR's repository from a No-project thread | thread | port (1.12) |
+| 7103527dcc | #41073 | fix(web): PR description file links resolve in the PR's repository from a No-project thread | thread | left: CW renders PR bodies in the pull request views (other agent), which pass no checkout cwd yet. Small |
 | 0938476b95 | #41060 | fix(web): Thinking row no longer shows below a streaming reply | thread | ported ad384d3e |
 | a3323d4a43 | #41070 | perf(web): new thread opens its draft without waiting on t3.json | composer | n/a (React load order) |
 | fe9c98c98f | #35871 | feat: agents can report T3 Code problems when you turn feedback on | thread | ported 47f71d35 (not seen on screen: needs a turn that asks for feedback with feedback on) |
 | dbb5bdb582 | #33057 | feat(web): sidebar folder button picks or adds a project | sidebar | ported 11e1c196 |
 | 67f17528f2 | #39494 | fix(web): snooze labels follow the app language | sidebar | port (3.5) |
 | c7df7004af | #41021 | fix(web): a photo picked on a phone attaches even when the composer collapses | composer | n/a (phone photo picker) |
-| 55880c41b4 | #40986 | fix(client-runtime): count ambiguous projects in chat file links | thread | port (1.12) |
+| 55880c41b4 | #40986 | fix(client-runtime): count ambiguous projects in chat file links | thread | ported dd1cfae1 |
 | 87554a7b86 | #40945 | fix(web): editing a queued message keeps its attachment chips resolved | composer | port (2.3) |
 | 7ddc81d639 | #40905 | fix(web): tool calls stay grouped after a usage-limit pause again | thread | ported 00aa8a70 |
 | 9de4ec1bfa | #40924 | fix(web,mobile): @-file mentions show by name in message previews, not as raw links | composer | ported 9ff295a2 |
@@ -528,8 +528,8 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | aa6fe390db | #40042 | fix(web): dismissing a local thread error no longer suppresses repeat errors | thread | ported fe5d9cd0 |
 | bac0508e08 | #38895 | feat(web): thread chips show the sidebar's thread card on hover | thread | ported 32609bf7 for chips in sent messages; the composer's chips and their "On another machine" line are the composer agent's (Features/Composer) |
 | e8b28328da | #29681 | feat(web): duplicate browser tabs from the context menu | other | n/a (browser tabs, other agent) |
-| b9879ede83 | #33286 | feat(web): copy a chat table as HTML | thread | port (1.12) |
-| 26d81d88c1 | #40076 | fix(web): timeline row actions stay put on hover, and notices expand only when cut off | thread | left: notices expand only when cut off. Small |
+| b9879ede83 | #33286 | feat(web): copy a chat table as HTML | thread | ported dd1cfae1 (unaligned columns say left: Foundation reports no "none" alignment) |
+| 26d81d88c1 | #40076 | fix(web): timeline row actions stay put on hover, and notices expand only when cut off | thread | ported 239ed38d (the row's chevron and click follow the cut-off check; not seen on screen) |
 | e28b2819ee | #39610 | fix(shared): compose NFD file names in link chips and the @ menu | composer | port (2.7) |
 | 9ab7da2a3e | #34646 | fix(web): screen readers can read expanded tool output | thread | n/a (web screen reader markup) |
 | af99412e9d | #24603 | fix(web): keep file path tooltips open for selection | thread | n/a (web tooltip hover) |
@@ -540,7 +540,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | left: hub pools on the details card (`resolveThreadDetailsLimits`, instance hubs). Medium |
 | 342b58a79f | #30644 | feat(web): add a composerEmpty keybinding condition | composer | port (2.8) |
 | 285558eb10 | #34027 | feat(desktop): dictate on this Mac with Apple Speech | composer | n/a (desktop IPC, wire A19) |
-| 669d8941e2 | #39921 | feat: sign in to an agent's MCP server from its warning | thread | left: the Sign in action and its dialog on MCP notices. Medium |
+| 669d8941e2 | #39921 | feat: sign in to an agent's MCP server from its warning | thread | ported ca680ce9 (seen offscreen only: no sandbox MCP server needs a login) |
 | 3027c2c840 | #40011 | fix(voice): start dictation capture sooner on iOS and desktop | composer | n/a (web audio capture) |
 | 6908754f0b | #37122 | fix(web): caret navigation no longer opens composer suggestions | composer | port (2.5) |
 | 8d37736cdd | #39889 | fix(web,mobile): usage-limit recovery banner updates copy after reset passes | thread | ported fe5d9cd0 |
@@ -564,15 +564,15 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 98af8803fe | - | refactor(web): share restart countdown seconds in update capsule | sidebar | n/a (refactor) |
 | f0f9de46c6 | - | fix(web): localize compact restart countdown | sidebar | port (3.6) |
 | 40c1e861ee | - | fix(web): keep sidebar update control readable when narrow | sidebar | port (3.6) |
-| 3b199e77fb | #39308 | fix: index displayed file line ranges in thread search | thread | port (1.12) |
+| 3b199e77fb | #39308 | fix: index displayed file line ranges in thread search | thread | ported dd1cfae1 (CW had no range label at all: chips now show `L42–64`; image destinations as file chips are not indexed) |
 | c5badf4e40 | #39305 | fix(web): scope Git controls to the active checkout | other | n/a (git controls, other agent) |
 | 73caab68e3 | #38912 | fix(client): commands run as Effects on the caller's fiber, so interrupting a caller stops them | other | n/a (client effects refactor) |
-| 5bc2d512e4 | #39295 | fix(web): scroll wide tables to the selected Find match | thread | port (1.12) |
+| 5bc2d512e4 | #39295 | fix(web): scroll wide tables to the selected Find match | thread | already: wide tables share the code blocks' `.scroll` item, so `activeFindRect` scrolls them (test added in dd1cfae1) |
 | 42d2387285 | #31545 | fix(web): right-clicking a sidebar search result now opens its thread actions | sidebar | port (3.5) |
 | a1e7ac2b24 | #39133 | fix(web): the Compact chip no longer shows after /clear | composer | port (2.5) |
-| ff9efe89f6 | #39150 | fix(web): copying items within one list keeps their list markers | thread | port (1.12) |
-| b6afe8109c | #39146 | fix(web): home paths like ~/.claude/CLAUDE.md no longer show under the workspace folder | thread | port (1.12) |
-| d067a04175 | #39130 | fix(web): a slow chat file link no longer replaces a file opened from the picker | thread | port (1.12) |
+| ff9efe89f6 | #39150 | fix(web): copying items within one list keeps their list markers | thread | ported dd1cfae1 (markers only: CW's selection copy is still plain text, not T3's Markdown serializer) |
+| b6afe8109c | #39146 | fix(web): home paths like ~/.claude/CLAUDE.md no longer show under the workspace folder | thread | ported dd1cfae1 |
+| d067a04175 | #39130 | fix(web): a slow chat file link no longer replaces a file opened from the picker | thread | ported dd1cfae1 |
 | 470ca63499 | #38224 | fix(web): restore the composer caret after dictation | composer | port (2.5) |
 | 2c7bfcec84 | #38225 | fix(desktop): restore clicks across the floating dictation controls | composer | n/a (Electron drag region) |
 | c9359f6535 | #38984 | fix(mobile): project picker starts a chat in an open copy, not an archived one | palette | port (4.5) |
