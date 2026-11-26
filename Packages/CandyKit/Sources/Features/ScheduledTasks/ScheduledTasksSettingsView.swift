@@ -1170,6 +1170,38 @@ final class ScheduledTaskInlineRow: DSView {
 
 /// Days to run: `ToggleGroup multiple variant="outline" size="sm"`, Monday first, joined; the last day stays on.
 final class ScheduledTaskWeekdaysView: DSView {
+    /// Redesign: the segmented control's quiet track with each chosen day as a selected segment, as the schedule
+    /// mode switch above it draws, in place of T3's joined outline with grey pressed days.
+    private func drawRedesign(_ ctx: CGContext, dark: Bool) {
+        typealias T = RedesignTokens
+        let track = CGPath(roundedRect: bounds, cornerWidth: T.Radius.card, cornerHeight: T.Radius.card, transform: nil)
+        ctx.addPath(track)
+        ctx.setFillColor((dark ? T.State.fill(T.Segment.track, dark: true) : T.Segment.trackFill).cgColor(in: self))
+        ctx.fillPath()
+        for (i, r) in frames().enumerated() {
+            let day = ScheduledTaskLogic.weekdayOrder[i]
+            let pressed = selected.contains(day)
+            let cell = r.insetBy(dx: 1, dy: 2)
+            let path = CGPath(roundedRect: cell, cornerWidth: T.Radius.control, cornerHeight: T.Radius.control, transform: nil)
+            if pressed {
+                ctx.addPath(path)
+                ctx.setFillColor((dark ? T.State.fill(T.State.selected, dark: true) : T.Segment.selectedFill).cgColor(in: self))
+                ctx.fillPath()
+                if !dark {
+                    ctx.addPath(CGPath(roundedRect: cell.insetBy(dx: 0.25, dy: 0.25), cornerWidth: T.Radius.control, cornerHeight: T.Radius.control, transform: nil))
+                    ctx.setStrokeColor(T.Segment.selectedRim.cgColor(in: self)); ctx.setLineWidth(0.5); ctx.strokePath()
+                }
+            } else if hover == i {
+                ctx.addPath(path)
+                ctx.setFillColor((dark ? T.State.fill(T.State.hover, dark: true) : T.Segment.hoverFill).cgColor(in: self))
+                ctx.fillPath()
+            }
+            UsageText.draw(ctx, ScheduledTaskLogic.weekdayShort[day], font: font,
+                           color: Themed.color(pressed || hover == i ? \.foreground : \.mutedForeground),
+                           in: CGRect(x: r.minX, y: 4, width: r.width, height: 20), lineHeight: 20, align: .center)
+        }
+    }
+
     private var selected: Set<Int>
     private let onChange: (Set<Int>) -> Void
     private var hover: Int? { didSet { if hover != oldValue { needsDisplay = true } } }
@@ -1233,6 +1265,7 @@ final class ScheduledTaskWeekdaysView: DSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         let dark = effectiveAppearance.isDark
+        if ThemeRuntime.isDither(dark: dark) { drawRedesign(ctx, dark: dark); return }
         let outer = bounds.insetBy(dx: 0.5, dy: 0.5)
         let shape = CGPath(roundedRect: outer, cornerWidth: 7.5, cornerHeight: 7.5, transform: nil)
         // `border-input bg-background shadow-xs/5`, `dark:bg-input/32`.
