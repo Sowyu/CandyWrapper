@@ -41,7 +41,7 @@
   },
   "outline.compact" : {
     "height" : 28,
-    "width" : 89.8046875
+    "width" : 91.8046875
   },
   "outline.default" : {
     "height" : 32,
@@ -81,7 +81,7 @@
   },
   "outline.micro" : {
     "height" : 20,
-    "width" : 54.0859375
+    "width" : 56.0859375
   },
   "outline.sm" : {
     "height" : 28,
@@ -93,7 +93,7 @@
   },
   "outline.xs" : {
     "height" : 24,
-    "width" : 42.8203125
+    "width" : 44.8203125
   },
   "overlay.sm" : {
     "height" : 28,
