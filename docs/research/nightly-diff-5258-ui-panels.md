@@ -426,7 +426,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 3571f28cca | #40816 | fix(web): Usage Limits no longer shows a stale scrollbar | usage | n/a (web scrollbar) † |
 | 369b46900c | #42480 | fix(web): Enter saves the default viewport size and skipped runs kept | settings | port (1.8) † |
 | 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | ported 4b07f98d (short commit id below 36rem, the hidden-tests link from 42rem, the only-hidden-tests state), diff read 2026-11-25 |
-| 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | holds for reloads (CW reads an open file again only on Force Reload); left: renew the HTML page grant two minutes before its hour ends (S) |
+| 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | holds for reloads (CW reads an open file again only on Force Reload); grant renewal ported 46522128. CW never reloads a changed preview after an agent command either: left, follow `workspaceMutationId` and `fileRevision` (S) |
 | 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | port (8.3) |
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
@@ -506,7 +506,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 7ef7ba0e3b | #40304 | perf(server): a tracked file's Diff panel patch skips the untracked-file listing | git | n/a (CW reads the whole preview, no per-file patch reads to send changeType with) |
 | 803f21f6a5 | #39213 | test: pull request Code tab keeps a hidden test file open through collapse all | pull requests | n/a (test only) † |
 | 80cf4f7945 | #39260 | fix(web): the terminal button reopens the drawer after its last terminal closed | terminal | already (closing the last terminal resets the drawer; no server listing to go stale), test in 47d4ad86 |
-| 8238dc2652 | #39648 | fix(web,mobile): make comment and review author lines headings | pull requests | left: VoiceOver headings for comment and review author lines (S) |
+| 8238dc2652 | #39648 | fix(web,mobile): make comment and review author lines headings | pull requests | ported 3a601e4a |
 | 830c11ccc2 | #41686 | fix(web): Esc while adding or editing a custom model no longer closes Settings | settings | port (1.3) † |
 | 83990ad9a2 | #42272 | fix(server): notebook attachments show a progress bar's last frame | files | n/a (QuickLook previews) † |
 | 849d19447f | #42129 | fix(web): Esc clears the Voice model search without closing Settings | settings | port (1.3) † |
@@ -583,7 +583,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | c14e9f9717 | #42810 | fix(server): preserve split terminal control sequences across scrollback clears | terminal | n/a (server only) † |
 | c198f73b37 | #40776 | fix(web): a click outside the project action editor no longer discards the draft | settings | ported 5dc3ddd9 |
 | c39c21f870 | #42361 | fix(web): Esc in a font family field closes Settings when no edit is pending | settings | port (1.3) † |
-| c43e073123 | #39319 | fix(web): Arrow and page keys scroll the pull request pane after a click or when it opens | pull requests | ported 92620f14 (Summary and Timeline take keyboard focus on a click; opening the pane does not move focus yet) |
+| c43e073123 | #39319 | fix(web): Arrow and page keys scroll the pull request pane after a click or when it opens | pull requests | ported 92620f14 and d6eba4a9: a click focuses the Summary or Timeline, and maximizing hands them panel focus. Focus on F6 waits for CW's area cycle (SideChatController.swift:177) |
 | c478fde9fe | #42791 | fix(web): bad workflow pane links no longer pick the first tab or crash | workflows | port (8.6) † |
 | c5dc20f9f5 | #37191 | fix(client): new threads from a grouped repository start in its root checkout | shell | ported 0e916fe4 |
 | c6162da7ec | #42353 | fix(server): skipped workflow runs no longer keep their webhook payloads forever | workflows | port (1.7) |
