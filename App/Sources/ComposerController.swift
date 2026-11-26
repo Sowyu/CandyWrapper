@@ -3949,10 +3949,12 @@ extension ComposerController {
             let key = pathKey(trigger.query)
             let entries = menuState.paths.flatMap { $0.key == key ? $0.entries : nil } ?? []
             let loading = key != nil && menuState.paths?.key != key
-            let machines = ComposerMenus.environmentItems(query: trigger.query,
-                environments: composerLinkedNames.sorted { $0.key < $1.key }.map {
-                    .init(id: $0.key, label: $0.value, machine: environments.machine($0.key) ?? "server")
-                }, excluding: targetEnvironmentId ?? "")
+            let machines = composerOffersLinks ? ComposerMenus.environmentItems(query: trigger.query,
+                environments: environments.environmentIds.compactMap { id in
+                    environments.label(id).map { .init(id: id, label: $0, machine: environments.machine(id) ?? "server") }
+                },
+                linked: composerLinkedNames.sorted { $0.key < $1.key }.map { .init(id: $0.key, label: $0.value) },
+                excluding: targetEnvironmentId ?? "") : []
             // Models follow threads and machines, before files (useComposerMenuItems.ts:237-241 at 4928).
             let models = ComposerModelMentions.items(query: trigger.query, entries: pickers.context.catalog.entries)
             return .init(items: machines + threads + models + ComposerMenus.pathItems(entries), emptyText: ComposerMenus.emptyText(kind: .path, loading: loading))

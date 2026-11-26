@@ -71,7 +71,8 @@ public struct ComposerChipLook: Equatable, Sendable {
             return ComposerChipLook(kind: .model(driver: found?.driver ?? ""), label: found?.label ?? slug)
         case .mention(let path):
             let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
-            return ComposerChipLook(kind: .mention(path: path), label: base.isEmpty ? path : base)
+            // Mentioned macOS paths can be NFD; the chip shows them composed (#39610).
+            return ComposerChipLook(kind: .mention(path: path), label: (base.isEmpty ? path : base).precomposedStringWithCanonicalMapping)
         case .citation(let citation): return ComposerChipLook(kind: .citation, label: citation.label)
         case .skill(let name):
             return ComposerChipLook(kind: .skill, label: skillLabel(name))
