@@ -99,6 +99,31 @@ struct TimelinePipelineTests {
         #expect(!model.items.contains { if case .thinking = $0.row.kind { true } else { false } })
     }
 
+    /// ThreadStressTests seed 2 step 9: after a run ends, an unconfirmed send counts as work (`isSendBusy`, 5258
+    /// ChatView.logic.ts:1426-1439), so the pipeline and a derive from scratch both show the working row until the
+    /// send leaves, and both drop it after.
+    @Test func aSendAfterAnEndedRunMatchesAFreshDerive() throws {
+        let projection = try #require(try steps("02-turn.jsonl").last)
+        let pending = [ChatMessage(id: MessageId("local-1"), role: .user, text: "hi", createdAt: "2026-01-01T00:00:00.000Z")]
+        func fresh(_ pending: [ChatMessage]) -> [TimelineRow] {
+            let base = TimelineRowsInput(projection: projection)
+            return TimelineRows.derive(TimelinePipeline.addingPending(pending, startingInstanceId: nil, to: base) ?? base)
+        }
+        func request(_ pending: [ChatMessage], changed: Bool) -> TimelinePipeline.Request {
+            TimelinePipeline.Request(projection: projection, projectionChanged: changed, expandedRunIds: [], expandedAttemptIds: [],
+                                     expandedWorkGroupIds: [], pending: pending)
+        }
+        let pipeline = TimelinePipeline()
+        _ = pipeline.run(request([], changed: true))
+        let sending = try #require(pipeline.run(request(pending, changed: false))).rows
+        #expect(sending == fresh(pending))
+        #expect(sending.contains { if case .working = $0.kind { true } else { false } })
+        if let again = pipeline.run(request(pending, changed: true)) { #expect(again.rows == fresh(pending)) }
+        let sent = try #require(pipeline.run(request([], changed: false))).rows
+        #expect(sent == fresh([]))
+        #expect(!sent.contains { if case .working = $0.kind { true } else { false } })
+    }
+
     /// A late result for the thread the view left is dropped.
     @Test func switchingThreadsDropsTheOldThreadsRows() async throws {
         let all = try ThreadPreview.projections()

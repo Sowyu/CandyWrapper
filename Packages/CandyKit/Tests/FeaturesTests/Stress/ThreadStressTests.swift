@@ -119,15 +119,11 @@ final class ThreadStressRun {
         }
         guard let projection else { return }
         fail(StressInvariants.projection(projection, partial: client.history.isPartial), "projection")
-        var input = TimelineRowsInput(projection: projection)
-        input.expandedRunIds = expandedRuns
-        input.expandedAttemptIds = expandedAttempts
-        input.expandedWorkGroupIds = expandedGroups
-        input.entries += pending.map { TimelineEntry.message($0.id.rawValue, $0) }
-        if let last = pending.last, ComposerCompaction.isCompactCommand(last.text, attachments: last.attachments.count) {
-            input.isWorking = true
-            input.isCompacting = true
-        }
+        var base = TimelineRowsInput(projection: projection)
+        base.expandedRunIds = expandedRuns
+        base.expandedAttemptIds = expandedAttempts
+        base.expandedWorkGroupIds = expandedGroups
+        let input = TimelinePipeline.addingPending(pending, startingInstanceId: nil, to: base) ?? base
         let fresh = TimelineRows.derive(input)
         if fresh != shown {
             let firstDiff = (0..<min(fresh.count, shown.count)).first { fresh[$0] != shown[$0] } ?? min(fresh.count, shown.count)

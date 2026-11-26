@@ -45,6 +45,30 @@ final class TimelinePipeline: @unchecked Sendable {
     private(set) var fullPasses = 0
     private var shownVisibility = "showAll"
 
+    /// `input` with the composer's unconfirmed sends added. Tests that derive rows from scratch call it too,
+    /// so their rows follow the same rules as the pipeline's.
+    static func addingPending(_ pending: [ChatMessage], startingInstanceId: String?, to input: TimelineRowsInput?) -> TimelineRowsInput? {
+        guard let last = pending.last else { return input }
+        var source = input ?? TimelineRowsInput(entries: [])
+        source.entries += pending.map { TimelineEntry.message($0.id.rawValue, $0) }
+        // The optimistic half of `isCompacting` (ChatView.tsx:3601-3604): a `/compact` on its way
+        // already counts as work, with the Compacting header.
+        if ComposerCompaction.isCompactCommand(last.text, attachments: last.attachments.count) {
+            source.isWorking = true
+            source.isCompacting = true
+        } else if !source.isWorking,
+                  !(source.latestRun.map { [.preparing, .queued, .starting, .running, .waiting].contains($0.status) } ?? false) {
+            // `providerStartingRun` (5258 ChatView.tsx:1605-1616, ff6b10e0a0 #41928): until the server has a run, a send
+            // shows the provider it is starting instead of nothing. An unconfirmed optimistic message is T3's
+            // `isSendBusy`, which counts as work (`deriveTimelineWorking`, 5258 ChatView.logic.ts:1426-1439); it leaves
+            // when the stream carries the message or the send fails, so the row cannot outlive it.
+            source.isWorking = true
+            source.activeTurnStartedAt = last.createdAt
+            source.providerStarting = startingInstanceId.map { RunStartup.ProviderStarting(driver: $0) }
+        }
+        return source
+    }
+
     /// The rows for `request`, or nil when nothing changed.
     func run(_ request: Request) -> Result? {
         if request.projectionChanged {
@@ -63,24 +87,7 @@ final class TimelinePipeline: @unchecked Sendable {
         source?.expandedRunIds = request.expandedRunIds
         source?.expandedAttemptIds = request.expandedAttemptIds
         source?.expandedWorkGroupIds = request.expandedWorkGroupIds
-        if !request.pending.isEmpty {
-            if source == nil { source = TimelineRowsInput(entries: []) }
-            source?.entries += request.pending.map { TimelineEntry.message($0.id.rawValue, $0) }
-            // The optimistic half of `isCompacting` (ChatView.tsx:3601-3604): a `/compact` on its way
-            // already counts as work, with the Compacting header.
-            if let last = request.pending.last, ComposerCompaction.isCompactCommand(last.text, attachments: last.attachments.count) {
-                source?.isWorking = true
-                source?.isCompacting = true
-            } else if let last = request.pending.last, let input = source, !input.isWorking,
-                      !(input.latestRun.map { [.preparing, .queued, .starting, .running, .waiting].contains($0.status) } ?? false) {
-                // `providerStartingRun` (5258 ChatView.tsx:1605-1616, ff6b10e0a0 #41928): until the server has a run, a send
-                // shows the provider it is starting instead of nothing. An unconfirmed optimistic message is T3's
-                // `isSendBusy`; it leaves when the stream carries the message or the send fails, so the row cannot outlive it.
-                source?.isWorking = true
-                source?.activeTurnStartedAt = last.createdAt
-                source?.providerStarting = request.startingInstanceId.map { RunStartup.ProviderStarting(driver: $0) }
-            }
-        }
+        source = Self.addingPending(request.pending, startingInstanceId: request.startingInstanceId, to: source)
         var changed = changedSinceShown
         changedSinceShown = []
         var prepended = prependedSinceShown
