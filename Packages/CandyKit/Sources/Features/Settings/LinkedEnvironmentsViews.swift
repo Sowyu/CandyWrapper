@@ -151,6 +151,33 @@ public struct LinkableMachine: Equatable {
     }
 }
 
+/// A machine this app can link without a pasted code because another of its environments links there at full access,
+/// so that one gets the pairing code (`LinkThroughRoute`, client-runtime state/peerLinks.ts:169-211 at 5258, #40036).
+public struct LinkThroughRoute: Equatable, Sendable {
+    public var viaEnvironmentId, viaLabel, environmentId, label: String
+    public var urls: [String]
+    public init(viaEnvironmentId: String, viaLabel: String, environmentId: String, label: String, urls: [String]) {
+        self.viaEnvironmentId = viaEnvironmentId; self.viaLabel = viaLabel; self.environmentId = environmentId
+        self.label = label; self.urls = urls
+    }
+
+    /// `linkThroughRoutes`: the machines `source` can link to through a host's full-access link that answers, the first
+    /// host winning. `hosts` are environments this app is connected to and manages access on, the only ones it may ask.
+    public static func routes(source: String, hosts: [(environmentId: String, label: String, links: [PeerLinkSummary])],
+                              now: Date) -> [LinkThroughRoute] {
+        var routes: [LinkThroughRoute] = []
+        for host in hosts where host.environmentId != source {
+            for link in host.links where link.environmentId != source && link.access == "full-access"
+                && !routes.contains(where: { $0.environmentId == link.environmentId }) {
+                guard case .reachable = PeerLinkHealth(link, now: now) else { continue }
+                routes.append(LinkThroughRoute(viaEnvironmentId: host.environmentId, viaLabel: host.label,
+                                               environmentId: link.environmentId, label: link.label, urls: link.urls))
+            }
+        }
+        return routes
+    }
+}
+
 /// "Link an environment" (LinkedEnvironmentsSettings.tsx:174-357 at 3814): a machine or an address, a pairing code
 /// unless this app can mint one there, and what agents here may do there.
 public final class LinkEnvironmentFormView: DSView {
@@ -160,6 +187,15 @@ public final class LinkEnvironmentFormView: DSView {
     private let machineTitle = LabelView("Machine", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground))
     private let machineSelect: SelectView
     private let linkedNote = TextBlockView()
+    private let throughNote = TextBlockView()
+    /// Machines reachable through another environment's full-access link (#40036).
+    public let throughRoutes: [LinkThroughRoute]
+    /// The map's drop on a machine known only through a link: linked through `prefilledThrough` while the address
+    /// stays the one the dialog opened with (LinkedEnvironmentsSettings.tsx:306-311 at 5258).
+    private var prefilledThrough: LinkThroughRoute?
+    private var prefilledAddress = ""
+    /// Machines that would not give a code through a link, so the form asks for one instead.
+    public var throughFailed: Set<String> = [] { didSet { apply() } }
     private let addressTitle = LabelView("Address", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground))
     public let addressInput = InputView(placeholder: "https://box.example.ts.net")
     private let addressHint = TextBlockView()
@@ -181,8 +217,14 @@ public final class LinkEnvironmentFormView: DSView {
     var onChange: (() -> Void)?
     public var onHeightChange: (() -> Void)?
 
-    public init(machines: [LinkableMachine]) {
+    public init(machines saved: [LinkableMachine], throughRoutes: [LinkThroughRoute] = []) {
+        // Machines this app has no entry for are still pickable when one of its environments links to them at full
+        // access (:264-277 at 5258).
+        let machines = saved + throughRoutes.filter { route in !saved.contains { $0.environmentId == route.environmentId } }.map {
+            LinkableMachine(environmentId: $0.environmentId, label: $0.label, connected: false, linked: false, urls: $0.urls, canMint: false)
+        }
         self.machines = machines
+        self.throughRoutes = throughRoutes
         machineSelect = SelectView(options: machines.map(\.label) + ["Another address…"], placeholder: "Choose a machine")
         accessSelect = SelectView(options: LinkAccess.all.map(\.label), selected: 1)
         super.init(frame: .zero)
@@ -201,7 +243,7 @@ public final class LinkEnvironmentFormView: DSView {
             self?.access = LinkAccess.all[i].value
             self?.apply()
         }
-        for t in [linkedNote, addressHint, codeHint, accessNote] {
+        for t in [linkedNote, throughNote, addressHint, codeHint, accessNote] {
             t.font = DSFont.ui(12)
             t.lineHeight = 16
             t.color = Themed.color(\.mutedForeground)
@@ -215,7 +257,7 @@ public final class LinkEnvironmentFormView: DSView {
             self.apply()
         }
         codeInput.onChange = { [weak self] _ in self?.onChange?() }
-        for v in [machineTitle, machineSelect, linkedNote, addressTitle, addressInput, addressHint, codeTitle, codeInput, codeHint,
+        for v in [machineTitle, machineSelect, linkedNote, throughNote, addressTitle, addressInput, addressHint, codeTitle, codeInput, codeHint,
                   accessTitle, accessSelect, accessNote] as [NSView] { addSubview(v) }
         apply()
     }
@@ -224,9 +266,10 @@ public final class LinkEnvironmentFormView: DSView {
 
     /// A link request card opens on the machine the agent named or hinted at, with the access it suggested; a named
     /// machine can't be changed (LinkRequestCard.tsx `resolveTarget`).
-    public func preset(choice: String?, access: String?, lockMachine: Bool, address: String? = nil) {
+    public func preset(choice: String?, access: String?, lockMachine: Bool, address: String? = nil, through: LinkThroughRoute? = nil) {
         if let choice { self.choice = choice }
-        if let address { addressInput.text = address }
+        if let address { addressInput.text = address; prefilledAddress = address }
+        if let through, address != nil { prefilledThrough = through; self.choice = Self.anotherAddress }
         if let access, let i = LinkAccess.all.firstIndex(where: { $0.value == access }) {
             self.access = access
             accessSelect.selectedIndex = i
@@ -247,8 +290,27 @@ public final class LinkEnvironmentFormView: DSView {
     /// The request's machine is linked already, so the agent uses that link and nothing else is asked
     /// (LinkRequestCard.tsx:245-277 at 3814).
     public var usesExisting: Bool { answersRequest && machine?.linked == true }
+    /// The link goes through another environment, which gets the pairing code: no address or code is asked. Minting
+    /// with this app's own session there comes first, since it needs no third machine (:325-347 at 5258).
+    public var through: LinkThroughRoute? {
+        let candidate: LinkThroughRoute?
+        if let p = prefilledThrough, selected == Self.anotherAddress, addressInput.text == prefilledAddress { candidate = p }
+        else if let m = machine, !mints, !answersRequest { candidate = throughRoutes.first { $0.environmentId == m.environmentId } }
+        else { candidate = nil }
+        guard let candidate, !throughFailed.contains(candidate.environmentId) else { return nil }
+        return candidate
+    }
+
+    /// `DialogTitle` (:491-501 at 5258): names the source, because from the map nothing else on screen does.
+    public func title(source: String?) -> String {
+        guard let source else { return "Link an environment" }
+        if let through { return "Link \(source) to \(through.label)" }
+        guard let machine, selected != Self.anotherAddress else { return "Link \(source) to another machine" }
+        return "Link \(source) to \(machine.label)"
+    }
+
     public var ready: Bool {
-        if usesExisting { return true }
+        if usesExisting || through != nil { return true }
         return selected != nil && (!needsAddress || !address.isEmpty) && (mints || !pairingCode.isEmpty)
     }
     /// `[url, ...alternateUrls]`: the typed address, else the machine's.
@@ -256,8 +318,13 @@ public final class LinkEnvironmentFormView: DSView {
 
     private func apply() {
         let m = machine
-        machineTitle.isHidden = machines.isEmpty
-        machineSelect.isHidden = machines.isEmpty
+        let through = through
+        // The machine the map dropped on stays fixed; picking another one shows the select again (:519).
+        let hideSelect = machines.isEmpty || (through != nil && through == prefilledThrough)
+        machineTitle.isHidden = hideSelect
+        machineSelect.isHidden = hideSelect
+        throughNote.isHidden = through == nil
+        throughNote.text = through.map { "\($0.viaLabel) links to \($0.label) at full access, so it gets the pairing code. No code to paste." } ?? ""
         machineSelect.isEnabled = !isBusy && !machineLocked
         if let i = machines.firstIndex(where: { $0.environmentId == selected }) { machineSelect.selectedIndex = i }
         else if selected == Self.anotherAddress, !machines.isEmpty { machineSelect.selectedIndex = machines.count }
@@ -265,13 +332,13 @@ public final class LinkEnvironmentFormView: DSView {
         linkedNote.text = usesExisting
             ? "This environment is already linked to \(m?.label ?? "it"). The agent can use that link as it is; change its access in Settings → Environments."
             : "Already linked. Linking again renews it with the access you pick."
-        let address = needsAddress && !usesExisting
+        let address = needsAddress && !usesExisting && through == nil
         addressTitle.isHidden = !address
         addressInput.isHidden = !address
         addressInput.isEnabled = !isBusy
         addressHint.text = m.map { $0.noAddressHint ?? "This app has no address for \($0.label) that another machine can reach. Enter its https or Tailscale address." } ?? ""
         addressHint.isHidden = !address || m == nil
-        let code = selected != nil && !mints && !usesExisting
+        let code = selected != nil && !mints && !usesExisting && through == nil
         codeTitle.isHidden = !code
         codeInput.isHidden = !code
         codeInput.isEnabled = !isBusy
@@ -297,6 +364,7 @@ public final class LinkEnvironmentFormView: DSView {
         }
         field([(machineTitle, 16), (machineSelect, 32)])
         field([(linkedNote, linkedNote.height(forWidth: width))])
+        field([(throughNote, throughNote.height(forWidth: width))])
         field([(addressTitle, 16), (addressInput, 32), (addressHint, addressHint.height(forWidth: width))])
         field([(codeTitle, 16), (codeInput, 32), (codeHint, codeHint.height(forWidth: width))])
         field([(accessTitle, 16), (accessSelect, 32), (accessNote, accessNote.height(forWidth: width))])
@@ -322,11 +390,12 @@ public final class LinkEnvironmentFormView: DSView {
 
 public enum LinkEnvironmentDialog {
     @MainActor
-    public static func make(machines: [LinkableMachine]) -> (dialog: DialogView, form: LinkEnvironmentFormView, cancel: ButtonView, link: ButtonView) {
+    public static func make(machines: [LinkableMachine], throughRoutes: [LinkThroughRoute] = [], sourceLabel: String? = nil)
+        -> (dialog: DialogView, form: LinkEnvironmentFormView, cancel: ButtonView, link: ButtonView) {
         let dialog = DialogView(title: "Link an environment",
                                 message: "Agents here can then launch, message and wait on threads there. It appears under Authorized clients in that environment's Sharing & access, where it can be revoked.")
         dialog.maxWidth = 448
-        let form = LinkEnvironmentFormView(machines: machines)
+        let form = LinkEnvironmentFormView(machines: machines, throughRoutes: throughRoutes)
         dialog.panelContent = [form]
         let cancel = ButtonView("Cancel", variant: .outline)
         let link = ButtonView("Link", variant: .default)
@@ -334,8 +403,9 @@ public enum LinkEnvironmentDialog {
         link.reservedTitles = ["Linking…"]
         dialog.footerButtons = [cancel, link]
         dialog.footerVariant = .bare
-        form.onChange = { [weak link, weak cancel, weak form] in
+        form.onChange = { [weak link, weak cancel, weak form, weak dialog] in
             guard let form else { return }
+            if let sourceLabel { dialog?.title = form.title(source: sourceLabel) }
             link?.isEnabled = !form.isBusy && form.ready
             link?.title = form.isBusy ? "Linking…" : "Link"
             cancel?.isEnabled = !form.isBusy

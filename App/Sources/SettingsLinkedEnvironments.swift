@@ -81,14 +81,22 @@ extension SettingsController {
         }()
         let machines = PeerLinkDialog.machines(environments, hostId: hostId, primaryLabel: primaryDescriptor?.label, linked: linked,
                                                   reported: { composer?.config($0)?.directEndpoints ?? [] })
-        var choice: String?, address: String?
+        let routes = linkThroughRoutes(hostId)
+        var choice: String?, address: String?, through: LinkThroughRoute?
         switch offer?.target {
         case .machine(let id)?: choice = id
-        case .address(let a, _)?: address = a ?? ""
+        case .address(let a, let t)?:
+            address = a ?? ""
+            through = t.map { t in
+                routes.first { $0.environmentId == t.environmentId && $0.viaEnvironmentId == t.viaEnvironmentId }
+                    ?? LinkThroughRoute(viaEnvironmentId: t.viaEnvironmentId, viaLabel: hostLabel(t.viaEnvironmentId),
+                                        environmentId: t.environmentId, label: t.label, urls: [])
+            }
         case nil: break
         }
         let host = PeerLinkDialog.present(
-            in: window, environments: environments, machines: machines, initialChoice: choice, address: address,
+            in: window, environments: environments, machines: machines, throughRoutes: routes, sourceLabel: hostLabel(hostId),
+            through: through, initialChoice: choice, address: address,
             toast: { [weak self] title, message, kind in self?.toast(title, message, kind) },
             failureMessage: { PeerLinkDialog.message($0, fallback: "Could not link the environment.") },
             commit: { [weak self] choice in
@@ -106,6 +114,21 @@ extension SettingsController {
             })
         host.onDismiss = { [weak self] in self?.modal = nil }
         modal = host
+    }
+
+    private func hostLabel(_ id: String) -> String {
+        (id == environments.primaryId ? primaryDescriptor?.label : nil) ?? environments.label(id) ?? id
+    }
+
+    /// `useLinkThroughRoutes` (state/peerLinks.ts:107-135 at 5258): the link lists of the other environments that offer
+    /// links and whose session here manages access there, as read for the page.
+    func linkThroughRoutes(_ sourceId: String) -> [LinkThroughRoute] {
+        let hosts = peerLinkHosts().filter { $0 != sourceId && self.hosts[$0]?.session?.grants(AuthScopes.accessWrite) == true }
+            .compactMap { id -> (environmentId: String, label: String, links: [PeerLinkSummary])? in
+                guard case .links(let links)? = peerLinks[id] else { return nil }
+                return (id, hostLabel(id), links)
+            }
+        return LinkThroughRoute.routes(source: sourceId, hosts: hosts, now: Date())
     }
 
     /// "Forget": confirm, then `peerLinks.unlink` on the host.
