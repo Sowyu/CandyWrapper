@@ -147,6 +147,17 @@ struct RedesignBaselineTests {
             sidebar.state = SidebarListState(activeThreadId: SidebarPreview.referenceActiveThread)
             sidebar.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
             try capture("sidebar-many-threads", sidebar, NSSize(width: 280, height: 900))
+            // Settings > Redesign > Sidebar rows: One line, at the default width and in a narrow sidebar.
+            let oneLine = SidebarContentView()
+            oneLine.windowedMac = false; oneLine.stage = .nightly
+            oneLine.now = { SidebarPreview.referenceNow }
+            oneLine.accountRow.set(name: "mrm", image: nil, initials: nil)
+            var oneLineState = SidebarListState(activeThreadId: SidebarPreview.referenceActiveThread)
+            oneLineState.redesignOneLineRows = true
+            oneLine.state = oneLineState
+            oneLine.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
+            try capture("sidebar-one-line", oneLine, NSSize(width: 280, height: 900))
+            try capture("sidebar-one-line-narrow", oneLine, NSSize(width: 200, height: 900))
             // A failed update pass: the capsule takes its own line in the account card and the name keeps its row.
             let footer = SidebarContentView()
             footer.windowedMac = false; footer.stage = .nightly
@@ -345,7 +356,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 144)
+        #expect(count == 148)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

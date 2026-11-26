@@ -123,6 +123,7 @@ CANDY_ITEMS = [
     '        .item(SettingsSearchItem(id: "ignore-reduce-transparency", title: "Ignore Reduce Transparency", to: .redesign, searchTerms: ["redesign blur accessibility reduce transparency picture"])),',
     '        .item(SettingsSearchItem(id: "redesign-stacked-picker", title: "Stacked model picker", to: .redesign, searchTerms: ["redesign model picker column docked reasoning layout one column details pane cost description scroll"])),',
     '        .item(SettingsSearchItem(id: "redesign-picker-account", title: "Account and limits in the model picker", to: .redesign, searchTerms: ["redesign model picker account usage limits manage provider card email plan details pane"])),',
+    '        .item(SettingsSearchItem(id: "redesign-sidebar-rows", title: "Sidebar rows", to: .redesign, searchTerms: ["redesign sidebar thread rows one line two lines compact dense meta environment provider"])),',
     '        .item(SettingsSearchItem(id: "trackpad-haptics", title: "Trackpad haptics", to: .general, searchTerms: ["force touch trackpad haptic feedback tap vibration feel detent"])),',
     '        .item(SettingsSearchItem(id: "title-rewrite-model", title: "Title rewrite model", to: .threads, searchTerms: ["rewrite title rename regenerate thread title model reads writes haiku effort reasoning speed fast"])),',
     '        .item(SettingsSearchItem(id: "message-rail-haptic", title: "Message rail ticks", to: .general, searchTerms: ["message rail minimap haptic trackpad tick tap strength light strong off feel"])),',

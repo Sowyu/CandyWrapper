@@ -121,7 +121,7 @@ import T3Protocol
 
     @Test func searchFindsTheTabAndEveryRow() {
         let ids = ["redesign", "redesign-picture", "redesign-text-dim", "accent-color", "ignore-reduce-transparency",
-                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate", "redesign-tint"]
+                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate", "redesign-tint", "redesign-sidebar-rows"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
         for word in ["flower", "lotus"] {
             #expect(SettingsSearch.search(word).contains { $0.id == "redesign-background" }, "\(word)")

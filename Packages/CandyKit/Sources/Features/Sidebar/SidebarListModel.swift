@@ -70,6 +70,36 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var folderMultiline = false
     /// Dither's compact row, from `SidebarListState.dither`.
     public var dither = false
+    /// Redesign's one-line row (Settings > Redesign > Sidebar rows): the title, then the status and the age.
+    public var oneLine = false
+
+    /// The one-line row's title takes 500 and the full text color: the thread waits on the user or has output
+    /// they haven't read.
+    var needsUser: Bool {
+        isUnread || isWoke || topStatus == .input || topStatus == .request || topStatus == .approval
+    }
+
+    /// What the one-line row shows before the age. Color only where the thread needs the user; a finished thread shows
+    /// nothing, its title's weight says it's unread.
+    enum QuietStatus: Equatable {
+        enum Tone: Equatable { case info, warning, error }
+        case none, pending, working, woke
+        case glyph(IconName, Tone)
+    }
+
+    var quietStatus: QuietStatus {
+        if isPendingSync { return .pending }
+        switch topStatus {
+        case .working, .waiting: return .working
+        case .input: return .glyph(.messageCircleQuestion, .info)
+        case .request: return .glyph(.userRound, .info)
+        case .approval: return .glyph(.shieldQuestion, .warning)
+        case .limited: return .glyph(.circleAlert, .warning)
+        case .failed: return .glyph(.circleAlert, .error)
+        case .woke: return .woke
+        case .done, nil: return .none
+        }
+    }
 
     /// The linked pull request badge (`ThreadPullRequestBadgeControl`), nil without a link.
     public var pullRequestBadge: SidebarPullRequestBadge? = nil
@@ -304,6 +334,15 @@ public enum SidebarItem: Equatable, Sendable {
         }
     }
 
+    /// Redesign's one rhythm (after Capy): every row 30pt from the next, centre to centre, as the nav rows are. A row
+    /// is 29 and the list's 1pt gap makes 30; its 28pt fill sits at the top, so fills stand 2pt apart like the nav rows'.
+    static let oneLineHeight: CGFloat = 29
+    static let rowFill: CGFloat = 28
+    /// A Redesign project section's header: its label `sectionLabelCentre` down, `Space.s` more than a row's pitch below
+    /// the row above (14 + 1 + 23 = 38) and one row pitch above its first row (37 - 22 + 1 + 14 = 30).
+    static let sectionHeaderHeight: CGFloat = 37
+    static let sectionLabelCentre: CGFloat = 22
+
     enum Kind: CaseIterable { case card, slim, shelf, showMore, draft, divider, searchResult, emptyText, noProjects, projectHeader, settledEmpty }
 
     /// Rows the keyboard can land on.
@@ -313,6 +352,7 @@ public enum SidebarItem: Equatable, Sendable {
     var height: CGFloat {
         switch self {
         // Dither (after Capy): a two-line card, title then a small meta line.
+        case .row(let r) where r.dither && r.oneLine: SidebarItem.oneLineHeight
         case .row(let r): r.variant == .card ? (r.dither ? 48 : (!r.hasMetaLine ? 64 : 82))
             : r.folderMultiline && r.hasMetaLine ? 54 : 36
         case .draft: 82 // `li py-0.5` around `h-[4.875rem]`
@@ -324,7 +364,7 @@ public enum SidebarItem: Equatable, Sendable {
         case .emptyText: 64 // `py-6`, one text-xs line
         // `py-6 gap-2`: the line, then the `py-1 text-2xs` bordered button (16 + 8 + 2).
         case .noProjects, .scopeEmpty: 24 + 16 + 8 + 26 + 24
-        case .projectHeader: 32
+        case .projectHeader(let h): h.folder ? 32 : SidebarItem.sectionHeaderHeight
         // The state view's inline size: a 16pt icon line over its action, 8 above and below.
         case .settledEmpty: 8 + 20 + 8 + 24 + 8
         }
@@ -402,6 +442,9 @@ public struct SidebarListState: Equatable, Sendable {
     public var collapsedProjects: Set<String> = []
     /// Dither in the sidebar's current appearance: compact rows under project sections.
     public var dither = false
+    /// `redesignSidebarRows == "one"`: Redesign's thread rows on one line. The default, Two lines, puts a meta line
+    /// under the title (the user, 2026-11-26: "keep 2 lines default").
+    public var redesignOneLineRows = false
     /// Redesign's "when" filter on Settled, kept for the session.
     public var settledRange = SettledRange.any
     /// `sidebarProjectSortOrder` and the manual order it reads (`projectOrder`): Dither's project sections follow them.
@@ -423,7 +466,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.renamingThreadId == b.renamingThreadId && a.scratchRoots == b.scratchRoots && a.grouping == b.grouping
             && a.boringSidebarEnabled == b.boringSidebarEnabled && a.boringSidebarMultilineRows == b.boringSidebarMultilineRows && a.workingShelfEnabled == b.workingShelfEnabled && a.workingExpanded == b.workingExpanded
             && a.heldOrder?.section == b.heldOrder?.section && a.heldOrder?.order == b.heldOrder?.order
-            && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither
+            && a.collapsedProjects == b.collapsedProjects && a.dither == b.dither && a.redesignOneLineRows == b.redesignOneLineRows
             && a.settledRange == b.settledRange
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
             && a.hiddenThreadTags == b.hiddenThreadTags && a.titleTypings == b.titleTypings
@@ -803,6 +846,7 @@ public enum SidebarListBuilder {
             pullRequestBadge: SidebarPullRequestBadge(shell),
             timeAnchorMs: anchor?.epochMs, snoozeWakeMs: wake)
         model.dither = state.dither
+        model.oneLine = state.dither && state.redesignOneLineRows
         model.isPendingSync = state.pendingSync.contains(shell.id)
         model.titleTyping = state.titleTypings[shell.id]
         if state.dither, section == .settled {
@@ -811,7 +855,9 @@ public enum SidebarListBuilder {
             model.recedes = !isActive && !isSelected
             model.timeInMeta = true
             if let settledAt = shell.settledAt, settledAt.isValid {
-                model.timeLabel = "settled " + TimestampFormat.formatRelativeTimeLabel(settledAt.raw, nowMs: nowMs)
+                let relative = TimestampFormat.formatRelativeTimeLabel(settledAt.raw, nowMs: nowMs)
+                // One line has room for the age alone; the Settled header says what it counts from.
+                model.timeLabel = model.oneLine ? TimestampFormat.compactSidebarTimeLabel(relative) : "settled " + relative
             } else {
                 model.timeLabel = SidebarModel.resolveThreadActivityTimestamp(t)
                     .map { TimestampFormat.compactSidebarTimeLabel(TimestampFormat.formatRelativeTimeLabel($0.raw, nowMs: nowMs)) } ?? ""
@@ -876,7 +922,7 @@ public enum SidebarListBuilder {
                     let unit: Int64 = remaining <= 3_600_000 ? 60_000 : remaining <= 86_400_000 ? 3_600_000 : 86_400_000
                     consider(nowMs + (remaining - 1) % unit + 1)
                 }
-            } else if let anchor = r.timeAnchorMs, r.topStatus == nil || r.variant == .slim {
+            } else if let anchor = r.timeAnchorMs, r.topStatus == nil || r.variant == .slim || r.oneLine {
                 consider(nextRelativeStep(anchor: anchor, nowMs: nowMs))
             }
             if working, let start = r.workingStartedMs, r.variant == .card {

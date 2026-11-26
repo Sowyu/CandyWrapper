@@ -78,7 +78,8 @@ public struct ClientSettings: Equatable, Sendable {
         "redesignInk": SettingSpec(.literals(["auto", "accent", "custom"]), .string("auto")),  // CandyWrapper only: where Redesign's Picture takes its two inks
         "redesignDotSize": SettingSpec(.literals(["fine", "medium", "coarse"]), .string("medium")),  // CandyWrapper only: the size of Redesign's Picture dots
         "redesignInkColor": SettingSpec(.string(maxLength: 9), .string("#86cdff")),  // CandyWrapper only: Picture's light ink when Ink is Custom, #rrggbb
-        "redesignStackedPicker": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's docked model picker as one column; off shows a details pane
+        "redesignSidebarRows": SettingSpec(.literals(["two", "one"]), .string("two")),  // CandyWrapper only: Redesign's sidebar thread rows on two lines or one
+        "redesignStackedPicker":SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's docked model picker as one column; off shows a details pane
         "redesignPickerAccount": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's account and limits card in the model picker
         "redesignPickerPaneWidth": SettingSpec(.nullableNumber(120...800), .null),  // CandyWrapper only: the width dragged on Redesign's model details pane; null is the default
         "appIcon": SettingSpec(.literals(["sticker", "pink", "grape", "mint", "lemon", "orange", "classic"]), .string("sticker")),  // CandyWrapper only: the Dock icon (AppIconChoice)

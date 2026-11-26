@@ -158,6 +158,13 @@ public enum RedesignTokens {
         }
     }
 
+    /// Text steps in the text color. Capy's sidebar labels rest a step under the text color and come to full strength
+    /// on hover or when selected, so color is left for what needs the reader.
+    public enum Text {
+        /// A label at rest: between the muted color and the full text color.
+        public static let quiet: CGFloat = 0.72
+    }
+
     /// Type weights. Redesign's chrome draws at 400 and 500, and size and color carry the hierarchy. Message content
     /// (Markdown, the prompt's rich text, code and math) keeps its own weights. `LabelView` and `TextBlockView` apply
     /// this to their fonts; custom drawing calls it. RedesignTokenGuardTests fails on a heavier literal elsewhere.

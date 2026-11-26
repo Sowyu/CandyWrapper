@@ -733,7 +733,8 @@ final class SidebarCardRowView: SidebarRowBase {
             statusLabel.color = SB.c(\.secondaryLabel)
             duration.text = ""
         } else if let top = r.topStatus {
-            let color = SB.status(top)
+            // Redesign: a finished thread is no event, so Done is muted, never green.
+            let color = capyRow && top == .done ? SB.c(\.sidebarMutedForeground) : SB.status(top)
             statusLabel.text = r.statusLabel ?? ""
             statusLabel.color = color
             statusIcon.set(SB.statusIcon(top), color: color)
@@ -757,6 +758,7 @@ final class SidebarCardRowView: SidebarRowBase {
             statusLabel.text = ""
             workingGrid.color = waitingGrid ? SB.c(\.foreground) : SB.c(\.warning)
         }
+        if oneLine { applyQuietStatus(r, grid: grid) }
         let rolls = grid && !duration.text.isEmpty
         if rolls {
             let v = rollingDuration ?? {
@@ -765,7 +767,7 @@ final class SidebarCardRowView: SidebarRowBase {
                 rollingDuration = v
                 return v
             }()
-            v.color = SB.status(.waiting)
+            v.color = oneLine ? SB.c(\.sidebarMutedForeground) : SB.status(.waiting)
             // Only a tick of the same thread rolls; a reused row shows its new thread's time at once.
             v.set(prefix: "", value: duration.text, animated: rollingFor == r.id.rawValue)
             rollingFor = r.id.rawValue
@@ -814,12 +816,19 @@ final class SidebarCardRowView: SidebarRowBase {
             title.color = r.recedes ? (hovered ? SB.c(\.foreground) : SB.c(\.foreground, 0.75))
                 : r.status == .failed && !r.isUnread && !r.isWoke ? SB.c(\.foreground, 0.95) : SB.c(\.foreground)
         }
+        if oneLine {
+            // 400 a step under the text color; 500 at full strength only where the thread needs the user.
+            let strong = r.needsUser
+            title.font = SB.font(13, strong ? .medium : .regular)
+            title.color = strong || hovered || r.isActive || r.isSelected ? SB.c(\.foreground)
+                : r.recedes ? SB.c(\.sidebarMutedForeground) : SB.c(\.foreground, RedesignTokens.Text.quiet)
+        }
         if r.isRegeneratingTitle, r.titleTyping == nil { title.color = SB.c(\.mutedForeground) }
         SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle && r.titleTyping == nil)
         TitleTypingOverlay.sync(&typing, over: title, phase: r.titleTyping)
         environment.text = r.environmentLabel ?? ""
         // Dither sections (after Capy): the time joins the meta line, and the status slot keeps only the status.
-        if capyRow && (r.inProjectSection || r.timeInMeta) {
+        if capyRow && !oneLine && (r.inProjectSection || r.timeInMeta) {
             environment.text = [environment.text, r.timeLabel].filter { !$0.isEmpty }.joined(separator: " · ")
             if r.topStatus == nil { duration.text = "" }
         }
@@ -829,11 +838,13 @@ final class SidebarCardRowView: SidebarRowBase {
         environmentGlyph.kind = r.environmentLabel == nil ? nil : r.environmentMachine
         environmentGlyph.isHidden = r.environmentLabel == nil
         environmentGlyph.color = capyRow ? SB.c(\.secondaryLabel) : redesign ? SB.c(\.mutedForeground, 0.4) : SB.c(\.iconMuted)
-        provider.set(r.providers, dither: capyRow)
+        // One line keeps the current provider, in the icon column, where a project section's rows have no project icon.
+        provider.set(oneLine ? (r.inProjectSection ? Array(r.providers.prefix(1)) : []) : r.providers, dither: capyRow)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
         issueBadge.badge = r.issueBadge
-        setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil, r.statusLabel, r.projectLabel]
+        // Redesign says the age too, which its rows show without a word.
+        setAccessibilityLabel([r.title, r.isRegeneratingTitle ? "Regenerating title" : nil, r.statusLabel, capyRow && !r.timeLabel.isEmpty ? r.timeLabel : nil, r.projectLabel]
             .compactMap { $0 }.joined(separator: ", "))
         setAccessibilitySelected(r.isActive) // `aria-current="page"` (Sidebar.logic.ts:59)
         needsLayout = true
@@ -842,6 +853,40 @@ final class SidebarCardRowView: SidebarRowBase {
     /// Dither (after Capy): 48pt, the icon and title on the first line with the status at its right, then the
     /// project, branch and badges on a small gray line.
     private var capyRow: Bool { row?.dither == true }
+    /// Redesign's one-line row (`SidebarRowModel.oneLine`).
+    private var oneLine: Bool { row?.dither == true && row?.oneLine == true }
+
+    /// The one-line row's status slot: `quietStatus`'s glyph, the working dots, or "Pending", then the age in muted
+    /// 12pt tabular figures. Runs after the two-line status so the working timer and the Woke button keep their wiring.
+    private func applyQuietStatus(_ r: SidebarRowModel, grid: Bool) {
+        statusLabel.text = ""
+        statusIcon.set(nil, color: .clear)
+        switch r.quietStatus {
+        case .pending:
+            statusLabel.text = "Pending"
+            statusLabel.font = SB.font(12)
+            statusLabel.color = SB.c(\.sidebarMutedForeground)
+        case .glyph(let icon, let tone):
+            statusIcon.set(icon, color: Self.quietTone(tone))
+        case .woke:
+            statusIcon.set(.alarmClock, color: SB.c(\.warning))
+        case .working, .none:
+            break
+        }
+        // The working dots carry their own timer; every other row shows its age.
+        if !grid { duration.text = r.isPendingSync ? "" : r.timeLabel }
+        duration.color = SB.c(\.sidebarMutedForeground)
+        duration.font = SB.tabular(12)
+    }
+
+    /// Redesign's status colors, as `SB.designColor` resolves them under Redesign.
+    static func quietTone(_ tone: SidebarRowModel.QuietStatus.Tone) -> NSColor {
+        switch tone {
+        case .info: SB.c(\.info)
+        case .warning: SB.c(\.warning)
+        case .error: SB.c(\.error)
+        }
+    }
 
     private func refreshCapyGroup(_ r: SidebarRowModel, snoozes: Bool, visible: Bool) {
         let g = capyGroup ?? {
@@ -888,8 +933,10 @@ final class SidebarCardRowView: SidebarRowBase {
         CATransaction.setDisableActions(true)
         // `li py-0.5` around the surface: 78pt with a meta line, 60pt without one, where T3's content goes
         // `h-auto` (SidebarThreadRow.tsx:1548-1550, 1580-1581 at 5258).
-        surface.frame = capy ? CGRect(x: 0, y: 1, width: w, height: bounds.height - 2) : CGRect(x: 0, y: 2, width: w, height: bounds.height - 4)
+        surface.frame = oneLine ? CGRect(x: 0, y: 0, width: w, height: SidebarItem.rowFill)
+            : capy ? CGRect(x: 0, y: 1, width: w, height: bounds.height - 2) : CGRect(x: 0, y: 2, width: w, height: bounds.height - 4)
         CATransaction.commit()
+        if oneLine { return layoutOneLine() }
         let left: CGFloat = capy ? 8 : 10, right = w - (capy ? 8 : 10), top: CGFloat = capy ? 5 : 10
         // Line 1: favicon, project, pin, status slot.
         var x = left
@@ -999,6 +1046,61 @@ final class SidebarCardRowView: SidebarRowBase {
             bx += glyph + 6
         }
         environment.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
+    }
+
+    /// Redesign's one-line row, on the nav rows' columns: a 16pt icon column 8 in (the project icon, or the provider
+    /// under a project header), the title on the label edge `Space.s` after it, then badges, pin, the status and the
+    /// age at the right. Hover trades the status and age for the action group.
+    private func layoutOneLine() {
+        let w = bounds.width, mid = SidebarItem.rowFill / 2
+        let left: CGFloat = 8, right = w - 8
+        let gap: CGFloat = 6
+        let tx = left + 16 + RedesignTokens.Space.s
+        for v in [project, capyIcon, environment, environmentGlyph] as [NSView] { v.isHidden = true }
+        monogram.frame = NSRect(x: left, y: mid - 8, width: 16, height: 16)
+        // A one-glyph stack is 12 wide; it centres in the column.
+        let pw = provider.preferredWidth
+        provider.frame = NSRect(x: left + (16 - min(pw, 16)) / 2, y: mid - 7, width: pw, height: 14)
+        removeAllToolTips()
+        if pw > 0 { addToolTip(provider.frame, owner: self, userData: nil) }
+        var actionsLeft = right
+        if let g = capyGroup { actionsLeft = layoutCapyGroup(g, right: right, top: mid - 10) }
+        // The status cluster, from the right: the age (or the working timer), then the glyph, dots or "Pending".
+        let wokeBeside = showsActions && !wokeButton.isHidden
+        var sx = wokeBeside ? actionsLeft - 2 : right
+        if !duration.text.isEmpty {
+            let dw = ceil(duration.textWidth)
+            duration.frame = NSRect(x: sx - dw, y: mid - 8, width: dw + 1, height: 16)
+            rollingDuration?.frame = duration.frame
+            sx -= dw + gap
+        }
+        if !statusLabel.text.isEmpty {
+            let lw = ceil(statusLabel.textWidth)
+            statusLabel.frame = NSRect(x: sx - lw, y: mid - 8, width: lw + 1, height: 16)
+            sx -= lw + gap
+        }
+        if statusIcon.icon != nil {
+            statusIcon.frame = NSRect(x: sx - 16, y: mid - 8, width: 16, height: 16)
+            if !wokeButton.isHidden { wokeButton.frame = statusIcon.frame.insetBy(dx: -2, dy: -2) }
+            sx -= 16 + gap
+        }
+        if !workingGrid.isHidden { workingGrid.frame = NSRect(x: sx - 16, y: mid - 8, width: 16, height: 16); sx -= 16 + gap }
+        var titleRight = showsActions ? (wokeBeside ? sx : actionsLeft - gap) : sx
+        if lift != nil {
+            let bw = lift?.verb == nil ? 0 : dropBadge?.preferredWidth ?? 0
+            dropBadge?.frame = NSRect(x: right - bw, y: mid - 10, width: bw, height: 20)
+            titleRight = right - bw - gap
+        }
+        if !pin.isHidden { pin.frame = NSRect(x: titleRight - 12, y: mid - 6, width: 12, height: 12); titleRight -= 12 + gap }
+        // The pull request, issue and terminal badges sit between the title and the status, where they fit.
+        for badge in [prBadge, issueBadge, terminal] as [NSView] where !badge.isHidden {
+            let bw = badge === terminal ? 14 : (badge as? PullRequestBadgeView)?.preferredWidth ?? (badge as? SidebarIssueBadgeView)?.preferredWidth ?? 16
+            badge.frame = NSRect(x: titleRight - bw, y: mid - (badge === terminal ? 7 : 8), width: bw, height: badge === terminal ? 14 : 16)
+            titleRight -= bw + gap
+        }
+        title.frame = NSRect(x: tx, y: mid - 10, width: max(0, titleRight - tx), height: 20)
+        placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
+                         frame: NSRect(x: tx, y: mid - 11, width: max(0, right - tx), height: 22))
     }
 }
 
@@ -1188,6 +1290,11 @@ final class SidebarSlimRowView: SidebarRowBase {
                 : r.isActive || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
                 : r.isUnread ? SB.c(\.mutedForeground) : SB.c(\.secondaryLabel, 0.7)
         }
+        if r.dither && r.oneLine {
+            // Redesign's one-line rows, as `SidebarCardRowView` draws them.
+            title.font = SB.font(13, r.needsUser ? .medium : .regular)
+            title.color = r.needsUser || hovered || r.isActive || r.isSelected ? SB.c(\.foreground) : SB.c(\.foreground, RedesignTokens.Text.quiet)
+        }
         if r.isRegeneratingTitle, r.titleTyping == nil { title.color = SB.c(\.mutedForeground) }
         SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle && r.titleTyping == nil)
         TitleTypingOverlay.sync(&typing, over: title, phase: r.titleTyping)
@@ -1296,10 +1403,13 @@ final class SidebarSlimRowView: SidebarRowBase {
     override func layout() {
         super.layout()
         defer { typing?.follow() }
-        let w = bounds.width, h = bounds.height
+        let w = bounds.width
+        // Redesign's one line: the 28pt fill at the row's top, as on the card rows.
+        let quiet = row?.dither == true && row?.oneLine == true
+        let h = quiet ? SidebarItem.rowFill : bounds.height
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.frame = bounds
+        surface.frame = NSRect(x: 0, y: 0, width: w, height: h)
         CATransaction.commit()
         let multiline = row?.folderMultiline == true, metaShown = multiline && row?.hasMetaLine == true
         // The two-line row's title line is `h-6` under `py-1.5`; the one-line row centers in its height.
@@ -1583,11 +1693,11 @@ final class TerminalStatusGlyph: DSView {
 
 /// Dither (after Capy): a section's header, quiet so the threads lead. A 16pt project icon (a pin for Pinned), the name
 /// in the muted 12pt of the "Threads" label, the count a step lighter, and a chevron after the count that shows on
-/// hover or while the section is folded. It sits on the lower part of its 32pt, so sections breathe above.
+/// hover or while the section is folded. It sits on the lower part of its height, so sections breathe above: a row
+/// pitch plus `Space.s` from the row above, one row pitch to its first row (`SidebarItem.sectionHeaderHeight`).
 final class SidebarProjectHeaderRowView: SidebarRowBase {
-    /// The name's line: the header's bottom 22pt, centred this far from the top of a 32pt header.
-    static let contentRow: CGFloat = 22
-    static var nameCentre: CGFloat { 32 - contentRow / 2 }
+    /// The name's centre line, from the header's top.
+    static var nameCentre: CGFloat { SidebarItem.sectionLabelCentre }
     private let icon = ProjectMonogramView()
     private let pinIcon = IconView(name: .pin, size: 16)
     private let label = LabelView("", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
@@ -1632,7 +1742,8 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
         let newThreadLabel = "New thread in \(h.label)"
         if newThread.currentTooltip != newThreadLabel { newThread.setTooltip(newThreadLabel); newThread.setAccessibilityLabel(newThreadLabel) }
         let folderStyle = h.folder && !DesignGeometry.usesClassic(self)
-        label.font = SB.font(folderStyle ? 14 : 12, .medium)
+        // Redesign's section names are 400, as Capy's "Threads" is; T3's folder header keeps 500.
+        label.font = SB.font(folderStyle ? 14 : 12, h.folder ? .medium : .regular)
         label.lineHeight = folderStyle ? 20 : 16
         label.color = folderStyle ? SB.c(\.sidebarForeground, 0.9) : SB.c(hovered ? \.sidebarForeground : \.sidebarMutedForeground)
         count.color = SB.c(\.sidebarMutedForeground, folderStyle ? 1 : 0.6)
@@ -1680,8 +1791,7 @@ final class SidebarProjectHeaderRowView: SidebarRowBase {
             label.frame = NSRect(x: 36, y: mid - 10, width: max(0, right - 36), height: 20)
             return
         }
-        // The content row is the bottom 22pt.
-        let mid = bounds.height - Self.contentRow / 2
+        let mid = Self.nameCentre
         // 16pt, flush with the rows' left edge (8) and centered on the name's line.
         icon.frame = NSRect(x: 8, y: (mid - 8).rounded(), width: 16, height: 16)
         pinIcon.frame = icon.frame

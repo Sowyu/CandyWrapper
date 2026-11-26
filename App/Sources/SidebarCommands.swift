@@ -1340,6 +1340,12 @@ final class SidebarCommands {
         setBandAccessories(view)
         // Clears the active row and draft while the page shows.
         sidebar.isOnUtilityPage = true
+        sidebar.selectedNavPage = switch page {
+        case .pullRequests: .pullRequests
+        case .issues: .issues
+        case .workflows: .automations
+        case .usage: nil
+        }
         if page == .pullRequests {
             pullRequestsPage.didShow()
             window?.makeFirstResponder(pullRequestsPage.container)
@@ -1382,6 +1388,7 @@ final class SidebarCommands {
         layout.mainContent = threads.panel
         setBandAccessories(nil)
         sidebar?.isOnUtilityPage = false
+        sidebar?.selectedNavPage = nil
         sidebar?.state.activeThreadId = threads.openThreadId
         threads.composer.syncSidebarDrafts()
         threads.focusComposerOnReturn()

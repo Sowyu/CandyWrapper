@@ -74,7 +74,8 @@ public final class RedesignSettingsView: SettingsPageBase {
                                    key: "redesignStackedPicker", reset: "stacked model picker", title: "Stacked model picker")
         let account = clientSwitch("redesign-picker-account", "The provider's account and usage bar at the top of the details pane, or above the models when stacked.",
                                    key: "redesignPickerAccount", reset: "account and limits", title: "Account and limits in the model picker")
-        gated = look + [stacked, account]
+        let rows = sidebarRowsRow()
+        gated = look + [stacked, account, rows]
         binder.add { [weak self] in
             guard let self else { return }
             let off = library.isRedesignOn ? nil : Self.offReason
@@ -98,6 +99,7 @@ public final class RedesignSettingsView: SettingsPageBase {
             section(nil, "Theme", [masterRow]),
             section("redesign-look", "Look", look + [transparency]),
             section("redesign-model-picker", "Model picker", [stacked, account]),
+            section("redesign-sidebar", "Sidebar", [rows]),
         ]
         themeObserver = library.observe { [weak self] in self?.refresh() }
         binder.refresh()
@@ -142,6 +144,27 @@ public final class RedesignSettingsView: SettingsPageBase {
         binder.add { [weak self, weak toggle] in
             guard let self else { return }
             toggle?.selectedIndex = values.firstIndex(of: self.client.string(key) == "gradient" ? "flower" : self.client.string(key)) ?? 0
+        }
+        return r
+    }
+
+    /// The sidebar's thread rows: two lines with the environment and provider under the title (the default, the user,
+    /// 2026-11-26: "keep 2 lines default"), or one line after Capy.
+    private func sidebarRowsRow() -> SettingsRowView {
+        let key = "redesignSidebarRows", values = ["two", "one"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Two lines", nil), ("One line", nil)], selected: 0)
+        toggle.setAccessibilityLabel("Sidebar rows")
+        let r = row("redesign-sidebar-rows", title: "Sidebar rows",
+                    detail: "Two lines shows the environment and provider under each thread's title. One line shows the title, status and age.",
+                    control: toggle)
+        toggle.onChange = { [weak self, weak toggle] i in
+            guard let self else { return }
+            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
+            self.context.writeClient?([key: .string(values[i])])
+        }
+        binder.add { [weak self, weak toggle] in
+            guard let self else { return }
+            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0
         }
         return r
     }
