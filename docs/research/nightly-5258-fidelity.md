@@ -76,6 +76,4 @@ What didn't help: snapping the SVG box and scaling to its snapped size as `SVGRo
 
 The same comparison found display formulas drawn 1em high, as the block left out the SVG's `margin: 1em auto`. The loose ceilings hid it. After all three fixes the mean is 2.09% where it was 4.09%, `10-inline-sum` light at 1x is 1.02%, and no ceiling changed. Dark still differs more than light (7.11% for `10-inline-sum` at 1x): Core Text spreads light ink on dark more than Skia's mask does, and no Core Graphics setting closes that.
 
-Left:
-
-- An inline formula wider than the column is clipped, where T3 scrolls it.
+An inline formula wider than the column scrolls sideways, as T3's `overflow-x-auto` wrapper does. T3 styles no scrollbar there, so macOS shows its overlay bar only during a scroll. CandyWrapper draws none and reserves no lane, so a resting formula costs nothing.

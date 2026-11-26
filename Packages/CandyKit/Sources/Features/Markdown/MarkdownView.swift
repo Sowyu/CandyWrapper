@@ -1160,7 +1160,7 @@ public final class MarkdownView: DSView {
 
     /// A press on a code block's scrollbar lane: the thumb drags, the track pages toward the pointer. True when it hit one.
     private func pressCodeScrollbar(at point: CGPoint) -> Bool {
-        guard let s = codeScrollers.first(where: { $0.viewport.contains(point) }),
+        guard let s = codeScrollers.first(where: { $0.viewport.contains(point) }), !MarkdownMathStyle.isInlineScroll(s.index),
               let thumb = Self.codeThumb(s.viewport, s.contentWidth, codeOffset(s.index, s.viewport, s.contentWidth)),
               point.y >= thumb.minY else { return false }
         let offset = codeOffset(s.index, s.viewport, s.contentWidth)
@@ -1552,7 +1552,7 @@ public final class MarkdownView: DSView {
                     tableFade = (viewport, codeOffset(index, viewport, width), width)
                 }
                 ctx.saveGState()
-                if let thumb = Self.codeThumb(viewport, width, codeOffset(index, viewport, width)) {
+                if !MarkdownMathStyle.isInlineScroll(index), let thumb = Self.codeThumb(viewport, width, codeOffset(index, viewport, width)) {
                     // The frame's `overflow-hidden rounded-lg` clips the bar at the block's bottom corners.
                     ctx.saveGState()
                     ctx.addPath(CGPath(roundedRect: CGRect(x: viewport.minX, y: viewport.minY - 10, width: viewport.width, height: viewport.height + 10),

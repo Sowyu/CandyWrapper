@@ -565,7 +565,7 @@ public final class MarkdownLayout: @unchecked Sendable {
         reusedTextBoxes = builder.boxes.hits
         rootBlocks = document.blocks
         rootEnds = builder.rootEnds
-        items = flow.items
+        items = MarkdownMathStyle.numberInlineScrolls(flow.items)
         controls = flow.controls
         for item in items {
             switch item {

@@ -143,9 +143,14 @@ struct MathTypesetterTests {
     }
 
     /// An inline formula wider than the column is clipped to it, inside its own item.
-    @Test func wideInlineFormulaIsClipped() {
-        let layout = MarkdownLayout(document: MarkdownDocument(parsing: "see $" + String(repeating: "a+", count: 150) + "a$ here", math: true), width: 300)
-        #expect(layout.items.contains { if case .math(_, _, _, let clip?) = $0 { clip.width <= 300 } else { false } })
+    @Test func wideInlineFormulaScrolls() {
+        let wide = "see $" + String(repeating: "a+", count: 150) + "a$ and $" + String(repeating: "b+", count: 150) + "b$ here"
+        let layout = MarkdownLayout(document: MarkdownDocument(parsing: wide, math: true), width: 300)
+        let ids = layout.scrollers.map(\.index)
+        #expect(ids == [MarkdownMathStyle.inlineScrollBase, MarkdownMathStyle.inlineScrollBase + 1])
+        #expect(layout.scrollers.allSatisfy { $0.viewport.width <= 300 && $0.contentWidth > 300 })
+        let narrow = MarkdownLayout(document: MarkdownDocument(parsing: "see $x^2$ here", math: true), width: 300)
+        #expect(narrow.scrollers.isEmpty)
     }
 
     @Test func copyGivesTeX() {
