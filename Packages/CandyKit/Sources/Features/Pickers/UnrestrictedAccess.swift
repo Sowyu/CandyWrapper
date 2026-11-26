@@ -17,7 +17,7 @@ public enum UnrestrictedAccess {
     // ponytail: the only build on hand, lower it when an older release is confirmed to read the variable
     public static let minimumVersion = [2, 1, 328]
     public static let label = "Unrestricted"
-    public static let description = "Full access, and Claude Code deletes files without asking. Applies to every Full access Claude thread on this machine."
+    public static let description = "Full access, and Claude Code deletes files without asking. CandyWrapper approves the safety checks it still stops on before commands while connected. Applies to every Full access Claude thread on this machine."
 
     /// What the access menu shows for the open thread's provider instance; nil hides the entry.
     public struct State: Equatable, Sendable {
@@ -77,7 +77,10 @@ public enum UnrestrictedAccess {
 
     // MARK: Confirm once per instance
 
-    static let confirmedKey = "unrestrictedAccessConfirmed"
+    /// Since 2026-11-26 the dialog also covers CandyWrapper approving Claude Code's safety checks
+    /// (`UnrestrictedAutoApprove`). The key changed with it, so whoever confirmed the old `unrestrictedAccessConfirmed`
+    /// sees the dialog once more, and CandyWrapper approves nothing for an instance until they do.
+    static let confirmedKey = "unrestrictedAccessConfirmedWithApprovals"
 
     public static func needsConfirm(environment: String, instance: String, defaults: UserDefaults = .standard) -> Bool {
         !(defaults.stringArray(forKey: confirmedKey) ?? []).contains("\(environment)|\(instance)")
@@ -91,8 +94,10 @@ public enum UnrestrictedAccess {
 
     public static let dialogTitle = "Turn on Unrestricted for Claude?"
     public static func dialogMessage(machine: String, provider: String) -> String {
-        "Claude Code skips its last permission prompts, the ones before risky rm commands. This applies to every Full access thread that uses \(provider) on \(machine), not only this one.\n\nClaude Code will delete files without asking. Anthropic recommends this only for throwaway containers.\n\nIt takes effect from each thread's next Claude session. Changing it restarts this machine's Claude sessions, so a running turn may stop."
+        "Claude Code skips its last permission prompts, the ones before risky rm commands. While a CandyWrapper window is connected to \(machine), CandyWrapper also approves the safety checks Claude Code still stops on before a command, such as one it couldn't read. This applies to every Full access thread that uses \(provider) on \(machine), not only this one.\n\nClaude Code will delete files and run those commands without asking anyone. Anthropic recommends this only for throwaway containers.\n\nClaude Code skips its prompts from each thread's next Claude session, and CandyWrapper's approvals start at once. Changing it restarts this machine's Claude sessions, so a running turn may stop."
     }
+    /// The Settings switch's line while the instance is on but this dialog was never confirmed here.
+    public static let unconfirmedHint = "CandyWrapper won't approve safety checks for this instance until you confirm: turn it off, then on."
     public static let confirmTitle = "Turn on Unrestricted"
 
     /// Runs `action` at once when this instance was confirmed before, else after the alert's destructive button.

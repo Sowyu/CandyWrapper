@@ -41,7 +41,7 @@ Run them from the repo root.
 
 ## Commands that stop for a person
 
-Claude Code asks for approval before any shell command it can't read the way the shell would, because it can't rule out an `rm` hidden in it. No setting skips that check: not Full access, and not CandyWrapper's Unrestricted. An agent nobody is watching then waits until a person answers. On 2026-11-26 a delegate sat for 31 minutes on a `python3 - <<'EOF'` script that only edited one file.
+Claude Code asks for approval before any shell command it can't read the way the shell would, because it can't rule out an `rm` hidden in it. No setting skips that check: not Full access, and not CandyWrapper's Unrestricted. An agent nobody is watching then waits until a person answers. On 2026-11-26 a delegate sat for 31 minutes on a `python3 - <<'EOF'` script that only edited one file. CandyWrapper approves these checks for Claude threads with Unrestricted on, but only while a CandyWrapper window is connected to that machine, and a 5258 server refuses this one outright, so keep commands plain anyway.
 
 - Write a script to a file with the Write tool and run the file. Don't pipe it into `python3`, `node`, `sh` or `swift` through a heredoc, and don't pass it with `-c` or `-e`.
 - Change files with the Edit and Write tools, not with `sed -i`, `cat > file <<EOF` or a script that rewrites them.
