@@ -155,4 +155,18 @@ struct Nightly5258WireTests {
         #expect(phases.isSubset(of: ["plugins", "mcp", "hooks", "skills", "resume", "connecting"]) && !phases.isEmpty)
         #expect(pongs == 1)
     }
+
+    /// #32841: a task left on the automatic base starts from the project's default branch.
+    @Test func automaticBaseIsTheDefaultBranch() throws {
+        #expect(ScheduledTaskDraft().baseRef == "")
+        #expect(ScheduledTaskLogic.worktreeBaseRef(" dev ", refs: []) == "dev")
+        #expect(ScheduledTaskLogic.worktreeBaseRef("", refs: [VcsRef(name: "trunk", isDefault: true)]) == "trunk")
+        #expect(ScheduledTaskLogic.worktreeBaseRef("", refs: [VcsRef(name: "origin/master")]) == "origin/master")
+        #expect(ScheduledTaskLogic.worktreeBaseRef("", refs: []) == "main")
+        var d = ScheduledTaskDraft()
+        d.title = "t"; d.prompt = "p"; d.workspaceMode = .worktree
+        let input = try ScheduledTaskLogic.upsertInput(d, projectId: "p", projectExists: true, selection: ("c", "m"), storedSecret: false,
+                                                       refs: [VcsRef(name: "trunk", isDefault: true)]).get()
+        #expect(input["workspaceStrategy"]?["baseRef"]?.stringValue == "trunk")
+    }
 }

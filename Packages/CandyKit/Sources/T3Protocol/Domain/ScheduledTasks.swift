@@ -232,7 +232,8 @@ public struct ScheduledTaskDraft: Equatable, Sendable {
     /// `new_thread`, `continue` or `fresh_session` (4928 #30326, logic.ts:72).
     public var threadMode = "new_thread"
     public var workspaceMode = WorkspaceMode.worktree
-    public var baseRef = "main"
+    /// Empty is automatic: the project's default branch at save (`EMPTY_DRAFT.baseRef`, ScheduledTasksSettings.tsx, 5258 #32841).
+    public var baseRef = ""
     public var startFromOrigin = true
     public var existingWorktreePath = ""
     /// `instanceId:model`; empty uses the default model.
@@ -489,7 +490,7 @@ public enum ScheduledTaskLogic {
         d.threadMode = t.effectiveThreadMode
         let strategy = t.workspaceStrategy
         d.workspaceMode = ScheduledTaskDraft.WorkspaceMode(rawValue: strategy["type"]?.stringValue ?? "root") ?? .root
-        d.baseRef = d.workspaceMode == .worktree ? strategy["baseRef"]?.stringValue ?? "main" : "main"
+        d.baseRef = d.workspaceMode == .worktree ? strategy["baseRef"]?.stringValue ?? "" : ""
         d.startFromOrigin = d.workspaceMode == .worktree ? strategy["startFromOrigin"]?.boolValue ?? false : true
         d.existingWorktreePath = d.workspaceMode == .existingWorktree ? strategy["worktreePath"]?.stringValue ?? "" : ""
         d.modelKey = "\(t.modelSelection["instanceId"]?.stringValue ?? ""):\(t.modelSelection["model"]?.stringValue ?? "")"
@@ -627,10 +628,21 @@ public enum ScheduledTaskLogic {
     }
 
     /// The `scheduledTasks.upsert` input `submit` builds (ScheduledTasksSettings.tsx:856-944), or the first problem.
+    /// `scheduledTaskWorktreeBaseRef` (client-runtime scheduledTaskWorktree.ts, T3 5258 #32841): an empty base is the
+    /// project's default branch, else `main` or `master`, else `main`.
+    public static func worktreeBaseRef(_ baseRef: String, refs: [VcsRef]) -> String {
+        let picked = baseRef.trimmingCharacters(in: .whitespaces)
+        if !picked.isEmpty { return picked }
+        if let d = refs.first(where: \.isDefault) { return d.name }
+        for name in ["main", "master"] { if let r = refs.first(where: { $0.name == name || $0.name == "origin/\(name)" }) { return r.name } }
+        return "main"
+    }
+
     /// `selection` is the picked or default model; `storedSecret` whether the live task already has a signing secret.
     /// `threadModes`: the server has `scheduledTaskThreadModes`, so `threadMode` is sent (ScheduledTasksSettings.tsx, #30326).
     public static func upsertInput(_ d: ScheduledTaskDraft, projectId: String, projectExists: Bool, selection: (instanceId: String, model: String)?,
-                                   storedSecret: Bool, creationSource: String = "web", threadModes: Bool = false) -> Result<JSONValue, ValidationError> {
+                                   storedSecret: Bool, creationSource: String = "web", threadModes: Bool = false,
+                                   refs: [VcsRef] = []) -> Result<JSONValue, ValidationError> {
         let title = d.title.trimmingCharacters(in: .whitespacesAndNewlines), prompt = d.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !prompt.isEmpty, projectExists, let selection else { return .failure(.incomplete) }
         if d.scheduleMode == .webhook, case .failure(let e) = parseFilterDrafts(d.filters) { return .failure(.invalidFilter(e.message)) }
@@ -659,7 +671,7 @@ public enum ScheduledTaskLogic {
         case .root: .object(["type": .string("root")])
         case .existingWorktree: .object(["type": .string("existing_worktree"), "worktreePath": .string(path)])
         case .worktree:
-            .object(["type": .string("worktree"), "baseRef": .string(d.baseRef.trimmingCharacters(in: .whitespaces).isEmpty ? "main" : d.baseRef.trimmingCharacters(in: .whitespaces)),
+            .object(["type": .string("worktree"), "baseRef": .string(worktreeBaseRef(d.baseRef, refs: refs)),
                      "startFromOrigin": .bool(d.startFromOrigin)])
         }
         var input: [String: JSONValue] = [

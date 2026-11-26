@@ -473,12 +473,15 @@ final class ScheduledTaskEditor {
         refreshFooter()
     }
 
+    /// The project's refs, read at save while the base branch is automatic.
+    private var automaticRefs: [VcsRef]?
+
     func selectEnvironment(_ id: String) {
         environmentId = id
         draft.projectId = ""
         draft.modelKey = ""
         draft.baseModelSelection = nil
-        draft.baseRef = "main"
+        draft.baseRef = ""
         draft.startFromOrigin = true
         draft.existingWorktreePath = ""
         context.watchScheduledTasks?(true)
@@ -491,9 +494,25 @@ final class ScheduledTaskEditor {
 
     private func save() {
         guard !saving, !editingTaskMissing, connected, let request = context.request else { return }
+        // An automatic base reads the project's refs first; a failed lookup falls back to `main` (ScheduledTasksSettings.tsx:1534-1546, 5258).
+        if draft.workspaceMode == .worktree, draft.baseRef.trimmingCharacters(in: .whitespaces).isEmpty, automaticRefs == nil,
+           let cwd = projects.first(where: { $0.projectId == selectedProjectId })?.workspaceRoot {
+            saving = true
+            refreshFooter()
+            let env = environmentId
+            Task { [weak self] in
+                let page = try? await request(env, VcsRPC.listRefs, VcsRPC.listRefsInput(cwd: cwd, query: "", cursor: nil)).decode(as: VcsListRefsResult.self)
+                guard let self else { return }
+                self.automaticRefs = page?.refs ?? []
+                self.saving = false
+                self.save()
+                self.automaticRefs = nil
+            }
+            return
+        }
         let input = ScheduledTaskLogic.upsertInput(draft, projectId: selectedProjectId, projectExists: projects.contains { $0.projectId == selectedProjectId },
                                                    selection: activeSelection, storedSecret: liveTask?.webhook?.hasSecret == true,
-                                                   threadModes: offersThreadModes)
+                                                   threadModes: offersThreadModes, refs: automaticRefs ?? [])
         switch input {
         case .failure(let e): report(e)
         case .success(let payload):
@@ -581,19 +600,26 @@ final class ScheduledTaskFormView: DSView {
     private var baseBranchTask: Task<Void, Never>?
     /// Whether each ref the picker has read is remote, for the trigger's "(remote)" (BranchToolbar.logic.ts:205-227).
     private var refIsRemote: [String: Bool] = [:]
+    /// The automatic base per project cwd: its default branch, read when the base is left empty (5258 #32841).
+    private var automaticBase: [String: String] = [:]
+    private var selectedCwd: String? { editor.flatMap { e in e.projects.first(where: { $0.projectId == e.selectedProjectId })?.workspaceRoot } }
     private func baseBranchLabel(_ d: ScheduledTaskDraft) -> String {
-        d.baseRef.isEmpty ? "Select ref" : BranchToolbarLogic.triggerLabel(worktreePath: nil, mode: .worktree, branch: d.baseRef,
-                                                                          branchIsRemote: refIsRemote[d.baseRef], startFromOrigin: d.startFromOrigin)
+        // `value={automaticBaseRefLoading ? "" : worktreeBaseRef}` (ScheduledTasksSettings.tsx:1897).
+        let ref = d.baseRef.isEmpty ? selectedCwd.flatMap { automaticBase[$0] } ?? "" : d.baseRef
+        return ref.isEmpty ? "Select ref" : BranchToolbarLogic.triggerLabel(worktreePath: nil, mode: .worktree, branch: ref,
+                                                                           branchIsRemote: refIsRemote[ref], startFromOrigin: d.startFromOrigin)
     }
     /// `WorktreeBaseBranchPicker` reads the refs when it mounts, so its label knows a local branch before the popup opens.
+    /// An empty base reads the first page to find the project's default branch.
     private func lookUpBaseRef(_ button: ButtonView) {
-        guard let e = editor, let request = e.context.request, !e.draft.baseRef.isEmpty, refIsRemote[e.draft.baseRef] == nil,
-              let cwd = e.projects.first(where: { $0.projectId == e.selectedProjectId })?.workspaceRoot else { return }
+        guard let e = editor, let request = e.context.request, let cwd = selectedCwd else { return }
         let ref = e.draft.baseRef, environmentId = e.environmentId
+        if ref.isEmpty ? automaticBase[cwd] != nil : refIsRemote[ref] != nil { return }
         Task { [weak self, weak button] in
-            guard let json = try? await request(environmentId, VcsRPC.listRefs, VcsRPC.listRefsInput(cwd: cwd, query: ref, cursor: nil)),
-                  let page = try? json.decode(as: VcsListRefsResult.self), let self else { return }
-            for r in page.refs { self.refIsRemote[r.name] = r.isRemote == true }
+            let page = try? await request(environmentId, VcsRPC.listRefs, VcsRPC.listRefsInput(cwd: cwd, query: ref, cursor: nil)).decode(as: VcsListRefsResult.self)
+            guard let self else { return }
+            for r in page?.refs ?? [] { self.refIsRemote[r.name] = r.isRemote == true }
+            if ref.isEmpty { self.automaticBase[cwd] = ScheduledTaskLogic.worktreeBaseRef("", refs: page?.refs ?? []) }
             if let d = self.editor?.draft, d.baseRef == ref { button?.title = self.baseBranchLabel(d) }
         }
     }
@@ -601,7 +627,7 @@ final class ScheduledTaskFormView: DSView {
         guard let e = editor, let request = e.context.request,
               let project = e.projects.first(where: { $0.projectId == e.selectedProjectId }) else { return }
         let picker = BranchPickerView()
-        picker.selectedValue = e.draft.baseRef
+        picker.selectedValue = e.draft.baseRef.isEmpty ? automaticBase[project.workspaceRoot] ?? "" : e.draft.baseRef
         picker.startFromOrigin = e.draft.startFromOrigin
         picker.onStartFromOrigin = { [weak self, weak e, weak trigger] in
             e?.draft.startFromOrigin = $0
