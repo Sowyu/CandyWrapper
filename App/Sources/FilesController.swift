@@ -470,11 +470,13 @@ final class FilesController {
                                            "mimeType": .string(attachment.mimeType), "disposition": .string("inline")])
         fileTask = Task { [weak self] in
             var content = FileSurfaceView.Content.failure("Reconnect to the environment and try again.", attemptedPath: nil, cwd: nil)
+            var expiresAt: Date?
             if let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
                let relative = reply["relativeUrl"]?.stringValue,
                let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL {
                 if wantsAsset {
                     content = .asset(url)
+                    expiresAt = Self.expiry(reply)
                 } else {
                     var request = URLRequest(url: url)
                     if attachment.sizeBytes > 0 { request.setValue("bytes=0-\(AttachmentPreviewText.maxBytes)", forHTTPHeaderField: "Range") }
@@ -485,6 +487,7 @@ final class FilesController {
                 }
             }
             guard !Task.isCancelled, let self, self.panel.panelState.active?.attachment == attachment else { return }
+            self.panel.fileSurface.assetExpiresAt = expiresAt
             self.panel.fileSurface.setContent(content)
         }
     }
@@ -524,8 +527,9 @@ final class FilesController {
         let wantsAsset = surface.wantsAsset
         fileTask = Task { [weak self] in
             var content: FileSurfaceView.Content
+            var expiresAt: Date?
             if wantsAsset {
-                content = await Self.asset(shell, threadId: ws.threadId, cwd: ws.cwd, path: path)
+                (content, expiresAt) = await Self.asset(shell, threadId: ws.threadId, cwd: ws.cwd, path: path)
             } else {
                 content = await Self.read(shell.supervisor, cwd: ws.cwd, path: path)
             }
@@ -550,6 +554,7 @@ final class FilesController {
                 self.panel.fileSurface.setContent(.directory)
                 return
             }
+            self.panel.fileSurface.assetExpiresAt = expiresAt
             self.panel.fileSurface.setContent(content)
             self.shownFile = k
             // A file past the 1 MB read shows its preview at once, then the whole text once it downloads
@@ -632,8 +637,13 @@ final class FilesController {
         }
     }
 
+    /// `expiresAt`, epoch milliseconds (packages/contracts/src/assets.ts:98).
+    nonisolated static func expiry(_ reply: JSONValue) -> Date? {
+        reply["expiresAt"]?.doubleValue.map { Date(timeIntervalSince1970: $0 / 1000) }
+    }
+
     /// `assets.createUrl` with a `workspace-file` resource (filePreviewMode.ts `workspaceAssetResource`).
-    nonisolated static func asset(_ shell: ShellSession, threadId: ThreadId, cwd: String, path: String) async -> FileSurfaceView.Content {
+    nonisolated static func asset(_ shell: ShellSession, threadId: ThreadId, cwd: String, path: String) async -> (FileSurfaceView.Content, expiresAt: Date?) {
         let absolute = FileLinks.isAbsolutePath(path) ? path : cwd + "/" + path
         let inside = absolute.hasPrefix(cwd + "/")
         let kind = FilePreviewKind.of(path)
@@ -642,9 +652,9 @@ final class FilesController {
         guard let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
               let relative = reply["relativeUrl"]?.stringValue,
               let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else {
-            return .failure(kind == .image ? "Unable to load workspace image." : kind == .audio ? "Unable to load audio." : "Unable to load file preview.", attemptedPath: nil, cwd: nil)
+            return (.failure(kind == .image ? "Unable to load workspace image." : kind == .audio ? "Unable to load audio." : "Unable to load file preview.", attemptedPath: nil, cwd: nil), nil)
         }
-        return .asset(url)
+        return (.asset(url), expiry(reply))
     }
 
     // MARK: Saving

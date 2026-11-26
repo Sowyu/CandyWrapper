@@ -39,3 +39,34 @@ struct CodeFileFindTests {
         #expect(!code.isFindShown && code.findMatches.isEmpty && window.firstResponder === code.textView)
     }
 }
+
+/// #39736: an HTML preview renews its asset grant before the hour runs out, only while it shows.
+@MainActor
+struct HTMLPreviewRenewalTests {
+    @Test func renewalTimeFollowsTheGrant() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        #expect(HTMLFileView.renewAt(expiresAt: now.addingTimeInterval(3600), now: now) == now.addingTimeInterval(3600 - 120))
+        // A server clock far behind or ahead never renews at once or waits past an hour.
+        #expect(HTMLFileView.renewAt(expiresAt: now.addingTimeInterval(-500), now: now) == now.addingTimeInterval(180))
+        #expect(HTMLFileView.renewAt(expiresAt: now.addingTimeInterval(9000), now: now) == now.addingTimeInterval(3600))
+    }
+
+    @Test func aPastGrantRenewsWhenThePageShowsAndNotWhileHidden() async {
+        let view = HTMLFileView(url: URL(string: "http://127.0.0.1:1/a.html")!, renewAt: Date().addingTimeInterval(-1))
+        var renewed = 0
+        view.onRenew = { renewed += 1 }
+        view.isHidden = true
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 200), styleMask: [.titled], backing: .buffered, defer: true)
+        window.contentView?.addSubview(view)
+        #expect(renewed == 0)
+        view.isHidden = false
+        await Task.yield()
+        #expect(renewed == 1)
+        #expect(view.web == nil)
+        view.isHidden = true
+        view.isHidden = false
+        await Task.yield()
+        #expect(renewed == 1)
+        view.removeFromSuperview()
+    }
+}
