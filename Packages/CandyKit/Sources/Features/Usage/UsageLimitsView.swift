@@ -414,7 +414,7 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
     private let big: LabelView
     private let left = UsageStyle.label("left", 14, color: Themed.color(\.mutedForeground))
     private let pace: NSView?
-    private let refill: LabelView?
+    private let refill: TextBlockView?
     private let note: TextBlockView?
     private var segments: [UsagePoolSegmentView] = []
     private var legend: [UsagePoolLegendRow] = []
@@ -440,8 +440,16 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         title = UsageStyle.label(label ?? w.label, 14, .medium)
         big = UsageStyle.label("\(w.remainingPercent)%", 30, .semibold, tabular: true, lineHeight: 36)
         pace = w.pace.map(usagePaceIcon)
-        let next = w.resets.first { $0.restoresPercent > 0 }
-        refill = next != nil && w.columns.count > 1 ? UsageStyle.label("↻ +\(next!.restoresPercent)%", 12, .medium, tabular: true) : nil
+        // UsageLimitsPooled.tsx:610-637 at 5258: the next reset still ahead (#42037) and when it lands (#42499, #42502).
+        refill = w.resets.first(where: { $0.at > nowMs && $0.restoresPercent > 0 }).flatMap { next -> TextBlockView? in
+            guard w.columns.count > 1 else { return nil }
+            let t = TextBlockView()
+            let lead = "↻ +\(next.restoresPercent)%"
+            t.text = "\(lead) in \(UsageLimitsLogic.duration(Double(next.at - nowMs)))"
+            t.font = DSFont.ui(12); t.lineHeight = 16; t.color = Themed.color(\.mutedForeground)
+            t.boldPrefix = lead; t.boldColor = Themed.color(\.foreground)
+            return t
+        }
         note = description.map { d in
             let t = TextBlockView()
             t.text = d; t.font = DSFont.ui(12); t.lineHeight = 16; t.color = Themed.color(\.mutedForeground)
@@ -509,7 +517,7 @@ final class UsagePoolCardView: BoxView, SettingsGroupRow {
         big.frame = NSRect(x: 16, y: ty, width: bw, height: 36)
         left.frame = NSRect(x: 16 + bw + 8, y: ty + 12, width: ceil(left.textWidth) + 1, height: 20)
         pace?.frame = NSRect(x: left.frame.maxX + 8, y: ty + 15, width: 14, height: 14)
-        refill?.frame = NSRect(x: 16, y: ty + 40, width: ceil(refill!.textWidth) + 1, height: 16)
+        refill?.frame = NSRect(x: 16, y: ty + 40, width: two ? 176 : inner, height: 16)
         let bx: CGFloat = two ? 16 + 176 + 24 : 16
         let by: CGFloat = two ? 16 + (rowH - bh) / 2 : 16 + leftHeight + 12
         let bwidth = barWidth(width)
@@ -640,8 +648,9 @@ final class UsagePoolSegmentView: ControlView {
             ctx.setFillColor(color.withAlphaComponent(0.35).cgColor(in: self))
             ctx.fillPath()
         }
-        // `repeating-linear-gradient(135deg, color 0 1px, transparent 1px 5px)` at 20%, from the right edge over what the
-        // reset hands back (UsageLimitsPooled.tsx:249-258, T3 5b72385065).
+        // A 7px tile of `repeating-linear-gradient(135deg, transparent 0 1px, color 1px 2px, transparent 2px 50%)` at 20%,
+        // from the right edge over what the reset hands back. The whole-pixel tile keeps every stripe the same width
+        // (UsageLimitsPooled.tsx at 5258, #30407).
         if remaining < 100, reset != nil, refillPercent > 0 {
             let hatchW = r.width * CGFloat(min(Double(100 - remaining), refillPercent)) / 100
             let spent = CGRect(x: r.width - hatchW, y: 0, width: hatchW, height: r.height)
@@ -649,8 +658,9 @@ final class UsagePoolSegmentView: ControlView {
             ctx.clip(to: spent)
             ctx.setStrokeColor(color.withAlphaComponent(0.2).cgColor(in: self))
             ctx.setLineWidth(1)
-            let step: CGFloat = 5 * sqrt(2)
-            var x = spent.minX - r.height
+            let step: CGFloat = 7
+            // Each stripe's centre sits 1.5px along the gradient from its tile's corner.
+            var x = spent.minX + 1.5 * sqrt(2) - r.height - (r.height / step).rounded(.up) * step
             while x < spent.maxX + r.height {
                 ctx.move(to: CGPoint(x: x, y: r.height))
                 ctx.addLine(to: CGPoint(x: x + r.height, y: 0))
