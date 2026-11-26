@@ -37,6 +37,8 @@ struct TimelineRowUI: Hashable {
     var retryRunIds: Set<RunId> = []
     /// MCP sign-in notices this row offers to answer, by entry id: whether the server signed in since the notice.
     var mcpSignIn: [String: Bool] = [:]
+    /// Approval entries CandyWrapper approved for Unrestricted (`UnrestrictedAutoApprove`), by entry id.
+    var unrestrictedApproved: Set<String> = []
     /// An open fold waits for its deferred work, or the last load failed (MessagesTimeline.tsx:1802-1840 at 4928).
     var deferredWorkLoading = false
     var deferredWorkFailed = false
@@ -159,6 +161,10 @@ public final class ThreadViewModel {
     public var canSignInMcp = false { didSet { if canSignInMcp != oldValue { refreshItems() } } }
     /// When each MCP server last signed in, by `McpSignIn.key` (threadCommands.ts:205-228).
     public var mcpSignedInAt: [String: Date] = [:] { didSet { if mcpSignedInAt != oldValue { refreshItems() } } }
+    /// Whether CandyWrapper approved this request id of the open thread for Unrestricted.
+    public var answeredForUnrestricted: ((String) -> Bool)?
+    /// CandyWrapper approved a request in the open thread: its row picks up the note.
+    public func unrestrictedApprovalsChanged() { refreshItems() }
     /// "Sign in" on a notice: the thread, the provider thread and the server.
     public var onMcpSignIn: (@MainActor (ThreadId, String, String) -> Void)?
     public var onOpenScheduledTask: (@MainActor (String) -> Void)?
@@ -629,6 +635,12 @@ public final class ThreadViewModel {
                 for e in entries {
                     guard let notice = e.projectedItem?.item, let server = notice.mcpSignInServer, notice.string("providerThreadId") != nil else { continue }
                     ui.mcpSignIn[e.id] = McpSignIn.signedIn(noticeAt: notice.updatedAt.date, signedInAt: mcpSignedInAt[McpSignIn.key(notice.threadId, server)])
+                }
+            }
+            if let answered = answeredForUnrestricted {
+                for e in entries {
+                    guard let item = e.projectedItem?.item, item.type == .approvalRequest, let id = item.requestId, answered(id) else { continue }
+                    ui.unrestrictedApproved.insert(e.id)
                 }
             }
             let children = Set(entries.compactMap(SubagentCardPresentation.notificationChild))
