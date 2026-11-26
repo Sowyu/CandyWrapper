@@ -531,7 +531,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | left: hub pools on the details card (`resolveThreadDetailsLimits`, instance hubs). Medium |
 | 342b58a79f | #30644 | feat(web): add a composerEmpty keybinding condition | composer | port (2.8) |
 | 285558eb10 | #34027 | feat(desktop): dictate on this Mac with Apple Speech | composer | n/a (desktop IPC, wire A19) |
-| 669d8941e2 | #39921 | feat: sign in to an agent's MCP server from its warning | thread | left: the Sign in action and its dialog on MCP notices. Medium |
+| 669d8941e2 | #39921 | feat: sign in to an agent's MCP server from its warning | thread | ported ca680ce9 (seen offscreen only: no sandbox MCP server needs a login) |
 | 3027c2c840 | #40011 | fix(voice): start dictation capture sooner on iOS and desktop | composer | n/a (web audio capture) |
 | 6908754f0b | #37122 | fix(web): caret navigation no longer opens composer suggestions | composer | port (2.5) |
 | 8d37736cdd | #39889 | fix(web,mobile): usage-limit recovery banner updates copy after reset passes | thread | ported fe5d9cd0 |
