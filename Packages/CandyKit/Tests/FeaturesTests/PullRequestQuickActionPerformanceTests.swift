@@ -30,4 +30,15 @@ struct PullRequestQuickActionPerformanceTests {
             }
         }
     }
+
+    /// #41931: Esc in the list search clears the query before it can leave the page.
+    @Test func searchEscapeClearsTheQueryFirst() {
+        let page = PullRequestsPageView()
+        var query: String?
+        page.onQuery = { query = $0 }
+        page.search.input.text = "label:bug"
+        #expect(page.search.input.clearOnEscape())
+        #expect(query == "" && page.search.input.text.isEmpty)
+        #expect(!page.search.input.clearOnEscape())
+    }
 }

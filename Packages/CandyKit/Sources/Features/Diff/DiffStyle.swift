@@ -78,6 +78,10 @@ enum DiffStyle {
     static var additionBase: NSColor { alternateColors ? Themed.base("blue-600", dark: "blue-400") : rgb(0x18a46c, 0x07c480) }
     static var deletionBase: NSColor { alternateColors ? Themed.base("orange-600", dark: "orange-400") : rgb(0xd52c36, 0xff2e3f) }
     static let modifiedBase = rgb(0x009fff, 0x009fff)
+    /// Find matches, translucent so the syntax colours stay under them (StyledDiffCodeView.tsx:24-33 at 5258):
+    /// `light-dark(#ff963288, #ff963266)`, and the current one `color-mix(in lab, modified-base 45%, transparent)`.
+    static let searchMatch = NSColor(name: nil) { NSColor(srgbRed: 1, green: 0x96 / 255, blue: 0x32 / 255, alpha: ($0.isDark ? 0x66 : 0x88) / 255) }
+    static let searchMatchCurrent = NSColor(srgbRed: 0, green: 0x9f / 255, blue: 1, alpha: 0.45)
 
     static var additionLine: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : canvasRGB(0xecf9f4, 0x0d1713, 0x02110b) }
     static var additionNumber: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : canvasRGB(0xeef9f5, 0x0e1713, 0x04110b) }

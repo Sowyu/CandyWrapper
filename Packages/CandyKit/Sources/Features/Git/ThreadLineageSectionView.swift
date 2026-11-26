@@ -506,7 +506,17 @@ public final class ThreadLineageSectionView: DSView {
             let hidden = list.count - min(count, list.count)
             if hidden > 0 {
                 let b = ThreadLineageShowMoreView(count: min(hidden, Self.pageCount))
-                b.action = { [weak self] in self?.visible[group] = count + Self.pageCount; self?.rebuild() }
+                b.action = { [weak self, weak b] in
+                    guard let self else { return }
+                    let focused = b.map { self.window?.firstResponder === $0 } ?? false
+                    self.visible[group] = count + Self.pageCount
+                    self.rebuild()
+                    // The keyboard stays on the next page's button, or on the list once the last page shows
+                    // (ThreadRelationshipsControl.tsx:118-124 at 5258, #31295).
+                    guard focused else { return }
+                    if let next = self.showMore.first(where: { $0.1 == group })?.0 { self.window?.makeFirstResponder(next) }
+                    else if let list = self.lists[group] { self.window?.makeFirstResponder(list) }
+                }
                 addSubview(b)
                 showMore.append((b, group))
                 layoutItems.append((b, 32, 0))
@@ -737,6 +747,10 @@ final class ThreadLineageRowListView: DSView {
         setAccessibilityRole(.list)
         setAccessibilityLabel("Related threads")
     }
+
+    /// `tabIndex={-1}`: focusable when Show more hands it the keyboard, never a Tab stop.
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { false }
 
     func add(_ view: NSView, height: CGFloat, indent: CGFloat) {
         document.addSubview(view)

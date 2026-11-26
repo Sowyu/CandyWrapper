@@ -469,7 +469,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 8ef195587d | #33030 | fix(web): tell update-all users where to update desktop servers it can't reach | sidebar | ported b4ba8432 |
 | d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | ported 8337eb04 |
 | d572ce9afe | #41814 | fix(chat): preserve model choices when editing queued messages | composer | ported 31975590 |
-| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | left for the details agent: CW's Lineage has no remote subagent rows yet (`RemoteSubagentRow`, ThreadRelationshipsControl.tsx:300-370), and the section is Features/Git's `ThreadLineageSectionView`. Small with the rows |
+| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | left: CW has no remote subagent row at all (`RemoteSubagentRow`, ThreadRelationshipsControl.tsx:298-380 at 5258): decode `remoteChild` on subagents, list them "on <label>" with the elapsed time, open the linked thread (M) |
 | c5918e5d24 | #41803 | fix(web): align composer banner details with status text | composer | already: CW's details button shares the 24pt row with the text, so it is centered |
 | eecb58c6d6 | #41769 | fix: approvals and hosted pairing show what is being approved | composer | ported 956f0e5a for the approval half; `draftSupportedRuntimeModes` is the composer's (2.x), hosted pairing the other note's |
 | 46f360d8dd | #41722 | fix(client): a link to a newly linked machine's thread opens without a reload | thread | ported 7c048ec6: a link naming a machine the cached peerLinks.names lack reads the names once more (`refreshNamesLacking`) |
@@ -510,7 +510,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 501e39d54a | #40841 | fix(web): clicking the Tab hint inserts short prompt suggestions again | composer | ported 0a35f251 |
 | bcb9217e8e | #26661 | fix(web): settling a thread no longer jolts the sidebar list | sidebar | ported fa78d3d4 |
 | d834a4e117 | #40763 | fix(web): preserve reply-only edits when a queued message leaves the queue | composer | nothing to port: the reply stays in the edit text |
-| d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | left for the details agent: Lineage show-more lives in Features/Git's `ThreadLineageSectionView`. Small |
+| d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | ported c78cf150 (panels lane) |
 | 671e05bc8c | #40768 | fix(issues): an Activity cross-reference opens the issue or pull request it came from | other | n/a (issues, other agent) |
 | 1acfd37c17 | #40798 | fix(web): restore effort picker keyboard typeahead | composer | ported 8e80f42f |
 | c3a330d834 | #40767 | fix(web): show Queue for running sessions that cannot steer | composer | ported 357ba3b8 |

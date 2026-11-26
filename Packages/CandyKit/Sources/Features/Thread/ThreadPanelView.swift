@@ -1592,6 +1592,8 @@ public final class ThreadPanelView: DSView {
         panelState = next
         updateMaximizeControl()
         onPanelChange?(next, [])
+        // Maximizing asks for panel focus (useRightPanelActions.ts:266-270 at 5258); a pull request hands it to its tab.
+        if next.maximized == true, panelState.active?.kind == .pullRequest { lazyPullRequestView.loaded?.focusContent() }
     }
 
     /// A tab dragged to `index` (`moveSurface`, rightPanelStore.ts:901-912 in 2994): not a choice about what

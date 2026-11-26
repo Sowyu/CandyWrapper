@@ -34,7 +34,7 @@ struct DesktopLeftoversTests {
         }
     }
     @Test func remoteLinksEncodeHostAndPath() {
-        #expect(OpenInEditors.remoteURL(editor: "vscode", host: "user@host", path: "/a b/#x")?.absoluteString == "vscode://vscode-remote/ssh-remote+user%40host/a%20b/%23x")
+        #expect(OpenInEditors.remoteURL(editor: "vscode", host: "user@host", path: "/a b/#x")?.absoluteString == "vscode://vscode-remote/ssh-remote+user%40host/a%20b/%23x?windowId=_blank")
         #expect(OpenInEditors.remoteURL(editor: "zed", host: "work", path: "C:\\Users\\me")?.absoluteString == "zed://ssh/work/Users/me")
         #expect(OpenInEditors.remoteURL(editor: "zed", host: "work", path: "/C:/keep")?.absoluteString == "zed://ssh/work/C%3A/keep")
         #expect(OpenInEditors.remoteURL(editor: "file-manager", host: "work", path: "/") == nil)

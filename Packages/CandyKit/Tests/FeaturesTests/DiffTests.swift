@@ -355,4 +355,17 @@ struct DiffTests {
         #expect(list.liveRowViews < 70)
         #expect(list.createdRowViews < 140)
     }
+
+    /// VoiceOver hears removed and added lines named (#40152).
+    @Test func changedLinesNameTheirKindForVoiceOver() {
+        let list = DiffListView()
+        let scroll = ScrollAreaView(documentView: list)
+        scroll.frame = NSRect(x: 0, y: 0, width: 460, height: 400)
+        list.setDiff(UnifiedDiff("diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,2 +1,2 @@\n same\n-old\n+new\n"), collapsedByDefault: false)
+        scroll.layoutSubtreeIfNeeded()
+        func labels(_ view: NSView) -> [String] {
+            view.subviews.flatMap { v in (v is DiffLineRowView && !v.isHidden ? [v.accessibilityLabel() ?? ""] : []) + labels(v) }
+        }
+        #expect(Set(labels(list)).isSuperset(of: ["same", "Removed old", "Added new"]))
+    }
 }

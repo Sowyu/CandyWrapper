@@ -75,7 +75,7 @@ public final class DiffPanelView: DSView {
     private func reloadToolCall(_ target: ToolCallDiffTarget) {
         showMessage("Loading tool call diff...")
         guard let toolCallLoader else { showMessage("No patch available for this selection."); return }
-        let whitespace = ignoreWhitespace
+        let whitespace = ignoreWhitespace, root = workspaceRoot
         let request = GetTurnItemInput(threadId: target.threadId, itemId: target.itemId, revision: target.revision)
         loadTask = Task { [weak self] in
             guard !Task.isCancelled else { return }
@@ -91,7 +91,7 @@ public final class DiffPanelView: DSView {
                     return
                 }
                 let (preview, parsed) = await Task.detached(priority: .userInitiated) {
-                    let preview = ToolCallDiff(item)
+                    let preview = ToolCallDiff(item, workspaceRoot: root)
                     return (preview, ToolCallDiff.render(preview.patch ?? "", ignoringWhitespace: whitespace))
                 }.value
                 guard !Task.isCancelled, let self, self.toolCallTarget == target else { return }

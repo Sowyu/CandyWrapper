@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Features
@@ -214,5 +215,33 @@ struct MarkdownImageBaseTests {
         #expect(FileSurfaceView.markdownImageBase(path: "docs/a.md", cwd: "/repo") == "/repo/docs/")
         #expect(FileSurfaceView.markdownImageBase(path: "notes/2026-11-25T10:00/a.md", cwd: "/repo") == "/repo/notes/2026-11-25T10:00/")
         #expect(FileSurfaceView.markdownImageBase(path: "/a.md", cwd: "/repo") == "/")
+    }
+
+    /// A refresh reads the root and leaves other listed folders stale until a row of theirs shows (#42870).
+    @MainActor @Test func refreshReadsOnlyFoldersOnScreen() {
+        var model = FileTreeModel()
+        model.setChildren([ProjectEntry(path: "a", isDirectory: true), ProjectEntry(path: "z", isDirectory: true)], of: "")
+        _ = model.toggle("a")
+        model.setChildren([ProjectEntry(path: "a/b", isDirectory: true), ProjectEntry(path: "a/f.ts", isDirectory: false)], of: "a")
+        _ = model.toggle("a/b")
+        model.setChildren([ProjectEntry(path: "a/b/c.ts", isDirectory: false)], of: "a/b")
+        model.stale = ["a", "a/b", "z"]
+        let deep = model.rows.first { $0.path == "a/b/c.ts" }!
+        #expect(model.staleFolders(for: deep) == ["a/b", "a"])
+        let closed = model.rows.first { $0.path == "z" }!
+        #expect(model.staleFolders(for: closed).isEmpty)
+        model.setChildren([], of: "a/b")
+        #expect(!model.stale.contains("a/b"))
+
+        let tree = FileTreeView(frame: NSRect(x: 0, y: 0, width: 200, height: 400))
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 200, height: 400))
+        scroll.documentView = tree
+        var asked: [[String]] = []
+        tree.onLoad = { asked.append($0) }
+        tree.model = model
+        #expect(asked == [["a"]])
+        #expect(tree.model.stale == ["z"])
+        tree.tile()
+        #expect(asked.count == 1)
     }
 }

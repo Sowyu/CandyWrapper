@@ -132,6 +132,8 @@ public final class PullRequestsPageView: DSView {
         addSubview(scroll)
         addSubview(header)
         search.input.setAccessibilityLabel("Search pull requests")
+        // Esc clears the query first; only an Esc on an empty field leaves the page (PullRequestListFilters.tsx at 5258, #41931).
+        search.input.escapeClears = true
         search.input.onChange = { [weak self] text in self?.onQuery?(text) }
         // T3 3814 PullRequestListFilters.tsx:121-134 submits Return and completed text pastes immediately.
         search.input.onSubmit = { [weak self] in guard let self else { return }; onQuerySubmit?(search.input.text) }

@@ -22,6 +22,9 @@ public struct FileTreeModel: Sendable {
     public private(set) var directories: [String: [ProjectEntry]] = [:]
     public private(set) var expanded: Set<String> = []
     public var loading: Set<String> = []
+    /// Listed folders a refresh has not read again yet. Each one is read once a row it puts on
+    /// screen shows (useDirectoryEntries.ts:198-217 at 5258, #42870).
+    public var stale: Set<String> = []
     /// Path search results while the search field has text (`useProjectPathSearch`).
     public private(set) var search: (query: String, entries: [ProjectEntry])?
 
@@ -34,6 +37,7 @@ public struct FileTreeModel: Sendable {
     /// Stores a folder's listing; only direct children count (useDirectoryEntries.ts:56-63).
     public mutating func setChildren(_ entries: [ProjectEntry], of directory: String) {
         let children = entries.filter { $0.parent == directory }
+        stale.remove(directory)
         if let pathOrder {
             directories[directory] = children.sorted {
                 let a = pathOrder[$0.path] ?? Int.max, b = pathOrder[$1.path] ?? Int.max
@@ -105,6 +109,21 @@ public struct FileTreeModel: Sendable {
         }
         return need
     }
+
+    /// The stale folders that put `row` on screen: the folder an open row lists, or the row's own
+    /// folder, and their ancestors, innermost first (`revalidate`, useDirectoryEntries.ts:207-217).
+    public func staleFolders(for row: Row) -> [String] {
+        guard !stale.isEmpty else { return [] }
+        var folder = row.isDirectory && row.isExpanded ? row.path : Self.parent(row.path)
+        var out: [String] = []
+        while !folder.isEmpty {
+            if stale.contains(folder) { out.append(folder) }
+            folder = Self.parent(folder)
+        }
+        return out
+    }
+
+    static func parent(_ path: String) -> String { path.lastIndex(of: "/").map { String(path[..<$0]) } ?? "" }
 
     /// Every loaded folder (`directoryPaths`).
     public var directoryPaths: [String] {

@@ -37,6 +37,20 @@ public final class PullRequestDetailView: DSView {
         }
     }
     public var refreshing = false { didSet { more.icon = refreshing ? .refreshCw : .ellipsis } }
+
+    /// Panel focus lands on the open tab's scroller, T3's `data-workspace-focus-default`, so arrow, page, space,
+    /// Home and End keys scroll it at once (PullRequestSummaryTab.tsx and PullRequestDetailPanel.tsx at 5258, #39319).
+    /// The Code tab keeps the focus where it is.
+    @discardableResult public func focusContent() -> Bool {
+        let document: NSView
+        switch tab {
+        case .summary: document = summary.stack.document
+        case .timeline: document = timeline.stack.document
+        case .code: return false
+        }
+        guard !document.isHiddenOrHasHiddenAncestor else { return false }
+        return window?.makeFirstResponder(document) ?? false
+    }
     public var pendingAction: String?
     public var actionPending = false { didSet { composer?.actionPending = actionPending; rebuildActions() } }
     public var nowMs: Int64 = Int64(Date().timeIntervalSince1970 * 1000) { didSet { rebuild() } }

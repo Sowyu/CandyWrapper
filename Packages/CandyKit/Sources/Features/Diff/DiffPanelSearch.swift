@@ -8,12 +8,24 @@ public enum DiffPanelSearch {
         public var line: Int
         public var range: NSRange
     }
-    public static func matches(_ query: String, in diff: UnifiedDiff, caseSensitive: Bool = false,
-                               wholeWord: Bool = false, regex: Bool = false) -> [Match] {
-        guard !query.isEmpty else { return [] }
+    /// The search panel's query as an expression: escaped unless Regexp is on, `\\b` around it for Whole Word.
+    static func expression(_ query: String, caseSensitive: Bool, wholeWord: Bool, regex: Bool) -> NSRegularExpression? {
+        guard !query.isEmpty else { return nil }
         var pattern = regex ? query : NSRegularExpression.escapedPattern(for: query)
         if wholeWord { pattern = "\\b(?:" + pattern + ")\\b" }
-        guard let re = try? NSRegularExpression(pattern: pattern, options: caseSensitive ? [] : [.caseInsensitive]) else { return [] }
+        return try? NSRegularExpression(pattern: pattern, options: caseSensitive ? [] : [.caseInsensitive])
+    }
+
+    /// Matches in a whole text, as the search panel finds them in a source (ReadOnlySourcePreview.tsx at 5258, #42442).
+    public static func matches(_ query: String, in text: String, caseSensitive: Bool = false,
+                               wholeWord: Bool = false, regex: Bool = false) -> [NSRange] {
+        guard let re = expression(query, caseSensitive: caseSensitive, wholeWord: wholeWord, regex: regex) else { return [] }
+        return re.matches(in: text, range: NSRange(location: 0, length: (text as NSString).length)).map(\.range).filter { $0.length > 0 }
+    }
+
+    public static func matches(_ query: String, in diff: UnifiedDiff, caseSensitive: Bool = false,
+                               wholeWord: Bool = false, regex: Bool = false) -> [Match] {
+        guard let re = expression(query, caseSensitive: caseSensitive, wholeWord: wholeWord, regex: regex) else { return [] }
         var result: [Match] = []
         for (f, file) in diff.files.enumerated() {
             for hunk in file.hunks { for l in hunk.lines {

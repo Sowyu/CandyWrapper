@@ -780,6 +780,9 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     private let login = LabelView("", font: DSFont.ui(12, weight: .medium))
     private let time = LabelView("", font: DSFont.ui(12))
     private let state = LabelView("", font: DSFont.ui(12))
+    /// The author line is a heading for VoiceOver: `<h2>` in the Summary and Timeline, `<h3>` in the issue
+    /// panel (PullRequestSummaryTab.tsx:138, PullRequestTimelineTab.tsx:301, IssueDetailPanel.tsx at 5258, #39648).
+    let heading: AccessibilityHeadingView
     private let body = MarkdownView()
     private let hasBody: Bool
     /// A resolved or dismissed remark (`CollapsedComment`): no head fill, a status toggle and a
@@ -803,7 +806,8 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false,
          collapsed: PullRequestDetailLogic.Collapsed? = nil, open: Bool = false, reply: Bool = false,
          replyCount count: Int = 0, replies: PullRequestReplyList? = nil, moreReplies: PullRequestMoreRepliesLine? = nil,
-         addsToChat: Bool = false, chatIconOnly: Bool = false, lineBreaks: Bool = false, emoji: Bool = false) {
+         addsToChat: Bool = false, chatIconOnly: Bool = false, lineBreaks: Bool = false, emoji: Bool = false, headingLevel: Int = 2) {
+        heading = AccessibilityHeadingView(level: headingLevel)
         self.replies = replies
         self.moreReplies = moreReplies
         // An empty verdict hides the body, unless this reader may rewrite it (the pencil lives there).
@@ -857,6 +861,9 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         }
         for l in [login, time, state] { l.lineHeight = 16; addSubview(l) }
         addSubview(avatar)
+        heading.label = [login.text, time.text, state.text].filter { !$0.isEmpty }.joined(separator: ", ")
+        login.setAccessibilityElement(false)
+        addSubview(heading)
         body.cwd = cwd
         // Comments break lines where the host does, as the description does (PullRequestDetailPanel.tsx:302).
         if hasBody { body.setMarkdown(emoji ? GitHubEmoji.expandMarkdown(c.body) : c.body, preservesLineBreaks: lineBreaks) }
@@ -949,6 +956,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
             right -= cw + 8
         }
         state.frame = NSRect(x: x, y: 11, width: max(0, right - x), height: 16)
+        heading.frame = NSRect(x: 12, y: 11, width: max(0, (state.text.isEmpty ? time.frame.maxX : state.frame.maxX) - 12), height: 16)
         body.isHidden = !hasBody || editor != nil
         let ew: CGFloat = editButton.isHidden ? 0 : 28
         if hasBody { body.frame = NSRect(x: 12, y: 37 + 12, width: bounds.width - 24 - ew, height: body.height(forWidth: bounds.width - 24 - ew)) }
@@ -968,6 +976,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         login.frame = NSRect(x: x, y: top + 4, width: lw, height: 16); x += lw + 8
         let tw = ceil(time.textWidth) + 1
         time.frame = NSRect(x: x, y: top + 4, width: tw, height: 16); x += tw + 8
+        heading.frame = NSRect(x: 13, y: top + 4, width: max(0, time.frame.maxX - 13), height: 16)
         if !replyCount.text.isEmpty {
             let cw = ceil(replyCount.textWidth) + 1
             replyCount.frame = NSRect(x: x, y: top + 4, width: cw, height: 16); x += cw + 8
@@ -1059,7 +1068,7 @@ final class CollapsedSummaryLine: DSView {
 /// The Timeline tab (PullRequestTimelineTab.tsx): a rail at 15pt with one row per lifecycle event,
 /// commit and verdict, and runs of remarks folded into one conversation row; newest first.
 public final class PullRequestTimelineView: DSView {
-    private let stack = StackScrollView()
+    let stack = StackScrollView()
     private let rail = CALayer()
     var newestFirst = true { didSet { rebuild() } }
     var onOpenCommit: ((String) -> Void)?
@@ -1223,6 +1232,8 @@ final class TimelineEventRow: DSView, StackItem {
     private let stat = PullRequestDiffStatView()
     private var body: MarkdownView?
     private var verdictIcon: IconView?
+    /// A review's verdict line is an `<h2>` (PullRequestTimelineTab.tsx:757 at 5258, #39648).
+    private var heading: AccessibilityHeadingView?
     var onClick: (() -> Void)?
     private let pinTop: Bool
     /// Commit rows: `transition-colors group-hover:text-primary` on the title (PullRequestTimelineTab.tsx:389).
@@ -1267,6 +1278,10 @@ final class TimelineEventRow: DSView, StackItem {
                             strokeColor: outcome == "approved" ? PullRequestStyle.color(.open) : outcome == "changes-requested" ? Themed.color(\.destructive) : Themed.color(\.mutedForeground, 0.7))
         verdictIcon = icon
         addSubview(icon)
+        let h = AccessibilityHeadingView(level: 2)
+        h.label = "\(actorName.text), \(title.text)"
+        addSubview(h)
+        heading = h
         if let text = e.body {
             let m = MarkdownView()
             m.cwd = cwd
@@ -1301,6 +1316,7 @@ final class TimelineEventRow: DSView, StackItem {
         if let verdictIcon { verdictIcon.frame = NSRect(x: x, y: 7, width: 14, height: 14); x += 14 + 6 }
         let sw = stat.isHidden ? 0 : stat.width
         title.frame = NSRect(x: x, y: 6, width: max(0, bounds.width - x - (sw > 0 ? sw + 10 : 0)), height: 16)
+        heading?.frame = NSRect(x: 48, y: 6, width: max(0, title.frame.maxX - 48), height: 16)
         subtitle.frame = NSRect(x: 48, y: 26, width: max(0, bounds.width - 48), height: 16)
         if sw > 0 { stat.frame = NSRect(x: bounds.width - sw, y: (contentH - 16) / 2, width: sw, height: 16) }
         if let body { body.frame = NSRect(x: 48, y: 50, width: bounds.width - 48, height: body.height(forWidth: bounds.width - 48)) }

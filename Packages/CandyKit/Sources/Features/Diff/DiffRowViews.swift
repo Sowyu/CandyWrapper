@@ -463,6 +463,16 @@ final class DiffLineRowView: DiffRowView {
         let indices: [Int32] = columns.isSplit ? [row.left, row.right] : [row.left]
         kinds = indices.map { $0 >= 0 ? (context.diff.lines[Int($0)].kind, isMarker) : (nil, isMarker) }
         text.configure(row: row, columns: columns, context, marker: isMarker)
+        // The change bars are colour alone, so VoiceOver hears each changed line named
+        // (StyledDiffCodeView.tsx:205-211 at 5258, #40152).
+        setAccessibilityElement(true)
+        setAccessibilityRole(.staticText)
+        setAccessibilityLabel(isMarker ? "No newline at end of file" : indices.compactMap { index -> String? in
+            guard index >= 0 else { return nil }
+            let line = context.diff.lines[Int(index)]
+            let kind = line.kind == .deletion ? "Removed " : line.kind == .addition ? "Added " : ""
+            return kind + context.diff.text(line)
+        }.joined(separator: ", "))
         needsLayout = true
         needsDisplay = true
     }
@@ -603,7 +613,7 @@ final class DiffCodeTextView: DSView {
         let baselineOffset = metrics.baseline(top: 0, lineHeight: DiffStyle.lineHeight)
         ctx.textMatrix = .identity
         for (rect, active) in searchRects {
-            ctx.setFillColor(NSColor.systemYellow.withAlphaComponent(active ? 0.65 : 0.28).cgColor)
+            ctx.setFillColor((active ? DiffStyle.searchMatchCurrent : DiffStyle.searchMatch).cgColor(in: self))
             ctx.fill(rect)
         }
         for piece in pieces {

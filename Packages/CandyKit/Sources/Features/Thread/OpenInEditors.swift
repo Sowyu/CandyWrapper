@@ -99,7 +99,8 @@ public enum OpenInEditors {
             return URL(string: "\(scheme)://ssh/\(destination)\(encoded)")
         }
         let destination = username.map { "\($0)@\(host)" } ?? host
-        return URL(string: "\(scheme)://vscode-remote/ssh-remote+\(encode(destination))\(encoded)\(isFile ? ":1:1" : "")")
+        // Without windowId=_blank a folder link replaces the last active window (packages/contracts/src/editor.ts at 5258, #41610).
+        return URL(string: "\(scheme)://vscode-remote/ssh-remote+\(encode(destination))\(encoded)\(isFile ? ":1:1" : "?windowId=_blank")")
     }
 
     /// `resolveRemoteOpenState` (remoteOpen.ts:78-90): an alias splits at its last `@`; a saved username wins.

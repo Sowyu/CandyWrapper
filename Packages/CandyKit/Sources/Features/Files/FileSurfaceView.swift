@@ -211,6 +211,8 @@ public final class FileSurfaceView: DSView {
     public var wantsAsset: Bool { kind.isAsset || (kind == .html && rendered) }
     /// Called when the render toggle changes what the body needs.
     public var onNeedsReload: (@MainActor () -> Void)?
+    /// When the shown asset URL's grant ends (`expiresAt`); an HTML page asks for a fresh one before then.
+    public var assetExpiresAt: Date?
 
     private func setRendered(_ on: Bool) {
         if attachment != nil {
@@ -278,7 +280,10 @@ public final class FileSurfaceView: DSView {
                 notice.isHidden = false
             }
             if kind == .markdown, rendered {
-                view = MarkdownFileView(markdown: text, cwd: cwd, imageBase: Self.markdownImageBase(path: path, cwd: cwd))
+                // Past the 1 MB read, T3 renders Markdown in pieces (LargeFilePreview.tsx:71-87 at 5258).
+                view = truncated || bytes > Self.largeFileBytes
+                    ? ChunkedMarkdownFileView(markdown: text, cwd: cwd, imageBase: Self.markdownImageBase(path: path, cwd: cwd))
+                    : MarkdownFileView(markdown: text, cwd: cwd, imageBase: Self.markdownImageBase(path: path, cwd: cwd))
             } else if case .table(let d) = kind, rendered {
                 let table = DelimitedTableView(text: text, delimiter: d)
                 if table.truncated, notice.isHidden {
@@ -352,7 +357,9 @@ public final class FileSurfaceView: DSView {
             }
             return pdf
         case .html:
-            return HTMLFileView(url: url)
+            let html = HTMLFileView(url: url, renewAt: assetExpiresAt.map { HTMLFileView.renewAt(expiresAt: $0, now: Date()) })
+            html.onRenew = { [weak self] in self?.onNeedsReload?() }
+            return html
         default:
             return NativeFilePreviewView(source: url, name: path)
         }
@@ -644,6 +651,9 @@ extension FileSurfaceView {
     /// The folder a Markdown file's relative images resolve against: the file's own folder, kept
     /// with its trailing separator so a timestamped name never reads as a line suffix and a file at
     /// the root resolves against "/" (5258 FileMarkdownPreview.tsx:18-25, #41505).
+    /// The server's file read stops at 1 MB; a file past it takes T3's large-file path.
+    static let largeFileBytes = 1024 * 1024
+
     static func markdownImageBase(path: String, cwd: String?) -> String? {
         guard let i = path.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return cwd }
         let folder = String(path[...i])
@@ -689,8 +699,22 @@ final class HTMLFileView: NSView {
     let url: URL
     let frameView = ThreadWebFrameView()
     var web: WKWebView? { frameView.webView }
-    init(url: URL) {
+    /// When the page's asset grant is about to end, so a fresh URL replaces it (FilePreviewPanel.tsx at 5258, #39736).
+    /// One timer runs only while the page shows; a page that comes back after it loads the fresh URL straight away.
+    let renewAt: Date?
+    var onRenew: (() -> Void)?
+    private var renewTimer: Timer?
+    private var renewed = false
+
+    /// `htmlPreviewFrame`: two minutes before the grant expires, held at least three minutes and at most an hour, so a
+    /// client clock far from the server's never renews at once, forever.
+    static func renewAt(expiresAt: Date, now: Date) -> Date {
+        min(max(expiresAt.addingTimeInterval(-2 * 60), now.addingTimeInterval(3 * 60)), now.addingTimeInterval(60 * 60))
+    }
+
+    init(url: URL, renewAt: Date? = nil) {
         self.url = url
+        self.renewAt = renewAt
         super.init(frame: .zero)
         frameView.autoresizingMask = [.width, .height]
         addSubview(frameView)
@@ -708,11 +732,28 @@ final class HTMLFileView: NSView {
     private func sync() {
         let visible = window != nil && !isHiddenOrHasHiddenAncestor
         frameView.frame = bounds
+        renewTimer?.invalidate()
+        renewTimer = nil
+        if visible, let renewAt, !renewed {
+            let wait = renewAt.timeIntervalSinceNow
+            // Not from inside the show itself: the owner replaces this view.
+            if wait <= 0 { renewed = true; Task { @MainActor [weak self] in self?.onRenew?() }; return }
+            renewTimer = Timer.scheduledTimer(withTimeInterval: wait, repeats: false) { [weak self] _ in
+                MainActor.assumeIsolated { self?.renew() }
+            }
+        }
         if visible, !frameView.isLive {
             frameView.activate(.init(src: url, title: url.lastPathComponent, dark: effectiveAppearance.isDark, kind: .workspaceFile))
         } else if !visible {
             frameView.release()
         }
+    }
+
+    private func renew() {
+        renewed = true
+        renewTimer?.invalidate()
+        renewTimer = nil
+        onRenew?()
     }
 }
 
