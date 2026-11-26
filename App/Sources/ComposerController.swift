@@ -6350,17 +6350,20 @@ extension ComposerController {
             toast(.warning, "Wait for attachments to finish preparing before rewinding."); return
         }
         guard let checkpoint = ThreadPromptRewind.checkpoint(before: message, in: projection) else {
-            toast(.warning, "No ready checkpoint is available before this message."); return
+            toast(.warning, "No checkpoint is available before this message."); return
         }
-        // ChatOverlayHosts.tsx:212-225 (7116325f03). The files sentence goes with the button it names.
-        let revertsFiles = projection.thread.worktreePath != nil
+        // `RevertConfirmHost` (ChatOverlayHosts.tsx:209-297 at 5258): "Revert files too" is always there, disabled
+        // outside an isolated worktree or when the target's snapshot is missing or failed (#40745), which still
+        // rewinds the conversation. CW has no task-folder repositories, so the "repositories" wording never applies.
+        let revertsFiles = projection.thread.worktreePath != nil && ThreadPromptRewind.restoresFiles(checkpoint)
         let description = "Rewind chat to before this message. Your prompt and attachments return to the composer."
-            + (revertsFiles ? " \u{201C}Revert files too\u{201D} also undoes your own edits." : "")
+            + " \u{201C}Revert files too\u{201D} also undoes your own edits."
         let dialog = DialogView(kind: .alertDialog, title: "Edit from here?", message: description)
         let cancel = ButtonView("Cancel", variant: .outline)
         let keep = ButtonView("Revert and keep changes")
         let files = ButtonView("Revert files too", variant: .destructiveOutline)
-        dialog.footerButtons = revertsFiles ? [cancel, files, keep] : [cancel, keep]
+        files.isEnabled = revertsFiles
+        dialog.footerButtons = [cancel, files, keep]
         let host = ModalHost.present(dialog, in: window)
         cancel.action = { [weak host] in host?.close() }
         let perform: (Bool) -> Void = { [weak self, weak host] restoreFiles in
