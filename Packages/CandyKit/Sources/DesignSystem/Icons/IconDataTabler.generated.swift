@@ -684,6 +684,13 @@ extension IconName {
                 IconElement(.path(d: "M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7")),
                 IconElement(.path(d: "M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6")),
             ])
+        case .hourglass: // hourglass
+            return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
+                IconElement(.path(d: "M6.5 7h11")),
+                IconElement(.path(d: "M6.5 17h11")),
+                IconElement(.path(d: "M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1")),
+                IconElement(.path(d: "M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1")),
+            ])
         case .image: // photo
             return IconDefinition(viewBox: IconViewBox(x: 0, y: 0, width: 24, height: 24), elements: [
                 IconElement(.path(d: "M15 8h.01")),
