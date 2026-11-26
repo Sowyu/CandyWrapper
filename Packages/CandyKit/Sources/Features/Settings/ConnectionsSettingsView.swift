@@ -260,6 +260,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         map.onLink = { [weak self] source, target, ticked in self?.actions.mapLink(source, target, ticked) }
         map.onLinkOne = { [weak self] source, target in self?.actions.mapLinkOne(source, target) }
         map.onLinkSeveral = { [weak self] source, ids in self?.actions.linkSeveral(source, ids) }
+        map.onHeightChange = { [weak self] in self?.environmentsSection.needsLayout = true; self?.relayout() }
         map.details.onHeightChange = { [weak self] in self?.environmentsSection.needsLayout = true; self?.relayout() }
         var details = EnvironmentsMapDetailsActions()
         // `renderSavedEnvironment` (ConnectionsSettings.tsx:1880-1894): the list's row, its routes open.

@@ -64,8 +64,8 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
             button.setAccessibilityLabel(label)
             TooltipController.attach(to: button, text: label)
         }
-        zoomOut.action = { [weak self] in self?.canvas.zoom(0.8) }
-        zoomIn.action = { [weak self] in self?.canvas.zoom(1.25) }
+        zoomOut.action = { [weak self] in self?.canvas.zoomGliding(0.8) }
+        zoomIn.action = { [weak self] in self?.canvas.zoomGliding(1.25) }
         fitButton.action = { [weak self] in self?.canvas.fitView() }
         for v in [zoomOut, zoomIn, fitButton] { zoomGroup.addSubview(v) }
         zoomGroup.wantsLayer = true
@@ -156,7 +156,11 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
         fitButton.isEnabled = canvas.state.held != nil
         syncDetails()
         needsLayout = true
+        // A stack's anchoring or a fit changes the canvas height: the page lays out again.
+        let height = bounds.width > 0 ? self.height(forWidth: bounds.width) : 0
+        if height != lastHeight { lastHeight = height; onHeightChange?() }
     }
+    private var lastHeight: CGFloat = 0
 
     /// "Link several…": the batch dialog from the environment in the details, or the only one that can link (:870-882).
     func startLinkSeveral() {
