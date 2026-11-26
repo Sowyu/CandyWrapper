@@ -357,6 +357,27 @@ Keypress to glyph in the "Say Pong" composer, end to end, two runs of 20 keys ea
 
 These runs add a random 0 to 17 ms to each 600 ms gap. My first runs used a fixed 600 ms, which is exactly 36 frames at 60 Hz, so every press in a run landed on the same frame phase and the run medians jumped between phases (official 41.3 and 50.9 ms, CandyWrapper 44.7 and 50.5 ms). `frames key` now always adds the offset. In both apps the first press, which also removes the placeholder, took 63 to 86 ms.
 
+#### Keypress, measured again the same evening
+
+The 4.9 ms gap above did not reproduce. I built 3844946 (v1.18.3) and 30f5c7ef (main, with a86f9b59's one draft serialization per key) in Release the same way, started the 5258 runtime on a fresh copy of the seed, and ran the official app on another copy. All four windows stayed open and took turns in front: four rounds, each round 30 presses per app with `frames key`, the first press of every round dropped, so 116 presses per app. The thread was "Lint the shell scripts", one of the seeded small threads. The 1-minute load average was 1.5 to 1.9 and no agent was building.
+
+| App | Median, pooled | Round medians | Range |
+|---|---|---|---|
+| CandyWrapper v1.18.3 | 37.2 ms | 37.2, 36.1, 38.3, 37.3 | 26.0 to 50.5 ms |
+| CandyWrapper main | 38.4 ms | 38.1, 37.2, 39.0, 38.9 | 24.5 to 48.8 ms |
+| Official 5258 | 43.5 ms | 46.8, 42.7, 43.6, 42.3 | 26.8 to 53.5 ms |
+| Bare TextKit 2 `NSTextView` (`scripts/perf/floor.swift`) | 42.7 ms | 44.7, 41.1, 42.8, 42.6 | 24.8 to 54.0 ms |
+
+CandyWrapper was ahead of the official app in every round. In "Say Pong" afterwards, main read 39.7 and 37.2 ms with the official app at 43.9 ms between them. The README's keypress row now uses the v1.18.3 and official numbers from this table.
+
+An earlier pass that evening, against the 3824 sandbox with the load at 1.6 to 5.7, compared main with and without the composer's backdrop blur (`--no-blur`): 40.9 ms with it, 40.5 ms without, and 40.5 ms for the bare text view, four rounds of 30 each. The blur costs nothing a keypress can show.
+
+What this does and doesn't say:
+
+- The two sessions differ by about 3 ms for the same build (40.9 and 38.4 ms for main, 40.5 and 42.7 ms for the bare text view), so compare apps only inside one interleaved run.
+- The morning's 49.9 ms came from two runs of 20 presses with each app measured in its own window of time. I don't know what made it 12 ms slower than the same commit read here. A code change is ruled out: v1.18.3 and main read the same, and in process a keystroke costs about 1.6 ms in Release from keyDown through the commit against 0.8 ms for a bare text view (`ComposerKeystrokeWorkTests`).
+- The bare text view read slower than CandyWrapper in the second session and the same in the first, so it is a floor only within a few milliseconds.
+
 Sizes: the official `T3-Code-0.1.13-nightly.20261125.5258-arm64.dmg` is 246,027,624 bytes, and its app is 576,904 KiB (563 MB) by `du -sk` inside the mounted DMG. `CandyWrapper-1.18.3-arm64.dmg` is 23,728,920 bytes and its app is 42,872 KiB (41.9 MB).
 
 ### Caveats

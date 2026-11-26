@@ -30,10 +30,10 @@ I have T3 Code open all day, and the official Electron app used too much memory 
 | CPU wakeups a second at idle | 71.4 | 0.41 |
 | Launch to a ready sidebar | 1.20 s | 0.33 s |
 | Slow frames scrolling 2,000 messages | 0 of 715 | 0 of 707 |
-| Keypress to letter on screen | 45.0 ms | 49.9 ms |
+| Keypress to letter on screen | 43.5 ms | 37.2 ms |
 | Download | 246 MB | 23.7 MB |
 
-Typing is where CandyWrapper loses, by less than one frame at 60 Hz. I'd like to close that gap, but I haven't yet. I measured both apps on 2026-11-25 against T3 Code Nightly 0.1.13 (5258) with CandyWrapper 1.18.3. [docs/benchmarks.md](docs/benchmarks.md) has the method and the raw numbers.
+I measured both apps on 2026-11-25 against T3 Code Nightly 0.1.13 (5258) with CandyWrapper 1.18.3. The keypress row comes from a second run that evening, where the two apps took turns on the same screen for 116 presses each. The first run had CandyWrapper at 49.9 ms and the official app at 45.0 ms, and I couldn't reproduce that. [docs/benchmarks.md](docs/benchmarks.md) has the method and the raw numbers.
 
 ## Install
 
