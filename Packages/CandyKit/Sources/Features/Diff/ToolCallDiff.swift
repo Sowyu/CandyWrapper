@@ -33,7 +33,8 @@ struct ToolCallDiff: Sendable {
         ["diffStr", "oldStr", "newStr"].contains { item[$0]?.stringValue != nil }
     }
 
-    init(fileName: String, diffStr: String? = nil, changes: [JSONValue] = [], oldStr: String? = nil, newStr: String? = nil) {
+    init(fileName: String, diffStr: String? = nil, changes: [JSONValue] = [], oldStr: String? = nil, newStr: String? = nil,
+         workspaceRoot: String? = nil) {
         let suffix = "\n… output truncated for transport"
         func recorded(_ value: String?) -> (String?, Bool) {
             guard let value, value.hasSuffix(suffix) else { return (value, false) }
@@ -44,16 +45,60 @@ struct ToolCallDiff: Sendable {
         let (before, bt) = recorded(oldStr ?? (operation == "delete" && diff == "" ? "" : nil))
         let (after, at) = recorded(newStr ?? (operation == "add" && diff == "" ? "" : nil))
         truncated = dt || bt || at
-        patch = Self.normalize(diff, fileName: fileName, changes: changes)
+        patch = Self.relativeHeaderPaths(Self.normalize(diff, fileName: fileName, changes: changes), workspaceRoot: workspaceRoot)
         if diff?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
             if let before { content.append(.init(label: "Recorded content before", text: before)) }
             if let after { content.append(.init(label: "Recorded content after", text: after)) }
         }
     }
 
-    init(_ item: TurnItem) {
+    init(_ item: TurnItem, workspaceRoot: String? = nil) {
         self.init(fileName: item["fileName"]?.stringValue ?? "", diffStr: item["diffStr"]?.stringValue,
-                  changes: item["changes"]?.arrayValue ?? [], oldStr: item["oldStr"]?.stringValue, newStr: item["newStr"]?.stringValue)
+                  changes: item["changes"]?.arrayValue ?? [], oldStr: item["oldStr"]?.stringValue, newStr: item["newStr"]?.stringValue,
+                  workspaceRoot: workspaceRoot)
+    }
+
+    /// Claude records absolute paths, so header lines name files under the workspace relative to it,
+    /// as other diffs do. Only lines from the start or a `diff --git` line up to the first hunk change
+    /// (toolCallDiff.ts:56-96 at 5258, #32697).
+    static func relativeHeaderPaths(_ patch: String?, workspaceRoot: String?) -> String? {
+        guard let patch, !patch.isEmpty, let workspaceRoot else { return patch }
+        let windows = workspaceRoot.range(of: #"^(?:[A-Za-z]:[\\/]|\\\\)"#, options: .regularExpression) != nil
+        let separators: Set<Character> = windows ? ["\\", "/"] : ["/"]
+        // JS `split(/\/+/)`: a run of separators splits once, so only the first and last parts can be empty.
+        let parts = workspaceRoot.split(omittingEmptySubsequences: false, whereSeparator: separators.contains).map(String.init)
+        var segments = [parts[0]] + parts.dropFirst().filter { !$0.isEmpty }
+        while segments.last == "" { segments.removeLast() }
+        guard segments.contains(where: { !$0.isEmpty }) else { return patch }
+        // Windows separates with / or \ (\\ in a quoted header). POSIX only with /, where a \ is part
+        // of a name and a quoted header doubles it.
+        let separator = windows ? #"[\\/]+"# : "/+"
+        let root = segments.map { segment in
+            segment.components(separatedBy: "\\").map(NSRegularExpression.escapedPattern(for:)).joined(separator: #"\\\\?"#)
+        }.joined(separator: separator)
+        guard let prefix = try? NSRegularExpression(pattern: #"^("?(?:[ab]/)?)"# + root + separator,
+                                                    options: windows ? [.caseInsensitive] : []) else { return patch }
+        func relative(_ name: String) -> String {
+            prefix.stringByReplacingMatches(in: name, range: NSRange(name.startIndex..., in: name), withTemplate: "$1")
+        }
+        let gitLine = try! NSRegularExpression(pattern: #"^diff --git ("a/(?:[^"\\]|\\.)*"|a/.+?) ("b/(?:[^"\\]|\\.)*"|b/.+?)$"#)
+        let nameLine = try! NSRegularExpression(pattern: #"^(---|\+\+\+)(\s+)(.*)$"#)
+        func groups(_ regex: NSRegularExpression, _ line: String) -> [String]? {
+            guard let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)) else { return nil }
+            return (1..<match.numberOfRanges).map { Range(match.range(at: $0), in: line).map { String(line[$0]) } ?? "" }
+        }
+        var inHeader = true
+        return patch.components(separatedBy: "\n").map { line in
+            if line.hasPrefix("diff --git ") {
+                inHeader = true
+                // Split the names as Pierre's parser does, so a name with a space stays whole.
+                guard let names = groups(gitLine, line) else { return line }
+                return "diff --git \(relative(names[0])) \(relative(names[1]))"
+            }
+            if line.hasPrefix("@@") { inHeader = false }
+            guard inHeader, let name = groups(nameLine, line) else { return line }
+            return name[0] + name[1] + relative(name[2])
+        }.joined(separator: "\n")
     }
 
     /// Re-diff each hunk after removing whitespace, retaining the recorded line text and numbers

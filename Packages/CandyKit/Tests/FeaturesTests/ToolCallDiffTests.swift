@@ -193,4 +193,31 @@ struct ToolCallDiffPanelTests {
         #expect(await eventually { panel.list.diff.files.count == 1 })
         panel.closeToolCall()
     }
+
+    /// toolCallDiff.test.ts at 5258 (#32697).
+    @Test func headersNameWorkspaceFilesRelativeToIt() {
+        let root = "/Users/me/project"
+        func paths(_ patch: String?) -> [String] { UnifiedDiff(patch ?? "").files.map(\.path) }
+        let claude = "--- \(root)/docs/plan.md\n+++ \(root)/docs/plan.md\n@@ -2 +2 @@\n-- \(root)/x\n++ \(root)/y\n"
+        let patch = ToolCallDiff(fileName: "\(root)/docs/plan.md", diffStr: claude, workspaceRoot: root).patch
+        #expect(paths(patch) == ["docs/plan.md"])
+        #expect(patch?.contains("\n-- \(root)/x\n++ \(root)/y\n") == true)
+        let hunk = "@@ -1 +1 @@\n-x\n+y\n"
+        #expect(paths(ToolCallDiff(fileName: "\(root)/src/a.ts", diffStr: hunk, workspaceRoot: "\(root)/").patch) == ["src/a.ts"])
+        #expect(paths(ToolCallDiff(fileName: "/elsewhere/b.ts", diffStr: hunk, workspaceRoot: root).patch) == ["/elsewhere/b.ts"])
+        for (fileName, workspace) in [("repo/src/a.ts", "/repo"), ("/repo/back/slash/a.ts", "/repo/back\\slash")] {
+            let diffStr = "--- \(fileName)\n+++ \(fileName)\n\(hunk)"
+            #expect(ToolCallDiff(fileName: fileName, diffStr: diffStr, workspaceRoot: workspace).patch == diffStr)
+        }
+        #expect(paths(ToolCallDiff(fileName: "/repo/back\\slash/a.ts", diffStr: hunk, workspaceRoot: "/repo/back\\slash").patch) == ["a.ts"])
+        let twoFiles = [
+            "diff --git a/\(root)/a.ts b/\(root)/a.ts", "--- a/\(root)/a.ts", "+++ b/\(root)/a.ts", "@@ -1 +1 @@\n-x\n+y",
+            "diff --git a/backup\(root)/b.ts b/backup\(root)/b.ts", "--- a/backup\(root)/b.ts", "+++ b/backup\(root)/b.ts", hunk,
+        ].joined(separator: "\n")
+        #expect(paths(ToolCallDiff(fileName: "\(root)/a.ts", diffStr: twoFiles, workspaceRoot: root).patch) == ["a.ts", "backup\(root)/b.ts"])
+        #expect(paths(ToolCallDiff(fileName: "\(root)/docs \(root)/a.md", diffStr: hunk, workspaceRoot: root).patch) == ["docs \(root)/a.md"])
+        #expect(paths(ToolCallDiff(fileName: "/backup \(root)/a.md", diffStr: hunk, workspaceRoot: root).patch) == ["/backup \(root)/a.md"])
+        #expect(paths(ToolCallDiff(fileName: "C:\\repo\\src\\a.ts", diffStr: hunk, workspaceRoot: "c:\\repo").patch) == ["src\\a.ts"])
+        #expect(ToolCallDiff(fileName: "\(root)/a.ts", diffStr: hunk).patch?.contains("a/\(root)/a.ts") == true)
+    }
 }
