@@ -280,7 +280,10 @@ public final class FileSurfaceView: DSView {
                 notice.isHidden = false
             }
             if kind == .markdown, rendered {
-                view = MarkdownFileView(markdown: text, cwd: cwd, imageBase: Self.markdownImageBase(path: path, cwd: cwd))
+                // Past the 1 MB read, T3 renders Markdown in pieces (LargeFilePreview.tsx:71-87 at 5258).
+                view = truncated || bytes > Self.largeFileBytes
+                    ? ChunkedMarkdownFileView(markdown: text, cwd: cwd, imageBase: Self.markdownImageBase(path: path, cwd: cwd))
+                    : MarkdownFileView(markdown: text, cwd: cwd, imageBase: Self.markdownImageBase(path: path, cwd: cwd))
             } else if case .table(let d) = kind, rendered {
                 let table = DelimitedTableView(text: text, delimiter: d)
                 if table.truncated, notice.isHidden {
@@ -648,6 +651,9 @@ extension FileSurfaceView {
     /// The folder a Markdown file's relative images resolve against: the file's own folder, kept
     /// with its trailing separator so a timestamped name never reads as a line suffix and a file at
     /// the root resolves against "/" (5258 FileMarkdownPreview.tsx:18-25, #41505).
+    /// The server's file read stops at 1 MB; a file past it takes T3's large-file path.
+    static let largeFileBytes = 1024 * 1024
+
     static func markdownImageBase(path: String, cwd: String?) -> String? {
         guard let i = path.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return cwd }
         let folder = String(path[...i])
