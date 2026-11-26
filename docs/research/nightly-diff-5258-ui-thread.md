@@ -383,8 +383,8 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 67918f51cc | #42919 | fix(web): Show more in Thread Details keeps every repository listed | thread | port (1.8) |
 | 2891419b93 | #42886 | fix(web): localize terminal excerpt line ranges | composer | port (1.18) |
 | 83a7c75b88 | #42889 | fix(web,mobile): adding a project from a draft's picker no longer leaves the draft behind | palette | port (4.2) |
-| e045a127e7 | #42882 | fix(web): web search result links follow Open links in | thread | port (1.18) |
-| 8783b9d2ea | #42880 | fix(web): Restart agent session toast says the conversation is kept | palette | port (1.18) |
+| e045a127e7 | #42882 | fix(web): web search result links follow Open links in | thread | left: web search links still open in the system browser; the inspector needs the thread's link handler for "Open links in". Small |
+| 8783b9d2ea | #42880 | fix(web): Restart agent session toast says the conversation is kept | palette | ported 2995f10a |
 | 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | port (1.10) |
 | 19a6e5b57b | #42856 | fix(web): clicking outside a citation comment keeps its dictation | thread | port (1.15) |
 | 3a63e0ca37 | #42771 | fix(web): expanding linked issues no longer hides thread details sections | thread | port (1.8) |
@@ -406,10 +406,10 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | port (1.18) |
 | c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | port (2.1) |
 | 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | port (3.5) |
-| dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | port (1.13) |
+| dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | ported d11002d4 (not seen on screen: the sandbox turn used Bash grep) |
 | 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | port (1.8) |
 | 924d9c1fff | #42386 | feat(projects): worktree layout commands run only once a person approves them | composer | port (2.9) |
-| eb7cc44727 | #42309 | fix(web): showing or hiding a requested secret keeps the caret in place | thread | port (1.4) |
+| eb7cc44727 | #42309 | fix(web): showing or hiding a requested secret keeps the caret in place | thread | ported f15f9c8d |
 | 571ed76fc3 | #42275 | fix(web): sidebar issue and pull request badges share one component | sidebar | port (3.7) |
 | 921349decf | #42295 | fix(web): Mod+S stashes a side chat's prompt | composer | port (2.8) |
 | 51a721da44 | #42279 | fix(web): a held Esc in file or content search stops on the Command Palette | palette | port (4.4) |
@@ -419,22 +419,22 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | port (4.4) |
 | 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | port (1.18) |
 | d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | port (3.6) |
-| 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | port (1.11) |
-| 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | port (1.17) |
+| 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | left: CW already closes with an ×, but a 24pt one 40pt above the image; 5258 has a 32pt `size="icon"` button at the 92vw popup's top end (dialog.tsx:160-168, `mediaControlsPlacement="inside"`). Small |
+| 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | ported 98004311 |
 | 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | port (1.1) |
 | 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | port (3.8) |
 | 2ced06ef4a | #42041 | fix(web): model picker search finds a model by its ID | composer | port (2.6) |
 | a891304c84 | #30810 | fix(web): keep Codex Ultra off the effort bar scale | composer | port (2.6) |
 | 66259ff051 | #41964 | fix(web): a failed server update restored after the app relaunches can retry | sidebar | port (3.6) |
 | 74c6d21c7a | #41672 | fix(web): the update dialog says why a server was skipped | sidebar | port (3.6) |
-| a6c69be8df | #41927 | fix(web,mobile): a parent parked on subagents no longer reads as Thinking | thread | port (1.9) |
-| ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | port (1.2) |
+| a6c69be8df | #41927 | fix(web,mobile): a parent parked on subagents no longer reads as Thinking | thread | ported ad384d3e (the server half, #38869, is not a client change) |
+| ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | ported 3a1892b1 (the local starting row before the server has a run is left: CW shows no Thinking row for an optimistic send) |
 | b3fff82014 | #29282 | fix(web): Settings opened with Cmd+, no longer leaves the model picker open over it | composer | port (2.5) |
 | 8032cbb66b | #28919 | fix(web): Cmd+F searches a side chat, and Escape closes it | thread | port (1.15) |
 | a4029d4b91 | #41899 | fix(web): an IME Escape no longer dismisses the citation highlight | thread | n/a (AppKit handles IME) |
 | 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | port (3.5) |
 | 3d9a14d4da | #41875 | fix(web): IME keys no longer trigger or close the prompt stash menu | composer | n/a (AppKit handles IME) |
-| 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | port (1.4) |
+| 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | n/a (CW has no reference sources, so the card is always typed) |
 | d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | port (1.18) |
 | 14ea095b0a | #41663 | feat(web): add an HTML preview width setting separate from chat width | thread | port (1.16) |
 | 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | port (1.10) |
@@ -449,7 +449,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 78cffe29ec | #41761 | fix: a merge or review stays on the commit you opened the pull request on | other | n/a (pull requests, other agent) |
 | 5e62206e7d | #41757 | fix(desktop): preview pages run in their own JavaScript world and popups open web links only | thread | n/a (Electron only) |
 | d4d08aed56 | #41745 | fix: XML assets open sandboxed and MCP apps bind to their document | thread | port (1.18) |
-| 1c6d41a9ba | #41317 | feat(web,mobile): remove the changed-files card under assistant turns | thread | port (1.3) |
+| 1c6d41a9ba | #41317 | feat(web,mobile): remove the changed-files card under assistant turns | thread | ported 31bbc675 |
 | cdb0e238ed | #41674 | fix(web): keyboard-opened context menus start on their first action | other | n/a (AppKit native menus) |
 | b5e1f91cba | #27167 | fix(web): color sidebar PR text to match status icons | sidebar | port (3.7) |
 | 36ecdeb851 | #41597 | fix(web): an unavailable work-log image keeps the 10rem strip instead of filling the row | thread | port (1.11) |
@@ -464,11 +464,11 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 9f24cac6d4 | #41269 | fix(web): No project drafts no longer offer New worktree | composer | port (2.9) |
 | 10765a4e47 | #41262 | fix(web): a refused desktop install shows as failed instead of downloaded | sidebar | n/a (desktop updater, Electron) |
 | 5812320a6a | #41258 | fix(web): quick clicks on different sidebar threads open each one | sidebar | port (3.5) |
-| 611410683b | #41242 | feat(cursor): show which step Cursor is in while a turn starts | thread | port (1.2) |
+| 611410683b | #41242 | feat(cursor): show which step Cursor is in while a turn starts | thread | ported 3a1892b1 |
 | e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | port (1.10) |
 | 69c1d53826 | #38884 | feat: workflows on web and mobile | thread | port (1.18) |
 | 7103527dcc | #41073 | fix(web): PR description file links resolve in the PR's repository from a No-project thread | thread | port (1.12) |
-| 0938476b95 | #41060 | fix(web): Thinking row no longer shows below a streaming reply | thread | port (1.9) |
+| 0938476b95 | #41060 | fix(web): Thinking row no longer shows below a streaming reply | thread | ported ad384d3e |
 | a3323d4a43 | #41070 | perf(web): new thread opens its draft without waiting on t3.json | composer | n/a (React load order) |
 | fe9c98c98f | #35871 | feat: agents can report T3 Code problems when you turn feedback on | thread | port (1.5) |
 | dbb5bdb582 | #33057 | feat(web): sidebar folder button picks or adds a project | sidebar | port (3.3) |
@@ -538,8 +538,8 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 7c6e889ddb | #39515 | feat: subagents, side chats and linked threads open the same way | thread | port (1.1) |
 | d7f6b3efca | #39439 | feat: connect to a linked environment from its read-only thread | thread | port (1.1) |
 | 1cb3a8c753 | #39406 | feat: read a linked environment's threads from the client | thread | port (1.1) |
-| 9294a9801e | #39837 | fix(acp,web): stop showing "Running Ran" for commandless ACP tool calls | thread | port (1.9) |
-| 0bc9b57b93 | #31257 | feat: secret cards get a show/hide toggle and multi-value fields | thread | port (1.4) |
+| 9294a9801e | #39837 | fix(acp,web): stop showing "Running Ran" for commandless ACP tool calls | thread | ported ad384d3e |
+| 0bc9b57b93 | #31257 | feat: secret cards get a show/hide toggle and multi-value fields | thread | ported f15f9c8d (multi-value fields were already in from the wire port) |
 | d5a084c440 | #39636 | fix(web): the provider update pill no longer recounts dismissed updates | sidebar | port (3.6) |
 | 019e55bad5 | #39569 | fix(composer): keep screenshots preparing after an unanswered question closes | composer | port (2.1) |
 | 732c03f410 | #39557 | fix(web): fold accents in thread link picker search | composer | port (2.7) |
