@@ -1,3 +1,4 @@
+import DesignSystem
 import Foundation
 import T3Protocol
 
@@ -46,20 +47,39 @@ public struct ComposerServerUpdateNotice: Equatable {
         case .failed(let message): message
         }
     }
+    /// Redesign's narrow pill: the title's short complete form.
+    public var shortTitle: String {
+        switch status {
+        case .available: "Server update"
+        case .running: "Updating"
+        case .failed: "Update failed"
+        }
+    }
+    /// Redesign's narrow pill: the icon the action drops its label to, nil to keep the label.
+    var actionIcon: IconName? {
+        guard let action else { return nil }
+        if action.hasPrefix("Copy") { return .copy }
+        if action.hasPrefix("Disconnect") { return .unplug }
+        if action.hasPrefix("Retry") { return .refreshCw }
+        if action.hasPrefix("Update") { return .download }
+        return nil
+    }
     @MainActor var content: ComposerNoticeBannerView.Content {
         let dismiss = dismissible ? "Dismiss update notice" : nil
+        let actions = action.map { [$0] } ?? [], icons = action.map { _ in [actionIcon] } ?? []
         switch status {
         case .available:
-            return .init(variant: .neutral, icon: .download, title: title, description: guidance, actions: action.map { [$0] } ?? [],
-                         dismissLabel: dismiss, priority: .notice, titleTooltip: detail)
+            return .init(variant: .neutral, icon: .download, title: title, description: guidance, actions: actions,
+                         dismissLabel: dismiss, priority: .notice, titleTooltip: detail, shortTitle: shortTitle, actionIcons: icons)
         case .running:
             // Update progress outranks passive notices. Its only action is "Disconnect server".
             // The stage or the failure is the plain description (ChatView.tsx:2325-2332, a261a71817).
-            return .init(variant: .neutral, icon: .download, title: title, description: detail, actions: action.map { [$0] } ?? [],
-                         priority: .urgent, spinner: !ComposerDesign.current, actionTooltip: actionTooltip)
+            return .init(variant: .neutral, icon: .download, title: title, description: detail, actions: actions,
+                         priority: .urgent, spinner: !ComposerDesign.current, actionTooltip: actionTooltip,
+                         shortTitle: shortTitle, actionIcons: icons)
         case .failed:
-            return .init(variant: .error, icon: .circleAlert, title: title, description: detail, actions: action.map { [$0] } ?? [],
-                         dismissLabel: dismiss, priority: .notice, iconIsError: true)
+            return .init(variant: .error, icon: .circleAlert, title: title, description: detail, actions: actions,
+                         dismissLabel: dismiss, priority: .notice, iconIsError: true, shortTitle: shortTitle, actionIcons: icons)
         }
     }
 }

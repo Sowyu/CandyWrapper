@@ -97,6 +97,8 @@ public enum RedesignTokens {
         public static let rim: CGFloat = 0.08
         /// Increase Contrast's rim.
         public static let rimContrast: CGFloat = 0.24
+        /// A line that has to read at a glance, in the text color: a meter's unfilled track, a queued message's dashes.
+        public static let strongRim: CGFloat = 0.24
         /// A card's rim while the keyboard is inside it (the terminal drawer), in the accent.
         public static let focusRim: CGFloat = 0.4
         /// The black under a caption over a picture (the agent gallery), reached halfway down a short gradient. 0.62

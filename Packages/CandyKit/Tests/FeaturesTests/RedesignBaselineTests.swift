@@ -48,7 +48,7 @@ struct RedesignBaselineTests {
                 try Self.compare(reference, ours, name: base)
             }
             let panelSize = NSSize(width: 844, height: 780)
-            for mode in ["empty", "typing", "queued", "approval", "question", "attachments"] {
+            for mode in ["empty", "typing", "queued", "queued-attachments", "approval", "question", "attachments", "compact", "compact-legacy"] {
                 let panel = ComposerFidelityTests.panel(width: 844, dark: dark)
                 panel.timeline.context.now = { Self.now }
                 if mode == "empty" {
@@ -70,6 +70,20 @@ struct RedesignBaselineTests {
                     panel.queue.editingRunId = RunId("q2")
                     panel.layoutSubtreeIfNeeded(); panel.timeline.scroll(toFraction: 1)
                 }
+                if mode == "queued-attachments" {
+                    // A queued message with a picture, being edited. Offscreen the picture never loads, so the tile
+                    // shows its fallback glyph.
+                    var message = ChatMessage(id: MessageId("m1"), role: .user, text: "Check this screenshot and the log", runId: RunId("q1"),
+                                              createdAt: T3Timestamp("2026-10-28T11:58:00Z"))
+                    message.attachments = [.object(["type": .string("image"), "id": .string("img1"), "name": .string("screenshot.png")])]
+                    panel.composer.runState = .init(activeRunId: RunId("run"), running: true)
+                    panel.queue.state = .init(items: [
+                        .init(runId: RunId("q1"), messageId: message.id, text: message.text, message: message),
+                        .init(runId: RunId("q2"), messageId: nil, text: "then run the tests")],
+                        activeRunId: RunId("run"), canReorder: true, canPromoteToSteer: true)
+                    panel.queue.editingRunId = RunId("q1")
+                    panel.layoutSubtreeIfNeeded(); panel.timeline.scroll(toFraction: 1)
+                }
                 if mode == "approval" || mode == "question" {
                     if mode == "approval" {
                         panel.approvalPanel.configure(PendingApproval(requestId: "r", requestKind: .fileChange, createdAt: nil,
@@ -85,11 +99,24 @@ struct RedesignBaselineTests {
                     }
                 }
                 if mode == "attachments" {
-                    let shelf = ComposerAttachmentsFidelityTests.view("shelf", size: NSSize(width: 680, height: 100))
-                    // Same shelf fixture as the attachment fidelity suite, shown above the composer.
-                    shelf.frame.origin = NSPoint(x: 82, y: 440); panel.addSubview(shelf)
+                    // The attachment fidelity suite's tiles in the composer's own shelf, where the app draws them.
+                    let shelf = ComposerAttachmentsFidelityTests.view("shelf", size: NSSize(width: 680, height: 100)) as! ComposerImageShelfView
+                    panel.composer.imageTiles = shelf.tiles
+                    panel.needsLayout = true
+                    panel.layoutSubtreeIfNeeded(); panel.timeline.scroll(toFraction: 1)
+                    let tiles = panel.composer.convert(panel.composer.imageShelf.frame, from: panel.composer.imageShelf.superview)
+                    #expect(panel.composer.bounds.contains(tiles), "the tiles sit inside the composer card")
                 }
-                try capture("composer-" + mode, panel, panelSize)
+                if mode.hasPrefix("compact") {
+                    // A long thread's next send compacts first: the Compact toggle beside the round send button, or the
+                    // old split button with Settings > Redesign > Legacy on.
+                    panel.composer.text = "Continue with the refactor"
+                    panel.composer.compactBeforeSendTokens = 412_000
+                }
+                try ComposerView.$legacyCompactSendOverride.withValue(mode == "compact-legacy") {
+                    panel.needsLayout = true; panel.composer.needsLayout = true
+                    try capture("composer-" + mode, panel, panelSize)
+                }
                 if mode == "approval" { #expect(!panel.approvalPanel.isHidden) }
                 if mode == "question" { #expect(!panel.questionPanel.isHidden) }
                 if mode == "queued" { #expect(panel.queue.superview != nil && !panel.queue.isHidden) }
@@ -227,10 +254,14 @@ struct RedesignBaselineTests {
                 let size = NSSize(width: 800, height: kind == "header" ? 140 : 300)
                 try capture("usage-" + kind, UsageFidelityTests.make(kind, size: size), size)
             }
-            for kind in ["notice", "stack"] {
-                let size = NSSize(width: 692, height: 140)
-                try capture("banner-" + kind, BannerStackFidelityTests.make(kind, size: size), size)
-            }
+            let stackSize = NSSize(width: 692, height: 140)
+            try capture("banner-stack", BannerStackFidelityTests.make("stack", size: stackSize), stackSize)
+            // Redesign floats a notice as a pill as wide as its content (ThreadPanelView's layoutDitherComposer), so
+            // the baseline draws it that way, and once squeezed by the right panel: the short title, the action as an icon.
+            let notice = Self.notice(guidance: "Restart the server to update", action: nil)
+            try capture("banner-notice", notice, notice.frame.size)
+            let narrow = Self.notice(guidance: nil, action: "Copy relaunch command", width: 262)
+            try capture("banner-notice-narrow", narrow, narrow.frame.size)
             let toast = ToastView(title: "Permissions have changed for Sandbox", message: "Pair again using a new link with the permissions you need.", actionTitle: "Open Connections", secondaryTitle: "Dismiss")
             try capture("toast", toast, NSSize(width: 360, height: toast.height(forWidth: 360)))
             // Redesign's state view in its three sizes, and the panels' empty and error states (redesign-states-2026-11-21.md).
@@ -405,7 +436,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 160)
+        #expect(count == 168)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -453,6 +484,17 @@ struct RedesignBaselineTests {
     /// Snapshot's offscreen layer renderer, with synchronous art and animations at their model end state.
     /// Art normally arrives after a debounce on a worker; capture fixed pixels before that work can run.
     /// The full image gallery's wall: pictures of many proportions, measured up front, so the masonry places them all.
+    /// The server update notice as Redesign's pill: its own width, or `width` when the row is narrower.
+    static func notice(guidance: String?, action: String?, width: CGFloat? = nil) -> ComposerNoticeBannerView {
+        let view = ComposerNoticeBannerView()
+        view.placement = .floating
+        view.apply(ComposerServerUpdateNotice(status: .available(serverVersion: "0.1.10", clientVersion: "0.1.11"),
+                                              guidance: guidance, action: action).content)
+        view.frame = NSRect(x: 0, y: 0, width: min(width ?? .infinity, view.pillWidth), height: DitherPill.height)
+        view.layoutSubtreeIfNeeded()
+        return view
+    }
+
     @MainActor static func wallImages() -> [GalleryImage] {
         let sizes: [(Int, Int)] = [(2040, 600), (1179, 2556), (64, 64), (3840, 2160), (1024, 1024), (1600, 1200), (900, 1200), (1920, 1080),
                                    (3000, 700), (800, 1200), (600, 1200), (1250, 1000), (1500, 500), (1200, 800), (200, 150), (500, 1500)]
