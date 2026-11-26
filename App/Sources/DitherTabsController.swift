@@ -110,6 +110,7 @@ final class DitherTabsController {
             case .pullRequests: return .init(id: key, title: "Pull requests", icon: .gitPullRequestArrow)
             case .issues: return .init(id: key, title: "Issues", icon: .circleDot)
             case .usage: return .init(id: key, title: "Usage", icon: .chartNoAxesColumn)
+            case .workflows: return .init(id: key, title: "Workflows", icon: .workflow)
             }
         }
         strip.selected = list.selectedKey

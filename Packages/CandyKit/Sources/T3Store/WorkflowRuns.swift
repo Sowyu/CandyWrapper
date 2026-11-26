@@ -35,6 +35,10 @@ public struct WorkflowRunNode: Hashable, Sendable {
     /// In the order they started.
     public var children: [WorkflowRunNode]
     public var questions: [WorkflowQuestion]
+
+    public init(run: WorkflowRun, children: [WorkflowRunNode] = [], questions: [WorkflowQuestion] = []) {
+        self.run = run; self.children = children; self.questions = questions
+    }
 }
 
 /// One workflow and its runs that nobody has to act on (`WorkflowSection`, :112-122).

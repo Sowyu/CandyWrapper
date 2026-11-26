@@ -14,6 +14,8 @@ public final class RouteHistory {
         /// The 4928 Issues page.
         case issues
         case usage
+        /// The 5258 Workflows page (`/_chat/workflows`).
+        case workflows
 
         /// Whether the window title names the open thread. T3 reads the thread from the route's params
         /// (appInit.tsx:130-137, 149-186 at 4928), and Settings, Pull Requests, Issues and Usage have none, so
@@ -21,7 +23,7 @@ public final class RouteHistory {
         public var titlesOpenThread: Bool {
             switch self {
             case .thread, .draft: true
-            case .settings, .pullRequests, .issues, .usage: false
+            case .settings, .pullRequests, .issues, .usage, .workflows: false
             }
         }
     }

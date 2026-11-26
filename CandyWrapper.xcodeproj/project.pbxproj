@@ -67,6 +67,7 @@
 		BDA16E87CBD63885B93ACFBC /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 360B9D001D2A45C506332714 /* Sparkle */; };
 		BDDAD381D146759DB3794FBE /* snap-shot-click.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */; };
 		BF1F29DA6CF47B45F5F97BB4 /* notification-input.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 162121B8686607C8F5B9672C /* notification-input.mp3 */; };
+		C95B420432F3C6158673CA6B /* WorkflowsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEABD5D8B44478535B57C576 /* WorkflowsPage.swift */; };
 		C96452D36BFF7AE73672A212 /* T3Client in Frameworks */ = {isa = PBXBuildFile; productRef = C7D08B4D8BE9EBFA3061FF4B /* T3Client */; };
 		CC7E68D849C3162650E6B75F /* DevicePanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FB28D3B3DDFE3381D8B0971 /* DevicePanelController.swift */; };
 		D04967BBAD49F7F1B64DD6CC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0ACDB71C0AB4AD9E24120A0 /* AppDelegate.swift */; };
@@ -150,6 +151,7 @@
 		F3F9CF3EEFBA5031F1DD6EF6 /* DitherTabsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DitherTabsController.swift; sourceTree = "<group>"; };
 		F6D7325FDDA600E04CFFD7E0 /* AppIconVariants.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = AppIconVariants.xcassets; sourceTree = "<group>"; };
 		FB4A3C4266BFC2E4F7D1B326 /* PaletteAddProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteAddProject.swift; sourceTree = "<group>"; };
+		FEABD5D8B44478535B57C576 /* WorkflowsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsPage.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -258,6 +260,7 @@
 				35F79E1B4BAC92B09DE28732 /* UsageController.swift */,
 				EA598ADFC895B496C79E89EE /* WelcomeOnboardingController.swift */,
 				B99968B6FD148C941FC19A74 /* WindowTitleController.swift */,
+				FEABD5D8B44478535B57C576 /* WorkflowsPage.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -460,6 +463,7 @@
 				87959F581610CF381EEC6C11 /* UsageController.swift in Sources */,
 				A35346E84F4C99825C662E3B /* WelcomeOnboardingController.swift in Sources */,
 				52378F915EC8DA1BADA94480 /* WindowTitleController.swift in Sources */,
+				C95B420432F3C6158673CA6B /* WorkflowsPage.swift in Sources */,
 				71718717C7EBF952C5C3D99D /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
