@@ -456,6 +456,16 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
     /// `serverTime` (4928 contracts server.ts, #36420): the host's clock when it built the config, so live timers count
     /// against host timestamps despite clock skew. Only a subscription's first snapshot is fresh. Absent before 4928.
     public var serverTime: T3Timestamp?
+    /// `managedPolicy` (contracts server.ts:729, managedPolicy.ts:140-147 at 5258): the administrator's policy summary.
+    public var managedPolicy: JSONValue?
+
+    /// `managedCapabilityDenial` (managedPolicy.ts:223-236 at 5258): "{organization}'s policy does not allow {label}." when
+    /// the policy's limits switch `capability` off, else nil.
+    public func managedCapabilityDenial(_ capability: String, label: String) -> String? {
+        guard let policy = managedPolicy, let organization = policy["organization"]?.stringValue,
+              policy["limits"]?[capability]?.boolValue == false else { return nil }
+        return "\(organization)'s policy does not allow \(label)."
+    }
 
     public init(providers: [ServerProvider], settings: ServerThreadDefaults = ServerThreadDefaults(), keybindings: [ResolvedKeybindingRule] = [],
                 capabilities: Set<String> = [], keybindingsConfigPath: String? = nil) {
@@ -470,7 +480,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         case providers, settings, keybindings, environment, keybindingsConfigPath, availableEditors, remoteOpenTargets, shellRevealInFileManager,
              shellRevealInFileManagerKind,
              scratchWorkspaceRoot, newProjectsRoot, lastEventLoopStall, threadFind, threadFindProgressive, threadLinkMetadata, observability, issues,
-             directEndpoints, serverTime, cwd
+             directEndpoints, serverTime, cwd, managedPolicy
     }
 
     public init(from decoder: Decoder) throws {
@@ -483,6 +493,7 @@ public struct ServerProviderConfig: Decodable, Hashable, Sendable {
         cwd = try? c.decodeIfPresent(String.self, forKey: .cwd)
         environmentLabel = environment?["label"]?.stringValue
         serverTime = try? c.decodeIfPresent(T3Timestamp.self, forKey: .serverTime)
+        managedPolicy = try? c.decodeIfPresent(JSONValue.self, forKey: .managedPolicy)
         capabilities = Set((environment?["capabilities"]?.objectValue ?? [:]).compactMap { $0.value.boolValue == true ? $0.key : nil })
         // These flags live at ServerConfig's top level (server.ts:687-688).
         if try c.decodeIfPresent(Bool.self, forKey: .threadFind) == true { capabilities.insert("threadFind") }

@@ -2102,7 +2102,6 @@ final class ComposerController {
 
     /// `ensureWorktreeLayoutApproved` (worktreeLayoutApproval.ts at 5258, #42386). The server refuses unapproved
     /// commands either way, so a read that fails lets the send go on to that answer.
-    // ponytail: no managed-policy check (`managedCapabilityDenial`); the server's refusal names the policy instead
     private func ensureWorktreeLayoutApproved(projectId: String, projectTitle: String) async -> WorktreeLayoutApprovalView.Outcome {
         let scoped = ProjectId(projectId)
         guard let env = scoped.environmentId, let session = environments.session(env) else { return .proceed }
@@ -2113,6 +2112,8 @@ final class ComposerController {
               let all = try? (read["commands"] ?? .array([])).decode(as: [WorktreeLayoutCommand].self) else { return .proceed }
         let commands = all.filter { !$0.approved }
         guard !commands.isEmpty else { return .proceed }
+        // An approval would change nothing; the server's refusal names the policy (worktreeLayoutApproval.ts:103-107).
+        if serverConfigs[env]?.managedCapabilityDenial("worktreeLayoutCommands", label: "project worktree layout commands") != nil { return .proceed }
         if let auth, !auth.grants(AuthScopes.terminalOperate) { return .blocked(WorktreeLayoutApprovalView.cannotApproveMessage) }
         guard let window = panel.window else { return .cancelled }
         let approved = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in

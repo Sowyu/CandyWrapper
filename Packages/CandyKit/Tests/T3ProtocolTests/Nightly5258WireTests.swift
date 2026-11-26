@@ -179,4 +179,16 @@ struct Nightly5258WireTests {
         let older = try Self.decode(ConversationMessage.self, "{" + base + "}")
         #expect(older.followsThreadSelection == nil)
     }
+
+    /// managedPolicy.ts:223-236 at 5258: a policy that switches a capability off names the organization.
+    @Test func managedPolicyDeniesWorktreeLayoutCommands() throws {
+        func config(_ limits: String) throws -> ServerProviderConfig {
+            try JSONDecoder().decode(ServerProviderConfig.self, from: Data(#"{"providers":[],"managedPolicy":{"organization":"Example Corp","lockedSettings":[],"limits":\#(limits)}}"#.utf8))
+        }
+        #expect(try config(#"{"worktreeLayoutCommands":false}"#).managedCapabilityDenial("worktreeLayoutCommands", label: "project worktree layout commands")
+            == "Example Corp's policy does not allow project worktree layout commands.")
+        #expect(try config(#"{"worktreeLayoutCommands":true}"#).managedCapabilityDenial("worktreeLayoutCommands", label: "x") == nil)
+        #expect(try config("{}").managedCapabilityDenial("worktreeLayoutCommands", label: "x") == nil)
+        #expect(ServerProviderConfig(providers: []).managedCapabilityDenial("worktreeLayoutCommands", label: "x") == nil)
+    }
 }
