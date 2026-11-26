@@ -470,7 +470,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             // The rows' own height; the dock sets the popup's height from this and the pane, within a floor and a ceiling.
             if let frozenHeight { return CGSize(width: Self.detailListWidth, height: frozenHeight) }
             let list = sections.rows.isEmpty ? listTop + emptyListHeight : listContentHeight + listTop + listBottom
-            return CGSize(width: Self.detailListWidth, height: 6 + Self.detailSearchRow + 1 + list + 1)
+            return CGSize(width: Self.detailListWidth, height: 6 + Self.detailSearchRow + 1 + list + 1 + noticesHeight)
         }
         if docked { return CGSize(width: Self.width(capy), height: capy ? Self.capyHeight : Self.maxHeight) }
         if let frozenHeight { return CGSize(width: Self.width(capy), height: frozenHeight) }
@@ -488,8 +488,13 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     }
     private var footerHeight: CGFloat { (showsSharing ? ChatGptSharingControlView.height : 0) + noticesHeight }
     private var noticeViews: [ProviderUpdateNoticeView] = []
-    /// Notices span the list column, right of the rail. Docked layouts size from their dock and show none.
-    private var noticeWidth: CGFloat { Self.width(capy) - (sections.showsRail ? railW : 0) }
+    /// Notices span the list column, right of the rail. Redesign's docked layouts take them under their own column: the
+    /// stacked one across its width, the detail one under the list card.
+    private var noticeWidth: CGFloat {
+        if stacked { return bounds.width > 0 ? bounds.width : Self.stackedWidth }
+        if detailed { return (bounds.width > 0 ? bounds.width : Self.detailListWidth) - detailListLeft }
+        return Self.width(capy) - (sections.showsRail ? railW : 0)
+    }
     private var noticesHeight: CGFloat { noticeViews.reduce(0) { $0 + $1.height(forWidth: noticeWidth) } }
 
     /// `updateRequiredNotices` (ModelPickerContent.tsx:827-843 at 5258): the shown instance's notice, or every
@@ -497,7 +502,6 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     private func syncNotices() {
         noticeViews.forEach { $0.removeFromSuperview() }
         noticeViews = []
-        guard !docked else { return }
         let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
         let shown = catalog.entries.filter { e in
             guard e.isVisibleInPicker else { return false }
