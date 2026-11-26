@@ -227,6 +227,8 @@ struct RedesignBaselineTests {
                     }
                 }
             }
+            // A file past the paged viewer's limit says so with the state view.
+            try capture("large-file-limit", LargeTextFileView(file: nil, sizeBytes: 600_000_000, preview: ""), NSSize(width: 460, height: 320))
             // Project avatars at the sizes they show: palette and chips, sidebar, account card, a large preview.
             for size in [CGFloat(16), 20, 28, 64] {
                 let strip = DSView(frame: .zero)
@@ -336,7 +338,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 140)
+        #expect(count == 142)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

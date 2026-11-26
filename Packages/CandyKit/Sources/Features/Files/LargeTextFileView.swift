@@ -101,7 +101,35 @@ public final class LargeTextFileView: DSView {
         l.alignment = .center
         addSubview(l)
         failure = l
+        // Redesign says it with its state view, as the Files panel's own errors do.
+        let state = EmptyView(title: "")
+        // The muted line is only ever "This file is empty.".
+        state.redesign = muted ? StateCopy(title: "This file is empty", icon: .fileText)
+            : StateCopy(title: "Can't preview this file", detail: text, icon: .fileText)
+        addSubview(state)
+        failureState = state
+        failureMuted = muted
         if !muted { scroll.isHidden = true }
+        syncFailure()
+    }
+    private var failureState: EmptyView?
+    private var failureMuted = false
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+
+    /// Redesign shows the state view in place of the line, and an error drops the empty status strip above it.
+    private func syncFailure() {
+        guard let failure, let failureState else { return }
+        failure.isHidden = redesign
+        failureState.isHidden = !redesign
+        let hideStrip = redesign && !failureMuted
+        status.isHidden = hideStrip
+        statusBorder.isHidden = hideStrip
+        needsLayout = true
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        syncFailure()
     }
 
     /// Line `i`, read with its page.
@@ -146,6 +174,8 @@ public final class LargeTextFileView: DSView {
         // `absolute right-4 bottom-3`.
         spinner?.frame = NSRect(x: w - 16 - 16, y: bounds.height - 12 - 16, width: 16, height: 16)
         failure?.frame = NSRect(x: 24, y: 40 + 24, width: max(0, w - 48), height: 16)
+        let stateTop: CGFloat = statusBorder.isHidden ? 0 : 40
+        failureState?.frame = NSRect(x: 0, y: stateTop, width: w, height: max(0, bounds.height - stateTop))
     }
 
     public override func updateLayer() {
