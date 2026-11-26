@@ -1692,7 +1692,9 @@ final class ComposerController {
         let id = thread.id
         let runtime = SidebarModel.shellRuntime(thread)
         if runtime != nil { try await stopSessions(thread) }
-        panel.toasts.show(ToastView(title: "Agent session will restart", message: "Your next message starts a fresh session.", kind: .success))
+        // CommandPalette.tsx:1601-1605 at 5258 (#42880): the conversation is kept.
+        panel.toasts.show(ToastView(title: "Agent session will restart", message: "Your next message restarts the agent. This conversation is kept.",
+                                    kind: .success))
         guard let env = id.environmentId, let cwd else { return }
         let instance = runtime != nil ? thread.providerInstanceId.rawValue : thread.modelSelection.instanceId.rawValue
         let basis = serverConfigs[env]?.providers.first { $0.instanceId.rawValue == instance }
