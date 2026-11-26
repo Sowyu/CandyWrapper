@@ -51,7 +51,7 @@ public enum UsageFallback {
     public static func providerDefault(_ catalog: ProviderCatalog) -> ModelSelection? {
         let group = catalog.entries.filter { $0.driver == catalog.entries.first?.driver }
         let pick = { (entries: [ProviderInstanceEntry]) in
-            entries.first(where: \.isReady) ?? entries.first { $0.isSelectable && $0.provider.status != .error }
+            entries.first(where: \.isHealthy) ?? entries.first { $0.isSelectable && $0.provider.status != .error }
         }
         guard let entry = pick(group) ?? pick(catalog.entries), let model = entry.defaultModel else { return nil }
         return ModelSelection(instanceId: entry.id, model: model)
