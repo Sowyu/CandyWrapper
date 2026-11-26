@@ -427,7 +427,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 369b46900c | #42480 | fix(web): Enter saves the default viewport size and skipped runs kept | settings | already (viewport fields commit on Return, SettingsBrowserViewportControl.swift:56-61; skipped runs field 0ecbb07a) |
 | 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | ported 4b07f98d (short commit id below 36rem, the hidden-tests link from 42rem, the only-hidden-tests state), diff read 2026-11-25 |
 | 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | holds for reloads (CW reads an open file again only on Force Reload); grant renewal ported 46522128. CW never reloads a changed preview after an agent command either: left, follow `workspaceMutationId` and `fileRevision` (S) |
-| 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | ported a6197a0d (step line and note; summary line not yet) |
+| 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | ported a6197a0d, e7039927 (step line, panel note, timeline's "withdrawn by") |
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
 | 3d4fd8346e | #42563 | fix(web): long Pull Requests author and label filters no longer end in a broken character | other | n/a (Swift Characters; files read) |
@@ -443,7 +443,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 4568a1b741 | #42932 | fix(web): unsupported file preview no longer calls extensionless filenames a file type | files | n/a (CW previews unsupported files with QuickLook; its fallback names no file type) |
 | 457a52eb0a | #42312 | fix(web): opening a resolved PR comment keeps its toggle under the cursor | pull requests | already (CW's opened resolved card puts nothing before the toggle; it has no Resolve button there), diff read 2026-11-25 |
 | 45c011e218 | #42875 | fix(web): reopening a closed pull request tab keeps saved list filters | shell | ported 05c24604 |
-| 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | ported a6197a0d (words; no hourglass icon) |
+| 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | ported a6197a0d, e7039927 (words, the queue card's hourglass) |
 | 46eb376dda | #41677 | fix(web): a new price row mapped to a model asks for its model ID | settings | ported 2075c1a4: a new row with no model ID shows its error and invalid field |
 | 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | ported 40fa9c76: only the latest check attempt lands, and Test stays enabled for a corrected URL. This is the user's own OpenTelemetry export, not T3 telemetry |
 | 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d476c29f |
@@ -775,3 +775,11 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - Projects > Repositories' Add folder dialog now has T3's browse list (ea13818e), the part 640d7b91 left out.
 - CW's licenses page still draws each notice as a settings row with a chevron button; T3's rows are full-width collapsible triggers. The header now matches.
 - Five rows marked n/a from their subjects were not: #41005, #41742 and #41756 change the web client as well as the server, and #39067 and #41122 are the user's own OpenTelemetry export and Diagnostics' resource monitor, not T3 telemetry.
+## Corrections from the second workflows pass (2026-11-25)
+
+- 8.1: the run tabs are T3's default ToggleGroup, which is `segmented` at 5258 (ui/toggle-group.tsx:16), stretched with `w-full *:flex-1`.
+- 8.1: the page header has a Definitions button (WorkflowsPage.tsx:243-248) whenever an environment is picked.
+- 8.1: `workflowChip`'s 700 and 300 tones use sky-700, violet-700, rose-300 and rose-700, which 4928's tokens lack; CW crashed on them until 0fb934ac.
+- 8.2: the hourglass is the queue and wait cards' mark in the step panel (WorkflowRunFeed.tsx:1626-1646); the timeline row says the queue words only.
+- 7be3a767cc: T3 knows its own session from `GET /api/auth/session`, whose body has `sessionId` (state/session.ts:56-62).
+

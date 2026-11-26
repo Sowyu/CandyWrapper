@@ -45,6 +45,10 @@ final class SidebarCommands {
         let c = WorkflowsPageController(environments: environments, config: { [weak self] in self?.threads.composer.config($0) })
         c.page.onEscape = { [weak self] in self?.goBack() }
         c.openSettingsLabs = { [weak self] in self?.openSettingsItem?(SettingsSearch.items.first { $0.id == "workflows-beta" }!) }
+        c.openThread = { [weak self] env, threadId in
+            self?.closeUtilityPage()
+            self?.threads.open(ThreadId(threadId).scoped(to: env))
+        }
         return c
     }()
     /// `useWorkflowEnvironmentIds().length > 0` (CommandPalette.tsx:527): a connected server has workflows on.
