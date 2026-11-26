@@ -65,6 +65,13 @@ if [ ! -e "$slot" ]; then
   git -C "$repo" worktree add -q --detach "$slot" "$base" || { release; exit 1; }
   echo "slot $n is new, so its first build is cold; scripts/warm-refresh keeps free slots built" >&2
 fi
+# /usr/libexec/tmp_cleaner deletes files in /tmp untouched for 3 days, at midnight (docs/gotchas.md). Repair a
+# slot whose .git link it took, bring back the tracked files that are missing (and only those: edits and new
+# files stay as they are for the check below), and mark the slot and its Xcode build as used, so a task that
+# runs past midnight keeps its files. touch -a leaves modify times alone, so nothing rebuilds.
+[ -e "$slot/.git" ] || git -C "$repo" worktree repair "$slot" >/dev/null 2>&1 || true
+git -C "$slot" ls-files -d -z | (cd "$slot" && xargs -0 git checkout -q --) 2>/dev/null || true
+find -x "$slot" "/tmp/cw-dd-slot-$n" -type f -atime +1 -exec touch -a {} + 2>/dev/null || true
 if [ -n "$(git -C "$slot" status --porcelain)" ]; then
   release; echo "$slot has leftover changes; look at them before reusing the slot" >&2; exit 1
 fi

@@ -39,6 +39,16 @@ Run them from the repo root.
 
 `scripts/test` wraps `swift test` and first waits out any Origin energy run, as `scripts/preflight`, `scripts/run-app` and `scripts/perf-review` do. Agents run `scripts/test --mine`: it picks the test files you changed, every test file named after the `Features/<Area>` folder you touched, test files named after the source files you touched, `RedesignTokenGuardTests`, and `RedesignBaselineTests` when a view changed. The integrator runs `scripts/test --fast` after every merge and the full suite before a release, so agents don't run those. `swift test` never builds the app target, so every task that edits `App/Sources` runs `scripts/check-app-build` before its last commit and fixes what it prints. Don't call `swift test` directly. It takes several minutes, so run it in the background with a 30-minute limit. `scripts/run-app` runs until the app quits, so start it in the background too. An interrupted test run can leave a `t3 serve --base-dir .../Packages/CandyKit/.build/localserver-...` behind. Stop that PID.
 
+## Commands that stop for a person
+
+Claude Code asks for approval before any shell command it can't read the way the shell would, because it can't rule out an `rm` hidden in it. No setting skips that check: not Full access, and not CandyWrapper's Unrestricted. An agent nobody is watching then waits until a person answers. On 2026-11-26 a delegate sat for 31 minutes on a `python3 - <<'EOF'` script that only edited one file.
+
+- Write a script to a file with the Write tool and run the file. Don't pipe it into `python3`, `node`, `sh` or `swift` through a heredoc, and don't pass it with `-c` or `-e`.
+- Change files with the Edit and Write tools, not with `sed -i`, `cat > file <<EOF` or a script that rewrites them.
+- Keep shell commands plain: no `eval`, no `trap` strings, no command built up in a variable and run later.
+- If Claude Code does ask, and the command deletes nothing, send it again in plain syntax. If it deletes something, leave that part to the user.
+- When you run other agents, look at `task_status` for `pendingApproval` and `hasPendingQuestion` each time you wake, and tell the user at once. A parent can't answer a child's approval.
+
 ## Code map
 
 `App/Sources` is the app target: the window, the sessions and the controllers that join the client to the screens, like `MainWindow`, `ShellSession`, `ThreadSession`, `ServerController` and `UpdateController`. Everything else lives in the CandyKit package, `Packages/CandyKit/Sources`.
@@ -125,6 +135,7 @@ Git and secrets:
 - Run at most four at once. Check each with `task_status` within two minutes, and cancel stalled ones with `task_cancel`.
 - Every brief says "Do not start other agents". Nested agents once multiplied the cost.
 - Research and spelled-out edits go to `claude-sonnet-5-5` at effort `medium`, judgement calls to `claude-opus-5-5` at effort `medium`.
+- Every brief also says to keep to "Commands that stop for a person" above, since a delegate that hits that prompt waits for the user.
 - Give each agent its own task name and a warm worktree: run `scripts/warm-worktree <task>` and name the path it prints in the brief, instead of `isolation: "worktree"`, whose new path builds everything from nothing. The brief ends with `scripts/warm-worktree --done <task>` after the last commit. `scripts/warm-worktree` runs `scripts/preflight` itself.
 - After merging, run `scripts/warm-refresh` in the background, so free slots rebuild main while nobody waits. Then run `scripts/test --fast` on main. Agents run only `scripts/test --mine`.
 - Agents test their apps at the same time from behind, with `--background` and the tools in `/tmp/cw-ui`. Only hover, drags and native menus still go through the screen lock.
