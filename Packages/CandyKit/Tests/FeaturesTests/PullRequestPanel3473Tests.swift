@@ -68,9 +68,11 @@ struct PullRequestPanel3473Tests {
 
     @Test func checksCountAndBreakdown() throws {
         let c = { (s: String) in PullRequestCheck(name: s, status: s) }
-        #expect(PullRequestDetailLogic.checksCountLabel([c("success"), c("pending"), c("action-required")]) == "1/3")
-        #expect(PullRequestDetailLogic.checksCountLabel([c("success"), c("failure"), c("cancelled")]) == "2 failed")
-        #expect(PullRequestDetailLogic.checksCountLabel([c("success")]) == "")
+        #expect(PullRequestDetailLogic.checksCountLabel([c("failure"), c("cancelled"), c("action-required"), c("pending"), c("success")]) == "2 failed")
+        #expect(PullRequestDetailLogic.checksCountLabel([c("action-required"), c("pending"), c("pending")]) == "1 awaiting action")
+        #expect(PullRequestDetailLogic.checksCountLabel([c("pending"), c("pending"), c("success"), c("skipped")]) == "2 running")
+        #expect(PullRequestDetailLogic.checksCountLabel([c("success"), c("skipped"), c("neutral")]) == "")
+        #expect(PullRequestDetailLogic.checksCountLabel([]) == "")
         // Older servers send no docs; kinds without lines leave no row.
         let b = try JSONDecoder().decode(PullRequestChangeBreakdown.self, from: Data(#"""
         {"code":{"additions":10,"deletions":2},"tests":{"additions":4,"deletions":0},"mocks":{"additions":0,"deletions":0},"generated":{"additions":0,"deletions":9}}

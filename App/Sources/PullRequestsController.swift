@@ -520,7 +520,9 @@ final class PullRequestDetailBinding {
                     self.view.show(d)
                     if let t = self.target { self.onStatus?(t.surfaceId, PullRequestStateTone(state: d.state, isDraft: d.isDraft)) }
                 } else {
-                    self.reload(invalidate: action == "update-branch" || action == "approve-workflows")
+                    // Only update-branch asks the host to refresh; approved workflows reread from the
+                    // server's own state (5258 pullRequestDetail.logic.ts:1618-1630, 2514a5ce5e #42523).
+                    self.reload(invalidate: action == "update-branch")
                 }
             } catch {
                 guard let self else { return }
