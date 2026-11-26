@@ -44,7 +44,8 @@ public final class ComposerView: DSView {
     /// The thread's runs as the primary action reads them.
     /// A draft (new thread) route: `draftThreadRoute` for the send keybindings.
     public var isDraftRoute = false { didSet { if isDraftRoute != oldValue { relayoutHeight() } } }
-    /// A compaction blocks steering, so a send queues (`canSteer`, ChatComposer.tsx at 4928, #24138).
+    /// The running turn takes no steer, so a send queues (`canSteer`): a compaction blocks it (#24138), or the provider
+    /// session cannot steer at all (`threadCanSteer`, client-runtime threadWorkflows.ts at 5258, #40767).
     public var isCompacting = false { didSet { if isCompacting != oldValue { refresh() } } }
     public var runState = ComposerLogic.RunState() {
         didSet {
@@ -643,7 +644,8 @@ public final class ComposerView: DSView {
                 let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraftRoute, "turnRunning": true,
                                                  "composerRequiresModifier": ComposerLogic.requiresModifier(sendShortcut, prompt: prompt)])
                 let chord = ActiveKeymap.label(for: "composer.sendAlternate", context: context).map { " or \($0)" } ?? ""
-                primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), ⌘-click\(chord) to \(other)"
+                // Without a steer the tooltip is the label (ComposerPrimaryActions.tsx:431-437 at 5258).
+                primary.tooltip = isCompacting ? "Queue message" : "Click to \(action), ⌘-click\(chord) to \(other)"
                 // The label is `submitLabel`, not the click hint (ComposerPrimaryActions.tsx:280-289, 328).
                 primary.setAccessibilityLabel(face == .queue ? "Queue message" : "Steer message")
             }

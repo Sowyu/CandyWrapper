@@ -84,6 +84,36 @@ struct ComposerLogicTests {
         #expect(try !state("running").canPromoteToSteer)
     }
 
+    /// QueuedRunsControl.tsx:281-347 at 5258 (#40316): a queued slash command's Send now moves it to the front of the
+    /// queue; `/goal` and anything with an attachment keep "Send into the current turn".
+    @Test func aQueuedCommandMovesToTheFront() {
+        #expect(L.movesCommandFirst(text: " /review now", attachmentCount: 0))
+        #expect(L.movesCommandFirst(text: "/plugin:run", attachmentCount: 0))
+        #expect(!L.movesCommandFirst(text: "/goal ship it", attachmentCount: 0))
+        #expect(!L.movesCommandFirst(text: "/goal", attachmentCount: 0))
+        #expect(L.movesCommandFirst(text: "/goals", attachmentCount: 0))
+        #expect(!L.movesCommandFirst(text: "/review", attachmentCount: 1))
+        #expect(!L.movesCommandFirst(text: "fix /review", attachmentCount: 0))
+        let state = L.QueueState(items: [.init(runId: nil, messageId: nil, text: "/review")])
+        #expect(L.queuedSteerTip(state, state.items[0]) == "Move this command to the front of the queue")
+        #expect(L.queuedSteerTip(state, .init(runId: nil, messageId: nil, text: "hello")) == "Send into the current turn")
+    }
+
+    /// `supportsSteering` and `threadCanSteer` (threadWorkflows.ts at 5258, #40767): a restart needs interrupt support,
+    /// and a session that cannot steer queues every send.
+    @Test func sessionsThatCannotSteerQueue() {
+        func turns(_ active: Bool, _ interrupt: Bool, _ restart: Bool) -> JSONValue {
+            .object(["supportsActiveSteering": .bool(active), "supportsInterrupt": .bool(interrupt),
+                     "supportsSteeringByInterruptRestart": .bool(restart)])
+        }
+        #expect(L.QueueState.supportsSteering(turns(true, false, false)))
+        #expect(L.QueueState.supportsSteering(turns(false, true, true)))
+        #expect(!L.QueueState.supportsSteering(turns(false, false, true)))
+        #expect(!L.QueueState.supportsSteering(nil))
+        #expect(!L.QueueState.sessionCannotSteer(nil))
+        #expect(L.sendMode(running: true, alternate: true, steerByDefault: false, canSteer: false) == .queue)
+    }
+
     @Test func sendShortcutModes() {
         let enter = L.Key(isReturn: true), mod = L.Key(isReturn: true, mod: true)
         // mode, prompt, key, expected

@@ -1787,7 +1787,7 @@ final class ComposerController {
         if let id = runState.resumableRunId, let projection, RunStartup.resumeUnavailable(id, in: projection) {
             runState.resumableRunId = nil
         }
-        composer.isCompacting = ComposerLogic.compactionBlocksSteering(projection, compactCommandActive: projection.map {
+        composer.isCompacting = ComposerLogic.QueueState.sessionCannotSteer(projection) || ComposerLogic.compactionBlocksSteering(projection, compactCommandActive: projection.map {
             let state = TimelineRunState(projection: $0)
             return state.isWorking && TimelineRunState.compactRequestActive($0, latestRun: state.latestRun)
         } ?? false)

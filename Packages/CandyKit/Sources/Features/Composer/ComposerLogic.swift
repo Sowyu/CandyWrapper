@@ -404,6 +404,22 @@ public enum ComposerLogic {
         openQuestionCount > 0 ? "Answer the question to edit queued messages" : nil
     }
 
+    /// `isSlashCommand(message) && parseGoalCommand(message) === null` (shared composerTrigger.ts:166-171,
+    /// contracts orchestrationV2.ts:684-705).
+    public static func movesCommandFirst(text: String, attachmentCount: Int) -> Bool {
+        guard attachmentCount == 0 else { return false }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.range(of: #"^/[\w:-]+(?:\s|$)"#, options: .regularExpression) != nil else { return false }
+        return t.range(of: #"^/goal(?:\s|$)"#, options: .regularExpression) == nil
+    }
+
+    /// The Send now tooltip of a queued row (QueuedRunsControl.tsx:324-347 at 5258).
+    public static func queuedSteerTip(_ state: QueueState, _ item: QueueState.Item) -> String {
+        state.canSendNow ? "Start a turn with this message"
+            : state.promoteSkipsCompaction ? "Skip compaction and send this message"
+            : item.movesCommandFirst ? "Move this command to the front of the queue" : "Send into the current turn"
+    }
+
     public struct QueueState: Sendable, Equatable {
         public struct Item: Sendable, Equatable {
             /// Nil while the message is still optimistic: every action is disabled.
@@ -417,6 +433,11 @@ public enum ComposerLogic {
             /// Starts its own turn (`run.freshContext`), so it cannot steer into the running one.
             public var freshContext = false
             public var isEditable: Bool { guestName == nil }
+            /// A slash command that isn't `/goal`: the server runs it after the turn, so Send now moves it to the
+            /// front of the queue (QueuedRunsControl.tsx:281-283 at 5258, #40316).
+            public var movesCommandFirst: Bool {
+                ComposerLogic.movesCommandFirst(text: message?.text ?? text, attachmentCount: message?.attachments.count ?? 0)
+            }
             public init(runId: RunId?, messageId: MessageId?, text: String, guestName: String? = nil, message: ChatMessage? = nil,
                         freshContext: Bool = false) {
                 self.runId = runId; self.messageId = messageId; self.text = text; self.guestName = guestName; self.message = message
@@ -480,10 +501,24 @@ public enum ComposerLogic {
                 ($0.attachments ?? []).isEmpty && $0.role == "user" && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact"
             } == true
             canReorder = turns?["supportsQueuedMessages"] == .bool(true)
-            let steers = turns?["supportsActiveSteering"] == .bool(true) || turns?["supportsSteeringByInterruptRestart"] == .bool(true)
+            let steers = Self.supportsSteering(turns)
             // A run still preparing its worktree takes the steer once it is ready (threadWorkflows.ts:184-189 at 4928, #34581).
             let preparing = activeRun?.status == .preparing || activeRun?.status == .starting
             canPromoteToSteer = promoteSkipsCompaction || preparing && (turns == nil || steers) || steerable && steers
+        }
+
+        /// `supportsSteering` (client-runtime threadWorkflows.ts at 5258, #40767): active steering, or an interrupt that
+        /// restarts the turn with the steer. A restart without interrupt support no longer counts.
+        public static func supportsSteering(_ turns: JSONValue?) -> Bool {
+            turns?["supportsActiveSteering"] == .bool(true)
+                || turns?["supportsInterrupt"] == .bool(true) && turns?["supportsSteeringByInterruptRestart"] == .bool(true)
+        }
+
+        /// `threadCanSteer`' first rule: a session that attached and cannot steer queues every send. A steer sent before
+        /// the session attaches waits for its provider turn.
+        public static func sessionCannotSteer(_ p: ThreadProjection?) -> Bool {
+            guard let p, let turns = providerSession(p)?["capabilities"]?["turns"] else { return false }
+            return !supportsSteering(turns)
         }
 
         /// `canSendRun` (QueuedRunsControl.tsx:123-127 at 4928): a fresh message may skip compaction, but not steer into a turn.
