@@ -11,6 +11,7 @@ final class PendingApprovalInlineView: DSView {
     private let detail = DetailTextView()
     private let scroll = NSScrollView()
     private let note = TextBlockView()
+    private let hooks = PushHooksApprovalDetailsView()
     private let shield = IconView(name: .shield, size: 12, strokeColor: Themed.color(\.warning))
     private let status = LabelView("", font: DSFont.ui(12), color: Themed.color(\.warning))
     private let separator = LabelView("·", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
@@ -54,7 +55,7 @@ final class PendingApprovalInlineView: DSView {
                                    label: PendingApproval.fullAccessOverrideQuestion)
         }
         why.action = { [weak tip] in tip?.show(instant: true) }
-        [icon, scroll, note, shield, status, separator, more, why].forEach(addSubview)
+        [icon, scroll, hooks, note, shield, status, separator, more, why].forEach(addSubview)
     }
 
     func configure(_ approval: PendingApproval, threadId: ThreadId, enabled: Bool) {
@@ -62,15 +63,20 @@ final class PendingApprovalInlineView: DSView {
         self.threadId = threadId
         self.enabled = enabled && approval.canRespond
         icon.removeFromSuperview()
-        icon = IconView(name: approval.requestKind == .command ? .terminal : approval.requestKind == .fileRead ? .eye : approval.requestKind == .fileChange ? .squarePen : .wrench, size: 16, strokeColor: Themed.color(\.iconMuted))
+        icon = IconView(name: approval.pushHooks != nil || approval.requestKind == .command ? .terminal : approval.requestKind == .fileRead ? .eye : approval.requestKind == .fileChange ? .squarePen : .wrench, size: 16, strokeColor: Themed.color(\.iconMuted))
         addSubview(icon)
+        // A push hooks approval asks in a plain `text-sm leading-relaxed` sentence, not the mono detail (5258
+        // TimelinePendingApprovalRow.tsx:54-77).
+        let question = approval.pushHooks != nil && approval.canRespond
         let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = 20
-        paragraph.maximumLineHeight = 20
+        paragraph.minimumLineHeight = question ? 22 : 20
+        paragraph.maximumLineHeight = question ? 22 : 20
         // Breaks only after spaces (SpaceBreaks).
         paragraph.lineBreakMode = .byWordWrapping
         detail.textStorage?.setAttributedString(NSAttributedString(string: SpaceBreaks.marked(approval.detailText), attributes: [
-            .font: DSFont.mono(12), .foregroundColor: Themed.color(\.foreground), .paragraphStyle: paragraph]))
+            .font: question ? DSFont.ui(14) : DSFont.mono(12), .foregroundColor: Themed.color(\.foreground), .paragraphStyle: paragraph]))
+        hooks.rows = approval.pushHooks?.rows ?? []
+        hooks.isHidden = hooks.rows.isEmpty
         detail.setAccessibilityLabel(approval.label)
         note.text = [approval.appName, approval.reason].compactMap { $0 }.joined(separator: "\n")
         note.isHidden = note.text.isEmpty
@@ -121,7 +127,11 @@ final class PendingApprovalInlineView: DSView {
         manager.ensureLayout(for: container)
         return ceil(manager.usedRect(for: container).height)
     }
-    private func noteHeight(_ width: CGFloat) -> CGFloat { note.isHidden ? 0 : note.height(forWidth: max(1, width - 32)) + 4 }
+    private func noteHeight(_ width: CGFloat) -> CGFloat {
+        (note.isHidden ? 0 : note.height(forWidth: max(1, width - 32)) + 4) + hooksHeight(width)
+    }
+    /// The details sit first in the `flex-col gap-1` under the question.
+    private func hooksHeight(_ width: CGFloat) -> CGFloat { hooks.isHidden ? 0 : hooks.height(forWidth: max(1, width - 32)) + 4 }
     private var actionViews: [NSView] { [shield, status, separator].filter { !$0.isHidden } + actions + [more, why].filter { !$0.isHidden } }
     private func width(_ view: NSView) -> CGFloat {
         if view === shield { return 12 }
@@ -147,7 +157,9 @@ final class PendingApprovalInlineView: DSView {
         scroll.frame = NSRect(x: 32, y: -2, width: max(0, bounds.width - 32), height: dh)
         let fullHeight = textHeight(scroll.bounds.width)
         detail.setFrameSize(NSSize(width: scroll.bounds.width, height: max(dh, fullHeight)))
-        note.frame = NSRect(x: 32, y: dh, width: max(0, bounds.width - 32), height: max(0, nh - 4))
+        let hh = hooksHeight(bounds.width)
+        hooks.frame = NSRect(x: 32, y: dh, width: max(0, bounds.width - 32), height: max(0, hh - 4))
+        note.frame = NSRect(x: 32, y: dh + hh, width: max(0, bounds.width - 32), height: max(0, nh - hh - 4))
         var x: CGFloat = 32, y = dh + nh + 1
         for view in actionViews {
             let w = width(view)

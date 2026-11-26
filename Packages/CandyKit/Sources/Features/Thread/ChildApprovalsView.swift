@@ -115,6 +115,8 @@ final class ChildApprovalCardView: DSView {
     private let title = TextBlockView()
     private let detailScroll = NSScrollView()
     private let detail = TextBlockView()
+    /// A push hooks approval's question in `mb-1`, then its branch and hooks (ChildThreadApprovals.tsx:38-43 at 5258).
+    private let hooks = PushHooksApprovalDetailsView()
     private var notes: [TextBlockView] = []
     private var actions: [ThreadStatusLineAction] = []
     private let more = ThreadStatusLineAction()
@@ -146,7 +148,7 @@ final class ChildApprovalCardView: DSView {
         more.tone = .muted
         more.setAccessibilityLabel("More approval options")
         more.action = { [weak self] in self?.openMenu() }
-        [title, detailScroll, more, errorText].forEach(addSubview)
+        [title, detailScroll, hooks, more, errorText].forEach(addSubview)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
     }
@@ -161,7 +163,11 @@ final class ChildApprovalCardView: DSView {
         setAccessibilityLabel("Approval from \(entry.title)")
         title.text = "Approval needed from \(entry.title)"
         title.color = Themed.color(\.foreground)
-        detail.text = approval.detail.flatMap { $0.isEmpty ? nil : $0 } ?? approval.requestKind.rawValue
+        detail.text = approval.pushHooks != nil ? PendingApproval.pushHooksQuestion
+            : approval.detail.flatMap { $0.isEmpty ? nil : $0 } ?? approval.requestKind.rawValue
+        detail.font = approval.pushHooks != nil ? DSFont.ui(12) : DSFont.mono(12)
+        hooks.rows = approval.pushHooks?.rows ?? []
+        hooks.isHidden = hooks.rows.isEmpty
         detail.color = Themed.color(\.foreground)
         notes.forEach { $0.removeFromSuperview() }
         var lines: [(String, KeyPath<Palette, TokenColor>)] = []
@@ -227,6 +233,7 @@ final class ChildApprovalCardView: DSView {
     func height(forWidth width: CGFloat) -> CGFloat {
         let w = inner(width)
         var h = Self.pad + title.height(forWidth: w) + 8 + min(detailMaxHeight, detail.height(forWidth: w))
+        if !hooks.isHidden { h += 4 + hooks.height(forWidth: w) }
         for note in notes { h += 8 + note.height(forWidth: w) }
         h += 8 + actionRows(w).height
         if error != nil { h += 8 + errorText.height(forWidth: w) }
@@ -260,6 +267,11 @@ final class ChildApprovalCardView: DSView {
         detailScroll.frame = NSRect(x: x, y: y, width: w, height: min(detailMaxHeight, dh))
         detail.frame = NSRect(x: 0, y: 0, width: w, height: dh)
         y += min(detailMaxHeight, dh)
+        if !hooks.isHidden {
+            let hh = hooks.height(forWidth: w)
+            hooks.frame = NSRect(x: x, y: y + 4, width: w, height: hh)
+            y += 4 + hh
+        }
         for note in notes {
             y += 8
             let h = note.height(forWidth: w)

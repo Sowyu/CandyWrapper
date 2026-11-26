@@ -56,10 +56,44 @@ public struct PendingApproval: Hashable, Sendable {
     public var fullAccessOverride: String?
     /// A decline can carry feedback for the agent (`responseCapability.supportsFeedback`, threadRequests.ts:158-160).
     public var supportsFeedback: Bool
+    /// Set when T3 Code itself asks to run a repository's push hooks (5258 threadRequests.ts:63-64, #42535).
+    public var pushHooks: PushHooks?
+
+    /// `ProviderApprovalPushHooks` (5258 packages/contracts/src/providerPolicy.ts:83-89).
+    public struct PushHooks: Hashable, Sendable, Decodable {
+        public struct Command: Hashable, Sendable, Decodable { public var name: String; public var command: String }
+        public var branch: String
+        /// Hook files, relative to the checkout when they are in it.
+        public var files: [String]
+        /// Hooks Git's configuration defines.
+        public var commands: [Command]
+
+        public init(branch: String, files: [String] = [], commands: [Command] = []) {
+            self.branch = branch; self.files = files; self.commands = commands
+        }
+
+        public struct Row: Hashable, Sendable {
+            public var label: String
+            /// Plain text ahead of the code: a configured hook's name.
+            public var name: String?
+            /// A branch, file path or command.
+            public var code: String
+        }
+
+        /// `pushHooksApprovalRows` (threadRequests.ts:82-95): the branch, then each hook the push would run.
+        public var rows: [Row] {
+            [Row(label: "Branch", code: branch)] + files.map { Row(label: "Hook file", code: $0) }
+                + commands.map { Row(label: "Configured hook", name: $0.name, code: $0.command) }
+        }
+    }
+
+    /// `PUSH_HOOKS_APPROVAL_LABEL` and `PUSH_HOOKS_APPROVAL_QUESTION` (threadRequests.ts:70-71).
+    public static let pushHooksLabel = "Push hooks approval"
+    public static let pushHooksQuestion = "Run this repository's push hooks?"
 
     public init(requestId: String, requestKind: RuntimeRequestKind, createdAt: T3Timestamp? = nil, detail: String? = nil,
                 appName: String? = nil, options: [ApprovalOption]? = nil, canRespond: Bool = true,
-                reason: String? = nil, fullAccessOverride: String? = nil, supportsFeedback: Bool = false) {
+                reason: String? = nil, fullAccessOverride: String? = nil, supportsFeedback: Bool = false, pushHooks: PushHooks? = nil) {
         self.requestId = requestId
         self.requestKind = requestKind
         self.createdAt = createdAt
@@ -70,6 +104,7 @@ public struct PendingApproval: Hashable, Sendable {
         self.reason = reason
         self.fullAccessOverride = fullAccessOverride
         self.supportsFeedback = supportsFeedback
+        self.pushHooks = pushHooks
     }
 
     /// `FULL_ACCESS_OVERRIDE_QUESTION` (threadRequests.ts:58).
@@ -91,7 +126,8 @@ public struct PendingApproval: Hashable, Sendable {
 
     /// ComposerPendingApprovalPanel.tsx:16-25.
     public var label: String {
-        switch requestKind {
+        if pushHooks != nil { return Self.pushHooksLabel }
+        return switch requestKind {
         case .mcpElicitation: "App access approval"
         case .command: "Command approval"
         case .fileRead: "File read approval"
@@ -103,6 +139,8 @@ public struct PendingApproval: Hashable, Sendable {
     /// The panel's detail line (ComposerPendingApprovalPanel.tsx:84-86).
     public var detailText: String {
         if !canRespond { return "Provider process is gone. Interrupt or restart the run to respond." }
+        // T3 Code's own question reads as the app asking (TimelinePendingApprovalRow.tsx:54-77).
+        if pushHooks != nil { return Self.pushHooksQuestion }
         if let detail, !detail.isEmpty { return detail }
         return label
     }
@@ -233,7 +271,8 @@ public struct PendingRequests: Hashable, Sendable {
                 canRespond: capability == "live",
                 reason: item?.string("reason").flatMap { $0.isEmpty ? nil : $0 },
                 fullAccessOverride: item?.string("fullAccessOverride"),
-                supportsFeedback: capability == "live" && request.responseCapability?.supportsFeedback == true))
+                supportsFeedback: capability == "live" && request.responseCapability?.supportsFeedback == true,
+                pushHooks: item?.approvalPushHooks.flatMap { try? $0.decode(as: PendingApproval.PushHooks.self) }))
         }
         result.approvals = oldestFirst(result.approvals, \.createdAt)
         result.userInputs = oldestFirst(result.userInputs, \.createdAt)
