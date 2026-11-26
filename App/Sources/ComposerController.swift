@@ -4544,7 +4544,20 @@ extension ComposerController {
                 SkillDetailsView.show(skill: skill, from: self.composer, onViewInstructions: open)
                 return true
             }
-            guard case .context(_, let contextId, _) = token.kind else { return false }
+            guard case .context(let kind, let contextId, _) = token.kind else { return false }
+            // `ThreadContextChip` is a `Link` to the thread (ThreadContextChip.tsx:40-68 at 5258); a thread on a machine
+            // the open thread's environment links to reads there read-only, like a message's chip (MarkdownThreadLink.tsx:84-115).
+            if kind == "thread", let record = self.menuState.records[contextId],
+               let owner = record["environmentId"]?.stringValue, let local = record["threadId"]?.stringValue {
+                let via = self.openThreadId?.environmentId
+                if let via, owner != via, let label = self.panel.model.linkedEnvironmentLabel?(owner) {
+                    self.panel.model.onOpenLinkedThread?(LinkedThreadSurfaceTarget(
+                        viaEnvironmentId: via, environmentId: owner, threadId: local, label: label, title: record["title"]?.stringValue))
+                } else {
+                    self.panel.model.onOpenThread?(ThreadId("t3-thread://v2/\(owner)/\(local)"))
+                }
+                return true
+            }
             if let queued = self.queuedAttachment(contextId: contextId), let id = queued["id"]?.stringValue {
                 if queued["type"]?.stringValue == "image" { self.expandQueuedImage(id) } else { self.openSentAttachment(queued, download: false) }
                 return true
