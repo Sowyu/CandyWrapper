@@ -301,8 +301,9 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
         scrollView.frame = bounds
         if !findWidget.isHidden {
             // Where the diff panel puts it: 32pt in from the scroller's end, 40pt down (DiffPanelView.swift).
+            findWidget.availableWidth = bounds.width - 8
             let size = findWidget.preferredSize
-            findWidget.frame = NSRect(x: bounds.maxX - 32 - size.width + DiffFindWidget.overhang, y: 40 - DiffFindWidget.overhang,
+            findWidget.frame = NSRect(x: max(4, bounds.maxX - 32 - size.width + DiffFindWidget.overhang), y: 40 - DiffFindWidget.overhang,
                                       width: size.width, height: size.height)
         }
         if !comments.isEmpty, commentWidth != laidOutWidth { applyComments() }
@@ -496,27 +497,32 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
     /// The picked lines' rows get the selection fill (rendering attributes leave the text alone).
     private func showSelectedLines() { redrawHighlights() }
 
-    /// The picked lines, then the find matches over them. Both are rendering attributes, so the text storage
-    /// and its undo stay untouched.
+    /// The picked lines as a rendering attribute, then the find matches as a text background. Rendering
+    /// attributes did not repaint in a live window, while storage attributes do, as the syntax colors show; the
+    /// edit goes straight to the storage, so it leaves undo and `onChange` alone.
     private func redrawHighlights() {
         guard let tlm = textView.textLayoutManager, let content = tlm.textContentManager else { return }
         tlm.removeRenderingAttribute(.backgroundColor, for: content.documentRange)
-        func textRange(_ from: Int, _ to: Int) -> NSTextRange? {
-            guard let a = content.location(content.documentRange.location, offsetBy: from),
-                  let b = content.location(content.documentRange.location, offsetBy: to) else { return nil }
-            return NSTextRange(location: a, end: b)
-        }
         if let lines = selectedLines {
             let start = paragraphRange(lines.lowerBound + 1), end = paragraphRange(lines.upperBound + 1)
-            if let range = textRange(start.location, end.location + end.length) {
+            if let a = content.location(content.documentRange.location, offsetBy: start.location),
+               let b = content.location(content.documentRange.location, offsetBy: end.location + end.length),
+               let range = NSTextRange(location: a, end: b) {
                 tlm.addRenderingAttribute(.backgroundColor, value: Themed.color(\.accent), for: range)
             }
         }
-        for (i, match) in findMatches.enumerated() {
-            guard let range = textRange(match.location, NSMaxRange(match)) else { continue }
-            tlm.addRenderingAttribute(.backgroundColor, value: i == findIndex ? DiffStyle.searchMatchCurrent : DiffStyle.searchMatch, for: range)
+        guard let storage = textView.textStorage, highlightsMatches || !findMatches.isEmpty else { return }
+        settingText = true
+        storage.beginEditing()
+        storage.removeAttribute(.backgroundColor, range: NSRange(location: 0, length: storage.length))
+        for (i, match) in findMatches.enumerated() where NSMaxRange(match) <= storage.length {
+            storage.addAttribute(.backgroundColor, value: i == findIndex ? DiffStyle.searchMatchCurrent : DiffStyle.searchMatch, range: match)
         }
+        storage.endEditing()
+        settingText = false
+        highlightsMatches = !findMatches.isEmpty
     }
+    private var highlightsMatches = false
 
     /// The 0-based line under a point in the text view.
     fileprivate func line(atDocumentY y: CGFloat) -> Int? {

@@ -20,6 +20,14 @@ final class DiffFindWidget: DSView {
     /// The close button's half overhangs the box; the view keeps that room above and to the right.
     static let overhang: CGFloat = 10
     static let fieldWidth: CGFloat = 200, gap: CGFloat = 6, inset: CGFloat = 5, navWidth: CGFloat = 48
+    /// The room the host gives it. A narrow pane shrinks the field, down to the toggles plus a little text.
+    var availableWidth: CGFloat = .greatestFiniteMagnitude { didSet { if availableWidth != oldValue { needsLayout = true } } }
+    private var fieldWidth: CGFloat {
+        let fixed = 2 * Self.inset + Self.gap + countWidth + Self.gap + Self.navWidth + Self.overhang
+        return max(80, min(Self.fieldWidth, availableWidth - fixed))
+    }
+    /// Below this the case, word and regex toggles leave the field too little room, so they hide.
+    private var showsToggles: Bool { fieldWidth >= 140 }
 
     /// `1 of 3`, or `No results` in the dimmer `[data-no-matches]` color.
     var countText = "" {
@@ -46,7 +54,7 @@ final class DiffFindWidget: DSView {
     private var countWidth: CGFloat { max(50, ceil(count.textWidth)) }
     /// The box: border 1, padding 4, then field, count and nav on a 6pt grid gap.
     var boxSize: CGSize {
-        CGSize(width: 2 * Self.inset + Self.fieldWidth + Self.gap + countWidth + Self.gap + Self.navWidth, height: 38)
+        CGSize(width: 2 * Self.inset + fieldWidth + Self.gap + countWidth + Self.gap + Self.navWidth, height: 38)
     }
     var preferredSize: CGSize { CGSize(width: boxSize.width + Self.overhang, height: boxSize.height + Self.overhang) }
 
@@ -58,16 +66,19 @@ final class DiffFindWidget: DSView {
         self.box.layout(boxSize: box.size)
         self.box.frame.origin.y += box.minY
         let x = box.minX + Self.inset, y = box.minY + Self.inset
-        fieldBox.layout(boxSize: CGSize(width: Self.fieldWidth, height: 28))
+        fieldBox.layout(boxSize: CGSize(width: fieldWidth, height: 28))
         fieldBox.frame.origin.x += x
         fieldBox.frame.origin.y += y
         CATransaction.commit()
-        field.frame = NSRect(x: x + 1, y: y + 1, width: Self.fieldWidth - 2, height: 26)
+        field.frame = NSRect(x: x + 1, y: y + 1, width: fieldWidth - 2, height: 26)
         // `[data-search-toggles]`: 4pt from the field's end, 1pt apart, centered.
+        let padding: (CGFloat?, CGFloat?) = (6, showsToggles ? 72 : 6)
+        if field.paddingOverride != padding { field.paddingOverride = padding }
         for (i, toggle) in [matchCase, wholeWord, regex].enumerated() {
-            toggle.frame = NSRect(x: x + Self.fieldWidth - 4 - 62 + CGFloat(i) * 21, y: y + 4, width: 20, height: 20)
+            toggle.isHidden = !showsToggles
+            toggle.frame = NSRect(x: x + fieldWidth - 4 - 62 + CGFloat(i) * 21, y: y + 4, width: 20, height: 20)
         }
-        let countX = x + Self.fieldWidth + Self.gap
+        let countX = x + fieldWidth + Self.gap
         count.frame = NSRect(x: countX, y: y + 4, width: countWidth, height: 20)
         let navX = countX + countWidth + Self.gap
         previous.frame = NSRect(x: navX, y: y + 2, width: 24, height: 24)
