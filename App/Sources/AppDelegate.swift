@@ -277,6 +277,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return await settings.saveActions(writes)
         }
         threads.composer.openProviderSetup = { [weak settings] in settings?.open(.providers) }
+        threads.openEnvironments = { [weak settings] in settings?.open(.connections) }
         threads.automations.openSettings = { [weak settings] env, taskId in settings?.openScheduledTasks(environmentId: env, taskId: taskId) }
         environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings

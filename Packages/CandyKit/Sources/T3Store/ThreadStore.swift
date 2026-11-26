@@ -133,6 +133,12 @@ public actor ThreadStore {
         publish(reducer.applySnapshot(snapshot))
     }
 
+    /// The oldest row the thread shows, as `keepLinkedThreadView`'s `restoreThrough` names it (5258 linkedThread.ts:345).
+    public func oldestShownItemId() -> TurnItemId? { reducer.projection?.visibleTurnItems.first?.sourceItemId }
+
+    /// Whether a row is among the ones shown (`includesHistoryAnchor`, linkedThread.ts:239-244).
+    public func shows(_ itemId: TurnItemId) -> Bool { reducer.projection?.visibleTurnItems.contains { $0.sourceItemId == itemId } ?? false }
+
     /// Marks a load-earlier request as running and returns what to fetch, or nil.
     public func beginLoadEarlier(throughEntryId: String? = nil) -> ThreadHistoryRequest? {
         let request = reducer.beginLoadEarlier(throughEntryId: throughEntryId)

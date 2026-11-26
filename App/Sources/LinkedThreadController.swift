@@ -14,15 +14,23 @@ final class LinkedThreadController {
     private let panel: ThreadPanelView
     private let environments: Environments
     private var shown: Shown?
+    /// The main-screen page (LinkedThreadPage.tsx), over the thread panel while it shows.
+    private var page: Shown?
+    var isShowingPage: Bool { page != nil }
 
     @MainActor private final class Shown {
         let target: LinkedThreadSurfaceTarget
-        let pane = LinkedThreadPaneView()
+        let pane: LinkedThreadPaneView
+        let page: LinkedThreadPageView?
         var session: ThreadSession?
         var working = false
         var hasThread = false
         var failure: RPCClientError?
-        init(target: LinkedThreadSurfaceTarget) { self.target = target }
+        init(target: LinkedThreadSurfaceTarget, page: LinkedThreadPageView? = nil) {
+            self.target = target
+            self.page = page
+            pane = page?.pane ?? LinkedThreadPaneView()
+        }
     }
 
     init(panel: ThreadPanelView, environments: Environments) {
@@ -36,8 +44,29 @@ final class LinkedThreadController {
 
     /// A shell for the via environment arrived or changed: the shown pane follows it.
     func sync() {
-        guard let s = shown, let shell = environments.session(s.target.viaEnvironmentId) else { return }
-        s.session?.attach(shell)
+        for s in [shown, page].compactMap({ $0 }) {
+            if let shell = environments.session(s.target.viaEnvironmentId) { s.session?.attach(shell) }
+        }
+    }
+
+    /// Shows `target` on the main screen over `host`, replacing a page already there.
+    func showPage(_ target: LinkedThreadSurfaceTarget, over host: NSView) {
+        closePage()
+        let view = LinkedThreadPageView(frame: host.bounds)
+        view.autoresizingMask = [.width, .height]
+        view.title = target.title ?? "Thread on \(target.label)"
+        let s = Shown(target: target, page: view)
+        page = s
+        start(s)
+        host.addSubview(view)
+    }
+
+    /// Leaves the page: its stream ends, so nothing runs for it once another route shows.
+    func closePage() {
+        guard let s = page else { return }
+        s.session?.end()
+        s.page?.removeFromSuperview()
+        page = nil
     }
 
     private func show(_ target: LinkedThreadSurfaceTarget?) {
@@ -50,8 +79,20 @@ final class LinkedThreadController {
         guard let target else { return }
         let s = Shown(target: target)
         shown = s
+        start(s)
+        panel.sideChatHost.show(s.pane)
+        syncPane(s)
+    }
+
+    private func start(_ s: Shown) {
+        let target = s.target
         s.pane.chat.model.environmentId = target.environmentId
-        s.pane.onRetry = { [weak self, weak s] in s?.failure = nil; self?.syncPane(); s?.session?.retryLinked() }
+        s.pane.onRetry = { [weak self, weak s] in
+            guard let s else { return }
+            s.failure = nil
+            self?.syncPane(s)
+            s.session?.retryLinked()
+        }
         let id = ThreadId(target.threadId).scoped(to: target.environmentId)
         let session = ThreadSession(threadId: id, panel: s.pane.chat, sidebar: nil,
                                     linked: .init(via: target.viaEnvironmentId, environmentId: target.environmentId))
@@ -64,21 +105,21 @@ final class LinkedThreadController {
             if !title.isEmpty, self.shown === s {
                 self.panel.mutatePanel { $0.setLinkedThreadTitle(target.surfaceId, title: title); return [] }
             }
-            self.syncPane()
+            if !title.isEmpty { s.page?.title = title }
+            self.syncPane(s)
         }
         session.onLinkedFailure = { [weak self, weak s] error in
             guard let s else { return }
             s.failure = error
-            self?.syncPane()
+            self?.syncPane(s)
         }
         s.session = session
         if let shell = environments.session(target.viaEnvironmentId) { session.attach(shell) }
-        panel.sideChatHost.show(s.pane)
-        syncPane()
+        syncPane(s)
     }
 
-    private func syncPane() {
-        guard let s = shown else { return }
+    private func syncPane(_ s: Shown) {
+        guard s === shown || s === page else { return }
         let target = s.target
         s.pane.bar.status = LinkedThreads.status(label: target.label, via: via(target), working: s.hasThread && s.working)
         if let failure = s.failure, !failure.isTransport {

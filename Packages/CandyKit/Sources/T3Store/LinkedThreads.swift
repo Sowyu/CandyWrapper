@@ -79,3 +79,24 @@ public enum LinkedThreads {
         capabilities.contains(PeerLinkRPC.threadStreamCapability)
     }
 }
+
+/// Where a side thread opens (5258 packages/client-runtime/src/sideThread.ts:59-88): the `sideThreadOpenTarget`
+/// preference for a plain click, the other place for a Cmd-click or a middle click, and the main screen whenever
+/// there is no panel to open it in.
+public enum SideThreadOpen: String, Sendable, Equatable {
+    case panel, main
+
+    public enum Intent: Sendable, Equatable { case primary, alternate }
+
+    public static func resolve(preference: String, intent: Intent, panelAvailable: Bool) -> SideThreadOpen {
+        guard panelAvailable else { return .main }
+        let preferred = SideThreadOpen(rawValue: preference) ?? .panel
+        switch intent {
+        case .primary: return preferred
+        case .alternate: return preferred == .panel ? .main : .panel
+        }
+    }
+
+    /// `sideThreadOpenIntentOf` on macOS: the middle button or Cmd is the alternate intent.
+    public static func intent(command: Bool, middleButton: Bool) -> Intent { middleButton || command ? .alternate : .primary }
+}
