@@ -54,7 +54,26 @@ final class ServerUpdates {
         return id
     }
 
+    func unobserve(_ id: UUID) { observers[id] = nil }
+
     func changed() { for o in observers.values { o() } }
+
+    /// The launcher's id of each accepted update that still runs, kept for a pass this app relaunches in.
+    private var updateIds: [String: String] = [:]
+    func updateId(_ environmentId: String) -> String? { updateIds[environmentId] }
+
+    /// `followHandedOffServers` sets the update state of a server that a relaunch left restarting (updateEverythingRun.tsx:331-341),
+    /// so nothing offers its update again until it is back; `followed: nil` ends that.
+    func setFollowed(_ environmentId: String, targetVersion: String?) {
+        guard tasks[environmentId] == nil else { return }
+        if let targetVersion {
+            states[environmentId] = .running(stage: .resuming, fromVersion: descriptor(environmentId)?.serverVersion ?? targetVersion,
+                                             targetVersion: targetVersion)
+        } else if states[environmentId]?.isRunning == true {
+            states[environmentId] = .idle
+        }
+        changed()
+    }
 
     /// A new session for the environment: follow its lifecycle so a restarted server's version shows.
     func sessionChanged(_ environmentId: String) {
@@ -64,6 +83,8 @@ final class ServerUpdates {
             let id = UUID()
             shell.lifecycleObservers[id] = { [weak self] json in
                 if json["type"]?.stringValue == "welcome" { self?.checkedDescriptors[environmentId] = nil; self?.changed() }
+                // A ready can carry the outcome of an update a relaunched pass still follows.
+                else if json["type"]?.stringValue == "ready" { self?.changed() }
             }
             lifecycle[environmentId] = (shell, id)
         }
@@ -234,7 +255,10 @@ final class ServerUpdates {
             do {
                 let result = try await ServerUpdater.run(supervisor: shell.supervisor, targetVersion: mismatch.client,
                                                          continueRunningThreads: continueThreads, capabilities: caps,
-                                                         channel: switchTarget?.channel, targetDatabaseMigration: switchTarget?.databaseMigration) { stage, target in
+                                                         channel: switchTarget?.channel, targetDatabaseMigration: switchTarget?.databaseMigration,
+                                                         onAccepted: { accepted in
+                    await MainActor.run { self?.updateIds[environmentId] = accepted.updateId }
+                }) { stage, target in
                     await MainActor.run {
                         self?.states[environmentId] = .running(stage: stage, fromVersion: from, targetVersion: target)
                         self?.changed()
@@ -258,6 +282,7 @@ final class ServerUpdates {
                 if quiet { quietFailures[environmentId] = message } else { toast(ToastView(title: failureTitle, message: message, kind: .error)) }
             }
             self?.tasks[environmentId] = nil
+            self?.updateIds[environmentId] = nil
             self?.changed()
         }
     }

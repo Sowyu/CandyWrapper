@@ -20,12 +20,15 @@ public enum ServerUpdater {
         public var description: String { message }
     }
 
-    /// `onStage` runs on every stage change. Throws `Failure`, or `CancellationError` when cancelled.
+    /// `onStage` runs on every stage change; `onAccepted` once the server accepted the update, before the restart, with
+    /// the launcher's `updateId` that a relaunched client needs to find the outcome (state/server.ts:1257-1262 at 5258).
+    /// Throws `Failure`, or `CancellationError` when cancelled.
     /// `channel` and `targetDatabaseMigration` go only with a Stable/Nightly switch (ServerUpdateAction.tsx:146-156 at 4928).
     public static func run(supervisor: ConnectionSupervisor, targetVersion requested: String, continueRunningThreads: Bool,
                            capabilities: ServerUpdateCapabilities, channel: String? = nil, targetDatabaseMigration: Int? = nil,
                            resumeTimeout: Duration = ServerUpdateLogic.resumeTimeout,
                            nudgeInterval: Duration = .seconds(1),
+                           onAccepted: (@Sendable (ServerSelfUpdateResult) async -> Void)? = nil,
                            onStage: @escaping @Sendable (ServerUpdateStage, String) async -> Void) async throws -> ServerSelfUpdateResult {
         let input = ServerUpdateLogic.input(targetVersion: requested, continueRunningThreads: continueRunningThreads,
                                             channel: channel, targetDatabaseMigration: targetDatabaseMigration)
@@ -52,6 +55,7 @@ public enum ServerUpdater {
                 commitLostTransport = true
             }
         }
+        await onAccepted?(result)
         await onStage(.resuming, result.targetVersion)
 
         // nudgeReconnectDuringUpdateRestart: the restart is expected, so retry every second instead of

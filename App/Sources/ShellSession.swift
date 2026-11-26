@@ -13,6 +13,8 @@ final class ShellSession {
     private var lifecycleSubscription: Task<Void, Never>?
     private(set) var welcome: JSONValue?
     var lifecycleObservers: [UUID: (JSONValue) -> Void] = [:]
+    /// The last lifecycle `ready`: the host replays it on subscribe, with the launcher's outcome of its last update.
+    private(set) var lastReady: ServerLifecycleReady?
     let environmentId: String
     let supervisor: ConnectionSupervisor
     let configFeed: ServerConfigFeed
@@ -129,6 +131,7 @@ final class ShellSession {
             await MainActor.run {
                 guard let self else { return }
                 if json["type"]?.stringValue == "welcome" { self.welcome = json["payload"] }
+                if let ready = ServerLifecycleReady(json) { self.lastReady = ready }
                 for observer in self.lifecycleObservers.values { observer(json) }
             }
         }

@@ -147,11 +147,13 @@ public enum UpdateEverythingLogic {
         public var isActive: Bool { self != .done && self != .failed }
     }
 
-    /// `UpdateRunMachine` (updateEverything.logic.ts:501-511). CandyWrapper restores no handed-off server after a
-    /// relaunch, so `server !== null` is `updatesServer`: it clears once the server updated, like T3's `server: null`.
+    /// `UpdateRunMachine` (updateEverything.logic.ts:501-511). `server !== null` is `updatesServer`: it clears once the
+    /// server updated, like T3's `server: null`. A row restored after a relaunch has neither, only `handedOffVersion`.
     public struct RunMachine: Equatable, Sendable {
         public var environmentId: String, label: String
         public var updatesProviders: Bool, updatesServer: Bool
+        /// `handedOffVersion`: the version a server restarts into, set on a row this app restored after its own relaunch.
+        public var handedOffVersion: String?
         /// Seconds since 1970 when this machine's current step began; a server's restarts when the providers finish.
         public var startedAt: Double
         /// `result`: set when every update for the machine has finished, true when one failed.
@@ -160,8 +162,8 @@ public enum UpdateEverythingLogic {
         /// A provider failure kept across a server retry, so the row stays failed after the server updates.
         public var providerFailure: String?
         public init(environmentId: String, label: String, updatesProviders: Bool, updatesServer: Bool, startedAt: Double = 0,
-                    failed: Bool? = nil, failure: String? = nil, providerFailure: String? = nil) {
-            self.environmentId = environmentId; self.label = label
+                    failed: Bool? = nil, failure: String? = nil, providerFailure: String? = nil, handedOffVersion: String? = nil) {
+            self.environmentId = environmentId; self.label = label; self.handedOffVersion = handedOffVersion
             self.updatesProviders = updatesProviders; self.updatesServer = updatesServer; self.startedAt = startedAt
             self.failed = failed; self.failure = failure; self.providerFailure = providerFailure
         }
@@ -195,9 +197,93 @@ public enum UpdateEverythingLogic {
     /// `resolveUpdateRunMachineStatus` (updateEverything.logic.ts:522-534).
     public static func status(_ m: RunMachine, phase: Run.Phase, server: ServerUpdateState) -> MachineStatus {
         if let failed = m.failed { return failed ? .failed : .done }
+        if m.handedOffVersion != nil { return .restarting }
         if phase == .providers, m.updatesProviders { return .providers }
         if m.updatesServer, case .running(let stage, _, _) = server { return stage == .resuming ? .restarting : .downloading }
         return .waiting
+    }
+
+    // MARK: A pass across this app's relaunch (updateEverythingRun.tsx:208-432 at 5258, #41964, #33002)
+
+    /// `HandedOffServer` (updateEverythingRun.tsx:212-219): a server still restarting when this app relaunched.
+    /// `updateId` is the service launcher's id for the update, which finds its outcome after the restart.
+    public struct HandedOffServer: Codable, Equatable, Sendable {
+        public var environmentId: String, label: String, targetVersion: String
+        public var startedAt: Double
+        public var updateId: String?
+        public init(environmentId: String, label: String, targetVersion: String, startedAt: Double, updateId: String? = nil) {
+            self.environmentId = environmentId; self.label = label; self.targetVersion = targetVersion
+            self.startedAt = startedAt; self.updateId = updateId
+        }
+    }
+
+    /// `HANDOFF_TIMEOUT_MS` (updateEverythingRun.tsx:211): a background service's 30-minute trial start, and then some.
+    public static let handoffTimeout: Double = 32 * 60
+    /// `SAVED_RESULT_MAX_AGE_MS`: a saved pass older than this belongs to an install that never relaunched the app.
+    public static let savedMaxAge: Double = 10 * 60
+
+    /// What `saveUpdateEverythingResult` keeps (updateEverythingRun.tsx:221-266): the result so far, and every row that
+    /// had not finished, with the version its server restarts into.
+    public struct SavedPass: Codable, Equatable, Sendable {
+        public var savedAt: Double
+        public var result: Result
+        public var handedOff: [HandedOffServer]?
+        public init(savedAt: Double, result: Result, handedOff: [HandedOffServer] = []) {
+            self.savedAt = savedAt; self.result = result; self.handedOff = handedOff
+        }
+    }
+
+    /// The unfinished rows to save. `target` gives a row's server target now: its running update's, else the pass's.
+    /// A provider-only row has no server to follow and is left out, as in T3.
+    public static func handedOff(_ run: Run?, target: (RunMachine) -> (version: String, updateId: String?)?) -> [HandedOffServer] {
+        (run?.machines ?? []).compactMap { m in
+            guard m.failed == nil else { return nil }
+            let found = m.handedOffVersion.map { (version: $0, updateId: nil as String?) } ?? (m.updatesServer ? target(m) : nil)
+            guard let found else { return nil }
+            return HandedOffServer(environmentId: m.environmentId, label: m.label, targetVersion: found.version, startedAt: m.startedAt,
+                                   updateId: found.updateId)
+        }
+    }
+
+    /// `takeSavedUpdateEverythingResult`: nil once the pass is too old to belong to this launch.
+    public static func takeSaved(_ data: Data?, now: Double) -> SavedPass? {
+        guard let data, let saved = try? JSONDecoder().decode(SavedPass.self, from: data), now - saved.savedAt < savedMaxAge else { return nil }
+        return saved
+    }
+
+    /// `followHandedOffServers` (updateEverythingRun.tsx:306-327): the capsule shows each restarting server again.
+    public static func restoredRun(_ servers: [HandedOffServer]) -> Run? {
+        servers.isEmpty ? nil : Run(localVersion: nil, phase: .servers, machines: servers.map {
+            RunMachine(environmentId: $0.environmentId, label: $0.label, updatesProviders: false, updatesServer: false,
+                       startedAt: $0.startedAt, handedOffVersion: $0.targetVersion)
+        })
+    }
+
+    /// How a followed server ended, from what it reports now: nil while it still restarts, `.some(nil)` once it runs the
+    /// target, `.some(why)` when its launcher rolled the update back or failed it (updateEverythingRun.tsx:379-421, #33002).
+    /// A rollback restarts the old version, which the version check never accepts, so only the outcome can end it.
+    public static func settlement(_ s: HandedOffServer, serverVersion: String?, ready: ServerLifecycleReady?) -> String?? {
+        if let v = serverVersion, !ServerVersionSkewLogic.serverIsBehind(v, client: s.targetVersion) { return .some(nil) }
+        guard let id = s.updateId, let outcome = ready?.updateOutcome, outcome.id == id, outcome.status != "committed" else { return nil }
+        // `ServerUpdateTerminalError.message` (client-runtime state/server.ts:165-195).
+        return .some(outcome.reason ?? "The t3@\(s.targetVersion) update \(outcome.status).")
+    }
+
+    /// `"Not back after {minutes} minutes"`, a followed server's failure once `handoffTimeout` passes.
+    public static let notBackMessage = "Not back after \(Int(handoffTimeout / 60)) minutes"
+
+    /// `RestoredRetry` (updateEverything.logic.ts:536-537): `.current` when the server already runs the target, so a
+    /// retry only settles the row; `.update` when it can update again now.
+    public enum RestoredRetry: Equatable, Sendable { case current, update }
+
+    /// `resolveRestoredRetry` (updateEverything.logic.ts:539-558, #41964): a failed row restored after this app relaunched
+    /// keeps only its target version, so its retry is rebuilt from the server as it is now. Nil when nothing can retry,
+    /// which includes a machine no longer among `current`.
+    public static func restoredRetry(_ m: RunMachine, current: [Machine]) -> RestoredRetry? {
+        guard m.failed == true, !m.updatesServer, let target = m.handedOffVersion,
+              let now = current.first(where: { $0.environmentId == m.environmentId }) else { return nil }
+        if now.connected, let v = now.serverVersion, !ServerVersionSkewLogic.serverIsBehind(v, client: target) { return .current }
+        return serverTargets([now], target: target).targets.isEmpty ? nil : .update
     }
 
     /// `closeFinishedUpdateRun` (updateEverything.logic.ts:564-570): a pass with nothing left to show closes.
@@ -230,9 +316,10 @@ public enum UpdateEverythingLogic {
         }
     }
 
-    /// `describeUpdateCapsule` (updateEverything.logic.ts:603-678). CandyWrapper has no restored rows, so a failed
-    /// machine can retry when its server still waits to update.
-    public static func describeCapsule(_ run: Run, statuses: [MachineStatus], local: LocalState?, now: Double) -> CapsuleView {
+    /// `describeUpdateCapsule` (updateEverything.logic.ts:603-678). A failed machine can retry when its server still
+    /// waits to update, or when it is a restored row with a `restored` retry (index for index with the machines).
+    public static func describeCapsule(_ run: Run, statuses: [MachineStatus], local: LocalState?, now: Double,
+                                       restored: [RestoredRetry?] = []) -> CapsuleView {
         if let seconds = run.restartSeconds(now: now) { return CapsuleView(tone: .default, label: "Restart in \(seconds)s", action: .later) }
         if run.phase == .installing { return CapsuleView(tone: .default, label: "Restarting…", action: nil) }
         let rows = Array(zip(run.machines, statuses))
@@ -246,10 +333,11 @@ public enum UpdateEverythingLogic {
         if case .downloading(let percent) = local {
             return CapsuleView(tone: .default, label: percent.map { "Downloading \(Int($0.rounded(.down)))%" } ?? "Downloading", action: nil)
         }
-        let failed = rows.filter { $0.1 == .failed }
+        let failed = rows.indices.filter { rows[$0].1 == .failed }
         if !failed.isEmpty {
-            return CapsuleView(tone: .failed, label: failed.count == 1 ? "\(failed[0].0.label) failed" : "\(failed.count) failed",
-                               action: failed.contains { $0.0.updatesServer } ? .retry : .dismiss)
+            let canRetry = failed.contains { rows[$0].0.updatesServer || (restored.indices.contains($0) && restored[$0] != nil) }
+            return CapsuleView(tone: .failed, label: failed.count == 1 ? "\(rows[failed[0]].0.label) failed" : "\(failed.count) failed",
+                               action: canRetry ? .retry : .dismiss)
         }
         return updated
     }
@@ -284,12 +372,16 @@ public enum UpdateEverythingLogic {
         }
     }
 
-    /// `getUpdateEverythingToastView`: one toast for a finished pass, nil when nothing finished.
-    public static func toast(_ r: Result, appVersion: String) -> (success: Bool, title: String, description: String?)? {
+    /// `getUpdateEverythingToastView` (updateEverything.logic.ts:725-766 at 5258): one toast for a finished pass, nil when
+    /// nothing finished. `restarting` names the servers a relaunched pass still follows.
+    public static func toast(_ r: Result, appVersion: String, restarting: [String] = []) -> (success: Bool, title: String, description: String?)? {
         let parts = [r.localVersion != nil && r.localVersion == appVersion ? "this app" : nil,
                      count(r.updatedServers, "server"), count(r.updatedProviders, "provider")].compactMap { $0 }
-        if r.failures.isEmpty { return parts.isEmpty ? nil : (true, "Updated \(joinList(parts))", nil) }
-        return (false, parts.isEmpty ? "Update failed" : "Updated \(joinList(parts))", r.failures.joined(separator: "\n"))
+        let still = restarting.isEmpty ? [] : ["\(joinList(restarting)) \(restarting.count == 1 ? "is" : "are") still restarting."]
+        if r.failures.isEmpty {
+            return parts.isEmpty ? nil : (true, "Updated \(joinList(parts))", still.isEmpty ? nil : still.joined(separator: "\n"))
+        }
+        return (false, parts.isEmpty ? "Update failed" : "Updated \(joinList(parts))", (r.failures + still).joined(separator: "\n"))
     }
 
     /// The confirmation's thread line (UpdateEverythingDialog.tsx:104-112), nil when nothing runs.
