@@ -20,11 +20,15 @@ struct NightlyCompatFeaturesTests {
 
     @Test func contextWindowTakesTheNewestReportAndItsTtl() throws {
         var p = try #require(try ThreadPreview.projection(titled: ThreadPreview.commandsThread))
-        // Upserts can leave an older report later in the list; the newer one by time wins.
+        // Upserts can leave an older report later in the list; the newer one by time wins. Since 5258 only the
+        // active provider thread's turns count (client-runtime state/contextWindow.ts:48-56), so the turns name it.
+        let active: JSONValue = p.thread.activeProviderThreadId.map { .string($0) } ?? .null
         p.providerTurns = [
-            .object(["tokenUsage": .object(["usedTokens": .number(200), "updatedAt": .string("2026-10-10T12:00:00.000Z"),
+            .object(["providerThreadId": active,
+                     "tokenUsage": .object(["usedTokens": .number(200), "updatedAt": .string("2026-10-10T12:00:00.000Z"),
                                             "promptCacheTtlMs": .number(300_000)])]),
-            .object(["tokenUsage": .object(["usedTokens": .number(100), "updatedAt": .string("2026-10-10T11:00:00.000Z")])]),
+            .object(["providerThreadId": active,
+                     "tokenUsage": .object(["usedTokens": .number(100), "updatedAt": .string("2026-10-10T11:00:00.000Z")])]),
         ]
         let usage = try #require(ThreadContextWindowUsage.derive(p))
         #expect(usage.used == 200)
