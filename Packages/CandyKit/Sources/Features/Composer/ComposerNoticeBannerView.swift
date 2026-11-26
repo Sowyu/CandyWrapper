@@ -42,6 +42,11 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         /// The description as text and `InlineButton tone="muted"` pieces, written whole into `description`
         /// for the measure and the details popup. While it fits, the pieces show and the links answer `onLink`.
         public var descriptionParts: [DescriptionPart]
+        /// Redesign's narrow pill: a short complete title ("Server update") before the full one is cut.
+        public var shortTitle: String?
+        /// Redesign's narrow pill: each action's icon, by index, so the action can drop its label to the icon and a
+        /// tooltip when there is no room. An action without one keeps its label.
+        public var actionIcons: [IconName?]
         public struct DescriptionPart: Equatable, Sendable {
             public var text: String
             /// The link's VoiceOver label; nil for plain text.
@@ -52,8 +57,10 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
                     dismissLabel: String? = nil, dismissible: Bool? = nil, compact: Bool = false,
                     priority: ComposerBannerStackItem.Priority? = nil, titlePrefix: String? = nil, titleCode: Bool = false,
                     titleTooltip: String? = nil, spinner: Bool = false, iconIsError: Bool = false, actionTooltip: String? = nil,
-                    dot: Dot? = nil, elapsedStartedAt: TimeInterval? = nil, descriptionParts: [DescriptionPart] = []) {
+                    dot: Dot? = nil, elapsedStartedAt: TimeInterval? = nil, descriptionParts: [DescriptionPart] = [],
+                    shortTitle: String? = nil, actionIcons: [IconName?] = []) {
             self.variant = variant; self.icon = icon; self.title = title
+            self.shortTitle = shortTitle; self.actionIcons = actionIcons
             self.description = descriptionParts.isEmpty ? description : descriptionParts.map(\.text).joined()
             self.actions = actions; self.dismissLabel = dismissLabel; self.dismissible = dismissible ?? (dismissLabel != nil)
             self.compact = compact; self.priority = priority
@@ -70,7 +77,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     private var spinnerView: SpinnerView?
     private let elapsed = glassLabel(font: SB.tabular(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
     private let prefix = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
-    private let title = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 24)
+    let title = glassLabel(font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground), lineHeight: 24)
     private let detail = glassLabel(font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 24)
     /// "Show notice details": shown only while the description is cut or hidden.
     public let detailsButton = ButtonView(nil, icon: .info, variant: .ghostMuted, size: .iconXs)
@@ -78,6 +85,10 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     public let titleDetailsButton = ButtonView(nil, icon: .info, variant: .ghostMuted, size: .iconXs)
     private var titleTip: TooltipController?
     private var buttons: [ButtonView] = []
+    /// Redesign's narrow pill: the actions as icons with their label as tooltip, nil where an action has no icon.
+    private var iconButtons: [ButtonView?] = []
+    /// Measures a title the label isn't showing.
+    private let measure = glassLabel(font: DSFont.ui(12, weight: .medium), color: .clear, lineHeight: 24)
     private var dotView: WorkDotView?
     private var partViews: [NSView] = []
     /// A link in `content.descriptionParts`, by its index there.
@@ -85,6 +96,7 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     public var disabledActions: Set<Int> = [] { didSet { updateActionAvailability() } }
     private func updateActionAvailability() {
         for (index, button) in buttons.enumerated() { button.isEnabled = !disabledActions.contains(index) }
+        for (index, button) in iconButtons.enumerated() { button?.isEnabled = !disabledActions.contains(index) }
     }
     private let dismiss = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
     public override var dismissControl: ButtonView? { dismiss.isHidden ? nil : dismiss }
@@ -182,6 +194,18 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
             addSubview(b)
             return b
         }
+        iconButtons.forEach { $0?.removeFromSuperview() }
+        iconButtons = content.actions.enumerated().map { index, label in
+            guard index < content.actionIcons.count, let icon = content.actionIcons[index] else { return nil }
+            let b = ButtonView(nil, icon: icon, variant: .ghost, size: .iconXs)
+            b.iconSize = 14
+            b.setTooltip(content.actionTooltip ?? label)
+            b.setAccessibilityLabel(label)
+            b.action = { [weak self] in self?.onAction?(index) }
+            b.isHidden = true
+            addSubview(b)
+            return b
+        }
         tickElapsed()
         updateActionAvailability()
         dismiss.isHidden = !content.dismissible
@@ -211,13 +235,44 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
     public var pillWidth: CGFloat {
         var w: CGFloat = 4 + 24 + 4
         if !prefix.isHidden { w += ceil(prefix.textWidth) + 6 }
-        w += ceil(title.textWidth) + 1
+        // The full title, though a narrow pill may be showing the short one.
+        w += titleWidth(content?.title ?? title.text) + 1
         if !detail.text.isEmpty { w += 4 + ceil(detail.textWidth) + 2 }
         var actions: CGFloat = buttons.reduce(0) { $0 + 4 + $1.intrinsicContentSize.width }
         if !dismiss.isHidden { actions += 4 + dismiss.intrinsicContentSize.width }
         // `layout()` keeps the actions column at least `min-w-12` plus its gap (#22236), so a lone X takes 52.
         if actions > 0 { actions = max(actions, 4 + 48) }
         return ceil(w + actions + 6 + 4)
+    }
+
+    private func titleWidth(_ text: String) -> CGFloat {
+        measure.font = title.font
+        measure.text = text
+        return ceil(measure.textWidth)
+    }
+
+    /// Redesign's narrow pill, in order until the title fits: the full title, the short title, then either with the
+    /// actions as icons. Past that the title is cut with an ellipsis, and the actions keep their room.
+    private func narrowPlan() -> (short: Bool, collapse: Bool) {
+        guard let content else { return (false, false) }
+        let short = content.shortTitle.map { !$0.isEmpty && $0 != content.title } ?? false
+        let canCollapse = iconButtons.contains { $0 != nil }
+        func room(_ collapse: Bool) -> CGFloat {
+            var actions: CGFloat = dismiss.isHidden ? 0 : dismiss.intrinsicContentSize.width + 4
+            for (i, b) in buttons.enumerated() { actions += ((collapse ? iconButtons[i] : nil) ?? b).intrinsicContentSize.width + 4 }
+            var right = bounds.width - 4 - actions
+            if actions > 0 { right = min(right, bounds.width - 4 - 48 - 4) }
+            if !elapsed.isHidden { right -= ceil(elapsed.textWidth) + 8 }
+            var x: CGFloat = 4 + 24 + 4
+            if !prefix.isHidden { x = ((x + ceil(prefix.textWidth) + 6) * 2).rounded() / 2 }
+            return right - x
+        }
+        let full = titleWidth(content.title) + 1, shortNeed = short ? titleWidth(content.shortTitle!) + 1 : .infinity
+        for (useShort, collapse) in [(false, false), (true, false), (false, true), (true, true)] {
+            if collapse && !canCollapse || useShort && !short { continue }
+            if (useShort ? shortNeed : full) <= room(collapse) { return (useShort, collapse) }
+        }
+        return (short, canCollapse)
     }
 
     public override func layout() {
@@ -228,7 +283,21 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         spinnerView?.frame = iconView.frame
         dotView?.frame = NSRect(x: 4 + 9, y: rowY + 9, width: 6, height: 6)
         var right = bounds.width - 4
-        let actionViews = [dismiss].filter { !$0.isHidden } + buttons.reversed()
+        let narrow = ditherFloating
+        let plan = narrow ? narrowPlan() : (short: false, collapse: false)
+        if let content {
+            let text = plan.short ? content.shortTitle ?? content.title : content.title
+            if title.text != text { title.text = text }
+        }
+        var shownButtons: [ButtonView] = []
+        for (i, b) in buttons.enumerated() {
+            let icon = plan.collapse ? iconButtons[i] : nil
+            b.isHidden = icon != nil
+            icon?.isHidden = false
+            if !plan.collapse { iconButtons[i]?.isHidden = true }
+            shownButtons.append(icon ?? b)
+        }
+        let actionViews = [dismiss].filter { !$0.isHidden } + shownButtons.reversed()
         // The last action's hover takes the card's corner: its top unless joined to a banner above, and a detached
         // card's bottom too (ComposerBanner.tsx at 4928, #29018). Redesign's pills keep their own shape.
         for b in actionViews { b.cornerRadii = nil }
@@ -261,10 +330,18 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         // A cut title makes room for its details button, `gap-1` after it; the measure leaves the
         // button's own width out, so it can't keep itself shown.
         let titleCut = ceil(title.textWidth) + 1 > max(0, right - x)
-        titleDetailsButton.isHidden = !titleCut
-        let titleWidth = titleCut ? max(0, right - x - 4 - 24) : ceil(title.textWidth) + 1
+        // Redesign's pill cuts the title with an ellipsis and keeps the whole title, the versions and the description
+        // in the title's tooltip, rather than spending the room on a details button.
+        titleDetailsButton.isHidden = !titleCut || narrow
+        if let content {
+            let tip = narrow && (titleCut || plan.short)
+                ? [content.title, content.titleTooltip, content.description].compactMap { $0 }.joined(separator: "\n")
+                : content.titleTooltip ?? ""
+            if let titleTip { titleTip.text = tip } else if !tip.isEmpty { titleTip = TooltipController.attach(to: title, text: tip) }
+        }
+        let titleWidth = titleCut ? max(0, right - x - (narrow ? 0 : 4 + 24)) : ceil(title.textWidth) + 1
         title.frame = NSRect(x: x, y: rowY, width: titleWidth, height: 24)
-        if titleCut {
+        if titleCut || plan.short {
             titleDetailsButton.frame = NSRect(x: x + titleWidth + 4, y: rowY, width: 24, height: 24)
             // ponytail: T3 keeps a zero-width description with its own details button; add it if a cut title with a description shows up
             detail.isHidden = true

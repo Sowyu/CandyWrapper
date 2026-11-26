@@ -56,6 +56,9 @@ public final class ButtonView: ControlView {
     public var iconColor: NSColor? { didSet { restyle() } }
     /// `font-mono` on the label (the keybinding When trigger).
     public var monospaced = false { didSet { restyle(); invalidateIntrinsicContentSize() } }
+    /// Redesign drops the filled variants' 1pt inset highlight, so the button's top edge matches the flat controls
+    /// beside it (the toast's action next to Dismiss).
+    var flatInRedesign = false { didSet { if flatInRedesign != oldValue { restyle() } } }
     /// A view after the label in the content group, such as the count pill on the Pull Requests
     /// page's Filters button. Sized by its intrinsic content size.
     public var accessory: NSView? {
@@ -314,6 +317,7 @@ public final class ButtonView: ControlView {
             look.box.shadows = [RedesignTokens.Shadow.resting.box]
             if state.hoverOrPressed { look.icon = Themed.color(\.contrastForeground); look.text = look.icon }
         }
+        if flatInRedesign, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) { look.box.shadows.removeAll { $0.inset } }
         if joinedSides.leading || joinedSides.trailing {
             var corners = BoxStyle.Corners.all
             if joinedSides.leading { corners.subtract(.leading) }

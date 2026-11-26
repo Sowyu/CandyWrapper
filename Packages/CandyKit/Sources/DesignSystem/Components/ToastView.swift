@@ -132,6 +132,7 @@ public final class ToastView: DSView {
         actionButton = actionTitle.map { ButtonView($0, variant: .default, size: .xs) }
         actionButton?.action = action
         super.init(frame: .zero)
+        actionButton?.flatInRedesign = true
         layer?.masksToBounds = false
         decoration.host = self
         decoration.outset = 48 // shadow-xl reaches 20 + 25px down
@@ -186,14 +187,17 @@ public final class ToastView: DSView {
         var f = Frames()
         let actionSize = actionButton?.intrinsicContentSize ?? .zero
         let left: CGFloat = 1 + 14
+        // Redesign keeps the close button inside the card's top right corner, so the title row leaves it room.
+        let orbRoom: CGFloat = redesign ? Self.orbInset + 24 + 4 : 0
         if stackedActions {
             let right = width - left
             let textX = left + (iconView == nil ? 0 : 24)
-            let th = titleText.height(forWidth: max(1, right - textX))
+            let titleRight = redesign ? width - 1 - orbRoom : right
+            let th = titleText.height(forWidth: max(1, titleRight - textX))
             let mh = hasMessage ? messageText.height(forWidth: max(1, right - left)) : 0
             let top: CGFloat = 11
             f.icon = CGRect(x: left, y: top + 2, width: 16, height: 16)
-            f.title = CGRect(x: textX, y: top, width: right - textX, height: th)
+            f.title = CGRect(x: textX, y: top, width: titleRight - textX, height: th)
             f.message = CGRect(x: left, y: top + th + 2, width: right - left, height: mh)
             let y = top + th + (hasMessage ? mh + 2 : 0) + 8
             f.action = CGRect(x: right - actionSize.width, y: y, width: actionSize.width, height: actionSize.height)
@@ -202,8 +206,8 @@ public final class ToastView: DSView {
             f.height = y + max(actionSize.height, secondary.height) + 11
             return f
         }
-        let right = width - 1 - (actionButton == nil ? 14 : 24 + actionSize.width + 6)
-        let titleRight = actionButton == nil ? right - 24 : right
+        let right = width - 1 - (actionButton == nil ? 14 : max(24, orbRoom + 4) + actionSize.width + 6)
+        let titleRight = actionButton == nil ? min(right - 24, width - 1 - orbRoom) : right
         let textX = left + (iconView == nil ? 0 : 16 + 8)
         let titleHeight = titleText.height(forWidth: titleRight - textX)
         // With details the description shares its row with the chevron (`gap-1.5`, `size-3.5`).
@@ -263,9 +267,14 @@ public final class ToastView: DSView {
         }
         actionButton?.frame = f.action
         secondaryButton?.frame = f.secondary
-        // `absolute -top-1.5 -right-1.5`, 24px.
-        closeOrb.frame = NSRect(x: bounds.width + 6 - 24, y: -6, width: 24, height: 24)
+        // `absolute -top-1.5 -right-1.5`, 24px. Redesign sets it inside the card's corner.
+        closeOrb.frame = redesign ? NSRect(x: bounds.width - 1 - Self.orbInset - 24, y: 1 + Self.orbInset, width: 24, height: 24)
+            : NSRect(x: bounds.width + 6 - 24, y: -6, width: 24, height: 24)
     }
+
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// Redesign: the close button's inset from the card's top and right edges.
+    private static let orbInset = RedesignTokens.Space.xs + 2
 
     public override func updateLayer() { restyle() }
 
@@ -420,6 +429,14 @@ final class ToastCloseOrb: ControlView {
         box.border = Themed.color(\.border, 0.6)
         box.fill = Themed.color(\.popover, state.hovered ? 1 : 0.92)
         box.shadows = [BoxShadow(y: 1, blur: 3, color: Themed.black(0.1)), BoxShadow(y: 1, blur: 2, spread: -1, color: Themed.black(0.1))]
+        let dark = effectiveAppearance.isDark
+        if ThemeRuntime.isDither(dark: dark) {
+            // Redesign: a quiet control inside the card's corner, the hover fill on the card's own surface.
+            box.radius = RedesignTokens.Radius.control
+            box.border = .clear
+            box.fill = RedesignTokens.State.fill(state, dark: dark) ?? .clear
+            box.shadows = []
+        }
         if state.focusVisible { box.shadows = BoxShadow.focusRing(ring: Themed.color(\.ring), offset: Themed.color(\.background)) + box.shadows }
         decoration.boxStyle = box
         icon.strokeColor = Themed.color(state.hovered ? \.foreground : \.mutedForeground)
