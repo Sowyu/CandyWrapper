@@ -97,3 +97,26 @@ struct ThreadDetailsScrollTests {
         #expect(card.bounds.insetBy(dx: 1, dy: 1).contains(inCard), "last row \(inCard) outside \(card.bounds)")
     }
 }
+
+/// #31295: the keyboard stays on Show more while pages remain, then moves to the list.
+@MainActor
+struct ThreadLineageShowMoreFocusTests {
+    @Test func keyboardFollowsShowMore() throws {
+        let view = ThreadLineageSectionView()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 900), styleMask: [.titled], backing: .buffered, defer: true)
+        window.contentView = view
+        var lineage = ThreadRelationships.Lineage()
+        lineage.previous = (1...20).map { ThreadLineageFidelityTests.lineageRow(["subagent", "completed", "Agent \($0)"], index: $0) }
+        view.lineage = lineage
+        view.previousExpanded = true
+        func button() -> ThreadLineageShowMoreView? { ThreadDetailsScrollTests.views(ThreadLineageShowMoreView.self, in: view).first }
+        let first = try #require(button())
+        window.makeFirstResponder(first)
+        first.action?()
+        let second = try #require(button())
+        #expect(window.firstResponder === second)
+        second.action?()
+        #expect(button() == nil)
+        #expect(window.firstResponder is ThreadLineageRowListView)
+    }
+}
