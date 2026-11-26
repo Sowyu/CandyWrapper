@@ -52,6 +52,16 @@ struct EnvironmentsMapViewTests {
         }
     }
 
+    /// A plain scroll leaves the view where it is, so the page scrolls (:706-716), and the scene never draws past the
+    /// canvas (`overflow-clip`, :1010).
+    @Test func plainScrollLeavesTheMapAndTheCanvasClips() throws {
+        let view = Self.make("shared")
+        #expect(view.canvas.clipsToBounds)
+        let event = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: -150, wheel2: 0, wheel3: 0))
+        view.canvas.scrollWheel(with: try #require(NSEvent(cgEvent: event)))
+        #expect(view.canvas.state.held == nil)
+    }
+
     @Test func arrowKeysRoveAndSpaceTicks() {
         let view = Self.make("shared")
         let canvas = view.canvas
