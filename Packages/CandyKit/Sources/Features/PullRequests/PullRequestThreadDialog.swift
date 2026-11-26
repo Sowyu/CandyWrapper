@@ -21,7 +21,10 @@ public final class PullRequestThreadDialog {
     public var resolved: GitResolvedPullRequest? { didSet { update() } }
     public var resolving = false { didSet { update() } }
     public var resolveError: String? { didSet { update() } }
-    public var prepareError: String? { didSet { update() } }
+    /// A failed checkout and the reference it was for: it shows only while that reference is typed
+    /// (`checkoutError.target`, 5258 PullRequestThreadDialog.tsx:84-86, 201, #39554).
+    public private(set) var prepareError: (reference: String, message: String)? { didSet { update() } }
+    public func failPrepare(_ message: String, reference: String) { prepareError = (reference, message) }
     /// "local" or "worktree" while that one runs.
     public var preparing: String? { didSet { update() } }
     /// `AuthOrchestrationOperateScope`: without it the worktree mode is off.
@@ -57,7 +60,6 @@ public final class PullRequestThreadDialog {
         reference = ChangeRequestURL.reference(input.text)
         resolved = nil
         resolveError = nil
-        prepareError = nil
         onReference?(reference)
         update()
     }
@@ -71,7 +73,7 @@ public final class PullRequestThreadDialog {
     }
 
     private func update() {
-        let error = PullRequestWriteLogic.checkoutValidation(input.text, dirty: dirty, singular: terminology.singular) ?? prepareError ?? (resolved == nil ? resolveError : nil)
+        let error = PullRequestWriteLogic.checkoutValidation(input.text, dirty: dirty, singular: terminology.singular) ?? (prepareError?.reference == reference ? prepareError?.message : nil) ?? (resolved == nil ? resolveError : nil)
         fields.set(resolved: resolved, resolving: resolving && resolved == nil && reference != nil, error: error)
         let ready = canWrite && resolved != nil && !resolving && preparing == nil
         local.isEnabled = ready

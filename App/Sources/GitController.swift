@@ -1297,7 +1297,7 @@ final class GitController {
                 }
             } catch {
                 dialog.preparing = nil
-                dialog.prepareError = Self.message(error)
+                dialog.failPrepare(Self.message(error), reference: reference)
             }
         }
     }
