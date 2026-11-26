@@ -60,4 +60,12 @@ struct Composer5258PortTests {
         #expect(ComposerEffortColumnView.typeahead(" ", labels: labels, enabled: enabled, focus: 0) == nil)
     }
 
+    /// 2.7, #39557 (ThreadLinkPicker.logic.test.ts at 5258): thread link search folds accents and follows the locale.
+    @MainActor @Test func threadLinkSearchFoldsAccents() {
+        let cafe = ThreadLinkPicker.Candidate(id: "t1", title: "Café planning", project: nil, linked: false)
+        #expect(ThreadLinkPicker.filter([cafe], query: "cafe").count == 1)
+        #expect(ThreadLinkPicker.filter([cafe], query: "café").count == 1)
+        let turkish = ThreadLinkPicker.Candidate(id: "t2", title: "Işık planı", project: nil, linked: false)
+        #expect(ThreadLinkPicker.filter([turkish], query: "ışık", locale: Locale(identifier: "tr-TR")).count == 1)
+    }
 }
