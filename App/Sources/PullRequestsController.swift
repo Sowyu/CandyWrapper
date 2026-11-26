@@ -130,6 +130,7 @@ final class PullRequestDetailBinding {
             view.onLoadWithheldFile = { [weak self] path in self?.loadWithheld(path) }
             view.onRetryDiff = { [weak self] in self?.patchKey = nil; self?.loadCode() }
             view.onStackAction = { [weak self] action in self?.runStackAction(action) }
+            view.onStackCancelAutoMerge = { [weak self] in self?.cancelStackAutoMerge() }
             view.onStackRetry = { [weak self] in self?.loadStack() }
             view.reviewActions = PullRequestReviewThreadActions(
                 reply: { [weak self] id, body, done in self?.write("pullRequests.replyToThread", { PullRequestPayloads.replyToThread($0, threadId: id, body: body) },
@@ -805,6 +806,13 @@ final class PullRequestDetailBinding {
             view.stackNotice = nil
             view.stackCanMerge = supportsActions && PullRequestDetailLogic.can(d, "merge") && !PullRequestDetailLogic.allowedMergeMethods(d).isEmpty
             view.stackCanRebase = supportsActions && d.viewerPermissions.stackRebase == true
+            // 5258 PullRequestDetailPanel.tsx:723, 1438, 1457-1461 and 1634-1639 (69d8f4217f #41809).
+            let stackAutoMerge = supportsActions && d.capabilities.stackAutoMerge == true
+            let checks = PullRequestDetailLogic.effectiveChecksState(d)
+            view.stackCanAutoMerge = stackAutoMerge && PullRequestDetailLogic.can(d, "enable-auto-merge") && !PullRequestDetailLogic.allowedMergeMethods(d).isEmpty
+            view.stackPrefersAutoMerge = checks != nil && checks != "passing"
+            view.stackAutoMergeArmed = stackAutoMerge && d.state == "open" && d.autoMergeEnabled == true
+            view.stackCanCancelAutoMerge = stackAutoMerge && PullRequestDetailLogic.can(d, "disable-auto-merge")
             view.allowsSingleMerge = PullRequestWriteLogic.allowsSingleMerge(supportsStackActions: supportsActions, hasStack: stack != nil, stackPending: false, stackError: false)
         } catch {
             guard stackGeneration == gen else { return }
@@ -824,25 +832,50 @@ final class PullRequestDetailBinding {
         let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: view.preferredMergeMethod)
         guard let payload = PullRequestWriteLogic.stackActionPayload(stack, ref: ref, action: action, mergeMethod: method) else { return }
         view.stackPending = true
-        toast(action == "merge" ? "Merging stack..." : "Rebasing stack...", nil, .info)
+        // 5258 PullRequestStackMenu.tsx:128-197 (auto-merge from 69d8f4217f #41809).
+        let auto = action == "enable-auto-merge"
+        toast(action == "merge" ? "Merging stack..." : auto ? "Enabling stack auto-merge..." : "Rebasing stack...", nil, .info)
         let shown = showing
         Task { [weak self] in
             do {
                 _ = try await shell.supervisor.request("pullRequests.runAction", payload: payload)
-                self?.toast(action == "merge" ? "Stack merge request completed" : "Stack rebased",
-                            action == "merge" ? "GitHub merged the stack or added it to its merge queue." : nil, .success)
+                self?.toast(action == "merge" ? "Stack merge request completed" : auto ? "Stack auto-merge enabled" : "Stack rebased",
+                            action == "merge" ? "GitHub merged the stack or added it to its merge queue."
+                                : auto ? "GitHub merges the stack through #\(ref.number) once its requirements are met." : nil, .success)
             } catch {
                 // PullRequestStackMenu.tsx (#24118): the host's reason, or what usually stops each action.
-                let hint = action == "merge"
+                let hint = action != "update-branch"
                     ? "The host refused the merge. Check that you have write access, that the checks it requires have passed, and that the branch is not conflicting."
                     : "The host refused the rebase. A rebase stops at the first commit that does not apply cleanly."
-                self?.toast(action == "merge" ? "Could not merge the stack" : "Could not rebase the stack",
+                self?.toast(action == "merge" ? "Could not merge the stack" : auto ? "Could not enable stack auto-merge" : "Could not rebase the stack",
                             PullRequestDetailLogic.readableFailure(Self.failure(error, number: ref.number).1, hint: hint), .error)
             }
             guard let self, self.stillShows(shown) else { return }
             self.view.stackPending = false
             self.onActed?(action)
             self.reload(invalidate: false)
+        }
+    }
+
+    /// "Cancel stack auto-merge" (5258 PullRequestStackMenu.tsx:199-217): no confirmation and no
+    /// loading toast, only a toast when the host refuses.
+    private func cancelStackAutoMerge() {
+        guard let shell, let ref = reference, let stack = view.stack, !view.stackPending else { return }
+        view.stackPending = true
+        let payload = PullRequestPayloads.action(ref, action: "disable-auto-merge", stackNumber: stack.number)
+        let shown = showing
+        Task { [weak self] in
+            var failure: Error?
+            do { _ = try await shell.supervisor.request("pullRequests.runAction", payload: payload) } catch { failure = error }
+            guard let self else { return }
+            if self.stillShows(shown) { self.view.stackPending = false }
+            self.onActed?("disable-auto-merge")
+            if self.stillShows(shown) { self.reload(invalidate: false) }
+            if let failure {
+                self.toast("Could not cancel stack auto-merge",
+                           PullRequestDetailLogic.readableFailure(Self.failure(failure, number: ref.number).1,
+                                                                  hint: "The host refused to cancel auto-merge. Refresh and try again."), .error)
+            }
         }
     }
 

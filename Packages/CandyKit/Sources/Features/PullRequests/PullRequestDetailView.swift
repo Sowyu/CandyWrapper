@@ -198,6 +198,15 @@ public final class PullRequestDetailView: DSView {
     /// Stack merge and rebase are allowed (`canMerge`, `canRebase` of the menu).
     public var stackCanMerge = false { didSet { rebuildActions() } }
     public var stackCanRebase = false { didSet { rebuildActions() } }
+    /// The host can arm auto-merge for this layer and the open layers below it (`canAutoMerge`, 5258
+    /// PullRequestDetailPanel.tsx:723 and 1634-1639, 69d8f4217f #41809).
+    public var stackCanAutoMerge = false { didSet { rebuildActions() } }
+    /// Checks are still running, so arming auto-merge leads over merging now (`preferAutoMerge`).
+    public var stackPrefersAutoMerge = false { didSet { rebuildActions() } }
+    /// This layer carries a stack auto-merge request, which covers the layers below it.
+    public var stackAutoMergeArmed = false { didSet { rebuildActions() } }
+    public var stackCanCancelAutoMerge = false { didSet { rebuildActions() } }
+    public var onStackCancelAutoMerge: (() -> Void)?
     public var stackPending = false { didSet { rebuildActions() } }
     /// With stack actions, a single merge waits for the stack read (`allowsSinglePullRequestMerge`).
     public var allowsSingleMerge = true { didSet { rebuildActions() } }
@@ -276,7 +285,10 @@ public final class PullRequestDetailView: DSView {
         stackButton.iconSize = 14
         stackButton.action = { [weak self] in self?.showStackMenu() }
         stackMergeButton.iconSize = 14
-        stackMergeButton.action = { [weak self] in self?.confirmStack("merge") }
+        stackMergeButton.action = { [weak self] in
+            guard let self else { return }
+            self.confirmStack(self.stackLeadsWithAutoMerge ? "enable-auto-merge" : "merge")
+        }
         [stackButton, stackMergeButton].forEach(headerBox.addSubview)
         threadsButton.iconSize = 14
         threadsButton.isHidden = true
@@ -618,11 +630,17 @@ public final class PullRequestDetailView: DSView {
         stackButton.trailingIcon = stackFailed ? .triangleAlert : nil
         stackButton.setAccessibilityLabel("Stack \(stack.number), layer \(plan.position) of \(stack.layers.count)")
         stackButton.setTooltip("View stack #\(stack.number), layer \(plan.position) of \(stack.layers.count)" + (stackNotice.map { " · \($0)" } ?? ""))
-        stackMergeButton.isHidden = !(stackCanMerge && plan.selectedIsOpen)
+        // 5258 PullRequestStackMenu.tsx:321-344: the button leads with auto-merge while checks run.
+        let leadsWithAutoMerge = stackLeadsWithAutoMerge
+        stackMergeButton.title = leadsWithAutoMerge ? "Auto-merge stack" : "Merge stack"
+        stackMergeButton.icon = leadsWithAutoMerge ? .clock : .gitMerge
+        stackMergeButton.isHidden = !((leadsWithAutoMerge || stackCanMerge) && !stackAutoMergeArmed && plan.selectedIsOpen)
         stackMergeButton.isEnabled = !plan.mergeDisabled
         let n = plan.mergeLayers.count
         stackMergeButton.setTooltip("Merge stack through #\(d.number) into \(stack.base) (\(n) \(n == 1 ? "pull request" : "pull requests"))")
     }
+
+    private var stackLeadsWithAutoMerge: Bool { stackCanAutoMerge && stackPrefersAutoMerge }
 
     /// The header's merge or auto-merge button, confirmed in place (2994 PullRequestDetailPanel.tsx:2025-2141):
     /// the first press relabels it "Confirm …?", the second runs it. Its label slot holds both labels' width.
@@ -965,12 +983,23 @@ public final class PullRequestDetailView: DSView {
         var select: (@MainActor (Int) -> Void)?
         if onSelectPullRequest != nil { select = { [weak self] n in self?.onSelectPullRequest?(n) } }
         items += PullRequestStackMenu.layers(stack, current: d.number, pending: stackPending, onSelect: select)
-        if stackCanMerge || stackCanRebase {
+        // 5258 PullRequestStackMenu.tsx:275-318.
+        if stackCanMerge || stackCanRebase || stackCanAutoMerge || stackCanCancelAutoMerge {
             items.append(.separator)
-            if stackCanMerge {
+            if stackCanMerge && !stackAutoMergeArmed {
                 var merge = MenuItem("Merge stack (\(plan.mergeLayers.count))", icon: .gitMerge, disabled: plan.mergeDisabled)
                 merge.action = { [weak self] in self?.confirmStack("merge") }
                 items.append(merge)
+            }
+            if stackCanAutoMerge && !stackAutoMergeArmed {
+                var auto = MenuItem("Auto-merge stack (\(plan.mergeLayers.count))", icon: .clock, disabled: plan.mergeDisabled)
+                auto.action = { [weak self] in self?.confirmStack("enable-auto-merge") }
+                items.append(auto)
+            }
+            if stackAutoMergeArmed && stackCanCancelAutoMerge {
+                var cancel = MenuItem("Cancel stack auto-merge", icon: .x, disabled: stackPending)
+                cancel.action = { [weak self] in self?.onStackCancelAutoMerge?() }
+                items.append(cancel)
             }
             if stackCanRebase {
                 var rebase = MenuItem("Rebase stack", icon: .refreshCw, disabled: plan.rebaseDisabled)
@@ -991,7 +1020,7 @@ public final class PullRequestDetailView: DSView {
         let plan = PullRequestWriteLogic.stackPlan(stack, current: d.number, pending: stackPending)
         let dialog = DialogView(kind: .dialog, title: copy.title, message: copy.message)
         dialog.maxWidth = 448
-        dialog.panelContent = [PullRequestStackLayerListView(action == "merge" ? plan.mergeLayers : plan.unmerged)]
+        dialog.panelContent = [PullRequestStackLayerListView(action == "update-branch" ? plan.unmerged : plan.mergeLayers)]
         let cancel = ButtonView("Cancel", variant: .outline, size: .default)
         let go = ButtonView(copy.button, variant: .default, size: .default)
         dialog.footerButtons = [cancel, go]
