@@ -56,7 +56,9 @@ struct GitActionsLogicTests {
         #expect(q(Self.status(upstream: false), remote: false) == ("Publish repository", .openPublish, nil, false))
         #expect(q(Self.status(upstream: false)) == ("Push", .showHint, nil, true))
         #expect(q(Self.status(upstream: false, ahead: 1)) == ("Push & create PR", .runAction, .createPr, false))
-        #expect(q(Self.status(upstream: false, ahead: 1), isDefault: true) == ("Push", .runAction, .commitPush, false))
+        // 5258 pushes without committing on a clean default branch (GitActionsControl.logic.ts, a5d86e6382 #41844).
+        #expect(q(Self.status(upstream: false, ahead: 1), isDefault: true) == ("Push", .runAction, .push, false))
+        #expect(q(Self.status(ahead: 1), isDefault: true) == ("Push", .runAction, .push, false))
         #expect(q(Self.status(ahead: 1, behind: 1)) == ("Sync ref", .showHint, nil, true))
         #expect(q(Self.status(behind: 2)) == ("Pull", .runPull, nil, false))
         #expect(q(Self.status(ahead: 1, pr: "open")) == ("Push", .runAction, .push, false))
@@ -204,6 +206,7 @@ struct BranchToolbarLogicTests {
         #expect(B.sanitizeNewRefName("  new  branch\tname ") == "new-branch-name")
         #expect(B.localBranchName(fromRemote: "origin/feature/x") == "feature/x")
         #expect(B.localBranchName(fromRemote: "main") == "main")
+        #expect(B.localBranchName(fromRemote: "team/origin/feature", remoteName: "team/origin") == "feature")
         #expect(B.isTemporaryWorktreeBranch("t3/734bbabe") && B.isTemporaryWorktreeBranch("t3code-0123abcd"))
         #expect(!B.isTemporaryWorktreeBranch("t3/feature") && !B.isTemporaryWorktreeBranch("main"))
         let refs = [VcsRef(name: "main", current: true, isDefault: true), VcsRef(name: "new-branch"), VcsRef(name: "feature/x")]

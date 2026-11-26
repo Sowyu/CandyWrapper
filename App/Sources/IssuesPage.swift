@@ -28,7 +28,8 @@ final class IssuesPageController {
     private var involvement = "all"
     private var sort = "updated"
     private var host: String?
-    private var projectKey: String?
+    /// `environmentId:projectId` keys left out of the list (5258 `hideProjects`, 9fde959ac0 #38799).
+    private var hiddenProjects: [String] = []
     private var labels: [String] = []
     private var assignee: String?
 
@@ -87,7 +88,7 @@ final class IssuesPageController {
         page.onState = { [weak self] v in self?.state = v; self?.changed() }
         page.onInvolvement = { [weak self] v in self?.involvement = v; self?.changed() }
         page.onHost = { [weak self] v in self?.host = v; self?.changed() }
-        page.onProject = { [weak self] v in self?.projectKey = v; self?.candidatesKey = nil; self?.changed() }
+        page.onHiddenProjects = { [weak self] v in self?.hiddenProjects = v; self?.candidatesKey = nil; self?.changed() }
         page.onLabels = { [weak self] v in self?.labels = v; self?.changed() }
         page.onAssignee = { [weak self] v in self?.assignee = v; self?.changed() }
         page.onFiltersOpen = { [weak self] in self?.readCandidates() }
@@ -103,7 +104,7 @@ final class IssuesPageController {
 
     private var preferences: [String: Any] {
         var p: [String: Any] = ["who": involvement, "status": state]
-        if let projectKey { p["project"] = projectKey }
+        if !hiddenProjects.isEmpty { p["hideProjects"] = Array(hiddenProjects.prefix(IssueListInput.maxExcludedProjects)) }
         if let host { p["host"] = host }
         if !sentQuery.isEmpty { p["q"] = sentQuery }
         if !labels.isEmpty { p["label"] = labels }
@@ -118,7 +119,7 @@ final class IssuesPageController {
         involvement = ["assigned", "authored", "mentioned"].contains(who ?? "") ? who! : "all"
         let status = p["status"] as? String
         state = status == "closed" || status == "all" ? status! : "open"
-        projectKey = p["project"] as? String
+        hiddenProjects = Array((p["hideProjects"] as? [String] ?? []).filter { EnvironmentScope.split($0) != nil }.prefix(IssueListInput.maxExcludedProjects))
         host = (p["host"] as? String).flatMap { $0.isEmpty ? nil : String($0.prefix(200)) }
         sentQuery = String((p["q"] as? String ?? "").prefix(200))
         query = sentQuery
@@ -215,26 +216,31 @@ final class IssuesPageController {
     /// `useIssuesSupported`: the sidebar and palette offer Issues only then.
     var supported: Bool { !capableEnvironments.isEmpty }
 
+    /// `issueFilterProjects`: scratch projects stay, since Settings can bind one to a Linear team
+    /// (5258 issuesSearch.logic.ts:56-67, 9fde959ac0 #38799).
     private var projects: [ProjectShell] {
         let envs = Set(capableEnvironments)
-        return (sidebar?.snapshot?.projects ?? []).filter { p in
-            guard let env = p.id.environmentId, envs.contains(env) else { return false }
-            let scratch = sidebar?.state.scratchRoots[env]
-            return scratch == nil || SidebarModel.normalizeProjectPath(p.workspaceRoot) != scratch
-        }
+        return (sidebar?.snapshot?.projects ?? []).filter { p in p.id.environmentId.map(envs.contains) ?? false }
     }
 
-    private func scoped() -> (env: String, projectId: String)? {
-        guard let key = projectKey, let env = EnvironmentScope.environmentId(of: key) else { return nil }
-        return (env, EnvironmentScope.localId(of: key))
+    private var hiddenSet: Set<String> { Set(hiddenProjects) }
+
+    /// `everyProjectHidden` (IssuesPage.tsx:223-225).
+    private var everyProjectHidden: Bool { !projects.isEmpty && projects.allSatisfy { hiddenSet.contains($0.id.rawValue) } }
+
+    private var targets: [(environmentId: String, excludeProjectIds: [String])] {
+        guard !everyProjectHidden else { return [] }
+        return IssueListLogic.listTargets(environments: capableEnvironments,
+                                          projects: projects.compactMap { p in p.id.environmentId.map { ($0, p.id.localId.rawValue) } },
+                                          hidden: hiddenSet)
     }
 
-    private func input(cursors: [String: String]? = nil, refresh: Bool = false) -> IssueListInput {
+    private func input(_ env: String, cursors: [String: String]? = nil, refresh: Bool = false) -> IssueListInput {
         var i = IssueListInput()
         i.state = state
         i.involvement = involvement
         i.limit = IssueListLogic.pageSize
-        i.projectId = scoped()?.projectId
+        i.excludeProjectIds = targets.first { $0.environmentId == env }?.excludeProjectIds
         i.host = host
         i.query = sentQuery.isEmpty ? nil : sentQuery
         i.labels = labels
@@ -253,17 +259,16 @@ final class IssuesPageController {
         let gen = generation
         if !keepRows { pages = [:]; failures = [:] }
         for env in Set((sidebar?.snapshot?.projects ?? []).compactMap { $0.id.environmentId }) where !capabilities.known(env) { capabilities.load(env) }
-        let scoped = scoped()
-        let envs = capableEnvironments.filter { scoped == nil || scoped?.env == $0 }
+        let envs = targets.map(\.environmentId)
         guard !envs.isEmpty else { loading = false; render(); return }
         loading = true
         render()
-        let payload = input(refresh: refresh).json
         // One main-actor task per host instead of a task group. Swift 6.3's region-based isolation
         // checker gives up on a @MainActor addTask that captures self, and the build fails.
         pendingLoads = envs.count
         let environments = self.environments
         for env in envs {
+            let payload = input(env, refresh: refresh).json
             Task { [weak self] in
                 let result: Result<IssueListResult, Error>
                 do { result = .success(try await environments.request(env, "issues.list", payload).decode(as: IssueListResult.self)) }
@@ -288,7 +293,7 @@ final class IssuesPageController {
         loadingMore = "\(env) \(host)"
         render()
         let gen = generation
-        let payload = input(cursors: asked).json
+        let payload = input(env, cursors: asked).json
         Task { [weak self] in
             guard let self else { return }
             let next: IssueListLogic.PageResult
@@ -327,11 +332,12 @@ final class IssuesPageController {
 
     /// `issueFilterScopes` (issueList.ts:182-230) from what the answers name.
     private func filterScopes() -> [(String, IssueScopeRef)] {
-        let s = scoped()
+        let hidden = hiddenSet
         var out: [(String, IssueScopeRef)] = []
-        for (env, page) in pages.sorted(by: { $0.key < $1.key }) where s == nil || s?.env == env {
+        for (env, held) in pages.sorted(by: { $0.key < $1.key }) {
+            let page = IssueListLogic.dropHidden(held, environmentId: env, hidden: hidden)
             let covered = page.answer.scopes ?? page.entries.map { IssueScopeRef(projectId: $0.projectId, tracker: $0.tracker, host: $0.host, scope: $0.scope) }
-            for scope in covered where s == nil || s?.projectId == scope.projectId {
+            for scope in covered {
                 let t = page.answer.trackers.first { $0.tracker == scope.tracker && $0.host.lowercased() == scope.host?.lowercased() }
                 guard let t, t.configured, t.capabilities?.labels == true || t.capabilities?.assignees == true else { continue }
                 if out.contains(where: { $0.1.scope.lowercased() == scope.scope.lowercased() && $0.1.host?.lowercased() == scope.host?.lowercased() }) { continue }
@@ -346,7 +352,7 @@ final class IssuesPageController {
     private func render() {
         var m = IssuesPageView.Model()
         m.state = state; m.involvement = involvement; m.sort = sort; m.host = host
-        m.projectKey = projectKey; m.labels = labels; m.assignee = assignee
+        m.hiddenProjects = hiddenProjects; m.labels = labels; m.assignee = assignee
         m.query = sentQuery
         m.searchBusy = query.trimmingCharacters(in: .whitespacesAndNewlines) != sentQuery || (!sentQuery.isEmpty && loading)
         m.refreshing = loading
@@ -358,11 +364,12 @@ final class IssuesPageController {
         m.candidatesTruncated = candidates.truncated
         let envs = capableEnvironments
         let held = envs.compactMap { env in pages[env].map { (env, $0) } }
+        let hidden = hiddenSet
         // The server names every tracker so the menu can switch hosts, but reads only the chosen one.
         let chosen = host?.lowercased()
         let shown = held.map { env, p -> (String, IssueListLogic.HeldPage) in
+            var p = IssueListLogic.dropHidden(p, environmentId: env, hidden: hidden)
             guard let chosen else { return (env, p) }
-            var p = p
             p.answer.trackers = p.answer.trackers.filter { $0.host.lowercased() == chosen }
             return (env, p)
         }
@@ -382,6 +389,8 @@ final class IssuesPageController {
             m.body = .ghost
         } else if envs.isEmpty {
             m.body = .unsupported
+        } else if everyProjectHidden {
+            m.body = .everyProjectHidden
         } else if held.isEmpty && loading {
             m.body = .ghost
         } else if held.isEmpty, let failure {

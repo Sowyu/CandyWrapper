@@ -250,6 +250,9 @@ public struct PullRequestCapabilities: Codable, Hashable, Sendable {
     public var edit: Edit?
     public var stacks: Bool?
     public var stackActions: Bool?
+    /// Stack actions also arm and cancel auto-merge for a layer and the open layers below it
+    /// (5258 pullRequest.ts:313, 69d8f4217f #41809).
+    public var stackAutoMerge: Bool?
     public var deleteBranch: Bool?
     public var labels: Bool?
     /// The host searches the repository's users, so composers complete `@login` (4928 pullRequest.ts:314).

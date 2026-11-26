@@ -19,6 +19,8 @@ public struct ProjectCloneSnapshot: Sendable, Equatable {
     /// `stalled` (projectClone.ts:34-35): git printed nothing for a while, so `detail` is stale. Older servers omit it.
     public var stalled = false
     public var error: String?
+    /// When this attempt started; a retry starts another (projectClone.ts:37).
+    public var startedAt: String?
 
     public init(projectId: String, remoteUrl: String, destinationPath: String, nameWithOwner: String? = nil, phase: Phase,
                 stage: String, percent: Int? = nil, detail: String? = nil, error: String? = nil) {
@@ -36,6 +38,7 @@ public struct ProjectCloneSnapshot: Sendable, Equatable {
                   stage: json["stage"]?.stringValue ?? "connecting", percent: percent,
                   detail: json["detail"]?.stringValue, error: json["error"]?.stringValue)
         stalled = json["stalled"]?.boolValue ?? false
+        startedAt = json["startedAt"]?.stringValue
     }
 
     /// `ProjectCloneListEvent`: the list, skipping entries this build cannot read.

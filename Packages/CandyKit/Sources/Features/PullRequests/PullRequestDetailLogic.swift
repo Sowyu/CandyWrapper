@@ -227,12 +227,16 @@ public enum PullRequestDetailLogic {
     }
 
     /// `groupPullRequestChecks`: attention, running, completed (the checks popover's sections).
-    /// The count trigger's words (3473 PullRequestChecksPopover.tsx:154-196, 618c46478a): the finished
-    /// checks out of all while any is running or awaits action, else how many failed, else nothing.
+    /// The count trigger's words, the most urgent group only: failed, then awaiting action, then
+    /// running, else nothing (5258 pullRequestPresentation.tsx:602-631, ba37a1afa1 #41714).
     public static func checksCountLabel(_ checks: [PullRequestCheck]) -> String {
-        let incomplete = checks.filter { $0.status == "pending" || $0.status == "action-required" }.count
-        let failed = checks.filter { $0.status == "failure" || $0.status == "cancelled" }.count
-        return incomplete > 0 ? "\(checks.count - incomplete)/\(checks.count)" : failed > 0 ? "\(failed) failed" : ""
+        func count(_ statuses: Set<String>) -> Int { checks.filter { statuses.contains($0.status) }.count }
+        let failed = count(["failure", "cancelled"])
+        if failed > 0 { return "\(failed) failed" }
+        let awaiting = count(["action-required"])
+        if awaiting > 0 { return "\(awaiting) awaiting action" }
+        let running = count(["pending"])
+        return running > 0 ? "\(running) running" : ""
     }
 
     public static func groupChecks(_ checks: [PullRequestCheck]) -> (attention: [PullRequestCheck], running: [PullRequestCheck], completed: [PullRequestCheck]) {

@@ -207,6 +207,9 @@ public struct IssueListInput: Hashable, Sendable {
     public var state = "open"
     public var involvement: String?
     public var projectId: String?
+    /// Projects left out of the listing, as the issues page hides them, at most 1,000 (5258 issue.ts:259-268,
+    /// 9fde959ac0 #38799). Older servers ignore it, so the page also drops their rows.
+    public var excludeProjectIds: [String]?
     public var host: String?
     public var limit: Int?
     public var cursors: [String: String]?
@@ -215,12 +218,17 @@ public struct IssueListInput: Hashable, Sendable {
     public var labels: [String]?
     public var assignee: String?
     public var sort: String?
+    /// `ISSUE_LIST_MAX_EXCLUDED_PROJECTS` (5258 issue.ts:259).
+    public static let maxExcludedProjects = 1_000
     public init() {}
 
     public var json: JSONValue {
         var o: [String: JSONValue] = ["state": .string(state)]
         if let involvement { o["involvement"] = .string(involvement) }
         if let projectId { o["projectId"] = .string(projectId) }
+        if let excludeProjectIds, !excludeProjectIds.isEmpty {
+            o["excludeProjectIds"] = .array(excludeProjectIds.prefix(IssueListInput.maxExcludedProjects).map { .string($0) })
+        }
         if let host { o["host"] = .string(host) }
         if let limit { o["limit"] = .number(Double(limit)) }
         if let cursors { o["cursors"] = .object(cursors.mapValues { .string($0) }) }

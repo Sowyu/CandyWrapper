@@ -167,4 +167,11 @@ struct FilesLogicTests {
         #expect(pending == [true])
         #expect(c.hasUnsaved)
     }
+
+    /// 5258 fullFileText.ts caps (fb4558d77d #40631).
+    @Test func fullFileTextCaps() {
+        #expect(FullFileText.lineCount(Data("a\nb\n".utf8)) == 3)
+        #expect(FullFileText.lineCount(Data()) == 1)
+        #expect(FullFileText.maxBytes == 67_108_864 && FullFileText.maxLines == 1_200_000)
+    }
 }

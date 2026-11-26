@@ -75,30 +75,39 @@ public enum PullRequestWriteLogic {
                          selectedIsOpen: selected?.state == "open")
     }
 
-    /// The `runAction` input of "Merge stack" or "Rebase stack" (lines 84-104): merge targets the open
-    /// layer with the merge layers' heads, rebase targets the top with every unmerged head.
+    /// The `runAction` input of "Merge stack", "Auto-merge stack" or "Rebase stack" (5258
+    /// PullRequestStackMenu.tsx:108-148): merge and auto-merge target the open layer with the merge
+    /// layers' heads, rebase targets the top with every unmerged head.
     public static func stackActionPayload(_ stack: PullRequestStackDetail, ref: PullRequestRef, action: String, mergeMethod: String) -> JSONValue? {
         let plan = stackPlan(stack, current: ref.number, pending: false)
-        let target = action == "merge" ? (plan.position > 0 ? stack.layers[plan.position - 1] : nil) : stack.layers.last
+        let merging = action != "update-branch"
+        let target = merging ? (plan.position > 0 ? stack.layers[plan.position - 1] : nil) : stack.layers.last
         guard let target, target.headSha != nil else { return nil }
-        let heads = (action == "merge" ? plan.mergeLayers : plan.unmerged).compactMap { l in l.headSha.map { (number: l.number, headSha: $0) } }
+        let heads = (merging ? plan.mergeLayers : plan.unmerged).compactMap { l in l.headSha.map { (number: l.number, headSha: $0) } }
         var r = ref
         r.number = target.number
-        return PullRequestPayloads.action(r, action: action, mergeMethod: action == "merge" ? mergeMethod : nil,
-                                          updateMethod: action == "merge" ? nil : "rebase", stackNumber: stack.number, expectedStackHeads: heads)
+        return PullRequestPayloads.action(r, action: action, mergeMethod: merging ? mergeMethod : nil,
+                                          updateMethod: merging ? nil : "rebase", stackNumber: stack.number, expectedStackHeads: heads)
     }
 
-    /// The confirmation's title and description (lines 228-236).
+    /// The confirmation's title, description and button (5258 PullRequestStackMenu.tsx:369-445).
     public static func stackConfirmation(_ stack: PullRequestStackDetail, current: Int, action: String, mergeMethod: String) -> (title: String, message: String, button: String) {
         let plan = stackPlan(stack, current: current, pending: false)
-        if action == "merge" {
-            return ("Merge \(plan.mergeLayers.count) pull requests?",
+        func pullRequests(_ n: Int) -> String { "\(n) \(n == 1 ? "pull request" : "pull requests")" }
+        switch action {
+        case "merge":
+            return ("Merge \(pullRequests(plan.mergeLayers.count))?",
                     "Merge #\(current) and its unmerged layers below into \(stack.base) using \(mergeMethod). GitHub checks their rules before merging or queueing them and rebases the remaining stack after merging.",
                     "Merge stack")
+        case "enable-auto-merge":
+            return ("Auto-merge \(pullRequests(plan.mergeLayers.count))?",
+                    "Merge #\(current) and its unmerged layers below into \(stack.base) using \(mergeMethod) once every one of them meets the requirements on GitHub. This may happen immediately.",
+                    "Enable auto-merge")
+        default:
+            return ("Rebase \(pullRequests(plan.unmerged.count))?",
+                    "Rebase the remote branches from bottom to top onto \(stack.base). This rewrites branch history and may restart checks. If a layer fails, earlier updates remain.",
+                    "Rebase stack")
         }
-        return ("Rebase \(plan.unmerged.count) pull requests?",
-                "Rebase the remote branches from bottom to top onto \(stack.base). This rewrites branch history and may restart checks. If a layer fails, earlier updates remain.",
-                "Rebase stack")
     }
 
     /// `allowsSinglePullRequestMerge` (pullRequestDetail.logic.ts:47): with stack actions, a single

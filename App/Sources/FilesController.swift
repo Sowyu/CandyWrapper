@@ -518,7 +518,36 @@ final class FilesController {
             }
             self.panel.fileSurface.setContent(content)
             self.shownFile = k
+            // A file past the 1 MB read shows its preview at once, then the whole text once it downloads
+            // (5258 LargeFilePreview.tsx and fullFileText.ts, fb4558d77d #40631).
+            if case .text(_, true, let bytes, _) = content, bytes <= FullFileText.maxBytes,
+               let full = await Self.fullText(shell, threadId: ws.threadId, path: FileLinks.isAbsolutePath(path) ? path : ws.cwd + "/" + path) {
+                guard !Task.isCancelled, self.activeFilePath == path, let now = self.workspace, self.key(path, in: now) == k else { return }
+                let whole = FileSurfaceView.Content.text(full, truncated: false, byteLength: bytes, editable: false)
+                self.reads[k] = whole
+                self.panel.fileSurface.setContent(whole)
+            }
         }
+    }
+
+    /// `largeFileResource` (5258 FilePreviewPanel.tsx:1942-1961) read through `downloadText`: nil when the
+    /// download fails or passes `FULL_TEXT_MAX_BYTES` or `RENDERED_MAX_LINES`, which keeps the 1 MB preview.
+    nonisolated static func fullText(_ shell: ShellSession, threadId: ThreadId, path: String) async -> String? {
+        let resource: JSONValue = .object(["_tag": .string("media-file"), "threadId": .string(threadId.localId.rawValue),
+                                           "path": .string(path), "disposition": .string("attachment")])
+        guard let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
+              let relative = reply["relativeUrl"]?.stringValue,
+              let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else { return nil }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        // `readFile` already said the file is under the byte cap, so one read holds it.
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+              data.count <= FullFileText.maxBytes, FullFileText.lineCount(data) <= FullFileText.maxLines else { return nil }
+        guard var text = String(data: data, encoding: .utf8) else { return nil }
+        // Drops a leading BOM, as the 1 MB preview read does.
+        if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
+        return text
     }
 
     private func saveHostFile(_ resource: JSONValue, shell: ShellSession, name: String) {

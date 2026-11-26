@@ -77,6 +77,8 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
                 .baselineOffset: ((lineHeight - (f.ascender - f.descender)) / 2).rounded() / 2]
     }
 
+    static let highlightMaxLines = 100_000
+
     /// Shows `text` for `path` (the path picks the highlighting).
     public func setText(_ text: String, path: String) {
         language = UnifiedDiff.language(forPath: path)
@@ -124,7 +126,10 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
 
     private func scheduleHighlight(delay: TimeInterval) {
         highlightTask?.cancel()
-        guard CodeHighlighter.supports(language) else { return }
+        // A file read in full past 1 MB stays plain past this many lines, as T3 stops tokenizing
+        // (5258 LargeFilePreview.tsx:41-61, fb4558d77d #40631).
+        // ponytail: 100k lines guessed for pierre's DEFAULT_TOKENIZE_MAX_LENGTH, read its value when the package is at hand
+        guard CodeHighlighter.supports(language), lineStarts.count <= Self.highlightMaxLines else { return }
         let text = textView.string, language = language
         highlightTask = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }

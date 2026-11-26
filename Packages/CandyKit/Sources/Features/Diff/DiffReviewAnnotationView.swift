@@ -33,9 +33,13 @@ public enum DiffReviewContext {
         let marker = lines.allSatisfy { $0.kind == first.kind } ? first.kind == .addition ? "+" : first.kind == .deletion ? "-" : "" : ""
         let firstNumber = first.newNumber > 0 ? first.newNumber : first.oldNumber
         let lastNumber = last.newNumber > 0 ? last.newNumber : last.oldNumber
-        let label = firstNumber == lastNumber ? "\(marker)\(firstNumber)" : "\(marker)\(firstNumber) to \(marker)\(lastNumber)"
+        // A mixed selection whose numbers run backwards names its line count (5258 reviewCommentContext.ts:437-445,
+        // b61af8a5d2 #42863).
+        let counted = firstNumber <= 0 || lastNumber <= 0 || firstNumber > lastNumber
+        let label = counted ? (lines.count == 1 ? "line" : "\(lines.count) lines")
+            : firstNumber == lastNumber ? "\(marker)\(firstNumber)" : "\(marker)\(firstNumber) to \(marker)\(lastNumber)"
         let base = path.replacingOccurrences(of: "\\", with: "/").split(separator: "/").last.map(String.init) ?? path
-        let chipRange = marker.isEmpty ? label : "L\(firstNumber)" + (firstNumber == lastNumber ? "" : " to L\(lastNumber)") + (marker == "-" ? " (before)" : "")
+        let chipRange = marker.isEmpty || counted ? label : "L\(firstNumber)" + (firstNumber == lastNumber ? "" : " to L\(lastNumber)") + (marker == "-" ? " (before)" : "")
         let patch = (["@@ -\(old.0),\(old.1) +\(new.0),\(new.1) @@"] + lines.map {
             ($0.kind == .addition ? "+" : $0.kind == .deletion ? "-" : " ") + diff.text($0)
         }).joined(separator: "\n")

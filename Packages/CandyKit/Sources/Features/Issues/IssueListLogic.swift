@@ -1,10 +1,38 @@
 import AppKit
 import DesignSystem
 import T3Protocol
+import T3Store
 
 /// The Issues page's list rules (4928 packages/client-runtime/src/issueList.ts, state/issues.ts,
 /// issuePresentation.ts and apps/web/src/components/issue/issuePresentation.tsx).
 public enum IssueListLogic {
+    /// `issueListTargets` (5258 issuesSearch.logic.ts:76-105, 9fde959ac0 #38799): each environment leaves out
+    /// its hidden projects, named from the saved keys so a listing sent before the project list loads still
+    /// leaves them out. One with every project hidden is not read. `hidden` holds `environmentId:projectId` keys.
+    public static func listTargets(environments: [String], projects: [(environmentId: String, projectId: String)],
+                                   hidden: Set<String>) -> [(environmentId: String, excludeProjectIds: [String])] {
+        environments.compactMap { env in
+            let own = projects.filter { $0.environmentId == env }
+            let key = { (p: (environmentId: String, projectId: String)) in EnvironmentScope.key(p.environmentId, p.projectId) }
+            if !own.isEmpty, own.allSatisfy({ hidden.contains(key($0)) }) { return nil }
+            let excluded = own.isEmpty
+                ? hidden.sorted().compactMap { k in EnvironmentScope.environmentId(of: k) == env ? EnvironmentScope.localId(of: k) : nil }
+                : own.filter { hidden.contains(key($0)) }.map(\.projectId)
+            return (env, Array(excluded.prefix(IssueListInput.maxExcludedProjects)))
+        }
+    }
+
+    /// A server older than `excludeProjectIds` still answers for hidden projects (5258 IssuesPage.tsx:282-319).
+    public static func dropHidden(_ page: HeldPage, environmentId env: String, hidden: Set<String>) -> HeldPage {
+        guard !hidden.isEmpty else { return page }
+        var p = page
+        let shows = { (projectId: String) in !hidden.contains(EnvironmentScope.key(env, projectId)) }
+        p.entries = p.entries.filter { shows($0.projectId) }
+        p.errors = p.errors.filter { shows($0.projectId) }
+        p.answer.scopes = p.answer.scopes?.filter { shows($0.projectId) }
+        return p
+    }
+
     /// `PAGE_SIZE` (IssuesPage.tsx:132).
     public static let pageSize = 50
     /// `useDebouncedValue(search.q, 300)` (IssuesPage.tsx:212).

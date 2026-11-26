@@ -22,6 +22,8 @@ final class ProjectCloneController {
     private var clones: [String: [ProjectCloneSnapshot]] = [:]
     /// One toast per clone: its id, the snapshot drawn and the phase.
     private var toasts: [String: (id: Int, key: String, phase: ProjectCloneSnapshot.Phase)] = [:]
+    /// The clone attempt each toast drew (`startedAt`).
+    private var startedAt: [String: String?] = [:]
     /// The banner's clone, by scoped project id.
     private var bannerProject: ProjectId?
     /// Opens a project's draft ("Open project").
@@ -164,6 +166,13 @@ final class ProjectCloneController {
             toasts[key] = (t.id, clone.renderKey, clone.phase)
             return
         }
+        // The toast is gone, so the user closed it: it stays closed for this attempt, except that a failure
+        // after closed progress still shows (5258 ProjectCloneToastCoordinator.tsx:103-151, 6972026121 #40951).
+        if let t = toasts[key], startedAt[key] == clone.startedAt, panel.toasts.toast(t.id) == nil,
+           t.phase != .running || clone.phase != .failed {
+            toasts[key] = (t.id, clone.renderKey, t.phase)
+            return
+        }
         if let t = toasts[key] { panel.toasts.dismiss(t.id) }
         let toast: ToastView
         var timeout: TimeInterval = 0
@@ -186,6 +195,7 @@ final class ProjectCloneController {
         }
         let id = panel.toasts.show(toast, timeout: timeout)
         toasts[key] = (id, clone.renderKey, clone.phase)
+        startedAt[key] = clone.startedAt
     }
 
     /// Cancel and Retry report a request that never reached the server (`runCloneAction`).

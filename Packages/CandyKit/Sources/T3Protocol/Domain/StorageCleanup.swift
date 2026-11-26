@@ -67,7 +67,13 @@ public struct StorageCleanupReport: Sendable, Equatable {
     /// 1023.6 KB reads "1.00 MB", not "1024 KB".
     public static func formatBytes(_ value: Double) -> String {
         if value.rounded() < 1024 { return "\(Int(value.rounded())) B" }
-        func scaled(_ v: Double) -> String { String(format: v >= 100 ? "%.0f" : v >= 10 ? "%.1f" : "%.2f", v) }
+        // The decimals follow the rounded value, so 9.996 KB reads "10.0 KB" (5258 formatBytes.ts:1-7, 072611f65f #42682).
+        func scaled(_ v: Double) -> String {
+            let two = String(format: "%.2f", v)
+            if (Double(two) ?? v) < 10 { return two }
+            let one = String(format: "%.1f", v)
+            return (Double(one) ?? v) < 100 ? one : String(format: "%.0f", v)
+        }
         let units = ["KB", "MB", "GB", "TB"]
         var next = value / 1024, i = 0
         while (Double(scaled(next)) ?? next) >= 1024, i < units.count - 1 { next /= 1024; i += 1 }

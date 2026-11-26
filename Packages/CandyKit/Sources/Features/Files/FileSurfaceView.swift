@@ -381,7 +381,12 @@ public final class FileSurfaceView: DSView {
         wrapToggle.setTooltip(wrapLabel)
         explorerToggle.isHidden = attachmentMode || path.hasPrefix("/") || isDirectory
         // Copy once text loaded, Save once there is a file, Remove and Close when the owner offers them.
-        if case .text = content, attachment != nil { copyButton.isHidden = false } else { copyButton.isHidden = true }
+        // A workspace file copies its loaded text when it is whole and not empty (5258 FilePreviewPanel.tsx:1400-1409
+        // and 1652-1659, 07fe456146 #34769); an attachment copies what it shows (AttachmentFilePreview.tsx:462).
+        switch content {
+        case .text(let text, let truncated, _, _): copyButton.isHidden = attachment == nil && (truncated || text.isEmpty)
+        default: copyButton.isHidden = true
+        }
         let copied = (copiedUntil ?? .distantPast) > Date()
         copyButton.icon = copied ? .check : .copy
         let copyLabel: String = {
@@ -445,7 +450,7 @@ public final class FileSurfaceView: DSView {
         let h: CGFloat = dialogHeader ? 40 : 28
         let buttonY = (h - 28) / 2
         var right = w - 12
-        for t in [closeButton, removeButton, saveButton, copyButton, explorerToggle, wrapToggle, renderToggle] as [NSView] where !t.isHidden {
+        for t in [closeButton, removeButton, saveButton, explorerToggle, copyButton, wrapToggle, renderToggle] as [NSView] where !t.isHidden {
             t.frame = NSRect(x: right - 28, y: buttonY, width: 28, height: 28)
             right -= 28 + 8
         }
