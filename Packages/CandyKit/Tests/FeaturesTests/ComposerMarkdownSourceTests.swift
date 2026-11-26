@@ -267,4 +267,17 @@ private typealias Mark = ComposerRichText.Mark
         host.editor.setSelectedRange(NSRange(location: 1, length: 0))
         #expect(host.text == "bold after")
     }
+
+    /// ComposerPromptEditorTiptap.input.browser.test.tsx "types after the closing markers of pasted %s" (#41327).
+    /// The paste goes the way `insertClipboard` sends it, without touching the general pasteboard.
+    @Test(arguments: [("**DEV**", "**DEV**!"), ("*DEV*", "*DEV*!"), ("~~DEV~~", "~~DEV~~!"), ("`DEV`", "`DEV`!"), ("***DEV***", "***DEV***!")])
+    func typingAfterAPasteLandsPastTheClosingMarkers(_ pasted: String, _ typed: String) {
+        let host = Host("")
+        host.editor.clipboardEdit = true
+        host.editor.insertText(pasted, replacementRange: host.editor.selectedRange())
+        host.editor.clipboardEdit = false
+        host.settle()
+        host.type("!")
+        #expect(host.value == typed)
+    }
 }
