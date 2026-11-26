@@ -30,14 +30,37 @@ struct DiffHideTestsTests {
         defer { DiffHideTestFiles.value = saved }
         DiffHideTestFiles.value = true
         let patch = ["app.ts", "app.test.ts"].map { "diff --git a/\($0) b/\($0)\n--- a/\($0)\n+++ b/\($0)\n@@ -1 +1 @@\n-a\n+b\n" }.joined()
-        let view = PullRequestCodeView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let view = PullRequestCodeView(frame: NSRect(x: 0, y: 0, width: 700, height: 400))
         view.set(patches: [patch], loading: false, error: nil, nextCursor: nil, moreLoading: false, moreError: nil, commit: nil, commits: [])
+        view.layout()
         let list = view.subviews.compactMap { $0 as? ScrollAreaView }.compactMap { $0.scrollView.documentView as? DiffListView }.first
         #expect(list?.diff.files.map(\.path) == ["app.ts"])
         let link = view.subviews.compactMap { $0 as? LinkLabel }.first { !$0.isHidden && $0.text.contains("hidden") }
         #expect(link?.text == "1 test file hidden")
         link?.onClick?()
         #expect(list?.diff.files.count == 2)
+        #expect(!DiffHideTestFiles.value)
+    }
+
+    /// #42573 (PullRequestCodeTab.tsx:1462-1505, 1768-1777 at 5258): the link shows from the 42rem toolbar
+    /// width only, and a diff of only hidden tests says so with "Show test files".
+    @Test func narrowCodeToolbarAndOnlyHiddenTests() {
+        let saved = DiffHideTestFiles.value
+        defer { DiffHideTestFiles.value = saved }
+        DiffHideTestFiles.value = true
+        func patch(_ files: [String]) -> String {
+            files.map { "diff --git a/\($0) b/\($0)\n--- a/\($0)\n+++ b/\($0)\n@@ -1 +1 @@\n-a\n+b\n" }.joined()
+        }
+        let narrow = PullRequestCodeView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        narrow.set(patches: [patch(["app.ts", "app.test.ts"])], loading: false, error: nil, nextCursor: nil, moreLoading: false, moreError: nil, commit: nil, commits: [])
+        narrow.layout()
+        #expect(!narrow.subviews.contains { ($0 as? LinkLabel)?.isHidden == false && ($0 as? LinkLabel)?.text.contains("hidden") == true })
+        let only = PullRequestCodeView(frame: NSRect(x: 0, y: 0, width: 700, height: 400))
+        only.set(patches: [patch(["app.test.ts"])], loading: false, error: nil, nextCursor: nil, moreLoading: false, moreError: nil, commit: nil, commits: [])
+        only.layout()
+        #expect(only.subviews.contains { ($0 as? LabelView)?.isHidden == false && ($0 as? LabelView)?.text == "1 test file hidden" })
+        let show = only.subviews.compactMap { $0 as? DiffInlineButton }.first { !$0.isHidden }
+        show?.action?()
         #expect(!DiffHideTestFiles.value)
     }
 

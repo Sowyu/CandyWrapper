@@ -1150,11 +1150,13 @@ enum DiffPanelState: Equatable {
 
 /// `InlineButton` (5258 ui/button.tsx:103-120) at `text-xs`: medium foreground text, underlined on hover.
 final class DiffInlineButton: ControlView {
-    private let label = LabelView("", font: DSFont.ui(12, weight: .medium))
-    init(_ title: String) {
+    private let label: LabelView
+    /// `InlineButton` takes the size of the text around it: 12 in the Diff panel, 14 in the PR Code tab.
+    init(_ title: String, size: CGFloat = 12) {
+        label = LabelView("", font: DSFont.ui(size, weight: .medium))
         super.init(frame: .zero)
         label.text = title
-        label.lineHeight = 16
+        label.lineHeight = size + 4
         scalesWhenPressed = false
         addSubview(label)
         setAccessibilityRole(.button)
@@ -1163,7 +1165,7 @@ final class DiffInlineButton: ControlView {
         restyle()
     }
     required init?(coder: NSCoder) { fatalError() }
-    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth), height: 16) }
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth), height: label.lineHeight ?? 16) }
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     private func restyle() {
         label.color = Themed.color(\.foreground)
