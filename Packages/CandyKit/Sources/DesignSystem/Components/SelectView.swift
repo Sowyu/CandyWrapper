@@ -58,6 +58,12 @@ public final class SelectView: ControlView {
     public var optionTrailingDetails: [String?] = []
     /// What the trigger shows for each option when it differs from the item (`SelectValue` children).
     public var valueLabels: [String]? { didSet { updateValue() } }
+    /// `Select multiple`: a set turns the rows into `CheckboxMark` rows that toggle in place, keep the list
+    /// open and report the whole set to `onChangeMany`. The trigger shows `placeholder`, which the caller
+    /// sets to the joined picks.
+    public var selectedIndices: Set<Int>?
+    public final var onChangeMany: (@MainActor (Set<Int>) -> Void)?
+    private var checkMarks: [Int: CheckboxView] = [:]
 
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
@@ -214,8 +220,26 @@ public final class SelectView: ControlView {
         guard let host = popupHost else { return }
         var items: [MenuItem] = []
         var optionAt: [Int: Int] = [:]
+        checkMarks = [:]
         for (i, title) in options.enumerated() {
             if let group = groupLabels[i] { items.append(.label(group)) }
+            if let picked = selectedIndices {
+                // `data-selected={undefined}` with a `CheckboxMark` (IssueTrackerSettings.tsx:349-357, T3 5258).
+                var item = MenuItem(title, kind: .item)
+                item.isDisabled = disabledOptions.contains(i)
+                item.leading = { [weak self] in let box = CheckboxView(value: picked.contains(i) ? .on : .off); self?.checkMarks[i] = box; return box }
+                item.runsInPlace = true
+                item.action = { [weak self] in
+                    guard let self, var set = self.selectedIndices else { return }
+                    if set.remove(i) == nil { set.insert(i) }
+                    self.selectedIndices = set
+                    self.checkMarks[i]?.value = set.contains(i) ? .on : .off
+                    self.onChangeMany?(set)
+                }
+                optionAt[items.count] = i
+                items.append(item)
+                continue
+            }
             var item = MenuItem(title, kind: hidesIndicator ? .item : .radio(i == selectedIndex))
             item.subtitle = optionDetails.indices.contains(i) ? optionDetails[i] : nil
             item.glyph = optionGlyphs.indices.contains(i) ? optionGlyphs[i] : nil

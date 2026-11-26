@@ -2,44 +2,108 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
-/// The pure parts of `IssueTrackerSettings.tsx` (T3 4928) and `issueTrackerSummary`
-/// (client-runtime/src/state/issueTrackers.ts).
+/// The pure parts of `IssueTrackerSettings.tsx` and `client-runtime/src/state/issueTrackers.ts` (T3 5258).
 public enum IssueTrackerSettingsLogic {
     public typealias Connection = IssueTrackerConnectionList.Connection
+    public typealias Binding = IssueTrackerConnectionList.Binding
 
-    /// `usable` (IssueTrackerSettings.tsx:125): connected and the credential resolved to an account.
+    /// `MAX_ISSUE_TRACKER_ADDITIONAL_SCOPES` (issue.ts).
+    public static let maxAdditionalScopes = 250
+
+    /// `usable` (IssueTrackerSettings.tsx:162): connected and the credential resolved to an account.
     public static func usable(_ t: Connection) -> Bool { t.connected && t.account != nil }
 
+    /// A row's identity: the tracker and which of its accounts.
+    public static func key(_ t: Connection) -> String { "\(t.tracker)-\(t.accountId ?? "")" }
+
+    /// Each tracker's first account, then the accounts added beside it (IssueTrackerSettings.tsx:89-104).
+    public static func rows(_ list: IssueTrackerConnectionList) -> [Connection] {
+        list.trackers.flatMap { t in [t] + (list.accounts ?? []).filter { $0.tracker == t.tracker } }
+    }
+
+    /// The "Another account" row shows on a first account's row while any account of it is connected,
+    /// and only on servers with `issueTrackerAccounts` (IssueTrackerSettings.tsx:57-59, :91-92).
+    public static func canAddAccount(_ t: Connection, list: IssueTrackerConnectionList, capable: Bool) -> Bool {
+        guard capable, t.accountId == nil else { return false }
+        return t.connected || (list.accounts ?? []).contains { $0.tracker == t.tracker }
+    }
+
+    /// `issueTrackerBindings` (issueTrackers.ts): every project's binding, whichever account made it.
+    public static func bindings(_ list: IssueTrackerConnectionList) -> [String: Binding] {
+        list.bindings.merging(list.accountBindings ?? [:]) { _, added in added }
+    }
+
+    /// `issueTrackerBindingIsFor` (issueTrackers.ts).
+    static func binding(_ b: Binding, isFor t: Connection) -> Bool { b.tracker == t.tracker && b.accountId == t.accountId }
+
     /// `issueTrackerSummary` (issueTrackers.ts).
-    public static func summary(_ t: Connection, bindings: [String: IssueTrackerConnectionList.Binding]) -> String {
+    public static func summary(_ t: Connection, bindings: [String: Binding]) -> String {
         if !t.connected { return "Not connected. Add a \(t.credential.label.lowercased()) to list its issues." }
         guard let account = t.account else { return t.detail ?? "The saved credential was rejected." }
-        let linked = bindings.values.filter { $0.tracker == t.tracker }.count
+        let linked = bindings.values.filter { binding($0, isFor: t) }.count
         if linked == 0 {
             return "Connected as \(account) · no projects linked yet. Pick a \(t.scopeNoun) for a project to list its issues."
         }
         return "Connected as \(account) · \(linked) project\(linked == 1 ? "" : "s") linked"
     }
 
-    /// `issueTrackers.connect` (rpc.ts:1418): a null token disconnects.
-    public static func connect(tracker: String, token: String?) -> JSONValue {
-        .object(["tracker": .string(tracker), "token": token.map { .string($0) } ?? .null])
+    /// `issueTrackers.connect` (IssueTrackerSettings.tsx:136-141): a null token disconnects, and `addAccount`
+    /// saves the credential as a new account instead of replacing this one.
+    public static func connect(_ t: Connection, token: String?, addAccount: Bool = false) -> JSONValue {
+        var o: [String: JSONValue] = ["tracker": .string(t.tracker), "token": token.map { .string($0) } ?? .null]
+        if addAccount { o["addAccount"] = .bool(true) } else if let id = t.accountId { o["accountId"] = .string(id) }
+        return .object(o)
     }
 
-    /// `issueTrackers.bindProject` (rpc.ts:1424): a nil scope unbinds the project.
-    public static func bind(projectId: String, tracker: String, scope: String?) -> JSONValue {
-        .object(["projectId": .string(projectId),
-                 "binding": scope.map { .object(["tracker": .string(tracker), "scope": .string($0)]) } ?? .null])
+    /// `boundIssueTrackerScopes` (issueTrackers.ts): a project bound to another tracker or account shows unbound.
+    public static func boundScopes(_ t: Connection, binding: Binding?) -> [String] {
+        guard let binding, self.binding(binding, isFor: t) else { return [] }
+        return binding.scopes
     }
 
-    /// The picker's selection (IssueTrackerSettings.tsx:276-277): a project bound to another tracker
-    /// shows unbound here. Index 0 is "Not bound", then the tracker's scopes in order.
-    public static func selectedIndex(_ t: Connection, binding: IssueTrackerConnectionList.Binding?) -> Int {
-        guard let binding, binding.tracker == t.tracker else { return 0 }
-        return (t.scopes.firstIndex { $0.key == binding.scope }).map { $0 + 1 } ?? 0
+    /// `issueTrackerBindingFor` (issueTrackers.ts): the scopes kept from before stay first, so the filing
+    /// scope only changes when it is removed. No scopes unbinds.
+    public static func binding(for t: Connection, current: [String], scopes: [String]) -> Binding? {
+        let kept = current.filter { scopes.contains($0) }
+        let ordered = kept + scopes.filter { !kept.contains($0) }
+        guard let scope = ordered.first else { return nil }
+        let rest = Array(ordered.dropFirst())
+        return Binding(tracker: t.tracker, accountId: t.accountId, scope: scope, additionalScopes: rest.isEmpty ? nil : rest)
     }
 
-    public static func options(_ t: Connection) -> [String] { ["Not bound"] + t.scopes.map { "\($0.name) (\($0.key))" } }
+    /// `issueTrackers.bindProject` with `issueTrackerBindInput` (issueTrackers.ts): an unbind names the account.
+    public static func bind(projectId: String, tracker t: Connection, binding: Binding?) -> JSONValue {
+        var o: [String: JSONValue] = ["projectId": .string(projectId), "binding": .null]
+        if let binding {
+            var b: [String: JSONValue] = ["tracker": .string(binding.tracker), "scope": .string(binding.scope)]
+            if let id = binding.accountId { b["accountId"] = .string(id) }
+            if let more = binding.additionalScopes { b["additionalScopes"] = .array(more.map { .string($0) }) }
+            o["binding"] = .object(b)
+        } else if let id = t.accountId {
+            o["accountId"] = .string(id)
+        }
+        return .object(o)
+    }
+
+    public struct ScopeOption: Equatable { public var key: String; public var name: String; public var addable: Bool }
+
+    /// `issueTrackerScopeOptions` (issueTrackers.ts): the tracker's scopes, then bound keys it no longer offers.
+    public static func scopeOptions(_ t: Connection, bound: [String]) -> [ScopeOption] {
+        let offered = Set(t.scopes.map(\.key))
+        let full = bound.count > maxAdditionalScopes
+        return (t.scopes.map { ($0.key, $0.name) } + bound.filter { !offered.contains($0) }.map { ($0, $0) })
+            .map { ScopeOption(key: $0.0, name: $0.1, addable: !full || bound.contains($0.0)) }
+    }
+
+    /// `hasIssueTrackerTeams` (issueTrackers.ts).
+    public static func hasTeams(_ t: Connection, bindings: [String: Binding]) -> Bool {
+        !t.scopes.isEmpty || bindings.values.contains { binding($0, isFor: t) }
+    }
+
+    /// The trigger text (IssueTrackerSettings.tsx:334-341): "Not bound", or the picked names joined.
+    public static func value(_ t: Connection, bound: [String]) -> String {
+        bound.isEmpty ? "Not bound" : bound.map { k in t.scopes.first { $0.key == k }?.name ?? k }.joined(separator: ", ")
+    }
 }
 
 /// One tracker (`TrackerRow`, IssueTrackerSettings.tsx:96-218): the icon with its status dot, the name,
@@ -50,6 +114,8 @@ final class IssueTrackerRow: DSView, SettingsGroupRow {
     private let mark: NSView
     private let dot = CALayer()
     private let label = LabelView("", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    /// The account's workspace (`truncate text-xs text-muted-foreground`, IssueTrackerSettings.tsx:180-182, 5258).
+    private var workspace: LabelView?
     private var badge: BadgeView?
     private let summary = TextBlockView()
     private let toggle = ButtonView(nil, icon: .chevronDown, variant: .ghostMuted, size: .iconXs)
@@ -75,6 +141,12 @@ final class IssueTrackerRow: DSView, SettingsGroupRow {
         layer?.addSublayer(dot)
         label.text = tracker.displayName
         label.lineHeight = 20
+        if let name = tracker.workspace, !name.isEmpty {
+            let w = LabelView(name, font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+            w.lineHeight = 16
+            workspace = w
+            addSubview(w)
+        }
         if tracker.connected && tracker.account == nil {
             let b = BadgeView("Credential rejected", variant: .destructive, size: .sm)
             badge = b
@@ -122,9 +194,16 @@ final class IssueTrackerRow: DSView, SettingsGroupRow {
         let headerH = headerHeight(w)
         mark.frame = NSRect(x: 17, y: 13, width: 18, height: 18)
         var x: CGFloat = 16 + 20 + 8
-        let lw = ceil(label.textWidth) + 1
+        let room = w - 16 - 24 - 12 - x
+        let badgeW = badge.map { $0.intrinsicContentSize.width + 8 } ?? 0
+        let lw = min(ceil(label.textWidth) + 1, max(0, room - badgeW))
         label.frame = NSRect(x: x, y: 12, width: lw, height: 20)
         x += lw + 8
+        if let workspace {
+            let ww = min(ceil(workspace.textWidth) + 1, max(0, room - badgeW - lw - 8))
+            workspace.frame = NSRect(x: x, y: 12 + 2, width: ww, height: 16)
+            x += ww + 8
+        }
         if let badge {
             let s = badge.intrinsicContentSize
             badge.frame = NSRect(x: x, y: 12 + (20 - s.height) / 2, width: s.width, height: s.height)
@@ -143,18 +222,23 @@ final class IssueTrackerRow: DSView, SettingsGroupRow {
     }
 }
 
-/// The open part of a tracker row: the credential row, then "Projects" and one scope picker per project.
+/// The open part of a tracker row: the credential row, then "Projects" and one multi-pick per project, then
+/// "Another account" on a first account that can add one (IssueTrackerSettings.tsx:200-266, T3 5258).
 final class IssueTrackerDetailsView: DSView, SettingsGroupRow {
     let credential: SettingsRowView
     let secret: SecretFieldControl
     private(set) var projectRows: [SettingsRowView] = []
     private(set) var pickers: [SelectView] = []
+    private(set) var accountRow: SettingsRowView?
 
     struct Project { var id: String; var title: String }
 
+    /// `adding` shows the new account's credential field instead of the "Add account" button.
+    struct AddAccount { var adding: Bool; var start: @MainActor () -> Void; var submit: @MainActor (String) -> Void }
+
     init(tracker t: IssueTrackerConnectionList.Connection, bindings: [String: IssueTrackerConnectionList.Binding], projects: [Project],
-         canEdit: Bool, busy: Bool, failure: String?, openURL: ((URL) -> Void)?,
-         submit: @escaping @MainActor (String?) -> Void, bind: @escaping @MainActor (String, String?) -> Void) {
+         canEdit: Bool, busy: Bool, failure: String?, openURL: ((URL) -> Void)?, addAccount: AddAccount? = nil,
+         submit: @escaping @MainActor (String?) -> Void, bind: @escaping @MainActor (String, [String]) -> Void) {
         secret = SecretFieldControl(label: t.credential.label, saved: t.connected, enabled: canEdit && !busy)
         credential = SettingsRowView(title: t.credential.label, detail: "Stored on the server.", control: secret)
         super.init(frame: .zero)
@@ -176,18 +260,51 @@ final class IssueTrackerDetailsView: DSView, SettingsGroupRow {
         }
         if let failure { credential.status = failure; credential.statusIsError = true }
         addSubview(credential)
-        guard IssueTrackerSettingsLogic.usable(t), !projects.isEmpty, !t.scopes.isEmpty else { return }
-        let heading = SettingsRowView(title: "Projects",
-                                      detail: "Pick the \(t.displayName) \(t.scopeNoun) whose issues each project lists beside its repository's own.")
-        projectRows.append(heading)
-        for p in projects {
-            let picker = SelectView(options: IssueTrackerSettingsLogic.options(t),
-                                    selected: IssueTrackerSettingsLogic.selectedIndex(t, binding: bindings[p.id]), size: .sm)
-            picker.setAccessibilityLabel("\(t.displayName) \(t.scopeNoun) for \(p.title)")
-            picker.isEnabled = canEdit && !busy
-            picker.onChange = { i in bind(p.id, i == 0 ? nil : t.scopes[i - 1].key) }
-            pickers.append(picker)
-            projectRows.append(SettingsRowView(title: p.title, control: picker))
+        if IssueTrackerSettingsLogic.usable(t), !projects.isEmpty, IssueTrackerSettingsLogic.hasTeams(t, bindings: bindings) {
+            let heading = SettingsRowView(title: "Projects",
+                                          detail: "Pick one or more \(t.displayName) \(t.scopeNoun)s for each project. Their issues list beside the repository's own, and agents file new issues in the first one unless asked for another.")
+            projectRows.append(heading)
+            for p in projects {
+                let bound = IssueTrackerSettingsLogic.boundScopes(t, binding: bindings[p.id])
+                let options = IssueTrackerSettingsLogic.scopeOptions(t, bound: bound)
+                let picker = SelectView(options: options.map { "\($0.name) (\($0.key))" }, selected: nil,
+                                        placeholder: IssueTrackerSettingsLogic.value(t, bound: bound), size: .sm)
+                picker.selectedIndices = Set(options.indices.filter { bound.contains(options[$0].key) })
+                picker.disabledOptions = Set(options.indices.filter { !options[$0].addable })
+                picker.setAccessibilityLabel("\(t.displayName) \(t.scopeNoun) for \(p.title)")
+                picker.isEnabled = canEdit && !busy
+                picker.onChangeMany = { [weak picker] picked in
+                    let keys = options.indices.filter { picked.contains($0) }.map { options[$0].key }
+                    picker?.placeholder = IssueTrackerSettingsLogic.value(t, bound: keys)
+                    bind(p.id, keys)
+                }
+                pickers.append(picker)
+                projectRows.append(SettingsRowView(title: p.title, control: picker))
+            }
+        }
+        if let addAccount {
+            // `AddAccountRow` (IssueTrackerSettings.tsx:395-432).
+            let row: SettingsRowView
+            if addAccount.adding {
+                let field = SecretFieldControl(label: t.credential.label, saved: false, enabled: canEdit && !busy)
+                field.input.placeholder = "Not set"
+                field.input.onCommit = { text in
+                    let next = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !next.isEmpty { addAccount.submit(next) }
+                }
+                field.input.onSubmit = { [weak field] in
+                    let next = field?.input.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    if !next.isEmpty { addAccount.submit(next) }
+                }
+                row = SettingsRowView(title: t.credential.label, detail: "For the new \(t.displayName) account.", control: field)
+            } else {
+                let add = ButtonView("Add account", icon: .plus, variant: .outline, size: .xs)
+                add.isEnabled = canEdit && !busy
+                add.action = { addAccount.start() }
+                row = SettingsRowView(title: "Another account", detail: "Connect a second \(t.displayName) workspace or user.", control: add)
+            }
+            accountRow = row
+            projectRows.append(row)
         }
         projectRows.forEach(addSubview)
     }

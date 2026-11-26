@@ -36,14 +36,45 @@ struct IssueTrackerSettingsTests {
 
     @Test func payloadsAndPickerSelection() throws {
         let t = try Self.connection()
-        #expect(IssueTrackerSettingsLogic.connect(tracker: "linear", token: nil) == Self.json(#"{"tracker":"linear","token":null}"#))
-        #expect(IssueTrackerSettingsLogic.bind(projectId: "p", tracker: "linear", scope: "ENG")
+        #expect(IssueTrackerSettingsLogic.connect(t, token: nil) == Self.json(#"{"tracker":"linear","token":null}"#))
+        #expect(IssueTrackerSettingsLogic.connect(t, token: "k", addAccount: true) == Self.json(#"{"tracker":"linear","token":"k","addAccount":true}"#))
+        let second = try Self.connection(["accountId": .string("acme-2")])
+        #expect(IssueTrackerSettingsLogic.connect(second, token: nil) == Self.json(#"{"tracker":"linear","accountId":"acme-2","token":null}"#))
+        let eng = IssueTrackerSettingsLogic.binding(for: t, current: [], scopes: ["ENG"])
+        #expect(IssueTrackerSettingsLogic.bind(projectId: "p", tracker: t, binding: eng)
             == Self.json(#"{"projectId":"p","binding":{"tracker":"linear","scope":"ENG"}}"#))
-        #expect(IssueTrackerSettingsLogic.bind(projectId: "p", tracker: "linear", scope: nil) == Self.json(#"{"projectId":"p","binding":null}"#))
-        #expect(IssueTrackerSettingsLogic.options(t) == ["Not bound", "Engineering (ENG)", "Ops (OPS)"])
-        #expect(IssueTrackerSettingsLogic.selectedIndex(t, binding: .init(tracker: "linear", scope: "OPS")) == 2)
-        // Bound to another tracker: this picker shows unbound.
-        #expect(IssueTrackerSettingsLogic.selectedIndex(t, binding: .init(tracker: "jira", scope: "OPS")) == 0)
+        #expect(IssueTrackerSettingsLogic.bind(projectId: "p", tracker: t, binding: nil) == Self.json(#"{"projectId":"p","binding":null}"#))
+        // An unbind under an added account names it.
+        #expect(IssueTrackerSettingsLogic.bind(projectId: "p", tracker: second, binding: nil)
+            == Self.json(#"{"projectId":"p","binding":null,"accountId":"acme-2"}"#))
+        // The scope kept from before stays the filing scope.
+        let both = IssueTrackerSettingsLogic.binding(for: t, current: ["OPS"], scopes: ["ENG", "OPS"])
+        #expect(both == .init(tracker: "linear", scope: "OPS", additionalScopes: ["ENG"]))
+        #expect(IssueTrackerSettingsLogic.binding(for: t, current: ["OPS"], scopes: []) == nil)
+        #expect(IssueTrackerSettingsLogic.value(t, bound: ["OPS", "ENG"]) == "Ops, Engineering")
+        #expect(IssueTrackerSettingsLogic.value(t, bound: []) == "Not bound")
+        // Bound to another tracker or account: this picker shows unbound.
+        #expect(IssueTrackerSettingsLogic.boundScopes(t, binding: .init(tracker: "jira", scope: "OPS")) == [])
+        #expect(IssueTrackerSettingsLogic.boundScopes(t, binding: .init(tracker: "linear", accountId: "acme-2", scope: "OPS")) == [])
+        #expect(IssueTrackerSettingsLogic.boundScopes(second, binding: .init(tracker: "linear", accountId: "acme-2", scope: "OPS")) == ["OPS"])
+        // A bound key the tracker no longer offers stays listed under its key.
+        #expect(IssueTrackerSettingsLogic.scopeOptions(t, bound: ["GONE"]).map(\.name) == ["Engineering", "Ops", "GONE"])
+    }
+
+    @Test func accountsListUnderTheirTracker() throws {
+        let list = try JSONValue.object([
+            "trackers": .array([Self.linear]),
+            "accounts": .array([try JSONValueEncoder().encode(Self.connection(["accountId": .string("b"), "workspace": .string("Beta")]))]),
+            "bindings": .object(["p1": .object(["tracker": .string("linear"), "scope": .string("ENG")])]),
+            "accountBindings": .object(["p2": .object(["tracker": .string("linear"), "accountId": .string("b"), "scope": .string("OPS")])]),
+        ]).decode(as: IssueTrackerConnectionList.self)
+        let rows = IssueTrackerSettingsLogic.rows(list)
+        #expect(rows.map(\.accountId) == [nil, "b"])
+        let bindings = IssueTrackerSettingsLogic.bindings(list)
+        #expect(IssueTrackerSettingsLogic.summary(rows[1], bindings: bindings) == "Connected as dev@example.com · 1 project linked")
+        #expect(IssueTrackerSettingsLogic.canAddAccount(rows[0], list: list, capable: true))
+        #expect(!IssueTrackerSettingsLogic.canAddAccount(rows[1], list: list, capable: true))
+        #expect(!IssueTrackerSettingsLogic.canAddAccount(rows[0], list: list, capable: false))
     }
 
     @Test func pageListsTrackersOnlyWhereTheServerHasIssues() async throws {
@@ -76,8 +107,9 @@ struct IssueTrackerSettingsTests {
         let row = try #require(section.group.rows.first as? IssueTrackerRow)
         #expect(row.tracker.displayName == "Linear")
         #expect(row.details.pickers.count == 1)
-        row.details.pickers[0].onChange?(1)
+        row.details.pickers[0].onChangeMany?([0])
         while !calls.contains(where: { $0.0 == "issueTrackers.bindProject" }) { await Task.yield() }
-        #expect(calls.last?.1 == IssueTrackerSettingsLogic.bind(projectId: "p1", tracker: "linear", scope: "ENG"))
+        #expect(calls.first { $0.0 == "issueTrackers.bindProject" }?.1
+            == Self.json(#"{"projectId":"p1","binding":{"tracker":"linear","scope":"ENG"}}"#))
     }
 }

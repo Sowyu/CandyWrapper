@@ -307,7 +307,9 @@ public struct IssueLinkedThreadsResult: Codable, Hashable, Sendable {
     public var threads: [Thread]
 }
 
-/// `IssueTrackerConnection` (issue.ts:584-597) in `IssueTrackerConnectionList` (:599-604).
+/// `IssueTrackerConnection` (issue.ts:584-597) in `IssueTrackerConnectionList` (:599-604). Since 5258 a tracker
+/// can hold several accounts (`accountId`, `accounts`, `accountBindings`, #39179) and a project several teams
+/// (`additionalScopes`, #40023).
 public struct IssueTrackerConnectionList: Codable, Hashable, Sendable {
     public struct Connection: Codable, Hashable, Sendable {
         public struct Credential: Codable, Hashable, Sendable {
@@ -319,6 +321,8 @@ public struct IssueTrackerConnectionList: Codable, Hashable, Sendable {
             public var name: String
         }
         public var tracker: String
+        /// Absent for a tracker's first account (issue.ts, `IssueTrackerConnection.accountId`).
+        public var accountId: String?
         public var displayName: String
         public var host: String
         public var scopeNoun: String
@@ -331,11 +335,21 @@ public struct IssueTrackerConnectionList: Codable, Hashable, Sendable {
     }
     public struct Binding: Codable, Hashable, Sendable {
         public var tracker: String
+        public var accountId: String?
         public var scope: String
-        public init(tracker: String, scope: String) { self.tracker = tracker; self.scope = scope }
+        public var additionalScopes: [String]?
+        public init(tracker: String, accountId: String? = nil, scope: String, additionalScopes: [String]? = nil) {
+            self.tracker = tracker; self.accountId = accountId; self.scope = scope; self.additionalScopes = additionalScopes
+        }
+        /// `issueTrackerBindingScopes` (issue.ts): the filing scope first.
+        public var scopes: [String] { [scope] + (additionalScopes ?? []) }
     }
     public var trackers: [Connection]
+    /// Accounts added beside each tracker's first, oldest first. Absent before 5258.
+    public var accounts: [Connection]?
     public var bindings: [String: Binding]
+    /// Projects bound with an added account. Absent before 5258.
+    public var accountBindings: [String: Binding]?
 }
 
 /// Payloads for the issue writes (issue.ts:347-410) and thread links (orchestrationV2.ts:3301-3318).
