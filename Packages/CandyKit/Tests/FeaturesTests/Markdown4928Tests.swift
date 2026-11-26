@@ -96,4 +96,16 @@ struct Markdown4928Tests {
         #expect(FileLinks.parseLink("src/a.ts:42-64")?.line == 42)
         #expect(FileLinks.parseLink("src\\a.ts")?.path == "src/a.ts")
     }
+
+    /// #42055 (5258 wordsHast.ts): with line breaks on, raw HTML paragraphs and list items keep their lines as HTML
+    /// does, so no break lands inside them. CW shows raw HTML as text with HTML's whitespace collapsing.
+    @Test func rawHTMLGetsNoLineBreaksWhenBreaksAreOn() {
+        let blocks = parse("<p align=\"center\">\n  <img src=\"https://x.dev/a.png\" width=\"400\">\n</p>\n\n<ul>\n<li>\none\ntwo\n</li>\n</ul>")
+        let texts = blocks.compactMap { block -> String? in
+            if case .paragraph(let runs) = block { return runs.map(\.text).joined() }
+            return nil
+        }
+        #expect(!texts.isEmpty)
+        #expect(texts.allSatisfy { !$0.contains("\n") })
+    }
 }

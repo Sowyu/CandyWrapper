@@ -91,8 +91,12 @@ struct TerminalStateTests {
         #expect(model.canResize)
         let r3 = model.apply(.output("x"))
         #expect(r3.actions == [.write("x")])
-        let r4 = model.apply(.cleared)
+        let r4 = model.apply(.cleared())
         #expect(r4.actions == [.reset("")])
+        // A clear that split a title keeps its start, so the rest of it parses as a sequence (#42810).
+        let split = TerminalAttachEvent(json: .object(["type": .string("cleared"), "pendingControlSequence": .string("\u{1B}]0;Build ")]))
+        #expect(split == .cleared(pendingControlSequence: "\u{1B}]0;Build "))
+        #expect(model.apply(split!).actions == [.reset("\u{1B}]0;Build ")])
         let r5 = model.apply(.activity(hasRunningSubprocess: true, label: "top"))
         #expect(r5 == .init())
         #expect(model.hasRunningSubprocess && model.label == "top")

@@ -37,25 +37,44 @@ public struct ThreadContextWindowUsage: Equatable, Sendable {
                         cachedInputTokens: live ? json["cachedInputTokens"]?.doubleValue : nil,
                         outputTokens: live ? json["outputTokens"]?.doubleValue : nil)
         }
-        // `latestProviderTurnTokenUsage` (lib/contextWindow.ts:29-41 in 2994): the newest report by
-        // `updatedAt`, ties to the later entry, since live upserts append.
+        let provider = projection.providerThreads.first(where: { $0["id"]?.stringValue == projection.thread.activeProviderThreadId })
+        let providerId = provider?["id"]?.stringValue
+        // `latestProviderTurnTokenUsage` (5258 client-runtime state/contextWindow.ts:46-76): the newest report by
+        // `updatedAt` among the active provider thread's turns, ties to the later entry, since live upserts append;
+        // with none and no provider usage, a fork reads its parent's.
         var latest: (usage: JSONValue, at: Date?)?
         for turn in projection.providerTurns {
             guard let usage = turn["tokenUsage"] else { continue }
+            if let providerId, turn["providerThreadId"]?.stringValue != providerId { continue }
             let at = date(usage["updatedAt"])
             if latest == nil || (at ?? .distantPast) >= (latest!.at ?? .distantPast) { latest = (usage, at) }
         }
-        if let latest, let result = read(latest.usage, live: true, updatedAt: latest.at) { return result }
-        let provider = projection.providerThreads.first(where: { $0["id"]?.stringValue == projection.thread.activeProviderThreadId })
-        if let provider, let usage = provider["contextUsage"], let result = read(usage, live: false, updatedAt: date(provider["updatedAt"])) { return result }
-        if latest == nil, provider?["contextUsage"] == nil, let usage = forkSourceUsage(projection),
-           let result = read(usage, live: true, updatedAt: date(usage["updatedAt"])) { return result }
-        for entry in projection.visibleTurnItems.reversed() {
-            let item = entry.item.raw
-            if item["type"]?.stringValue == "compaction", let used = item["afterTokenCount"]?.doubleValue, used >= 0 {
-                return Self(used: used, total: item["beforeTokenCount"]?.doubleValue, automatically: true,
-                            updatedAt: date(item["startedAt"]) ?? date(item["updatedAt"]))
+        if latest == nil, provider?["contextUsage"] == nil, let usage = forkSourceUsage(projection) { latest = (usage, date(usage["updatedAt"])) }
+        // A retired provider thread's items say nothing about the active conversation.
+        func retired(_ item: JSONValue) -> Bool {
+            guard let providerId, let own = item["providerThreadId"]?.stringValue else { return false }
+            return own != providerId
+        }
+        func compaction(_ item: JSONValue, maximum: Double?, at: Date?) -> Self? {
+            guard let used = item["afterTokenCount"]?.doubleValue, used.isFinite, used >= 0 else { return nil }
+            return Self(used: used, maximum: maximum, total: item["beforeTokenCount"]?.doubleValue, automatically: true, updatedAt: at)
+        }
+        // A newer completed compaction wins over usage reported before it, which describes the context it just
+        // discarded; usage at the same instant is the provider's own post-compaction report (#39024, :134-156).
+        if let done = projection.visibleTurnItems.last(where: {
+            $0.item.type == .compaction && $0.item.status == .completed && !retired($0.item.raw)
+        })?.item {
+            let usageAt = latest.map { $0.at } ?? (provider?["contextUsage"] != nil ? date(provider?["updatedAt"]) : nil)
+            let compactedAt = done.completedAt?.date ?? done.updatedAt.date
+            if usageAt == nil || (compactedAt ?? .distantPast) > usageAt! {
+                let maximum = latest?.usage["maxTokens"]?.doubleValue ?? provider?["contextUsage"]?["maxTokens"]?.doubleValue
+                return compaction(done.raw, maximum: maximum, at: compactedAt)
             }
+        }
+        if let latest, let result = read(latest.usage, live: true, updatedAt: latest.at) { return result }
+        if let provider, let usage = provider["contextUsage"], let result = read(usage, live: false, updatedAt: date(provider["updatedAt"])) { return result }
+        for entry in projection.visibleTurnItems.reversed() where entry.item.type == .compaction && !retired(entry.item.raw) {
+            if let result = compaction(entry.item.raw, maximum: nil, at: date(entry.item.raw["startedAt"]) ?? entry.item.updatedAt.date) { return result }
         }
         return nil
     }

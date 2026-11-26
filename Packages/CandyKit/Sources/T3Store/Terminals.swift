@@ -383,8 +383,9 @@ public struct TerminalSessionModel: Sendable, Equatable {
         case .output(let data):
             if status == .closed { status = .running; out.resendSize = true }
             out.actions.append(.write(data))
-        case .cleared:
-            out.actions.append(.reset(""))
+        case .cleared(let pending):
+            // `clearOutput` (5258 client-runtime terminalOutput.ts): a clear, then the split sequence's start.
+            out.actions.append(.reset(pending))
         case .exited:
             status = .exited
         case .closed:
