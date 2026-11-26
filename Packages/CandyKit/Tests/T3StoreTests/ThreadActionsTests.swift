@@ -339,6 +339,26 @@ struct ThreadActionMenuTests {
         #expect(items.first { $0.id == "copy" }?.children.allSatisfy { !$0.disabled } == true)
     }
 
+    /// 5258 threadActionMenu.logic.ts:224-226 (#41365): no Mark unread before a run completes or while one runs.
+    @Test func markUnreadNeedsACompletedIdleRun() {
+        var s = ThreadActionMenu.State()
+        s.hasCompletedRun = false
+        #expect(!ThreadActionMenu.items(s).contains { $0.id == "mark-unread" })
+        s.hasCompletedRun = true
+        s.isRunning = true
+        #expect(!ThreadActionMenu.items(s).contains { $0.id == "mark-unread" })
+        s.isRunning = false
+        #expect(ThreadActionMenu.items(s).contains { $0.id == "mark-unread" })
+    }
+
+    /// 5258 threadActionMenu.logic.test.ts "disables only rename where no inline title editor exists" (#31545).
+    @Test func searchResultsDisableOnlyRename() {
+        var s = ThreadActionMenu.State()
+        s.canRename = false
+        let disabled = ThreadActionMenu.items(s).filter(\.disabled).map(\.id)
+        #expect(disabled == ["rename"])
+    }
+
     @Test func removingDropsItemsAtAnyDepth() {
         let items = ThreadActionMenu.removing(["snooze:custom", "delete"], from: ThreadActionMenu.items(ThreadActionMenu.State()))
         #expect(!items.contains { $0.id == "delete" })

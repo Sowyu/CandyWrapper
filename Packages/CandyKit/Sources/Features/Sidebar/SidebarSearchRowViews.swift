@@ -247,6 +247,7 @@ final class SidebarSearchResultRowView: SidebarRowBase {
     private let excerpt = SearchExcerptView()
     private var moveTracking: NSTrackingArea?
     var onHover: (@MainActor (Int) -> Void)?
+    var onMenu: (@MainActor (ThreadId, NSEvent) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -255,7 +256,7 @@ final class SidebarSearchResultRowView: SidebarRowBase {
         layer?.addSublayer(surface)
         for v in [monogram, title, time, excerpt] as [NSView] { addSubview(v) }
         title.font = SB.font(14); title.lineHeight = 20
-        time.font = SB.tabular(12); time.lineHeight = 16
+        time.font = SB.tabular(12); time.lineHeight = 16; time.alignment = .right
         setAccessibilityRole(.button)
     }
 
@@ -296,8 +297,9 @@ final class SidebarSearchResultRowView: SidebarRowBase {
         let right = w - 10
         let column: CGFloat = excerpt.isHidden ? 20 : 36
         let top = (h - column) / 2
-        let tw = ceil(time.textWidth)
-        time.frame = NSRect(x: right - tw, y: top + 2, width: tw + 1, height: 16)
+        // `min-w-8 text-right` (SidebarThreadRow.tsx at 5258, #42011): at least 32 pt, wider for a longer translated time.
+        let tw = max(32, ceil(time.textWidth))
+        time.frame = NSRect(x: right - tw - 1, y: top + 2, width: tw + 1, height: 16)
         title.frame = NSRect(x: x, y: top, width: max(0, right - tw - 10 - x), height: 20)
         excerpt.frame = NSRect(x: x, y: top + 20, width: max(0, right - x), height: 16)
     }
@@ -313,6 +315,12 @@ final class SidebarSearchResultRowView: SidebarRowBase {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         if let r = result, !r.isHighlighted { onHover?(r.index) }
+    }
+
+    /// SidebarThreadRow.tsx:1889-1896 at 5258 (#31545): a right click opens the result's thread actions.
+    override func rightMouseDown(with event: NSEvent) {
+        guard let r = result, let onMenu else { return super.rightMouseDown(with: event) }
+        onMenu(r.id, event)
     }
 }
 

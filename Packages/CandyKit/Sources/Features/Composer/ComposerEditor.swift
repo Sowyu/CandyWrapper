@@ -846,11 +846,14 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
 
     /// Pasted rich text arrives as plain text with our style; its tokens become chips, and a T3
     /// fragment in the HTML flavor brings the records behind its links.
-    override func paste(_ sender: Any?) {
+    override func paste(_ sender: Any?) { _ = insertClipboard(NSPasteboard.general, dropped: false) }
+
+    /// `insertClipboardText` (ComposerPromptEditorTiptap.tsx at 5258): pasted and dropped text parse the same way, so
+    /// Markdown, line breaks and copied context match (#31098). Only a paste can become attachments or a text file.
+    private func insertClipboard(_ pboard: NSPasteboard, dropped: Bool) -> Bool {
         collapseShownSource()
-        let pboard = NSPasteboard.general
-        let bypass = pasteAsTextPending
-        pasteAsTextPending = false
+        let bypass = !dropped && pasteAsTextPending
+        if !dropped { pasteAsTextPending = false }
         // CRLF and CR become LF, as ProseMirror's clipboard parser does (`readPastedPlainText`, #27280).
         let plain = pboard.string(forType: .string).map(ComposerPasteboard.normalizedLineBreaks)
         // Images, and files without text, become attachments (`shouldHandleComposerAttachmentPaste`); Paste as Text
@@ -858,10 +861,13 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         // Copied context wins over the image beside it, so a copied snapshot pastes as its chip (#37771,
         // ComposerPromptEditorTiptap.tsx:1563-1568 at 4928).
         let fragment = plain.flatMap { text in pboard.string(forType: .html).flatMap { ComposerContext.pastedFragment(html: $0, pastedText: text) } }
-        if !(bypass && plain?.isEmpty == false), fragment == nil, onPasteAttachments?(pboard) == true { return }
+        if !dropped, !(bypass && plain?.isEmpty == false), fragment == nil, onPasteAttachments?(pboard) == true { return true }
         // Large text becomes a text file unless Cmd+Shift+V asked for it inline (`foldPastedText`).
-        if fragment == nil, let text = plain, onPasteText?(text, bypass) == true { return }
-        guard var text = plain else { return super.pasteAsPlainText(sender) }
+        if !dropped, fragment == nil, let text = plain, onPasteText?(text, bypass) == true { return true }
+        guard var text = plain, !(dropped && text.isEmpty) else {
+            if !dropped { super.pasteAsPlainText(nil) }
+            return false
+        }
         // The draft takes the records under its own ids and the text follows (`importPastedComposerText`).
         if let fragment, let ids = onPasteFragment?(fragment) { text = ComposerContextImport.rewrite(text, ids: ids) }
         // T3 reads only the plain text flavor (handlePaste): a page's HTML arrives as the text the
@@ -871,6 +877,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         if pasteBlocks(text) { scrollRangeToVisible(selectedRange()) } else { insertText(text, replacementRange: selectedRange()) }
         clipboardEdit = false
         breakUndoCoalescing()
+        return true
     }
 
     // MARK: File drops
@@ -911,6 +918,14 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
             return composer.insertMentionAtEnd(mention)
         }
         if let fileDrop, ComposerFileDrop.hasFiles(sender) { return fileDrop.perform(sender) }
+        // Text dragged in from elsewhere lands at the drop point as a paste would; a move inside the editor keeps
+        // AppKit's own drop (`handleDrop`, ComposerPromptEditorTiptap.tsx at 5258).
+        if isEditable, (sender.draggingSource as AnyObject?) !== self, sender.draggingPasteboard.string(forType: .string) != nil {
+            let index = characterIndexForInsertion(at: convert(sender.draggingLocation, from: nil))
+            setSelectedRange(NSRange(location: min(index, (string as NSString).length), length: 0))
+            window?.makeFirstResponder(self)
+            if insertClipboard(sender.draggingPasteboard, dropped: true) { return true }
+        }
         return super.performDragOperation(sender)
     }
 

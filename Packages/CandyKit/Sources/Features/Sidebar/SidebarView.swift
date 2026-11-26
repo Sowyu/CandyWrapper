@@ -23,6 +23,9 @@ public struct SidebarActions {
     public var openLinkedItems: (ThreadId) -> Void = { _ in }
     /// Right click on a thread row: the row view and the event, for the native menu.
     public var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
+    /// Right click on a search result: the thread's menu for that thread alone, without Rename
+    /// (Sidebar.tsx `handleSearchResultContextMenu` at 5258, #31545).
+    public var searchResultMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
     /// Dither's row hover group: pin, archive, and ⋯, which opens the thread menu under the given button.
     public var pin: (ThreadId) -> Void = { _ in }
     public var archive: (ThreadId) -> Void = { _ in }
@@ -335,6 +338,7 @@ public final class SidebarContentView: DSView {
         list.onShowAnyTime = { [weak self] in self?.setSettledRange(.any) }
         list.onSettledRange = { [weak self] anchor in self?.toggleSettledRangePicker(anchor) }
         list.onHighlightSearchResult = { [weak self] i in self?.setSearchHighlight(i, scroll: false) }
+        list.onSearchResultMenu = { [weak self] id, event, view in self?.actions.searchResultMenu(id, event, view) }
         list.onOpenSearchResult = { [weak self] id in self?.selectSearchResult(id) }
         filterButton.addSubview(filterMonogram)
         filterMonogram.isHidden = true
@@ -485,12 +489,23 @@ public final class SidebarContentView: DSView {
 
     var nowMs: Int64 { TimestampFormat.nowMs(now()) }
 
-    /// The thread rows in display order, outside search (`orderedThreadKeys`, Sidebar.tsx:3073-3079):
-    /// what `thread.previous`, `thread.next` and `thread.jump.N` walk.
-    public var orderedThreadIds: [ThreadId] {
-        SidebarListBuilder.items(snapshot: listSnapshot, state: state, nowMs: nowMs, cache: listCache).compactMap {
-            if case .row(let row) = $0 { row.id } else { nil }
+    /// A row `thread.previous`, `thread.next` and `thread.jump.N` can land on.
+    public enum RowTarget: Equatable, Sendable { case draft(String), thread(ThreadId) }
+
+    /// Draft rows sit above the threads, so jumps and traversal reach them first (`orderedRowKeys`,
+    /// Sidebar.tsx:1475-1479 at 5258, #39968). `active` is the open draft's or thread's row.
+    public var orderedRowTargets: (rows: [RowTarget], active: RowTarget?) {
+        let items = SidebarListBuilder.items(snapshot: listSnapshot, state: state, nowMs: nowMs, cache: listCache)
+        var drafts: [RowTarget] = [], threads: [RowTarget] = []
+        var active: RowTarget?
+        for item in items {
+            switch item {
+            case .draft(let d): drafts.append(.draft(d.id)); if d.isActive { active = .draft(d.id) }
+            case .row(let r): threads.append(.thread(r.id))
+            default: break
+            }
         }
+        return (drafts + threads, active ?? state.activeThreadId.map(RowTarget.thread))
     }
 
     public var resolvedProjectIds: Set<ProjectId>? {
@@ -730,7 +745,8 @@ public final class SidebarContentView: DSView {
         }
         if flags.contains(.command) { toggleSelection(id); return }
         if flags.contains(.shift) { selectRange(to: id); return }
-        if mouse, (event?.clickCount ?? 1) >= 2 { startRename(id); return }
+        // Quick clicks keep counting across rows, so only the open row's second click renames (Sidebar.tsx:1632-1635 at 5258, #41258).
+        if mouse, (event?.clickCount ?? 1) >= 2, state.activeThreadId == id { startRename(id); return }
         clearSelection()
         selectionAnchor = id
         state.activeThreadId = id
@@ -757,9 +773,11 @@ public final class SidebarContentView: DSView {
         state.selectedThreadIds = next
     }
 
-    /// Dither's hover badge: the `thread.jump.N` shortcut for one of the first nine rows, as `orderedThreadIds` counts them.
+    /// Dither's hover badge: the `thread.jump.N` shortcut for one of the first nine rows, as `orderedRowTargets` counts them.
     func jumpHint(_ id: ThreadId) -> String? {
-        var n = 0
+        // Drafts take the first numbers (#39968).
+        var n = list.items.reduce(0) { if case .draft = $1 { $0 + 1 } else { $0 } }
+        if n >= 9 { return nil }
         for item in list.items {
             guard case .row(let r) = item else { continue }
             n += 1

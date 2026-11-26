@@ -95,6 +95,7 @@ final class SidebarCommands {
             self.threads.acknowledgeWake(id, at: wake)
         }
         sidebar.actions.contextMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view) }
+        sidebar.actions.searchResultMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view, fromSearch: true) }
         sidebar.actions.pin = { [weak self] in self?.pin($0) }
         sidebar.actions.archive = { [weak self] in self?.archive($0) }
         sidebar.actions.moreMenu = { [weak self] id, button in
@@ -792,9 +793,12 @@ final class SidebarCommands {
 
     /// `anchor` (in `view`) places the menu's top left there instead of at the pointer.
     /// Under Dither, `button` (the row's ⋯) places the menu under itself.
-    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, anchor: NSPoint? = nil, rename: (() -> Void)? = nil, from button: NSView? = nil) {
+    /// `fromSearch`: a search result is no selectable row and has no title editor, so the menu acts on its own
+    /// thread and Rename is off (Sidebar.tsx:2610-2633, 2687 at 5258, #31545).
+    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, anchor: NSPoint? = nil, rename: (() -> Void)? = nil, from button: NSView? = nil,
+                        fromSearch: Bool = false) {
         guard let thread = shell(id), let sidebar else { return }
-        if rename == nil, button == nil, sidebar.selectedThreadIds.contains(id) {
+        if !fromSearch, rename == nil, button == nil, sidebar.selectedThreadIds.contains(id) {
             showSelectionMenu(event: event, view: view)
             return
         }
@@ -807,6 +811,7 @@ final class SidebarCommands {
             state.isSettled = row?.section == .settled
         }
         state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
+        state.canRename = !fromSearch
         let items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
         let choose: @MainActor (String) -> Void = { [weak self, weak sidebar] choice in
             if choice == "rename", let rename { rename(); return }
@@ -846,6 +851,7 @@ final class SidebarCommands {
         state.isRegeneratingTitle = thread.titleRegeneration != nil || deeperRenames[thread.id] != nil
         state.canRewriteTitle = deeperRenameModel(thread.id) != nil
         state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
+        state.hasCompletedRun = thread.latestRunCompletedAt.value != nil
         state.snoozePresets = presets
         if let env = thread.id.environmentId, let config = threads.composer.config(env) {
             state.canTurnIntoProject = ProjectCommands.canTurnIntoProject(
@@ -1166,12 +1172,22 @@ final class SidebarCommands {
     /// Add project opens the command palette's add-project flow (`openCommandPalette({open: "add-project"})`).
     var openAddProject: () -> Void = {}
 
-    func addProject() { openAddProject() }
+    func addProject() { addProject(fromDraft: nil) }
+
+    /// The draft whose project picker opened Add project; every other entry clears it, so a cancelled pick never
+    /// moves the draft later (`openIntent.draftId`, CommandPalette.tsx at 5258, #42889).
+    private var addProjectDraftId: String?
+    func addProject(fromDraft draftId: String?) {
+        addProjectDraftId = draftId
+        openAddProject()
+    }
 
     /// `handleAddProjectForEnvironment`: an existing project opens its latest unsettled thread or a
     /// draft; a new one is created with `project.create`, then a draft opens in it.
     func addProject(path: String, environmentId env: String) {
         let projects = (snapshot?.projects ?? []).filter { $0.id.environmentId == env }
+        let draftId = addProjectDraftId
+        addProjectDraftId = nil
         if let existing = ProjectCommands.existing(projects, workspaceRoot: path) {
             // Adding an archived project's folder again brings the project back (CommandPalette.tsx:2003-2010 at 4928).
             if existing.archivedAt != nil {
@@ -1183,6 +1199,7 @@ final class SidebarCommands {
                     }
                 }
             }
+            if let draftId, threads.moveDraft(draftId, toAdded: existing) { return }
             let latest = (snapshot?.threads ?? []).filter { $0.projectId == existing.id }
                 .max { SidebarModel.getThreadSortTimestamp($0, .updatedAt) < SidebarModel.getThreadSortTimestamp($1, .updatedAt) }
             if let latest, latest.settledOverride != .settled { threads.open(latest.id) } else { threads.newThread(in: existing) }
@@ -1192,8 +1209,9 @@ final class SidebarCommands {
         Task {
             do {
                 let result = try await environments.request(env, "projects.mutate", ProjectCommands.create(projectId: projectId, workspaceRoot: path))
-                let created = try result.decode(as: ProjectShell.self)
-                threads.newThread(in: EnvironmentScope.scope(created, env))
+                let created = EnvironmentScope.scope(try result.decode(as: ProjectShell.self), env)
+                if let draftId, threads.moveDraft(draftId, toAdded: created) { return }
+                threads.newThread(in: created)
             } catch {
                 fail("Failed to add project", error)
             }

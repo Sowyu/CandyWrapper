@@ -50,6 +50,7 @@ public final class SidebarListView: DSView {
     var settledRange = SettledRange.any
     /// The pointer moved over a search result (`onMouseMove` highlights it).
     var onHighlightSearchResult: (@MainActor (Int) -> Void)?
+    var onSearchResultMenu: (@MainActor (ThreadId, NSEvent, NSView) -> Void)?
     var rowActions = SidebarRowActions()
     var onVisibleRowsChange: (@MainActor () -> Void)?
     /// The one rename field, lent to the row being renamed.
@@ -89,10 +90,18 @@ public final class SidebarListView: DSView {
         if let released { oldTops.merge(released) { $1 } }
         let oldVisible = visible
         let oldItems = Dictionary(uniqueKeysWithValues: items.map { ($0.key, $0) })
+        let scrollBefore = enclosingScrollView?.contentView.bounds.origin.y
         items = new
         recomputeGeometry()
         recordShifts()
         let shouldAnimate = (animated || released != nil) && window != nil && !Motion.reduced && !oldTops.isEmpty
+        // A removal near the end shrinks the list and the clip view clamps the scroll position, moving every row on
+        // screen. Old places include that shift, so those rows slide instead of jumping (Sidebar.motion.ts at 5258, #26661).
+        if shouldAnimate, let scrollBefore, let after = enclosingScrollView?.contentView.bounds.origin.y, after != scrollBefore {
+            let shift = after - scrollBefore
+            oldTops = oldTops.mapValues { $0 + shift }
+            for (key, view) in oldVisible where indexByKey[key] == nil { view.frame.origin.y += shift }
+        }
         // Rows that left the list fade out where they were.
         var faded = 0
         for (key, view) in oldVisible where indexByKey[key] == nil {
@@ -371,6 +380,7 @@ public final class SidebarListView: DSView {
         case .searchResult:
             let result = SidebarSearchResultRowView()
             result.onHover = { [weak self] index in self?.onHighlightSearchResult?(index) }
+            result.onMenu = { [weak self, weak result] id, event in if let result { self?.onSearchResultMenu?(id, event, result) } }
             view = result
         case .emptyText: view = SidebarEmptyTextRowView()
         case .noProjects:

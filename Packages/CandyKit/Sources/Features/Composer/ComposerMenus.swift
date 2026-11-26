@@ -103,6 +103,17 @@ public struct ComposerTriggerState: Equatable, Sendable {
         dismissed = trigger
         trigger = nil
     }
+
+    /// The caret moved without an edit: the open menu follows its own token and closes off it, but a move never
+    /// opens one (`followCaret`, useComposerTriggerState.ts at 5258, #37122).
+    public mutating func follow(_ candidate: ComposerTrigger?) {
+        func same(_ a: ComposerTrigger?, _ b: ComposerTrigger?) -> Bool {
+            guard let a, let b else { return false }
+            return a.kind == b.kind && a.rangeStart == b.rangeStart
+        }
+        if !same(dismissed, candidate) { dismissed = nil }
+        trigger = same(trigger, candidate) ? candidate : nil
+    }
 }
 
 // MARK: - Search ranking (packages/shared/src/searchRanking.ts)

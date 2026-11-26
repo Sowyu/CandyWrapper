@@ -50,4 +50,18 @@ struct QueuedRunEditsTests {
         #expect(finished)
         #expect(state.takeExited(thread, queuedRuns: []) == edit)
     }
+
+    /// #41814: an edit keeps its own model key and remembers the model it opened on; a changed model alone
+    /// counts as an edit when the run leaves the queue (queuedMessageEdit.ts:121-126 at 5258).
+    @Test func editKeepsItsModelApartFromTheThread() throws {
+        var state = QueuedRunEdits()
+        let thread = ThreadId("env:t"), run = RunId("r")
+        let model = ModelSelection(instanceId: ProviderInstanceId("codex"), model: "gpt-5")
+        let edit = state.begin(thread: thread, run: run, text: "same", originalModel: model)
+        #expect(edit.pickerKey != thread.rawValue && edit.pickerKey.hasPrefix(thread.rawValue))
+        #expect(edit.originalModel == model && !edit.followsThreadSelection)
+        #expect(ComposerFeedback.recoverQueuedEdit(edited: "same", original: "same", threadPrompt: "", modelChanged: true) == .kept)
+        #expect(ComposerFeedback.recoverQueuedEdit(edited: "same", original: "same", threadPrompt: "", modelChanged: false) == .clean)
+        #expect(ComposerFeedback.recoverQueuedEdit(edited: "same", original: "same", threadPrompt: "busy", modelChanged: true) == .discarded)
+    }
 }

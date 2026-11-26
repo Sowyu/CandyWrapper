@@ -155,7 +155,6 @@ public enum PaletteScoring {
         .union(CharacterSet(charactersIn: "\u{2000}"..."\u{200A}"))
     static func isJSSpace(_ s: Unicode.Scalar) -> Bool { jsSpaces.contains(s) }
 
-    static let wrappingQuotes = try! NSRegularExpression(pattern: "^\(jsSpace)*[\"'`“”‘’]+|[\"'`“”‘’]+\(jsSpace)*\\z")
 
     static func replacing(_ regex: NSRegularExpression, in text: String, with template: String = "") -> String {
         regex.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: template)
@@ -168,10 +167,81 @@ public enum PaletteScoring {
         text.unicodeScalars.split(whereSeparator: isJSSpace).map { String(String.UnicodeScalarView($0)) }
     }
 
-    /// `foldSearchQuery`: folded, whitespace-collapsed query; empty when there is nothing to match.
+    static func isQuoteOrSpace(_ s: Unicode.Scalar) -> Bool { "\"'`“”‘’".unicodeScalars.contains(s) || isJSSpace(s) }
+    static func isDoubleQuote(_ s: Unicode.Scalar) -> Bool { s == "\"" || s == "“" || s == "”" }
+
+    /// `unwrapQuery` (paletteSearch.ts at 5258, #37700): without the quotes and spaces around a query, so its words
+    /// never start or end with a quote.
+    static func unwrapQuery(_ query: String) -> String {
+        let scalars = Array(query.unicodeScalars)
+        var start = 0, end = scalars.count
+        while start < end, isQuoteOrSpace(scalars[start]) { start += 1 }
+        while end > start, isQuoteOrSpace(scalars[end - 1]) { end -= 1 }
+        return String(String.UnicodeScalarView(scalars[start..<end]))
+    }
+
+    /// `isExactQuery`: straight or curly double quotes around the whole query, longer than two characters, ask for
+    /// its words together, as typed.
+    static func isExactQuery(_ query: String) -> Bool {
+        let trimmed = Array(query.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n\r")).unicodeScalars)
+        guard trimmed.count > 2, let first = trimmed.first, let last = trimmed.last else { return false }
+        return isDoubleQuote(first) && isDoubleQuote(last)
+    }
+
+    /// `foldSearchQuery`: folded, whitespace-collapsed query; empty when there is nothing to match. An exact query
+    /// keeps straight double quotes around its words, so scoring sees it.
     public static func foldSearchQuery(_ query: String) -> String {
-        let folded = string(foldInPlace(replacing(wrappingQuotes, in: query).precomposedStringWithCanonicalMapping))
-        return splitWhitespace(folded).joined(separator: " ")
+        let folded = string(foldInPlace(unwrapQuery(query).precomposedStringWithCanonicalMapping))
+        let words = splitWhitespace(folded).joined(separator: " ")
+        return !words.isEmpty && isExactQuery(query) ? "\"\(words)\"" : words
+    }
+
+    /// `exactPhrase`: the words of a folded exact query, nil when it is not exact.
+    static func exactPhrase(_ normalized: String) -> String? {
+        guard normalized.utf16.count > 2, normalized.hasPrefix("\""), normalized.hasSuffix("\"") else { return nil }
+        return String(normalized.dropFirst().dropLast())
+    }
+
+    /// `findWholePhrase`: where `words` sit side by side in `field` as whole words, whatever whitespace is between.
+    static func findWholePhrase(_ field: SearchField, _ words: [Units]) -> SearchRange? {
+        let text = field.text, first = words[0]
+        // A phrase that opens with punctuation ("#12 fix") brings its own boundary, as a token does.
+        let ownBoundary = !unitIsAlnum(first[0]) && !unitIsSymbol(first[0])
+        var cursor = indexOf(text, first)
+        while let start = cursor {
+            defer { cursor = indexOf(text, first, from: start + 1) }
+            guard field.wordStarts[start] || ownBoundary else { continue }
+            var end: Int? = start + first.count
+            for word in words.dropFirst() {
+                guard let e = end else { break }
+                var next = e
+                while next < text.count, Unicode.Scalar(text[next]).map(isJSSpace) == true { next += 1 }
+                end = next > e && starts(text, with: word, at: next) ? next + word.count : nil
+            }
+            guard let end else { continue }
+            if end >= text.count || field.wordStarts[end] || !unitIsAlnum(text[end]) { return SearchRange(start: start, end: end) }
+        }
+        return nil
+    }
+
+    /// `matchExactPhrase`: one field must hold the words together as typed, as whole words. Typos, joined words,
+    /// mid-word hits and optional filler do not count.
+    @MainActor static func matchExactPhrase(_ phrase: String, _ fields: [WeightedSearchField]) -> SearchFieldsMatch? {
+        let words = phrase.split(separator: " ").map { Units($0.utf16) }
+        guard !words.isEmpty else { return nil }
+        var best = 0.0
+        var primaryRange: SearchRange?
+        var primaryLength = 0
+        for (position, weighted) in fields.enumerated() where !weighted.value.isEmpty {
+            let field = prepareSearchField(weighted.value)
+            guard let range = findWholePhrase(field, words) else { continue }
+            best = max(best, weighted.weight)
+            if position == 0 { primaryRange = range; primaryLength = field.text.count }
+        }
+        guard best > 0 else { return nil }
+        let wholeName = primaryRange?.start == 0 && primaryRange?.end == primaryLength
+        let bonus = wholeName ? Self.wholeName - wholeWord : primaryRange != nil && words.count > 1 ? 0.25 : 0
+        return SearchFieldsMatch(quality: best + bonus, strong: true, primaryRanges: primaryRange.map { [$0] } ?? [])
     }
 
     static func indexOf(_ hay: Units, _ needle: Units, from: Int = 0) -> Int? {
@@ -362,6 +432,7 @@ public enum PaletteScoring {
     /// weighted match, plus a bonus when the first field holds the whole query as a phrase or equals it.
     @MainActor static func matchSearchFields(_ normalizedQuery: String, _ fields: [WeightedSearchField], typos: Bool = false) -> SearchFieldsMatch? {
         guard !normalizedQuery.isEmpty else { return nil }
+        if let phrase = exactPhrase(normalizedQuery) { return matchExactPhrase(phrase, fields) }
         let prepared = fields.filter { !$0.value.isEmpty }.map { (prepareSearchField($0.value), $0) }
         // Field identity, as T3's cache gives one field per source string.
         let primaryValue = fields.first.flatMap { $0.value.isEmpty ? nil : $0.value }
@@ -422,7 +493,7 @@ public enum PaletteScoring {
     /// `messageSearchTokens`: every `long` token must match, `short` ones only narrow hits. No long tokens means
     /// no search. Two CJK characters count as long. Accents stay, as the server index folds Latin accents.
     public static func messageSearchTokens(_ query: String) -> MessageSearchTokens {
-        let cleaned = replacing(curlyApostrophes, in: replacing(wrappingQuotes, in: query), with: "'")
+        let cleaned = replacing(curlyApostrophes, in: unwrapQuery(query), with: "'")
         let tokens = splitWhitespace(cleaned.precomposedStringWithCanonicalMapping.lowercased())
         let searchable = { (token: String) -> Bool in
             let length = token.unicodeScalars.count

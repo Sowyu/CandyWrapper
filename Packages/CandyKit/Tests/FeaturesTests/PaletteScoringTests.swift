@@ -143,6 +143,22 @@ struct PaletteScoringTests {
             #expect(rankTitles("lakebed", named) == ["Lakebed", "Lakebed perf audit"])
         }
 
+        @Test("matches a query in double quotes only as whole words together, as typed (#37700)")
+        @MainActor func exactQuotedQueries() {
+            let threads = [thread("Fix sidebar lag"), thread("Sidebar scroll lag"), thread("Fix sidebar lagging"), thread("Lag in the sidebar")]
+            #expect(rankTitles("sidebar lag", threads).count == 4)
+            #expect(rankTitles("\"sidebar lag\"", threads) == ["Fix sidebar lag"])
+            #expect(rankTitles("“Sidebar  Lag”", threads) == ["Fix sidebar lag"])
+            #expect(rankTitles("\"sidebra lag\"", threads).isEmpty)
+            #expect(rankTitles("\"fix the sidebar\"", threads).isEmpty)
+            #expect(rankTitles("\"sidebar lag", threads).count == 4)
+            #expect(rankTitles("\"sidebar lag\"", [thread("Fix sidebar  lag")]) == ["Fix sidebar  lag"])
+            let quotes = String(repeating: "\"", count: 34)
+            #expect(PS.foldSearchQuery("a\(quotes)x") == "a\(quotes)x")
+            #expect(PS.scoreThreadSearch(PS.foldSearchQuery("\"#\""), thread("Fix \"\" handling"), now: now) == nil)
+            #expect(PS.scoreThreadSearch("\" lag\"", thread("Fix sidebar lag"), now: now) != nil)
+        }
+
         @Test("ignores the t3 prefix of flat temporary branches (#35430)")
         func flatBranchPrefix() {
             let flat = thread("Add search", branch: "t3-abcd1234")

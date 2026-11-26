@@ -100,8 +100,17 @@ struct ComposerAttachmentsTests {
         #expect(R.providerLimitError([(false, 50 * 1024 * 1024), (false, 50 * 1024 * 1024)]) == nil)
     }
 
+    /// 5258 composerAttachmentFiles.test.ts (#40686, #40909): Word's picture of its text never wins over the text.
     @Test func pasteRules() {
-        #expect(R.shouldHandlePaste(files: [("image.png", "image/png")], plainText: "hello"))
+        #expect(!R.shouldHandlePaste(files: [("image.png", "image/png")], plainText: "hello"))
+        #expect(R.shouldHandlePaste(files: [("image.png", "image/png")], plainText: "https://example.com/image.png", htmlIsOnlyImage: true))
+        #expect(R.shouldHandlePaste(files: [("image.png", "image/png")], plainText: "image.png"))
+        #expect(R.htmlImageContent(#"<meta charset="utf-8"><img src="https://example.com/a.png">"#) == .onlyImage)
+        #expect(R.htmlImageContent(#"<html><head><style>p{}</style></head><body><p>Hi</p><img src="a.png"></body></html>"#) == .imageAndText)
+        #expect(R.htmlImageContent("<p class=MsoNormal>Word text</p>") == .none)
+        let files = [("notes.txt", "text/plain"), ("image.png", "image/png")]
+        #expect(R.imagesBesidePastedText(files: files, plainText: "Hi", htmlImageContent: .imageAndText) == [1])
+        #expect(R.imagesBesidePastedText(files: files, plainText: "Hi", htmlImageContent: .none).isEmpty)
         #expect(!R.shouldHandlePaste(files: [("a.txt", "text/plain")], plainText: "hello"))
         #expect(R.shouldHandlePaste(files: [("a.txt", "text/plain")], plainText: ""))
         #expect(!R.shouldHandlePaste(files: [], plainText: ""))

@@ -55,11 +55,24 @@ public final class ThreadLinkPicker: DSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    /// `${title} ${project}` holds the query, ignoring case (ThreadLinkPicker.tsx:36-46).
-    static func filter(_ candidates: [Candidate], query: String) -> [Candidate] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    /// `${title} ${project}` holds the query, ignoring case in the user's locale or accents
+    /// (`threadLinkMatcher`, ThreadLinkPicker.logic.ts at 5258, #39557): "cafe" finds "Café".
+    static func filter(_ candidates: [Candidate], query: String, locale: Locale = .current) -> [Candidate] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(with: locale)
         guard !q.isEmpty else { return candidates }
-        return candidates.filter { "\($0.title) \($0.project ?? "")".lowercased().contains(q) }
+        let folded = normalizeSearchText(query)
+        return candidates.filter {
+            let text = "\($0.title) \($0.project ?? "")"
+            return text.lowercased(with: locale).contains(q) || normalizeSearchText(text).contains(folded)
+        }
+    }
+
+    /// `normalizeSearchText` (lib/utils.ts:29-31): NFKD without combining marks, lowercased, spaces collapsed.
+    static func normalizeSearchText(_ value: String) -> String {
+        let stripped = String(String.UnicodeScalarView(value.decomposedStringWithCompatibilityMapping.unicodeScalars.filter {
+            ![.nonspacingMark, .spacingMark, .enclosingMark].contains($0.properties.generalCategory)
+        }))
+        return stripped.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     private func refilter() {

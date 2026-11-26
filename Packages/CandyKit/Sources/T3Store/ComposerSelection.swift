@@ -415,6 +415,24 @@ public final class ComposerSelectionStore {
         return pick.instanceId == thread.instanceId && pick.model == thread.model && options(pick) == options(thread)
     }
 
+    /// A queued message's edit opens on the run's own model (`setModelSelection(target, run.modelSelection,
+    /// { explicit: true, replaceOptions: true })`, useQueuedRunEdit.ts:311-312 at 5258, #41814).
+    public func setExplicitSelection(_ key: String, _ selection: ModelSelection) {
+        var draft = ComposerModelDraft()
+        draft.activeInstance = selection.instanceId
+        let options = selection.optionSelections
+        draft.selectionByInstance[selection.instanceId] = InstanceModelSelection(model: selection.model, options: options.isEmpty ? nil : options)
+        draft.explicit = true
+        drafts[key] = draft
+        save()
+    }
+
+    /// The draft's own pick for its active instance, if it has one.
+    public func pickedSelection(_ key: String) -> ModelSelection? {
+        guard let draft = drafts[key], let id = draft.activeInstance, let pick = draft.selectionByInstance[id] else { return nil }
+        return ModelSelection(instanceId: id, model: pick.model, selections: pick.options)
+    }
+
     /// Drops the picks of every key that matches, for a removed environment.
     public func removeDrafts(where matches: (String) -> Bool) {
         let before = drafts.count

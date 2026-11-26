@@ -169,4 +169,14 @@ struct Nightly5258WireTests {
                                                        refs: [VcsRef(name: "trunk", isDefault: true)]).get()
         #expect(input["workspaceStrategy"]?["baseRef"]?.stringValue == "trunk")
     }
+
+    /// A8 (#41814): a message that named no model carries `followsThreadSelection` (orchestrationV2.ts:1532-1533),
+    /// and older messages decode without it.
+    @Test func messageFollowsThreadSelectionDecodes() throws {
+        let base = #""id":"m1","threadId":"t1","runId":"r1","nodeId":null,"role":"user","text":"hi","streaming":false,"createdAt":"2026-11-25T00:00:00.000Z","updatedAt":"2026-11-25T00:00:00.000Z""#
+        let follows = try Self.decode(ConversationMessage.self, "{" + base + #","followsThreadSelection":true}"#)
+        #expect(follows.followsThreadSelection == true)
+        let older = try Self.decode(ConversationMessage.self, "{" + base + "}")
+        #expect(older.followsThreadSelection == nil)
+    }
 }

@@ -385,8 +385,15 @@ public final class ComposerView: DSView {
             // A pasted folder always becomes a reference (ChatComposer.tsx:5176-5192, `splitTransferredFiles`).
             let isFolder = { (f: ComposerIncomingFile) in (try? f.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
             let plain = files.filter { !isFolder($0) }
+            let described = plain.map { ($0.name, $0.mimeType) }
+            let html: ComposerAttachmentRules.HTMLImageContent = text.isEmpty || plain.isEmpty ? .none : ComposerAttachmentRules.htmlImageContent(pboard.string(forType: .html) ?? "")
             guard plain.count < files.count
-                    || ComposerAttachmentRules.shouldHandlePaste(files: plain.map { ($0.name, $0.mimeType) }, plainText: text) else { return false }
+                    || ComposerAttachmentRules.shouldHandlePaste(files: described, plainText: text, htmlIsOnlyImage: html == .onlyImage) else {
+                // The text pastes as text; a copied message's pictures attach beside it (ChatComposer.tsx:3051-3057 at 5258).
+                let beside = ComposerAttachmentRules.imagesBesidePastedText(files: described, plainText: text, htmlImageContent: html)
+                if !beside.isEmpty { onFiles(beside.map { plain[$0] }) }
+                return false
+            }
             onFiles(files)
             return true
         }
@@ -432,7 +439,7 @@ public final class ComposerView: DSView {
         addSubview(outline)
 
         editor.onTextChange = { [weak self] in self?.textChanged() }
-        editor.onSelectionChange = { [weak self] in self?.onCaretChange?() }
+        editor.onSelectionChange = { [weak self] in self?.onCaretChange?(false) }
         editor.chipLook = chipLook
         editor.onSuggestionKey = { [weak self] accept in
             guard let self, suggestionOffered, let suggestion = promptSuggestion else { return false }
@@ -480,6 +487,10 @@ public final class ComposerView: DSView {
     public var requiresSendModifier: Bool { ComposerLogic.requiresModifier(sendShortcut, prompt: prompt) }
     /// `hasSendableContent`: prose besides context links, or a context chip (ChatView.logic.ts:866-890).
     private var hasContent: Bool { hasSendableContent(prompt) }
+    /// The prompt as the last refresh saw it is only whitespace, for the `composerEmpty` keybinding condition, so a
+    /// shortcut never serializes the draft again.
+    public private(set) var promptIsBlank = true
+
     private func hasSendableContent(_ text: String) -> Bool {
         !ComposerContext.stripReferences(text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !ComposerContext.referencedIds(text).isEmpty || attachmentCount > 0
@@ -534,8 +545,8 @@ public final class ComposerView: DSView {
         get { editor.onPasteFragment }
         set { editor.onPasteFragment = newValue }
     }
-    /// An edit or a caret move (the menu controller follows the trigger).
-    var onCaretChange: (() -> Void)?
+    /// An edit (true) or a caret move alone (false); the menu controller follows the trigger.
+    var onCaretChange: ((Bool) -> Void)?
 
     private var sendMode: ComposerLogic.SendMode {
         ComposerLogic.sendMode(running: runState.canInterrupt, alternate: alternateHeld, steerByDefault: steerByDefault, canSteer: !isCompacting)
@@ -565,6 +576,7 @@ public final class ComposerView: DSView {
     func refresh(prompt typed: String? = nil) {
         defer { invalidateHeightIfNeeded() }
         let prompt = typed ?? self.prompt
+        promptIsBlank = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasContent = hasSendableContent(prompt)
         // ChatComposer.tsx:7489-7490.
         let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it"
@@ -761,7 +773,7 @@ public final class ComposerView: DSView {
         refresh(prompt: prompt)
         relayoutHeight()
         onTextChange?(prompt)
-        onCaretChange?()
+        onCaretChange?(true)
     }
 
     private func relayoutHeight() {

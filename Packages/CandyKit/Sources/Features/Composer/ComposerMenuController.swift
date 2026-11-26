@@ -43,7 +43,7 @@ public final class ComposerMenuController {
         }
         menu.onSelect = { [weak self] item in self?.select(item) }
         composer.editor.onMenuKey = { [weak self] key in self?.handle(key) ?? false }
-        composer.onCaretChange = { [weak self] in self?.update() }
+        composer.onCaretChange = { [weak self] edited in self?.update(textChanged: edited) }
     }
 
     private var searchKey: String? {
@@ -58,10 +58,10 @@ public final class ComposerMenuController {
         return ComposerTriggers.detect(editor.string, cursor: selection.location)
     }
 
-    /// Re-reads the trigger after an edit or a caret move.
-    func update() {
+    /// Re-reads the trigger after an edit or a caret move. Only an edit opens a menu (#37122).
+    func update(textChanged: Bool = true) {
         let before = state.trigger
-        state.set(detect())
+        if textChanged { state.set(detect()) } else { state.follow(detect()) }
         if state.trigger != before { onTriggerChange?(state.trigger) }
         reload()
     }

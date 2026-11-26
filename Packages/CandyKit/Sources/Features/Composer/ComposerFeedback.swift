@@ -104,8 +104,9 @@ extension ComposerFeedback {
 
     /// `recoverQueuedMessageEdit` (chat/queuedMessageEdit.ts:11-27): a changed edit moves to the
     /// thread's prompt when that holds no text, else it is dropped; an unchanged edit just closes.
-    public static func recoverQueuedEdit(edited: String, original: String, threadPrompt: String) -> QueuedEditRecovery {
-        let dirty = edited != original
+    /// `modelChanged`: the edit's model differs from the one it opened on (queuedMessageEdit.ts:121-126 at 5258, #41814).
+    public static func recoverQueuedEdit(edited: String, original: String, threadPrompt: String, modelChanged: Bool = false) -> QueuedEditRecovery {
+        let dirty = edited != original || modelChanged
         if dirty, threadPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return .kept }
         return dirty ? .discarded : .clean
     }

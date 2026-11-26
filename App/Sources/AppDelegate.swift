@@ -549,7 +549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The no-projects hero (NoProjectsHero.tsx).
         threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
         threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }
-        threads.composer.onAddProject = { [weak commands] in commands?.addProject() }
+        threads.composer.onAddProject = { [weak commands] draftId in commands?.addProject(fromDraft: draftId) }
         // Settings > Projects' empty state: the palette's add-project flow lives in the main window, over Settings.
         settings.pageContext.addProject = { [weak settings, weak commands] in settings?.close(); commands?.addProject() }
         threads.composer.scratchEnvironment = { [weak palette] in palette?.scratchTargetEnvironmentId }
@@ -1067,6 +1067,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cmd+, : the settings pages, Connections first while it is the only one built. T3 lands on General.
     @objc func openSettings(_ sender: Any?) {
         mainWindow?.makeKeyAndOrderFront(nil)
+        // Cmd+, closes an open model picker or permissions menu, which would otherwise float over Settings
+        // (ChatComposer.tsx and ComposerContextPermissions.tsx at 5258, #29282).
+        if let mainWindow { PopupHost.host(for: mainWindow).closeAll() }
         settings?.open()
     }
 

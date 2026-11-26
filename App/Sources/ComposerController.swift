@@ -105,7 +105,8 @@ final class ComposerController {
     /// Opens a new thread in the open thread's project, leaving the thread (`handleNewThreadInActiveProject`).
     var onNewThread: (() -> Void)?
     /// The draft picker's "Add project" row.
-    var onAddProject: (() -> Void)?
+    /// Add project, with the draft whose project picker asked for it (`OpenAddProject.draftId` at 5258, #42889).
+    var onAddProject: ((String?) -> Void)?
     /// Dither's project popover: "No project" starts a draft in this machine's scratch project, nil hides the row.
     var scratchEnvironment: (() -> String?)?
     var onStartWithoutProject: ((String) -> Void)?
@@ -1039,7 +1040,10 @@ final class ComposerController {
     /// Keybinding context keys the composer owns.
     var shortcutContext: [String: Bool] {
         ["composerFocus": composer.isEditorFocused, "modelPickerOpen": pickers.isModelPickerOpen,
-         "turnRunning": composer.runState.canInterrupt, "composerRequiresModifier": composer.requiresSendModifier]
+         "turnRunning": composer.runState.canInterrupt, "composerRequiresModifier": composer.requiresSendModifier,
+         // A queued edit or a question's answer owns the composer even when its text is empty (ChatView.tsx:2909-2914 at 5258, #30644).
+         "composerEmpty": queuedEdit == nil && requests.userInputs.isEmpty && composer.attachmentCount == 0
+            && draftKey.map { replyTargets[$0] == nil } != false && composer.promptIsBlank]
     }
 
     /// The open draft's project, nil on a thread.
@@ -1474,7 +1478,7 @@ final class ComposerController {
                                         canPin: { actions?.canPinProject($0) ?? false },
                                         onTogglePin: { actions?.setProjectPinned($0, $1) }) { [weak self] key in
             guard let self else { return }
-            guard let key else { self.onAddProject?(); return }
+            guard let key else { self.onAddProject?(current.draftId); return }
             guard key != active?.key, let group = groups.first(where: { $0.key == key }) else { return }
             self.openPickedGroup(group, key: key, currentEnvironment: currentId.environmentId)
         }
@@ -1499,7 +1503,7 @@ final class ComposerController {
                 self.openPickedGroup(group, key: key, currentEnvironment: currentId.environmentId)
             case .noProject:
                 if !scratch, let scratchEnv { self.onStartWithoutProject?(scratchEnv) }
-            case .newProject: self.onAddProject?()
+            case .newProject: self.onAddProject?(current.draftId)
             case .manageProjects: self.onManageProjects?()
             }
         }
@@ -1527,6 +1531,24 @@ final class ComposerController {
                   let group = SidebarModel.buildProjectGroups([project]).first else { return }
             self.openPickedGroup(group, key: group.key, currentEnvironment: env)
         }
+    }
+
+    /// `moveDraftToAddedProject` (CommandPalette.tsx at 5258, #42889, lib/moveDraftToProject.ts): after Add project from
+    /// a draft's picker, a draft the user wrote in moves to the added project. False for an empty or gone draft, which
+    /// leaves the caller to open the project's own draft.
+    // ponytail: a just-created project may not be in the shell yet, so the draft keys by its project id until it is;
+    // T3 waits up to 3 s for the project record
+    func moveDraft(_ draftId: String, toAdded project: ProjectShell) -> Bool {
+        flushPrompt()
+        guard let draft = sessions.values.first(where: { $0.draftId == draftId }),
+              hasUserContent(draft, prompt: prompts[draftId] ?? "") else { return false }
+        let key = group(of: project.id)?.key ?? project.id.rawValue
+        let r = DraftProjectMove.move(draft, to: project.id, key: key, in: sessions) {
+            self.hasUserContent($0, prompt: self.prompts[$0.draftId] ?? "")
+        }
+        sessions = r.sessions
+        showDraft(project, stored: r.moved)
+        return true
     }
 
     private func hasUserContent(_ session: DraftSession, prompt: String) -> Bool {
@@ -2042,7 +2064,8 @@ final class ComposerController {
         // Redesign's strip never holds Permissions, so the composer keeps its chip there.
         pickers.permissionsShownInStrip = thread == nil && panel.showsContextStrip && strip.showsPermissions
         pickers.workspaceModelsScanning = workspaceSkillsScanning
-        pickers.update(draftKey: draftKey ?? "", context: context)
+        // A queued edit picks its own model, apart from the thread's (`queuedRunEditDraftId`, useQueuedRunEdit.ts at 5258).
+        pickers.update(draftKey: queuedEdit?.pickerKey ?? draftKey ?? "", context: context)
         updateStripPermissions()
         panel.hero.offersScratch = scratchEnvironment?() != nil
         strip.permissions.action = { [weak self, weak strip] in if let strip { self?.pickers.openPermissions(from: strip.permissions) } }
@@ -2067,6 +2090,38 @@ final class ComposerController {
         composer.needsLayout = true
     }
 
+    /// A worktree command approval is being read or asked for this composer's send (`sendInFlightRef`).
+    private var layoutApprovalInFlight = false
+
+    /// `ensureWorktreeLayoutApproved` (worktreeLayoutApproval.ts at 5258, #42386). The server refuses unapproved
+    /// commands either way, so a read that fails lets the send go on to that answer.
+    // ponytail: no managed-policy check (`managedCapabilityDenial`); the server's refusal names the policy instead
+    private func ensureWorktreeLayoutApproved(projectId: String, projectTitle: String) async -> WorktreeLayoutApprovalView.Outcome {
+        let scoped = ProjectId(projectId)
+        guard let env = scoped.environmentId, let session = environments.session(env) else { return .proceed }
+        let auth = environments.authSession(env)
+        if let auth, !auth.grants(AuthScopes.filesystemRead) { return .proceed }
+        let project = WorkspaceRPC.project(ProjectId(EnvironmentScope.localId(of: projectId)))
+        guard let read = try? await session.supervisor.request(WorkspaceRPC.layoutCommands, payload: project),
+              let all = try? (read["commands"] ?? .array([])).decode(as: [WorktreeLayoutCommand].self) else { return .proceed }
+        let commands = all.filter { !$0.approved }
+        guard !commands.isEmpty else { return .proceed }
+        if let auth, !auth.grants(AuthScopes.terminalOperate) { return .blocked(WorktreeLayoutApprovalView.cannotApproveMessage) }
+        guard let window = panel.window else { return .cancelled }
+        let approved = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            WorktreeLayoutApprovalView.present(projectTitle: projectTitle, commands: commands, in: window) { done.resume(returning: $0) }
+        }
+        guard approved else { return .cancelled }
+        let input = WorkspaceRPC.approveInput(projectId: ProjectId(EnvironmentScope.localId(of: projectId)),
+                                              approvals: commands.map { (kind: $0.kind, command: Optional($0.command)) })
+        do {
+            _ = try await session.supervisor.request(WorkspaceRPC.approveLayoutCommands, payload: input)
+            return .proceed
+        } catch {
+            return .blocked(Self.message(error) ?? "Could not approve the worktree layout command.")
+        }
+    }
+
     /// `noProviderAvailable`, the catalog still loading included: the send button is blocked.
     private var noProviderAvailable = false
 
@@ -2081,7 +2136,9 @@ final class ComposerController {
     /// `background`: a draft starts in the background behind a fresh draft (`beginBackgroundDraftSubmission`,
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
     /// `redirecting`: the pending approvals were just declined for this send, which now goes.
-    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false) {
+    /// `layoutApproved`: the project's worktree commands were just checked or approved for this send.
+    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false,
+                      layoutApproved: Bool = false) {
         guard !threadRewindBusy, !declineInFlight else { return }
         let sentText = text
         // A send now would leave a still-compressing image out of the turn, so it waits and goes once they finish
@@ -2324,6 +2381,36 @@ final class ComposerController {
         if case .draft(let d) = target, d.envMode == .worktree, d.worktreePath == nil, d.branch == nil, draftIsGitRepo {
             if let picksKey { threadErrors.set(picksKey, "Select a base branch before sending in New worktree mode.") }
             refresh()
+            return
+        }
+        // A project may set its worktrees up with its own commands, which run only once a person approved their text.
+        // Asking takes as long as the user does, so the draft is compared across the wait (useComposerSend.ts:1041-1071 at 5258, #42386).
+        if !layoutApproved, case .draft(let d) = target,
+           (d.envMode == .worktree && d.worktreePath == nil && draftIsGitRepo) || pickers.currentMultiple != nil {
+            guard !layoutApprovalInFlight else { return }
+            let typed = composer.text, attachmentIds = currentAttachments.map(\.id)
+            let title = sidebar?.snapshot?.projects.first { $0.id == ProjectId(d.projectId) }?.title ?? "This project"
+            layoutApprovalInFlight = true
+            Task { [weak self] in
+                guard let self else { return }
+                let outcome = await self.ensureWorktreeLayoutApproved(projectId: d.projectId, projectTitle: title)
+                self.layoutApprovalInFlight = false
+                switch outcome {
+                case .cancelled: return
+                case .blocked(let message):
+                    if let picksKey { self.threadErrors.set(picksKey, message) }
+                    self.refresh()
+                    return
+                case .proceed: break
+                }
+                guard case .draft(let now) = self.target, now.draftId == d.draftId else { return }
+                guard self.composer.text == typed, self.currentAttachments.map(\.id) == attachmentIds else {
+                    if let picksKey { self.threadErrors.set(picksKey, "Draft changed while preparing this message. Review it and send again.") }
+                    self.refresh()
+                    return
+                }
+                self.send(text, mode: mode, background: background, redirecting: redirecting, compactConfirmed: compactConfirmed, layoutApproved: true)
+            }
             return
         }
         // Several models picked: one thread and worktree each, the draft stays (ChatView.tsx:8824-8845, 9464-9680).
@@ -2927,6 +3014,7 @@ final class ComposerController {
     private func armFreshSession(_ key: String) {
         freshSessionArms[key] = UUID()
         updateFreshSessionBanner()
+        refresh()
     }
 
     /// With `arm`, clears only that arm, so a send never consumes one made while it was in flight.
@@ -2934,6 +3022,7 @@ final class ComposerController {
         guard let current = freshSessionArms[key], arm == nil || arm == current else { return }
         freshSessionArms[key] = nil
         updateFreshSessionBanner()
+        refresh()
     }
 
     /// `freshSessionBannerItem` (ComposerFreshSession.tsx at 4928); an approval's feedback goes to that approval, so
@@ -3089,7 +3178,8 @@ final class ComposerController {
     /// #31739: a model or effort pick on a started thread saves on the thread at once, so the next turn from any
     /// client runs on it (useApplyThreadModelPick.ts at 4928). Draft reconciliation drops the pick once it lands.
     private func applyThreadModelPick() {
-        guard let id = openThreadId, let supervisor = shell?.supervisor,
+        // A queued edit's pick rides on its `queued-run.edit`, never on the thread (#41814).
+        guard queuedEdit == nil, let id = openThreadId, let supervisor = shell?.supervisor,
               let pick = pickers.store.modelPickToApply(pickers.draftKey, pickers.context) else { return }
         Task { [weak self] in
             do {
@@ -3226,9 +3316,15 @@ final class ComposerController {
         guard let runId = item.runId, case .thread(let threadId) = target, queuedEdit == nil, !queueBusy,
               ComposerLogic.queuedEditBlockedReason(openQuestionCount: requests.userInputs.count) == nil else { return }
         flushPrompt()
-        queuedEdits.begin(thread: threadId, run: runId, text: item.text)
+        // The edit opens on the run's model unless its message followed the thread's pick (useQueuedRunEdit.ts:306-312 at 5258).
+        let message = projection?.messages.first(where: { $0.id == item.messageId })
+        let follows = message?.followsThreadSelection == true
+        let runModel = projection?.runs.first(where: { $0.id == runId })?.modelSelection
+        let edit = queuedEdits.begin(thread: threadId, run: runId, text: item.text, followsThreadSelection: follows,
+                                     originalModel: follows ? shellThread?.modelSelection : runModel)
+        if !follows, let runModel { pickers.store.setExplicitSelection(edit.pickerKey, runModel) } else { pickers.store.didSend(edit.pickerKey) }
         watchQueuedEdit(threadId)
-        if let message = projection?.messages.first(where: { $0.id == item.messageId }) {
+        if let message {
             for record in message.context?["records"]?.arrayValue ?? [] {
                 if let id = record["contextId"]?.stringValue { menuState.records[id] = record }
             }
@@ -3244,6 +3340,7 @@ final class ComposerController {
     private func endEdit() {
         guard let edit = queuedEdit else { return }
         queuedEdits.end(edit.threadId)
+        pickers.store.didSend(edit.pickerKey)
         stopQueuedEditWatch(edit.threadId)
         loadPrompt()
     }
@@ -3282,8 +3379,16 @@ final class ComposerController {
         guard let edit = queuedEdits.takeExited(id, queuedRuns: runs) else { return }
         stopQueuedEditWatch(id)
         let key = id.rawValue, saved = prompts[id.rawValue] ?? ""
-        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText, threadPrompt: saved)
-        if recovery == .kept { prompts[key] = edit.text; scheduleSave() }
+        // queuedMessageEdit.ts:121-126, 150-154 at 5258: a changed model counts as an edit and moves to the thread's draft.
+        let pick = pickers.store.pickedSelection(edit.pickerKey)
+        let modelChanged = pick.map { p in edit.originalModel.map { !ComposerSelectionStore.pickMatchesThread(p, $0) } ?? true } ?? false
+        pickers.store.didSend(edit.pickerKey)
+        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText, threadPrompt: saved, modelChanged: modelChanged)
+        if recovery == .kept {
+            prompts[key] = edit.text
+            if modelChanged, let pick { pickers.store.setExplicitSelection(key, pick) }
+            scheduleSave()
+        }
         if target == .thread(id), questionRequestId == nil { loadPrompt() }
         if recovery != .clean { report(.queuedEditLeft(kept: recovery == .kept), key: nil) }
     }
@@ -3298,6 +3403,11 @@ final class ComposerController {
             "threadId": .string(edit.threadId.localId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
         ]
         if let context = ComposerContext.messageContext(prompt: text, records: contextRecords(for: text)) { fields["context"] = context }
+        // The model goes along unless the message follows the thread and the edit made no pick (useQueuedRunEdit.ts:505-508 at 5258).
+        if !edit.followsThreadSelection || pickers.store.drafts[edit.pickerKey]?.explicit == true,
+           pickers.draftKey == edit.pickerKey, let selection = pickers.current.modelSelection {
+            fields["modelSelection"] = ThreadSession.encode(selection)
+        }
         let command = JSONValue.object(fields)
         queueBusy = true
         refresh()
@@ -3310,6 +3420,7 @@ final class ComposerController {
                 if let key { threadErrors.set(key, nil) }
                 queueBusy = false
                 if queuedEdits.finishSave(claim, succeeded: true) {
+                    pickers.store.didSend(edit.pickerKey)
                     stopQueuedEditWatch(edit.threadId)
                     if target == .thread(edit.threadId) { loadPrompt() }
                 }
@@ -6523,7 +6634,9 @@ extension ComposerController {
            ServerSettingsValues(serverConfigs[environmentId]?.settings.raw).resolveIdleCompaction(instanceId: pickers.current.instanceId?.rawValue ?? "claudeAgent") == "off" {
             dismissed = true
         }
-        let tokens = ComposerCompaction.resumeTokens(usage: contextWindow, driver: provider?.driver, dismissed: dismissed,
+        // The fresh session `/clear` armed inherits no context window, so it offers no compaction (ChatView.tsx at 5258, #39133).
+        let freshSessionPending = freshSessionAvailable && draftKey.map { freshSessionArms[$0] != nil } == true
+        let tokens = ComposerCompaction.resumeTokens(usage: contextWindow, driver: provider?.driver, dismissed: dismissed || freshSessionPending,
                                                      compactDisabled: gate.disabled, hasHeldQueuedRuns: held,
                                                      multipleModels: pickers.currentMultiple != nil, now: now)
         composer.compactBeforeSendTokens = tokens
