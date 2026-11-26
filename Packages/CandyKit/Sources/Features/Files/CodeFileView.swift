@@ -40,8 +40,6 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isContinuousSpellCheckingEnabled = false
         textView.smartInsertDeleteEnabled = false
-        textView.usesFindBar = true
-        textView.isIncrementalSearchingEnabled = true
         textView.drawsBackground = false
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainerInset = NSSize(width: DiffStyle.ch, height: 0)
@@ -66,6 +64,7 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(clipScrolled), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         addSubview(scrollView)
         applyWrap()
+        setUpFind()
     }
 
     static var baseAttributes: [NSAttributedString.Key: Any] {
@@ -88,6 +87,7 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
         textView.undoManager?.removeAllActions()
         updateLineStarts()
         scheduleHighlight(delay: 0)
+        if !findWidget.isHidden { runFind(keepIndex: true) }
     }
 
     public var text: String { textView.string }
@@ -181,19 +181,101 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
         let end = index + 1 < lineStarts.count ? lineStarts[index + 1] : (textView.string as NSString).length
         let range = NSRange(location: start, length: max(0, end - start))
         textView.setSelectedRange(range)
+        center(offset: start)
+        gutter.revealedLine = index
+    }
+
+    /// Scrolls the line holding UTF-16 `offset` to the middle. `exact` lays out every line above it first, so a
+    /// find match below wrapped lines lands on screen (#39616); a reveal keeps TextKit's estimate.
+    // ponytail: exact layout costs a pass over the text above the match, chunk it if finds in multi-MB files stall
+    private func center(offset: Int, exact: Bool = false) {
         guard let tlm = textView.textLayoutManager, let content = tlm.textContentManager,
-              let location = content.location(content.documentRange.location, offsetBy: start) else { return }
-        tlm.ensureLayout(for: NSTextRange(location: location))
+              let location = content.location(content.documentRange.location, offsetBy: offset) else { return }
+        tlm.ensureLayout(for: exact ? NSTextRange(location: content.documentRange.location, end: location) ?? NSTextRange(location: location)
+                                    : NSTextRange(location: location))
         var y: CGFloat = 0
         tlm.enumerateTextLayoutFragments(from: location, options: [.ensuresLayout]) { fragment in
             y = fragment.layoutFragmentFrame.minY
+            for line in fragment.textLineFragments {
+                guard let start = content.location(fragment.rangeInElement.location, offsetBy: line.characterRange.location),
+                      content.offset(from: start, to: location) >= 0 else { break }
+                y = fragment.layoutFragmentFrame.minY + line.typographicBounds.minY
+            }
             return false
         }
         let clip = scrollView.contentView
         let target = max(0, y - (clip.bounds.height - Self.lineHeight) / 2)
-        clip.scroll(to: NSPoint(x: 0, y: min(target, max(0, textView.frame.height - clip.bounds.height))))
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: min(target, max(0, textView.frame.height - clip.bounds.height))))
         scrollView.reflectScrolledClipView(clip)
-        gutter.revealedLine = index
+    }
+
+    // MARK: Find
+
+    /// Find in the source. T3 renders sources through `StyledDiffCodeView`, so Mod+F opens the diff view's
+    /// search panel there (ReadOnlySourcePreview.tsx at 5258, #42442), the panel CandyWrapper draws as
+    /// `DiffFindWidget`, with its case, word and regex toggles.
+    let findWidget = DiffFindWidget()
+    private(set) var findMatches: [NSRange] = []
+    private(set) var findIndex = 0
+    public var isFindShown: Bool { !findWidget.isHidden }
+
+    private func setUpFind() {
+        findWidget.isHidden = true
+        addSubview(findWidget)
+        for toggle in [findWidget.matchCase, findWidget.wholeWord, findWidget.regex] {
+            toggle.action = { [weak self, weak toggle] in toggle?.isPressed.toggle(); self?.runFind() }
+        }
+        findWidget.previous.action = { [weak self] in self?.stepFind(-1) }
+        findWidget.next.action = { [weak self] in self?.stepFind(1) }
+        findWidget.close.action = { [weak self] in self?.closeFind() }
+        findWidget.field.onChange = { [weak self] _ in self?.runFind() }
+        findWidget.field.onCommand = { [weak self] selector in
+            guard let self else { return false }
+            if selector == #selector(NSResponder.cancelOperation(_:)) { self.closeFind(); return true }
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                self.stepFind(NSApp.currentEvent?.modifierFlags.contains(.shift) == true ? -1 : 1); return true
+            }
+            return false
+        }
+    }
+
+    /// Mod+F: opens the panel, or selects its query when it is open.
+    public func showFind() {
+        let opening = findWidget.isHidden
+        findWidget.isHidden = false
+        needsLayout = true
+        if opening { runFind() }
+        window?.makeFirstResponder(findWidget.field)
+        findWidget.field.selectAll()
+    }
+
+    public func closeFind() {
+        guard !findWidget.isHidden else { return }
+        findWidget.isHidden = true
+        findMatches = []
+        redrawHighlights()
+        window?.makeFirstResponder(textView)
+    }
+
+    func runFind(keepIndex: Bool = false, reveal: Bool = true) {
+        findMatches = DiffPanelSearch.matches(findWidget.field.text, in: textView.string, caseSensitive: findWidget.matchCase.isPressed,
+                                              wholeWord: findWidget.wholeWord.isPressed, regex: findWidget.regex.isPressed)
+        findIndex = keepIndex ? min(findIndex, max(0, findMatches.count - 1)) : 0
+        showFindResult(reveal: reveal)
+    }
+
+    func stepFind(_ direction: Int) {
+        guard !findMatches.isEmpty else { return }
+        findIndex = (findIndex + direction + findMatches.count) % findMatches.count
+        showFindResult(reveal: true)
+    }
+
+    private func showFindResult(reveal: Bool) {
+        findWidget.hasMatches = !findMatches.isEmpty
+        findWidget.countText = findMatches.isEmpty ? "No results" : "\(findIndex + 1) of \(findMatches.count)"
+        needsLayout = true
+        redrawHighlights()
+        if reveal, findIndex < findMatches.count { center(offset: findMatches[findIndex].location, exact: true) }
     }
 
     // MARK: NSTextViewDelegate
@@ -206,6 +288,7 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
         if !comments.isEmpty { remapComments(lineCountChanged: lineStarts.count != lineCount) }
         onChange?(textView.string)
         scheduleHighlight(delay: 0.25)
+        if !findWidget.isHidden { runFind(keepIndex: true, reveal: false) }
     }
 
     @objc private func clipScrolled() {
@@ -216,6 +299,12 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
     public override func layout() {
         super.layout()
         scrollView.frame = bounds
+        if !findWidget.isHidden {
+            // Where the diff panel puts it: 32pt in from the scroller's end, 40pt down (DiffPanelView.swift).
+            let size = findWidget.preferredSize
+            findWidget.frame = NSRect(x: bounds.maxX - 32 - size.width + DiffFindWidget.overhang, y: 40 - DiffFindWidget.overhang,
+                                      width: size.width, height: size.height)
+        }
         if !comments.isEmpty, commentWidth != laidOutWidth { applyComments() }
     }
 
@@ -405,15 +494,28 @@ public final class CodeFileView: DSView, NSTextViewDelegate {
     }
 
     /// The picked lines' rows get the selection fill (rendering attributes leave the text alone).
-    private func showSelectedLines() {
+    private func showSelectedLines() { redrawHighlights() }
+
+    /// The picked lines, then the find matches over them. Both are rendering attributes, so the text storage
+    /// and its undo stay untouched.
+    private func redrawHighlights() {
         guard let tlm = textView.textLayoutManager, let content = tlm.textContentManager else { return }
         tlm.removeRenderingAttribute(.backgroundColor, for: content.documentRange)
-        guard let lines = selectedLines else { return }
-        let start = paragraphRange(lines.lowerBound + 1), end = paragraphRange(lines.upperBound + 1)
-        guard let from = content.location(content.documentRange.location, offsetBy: start.location),
-              let to = content.location(content.documentRange.location, offsetBy: end.location + end.length),
-              let range = NSTextRange(location: from, end: to) else { return }
-        tlm.addRenderingAttribute(.backgroundColor, value: Themed.color(\.accent), for: range)
+        func textRange(_ from: Int, _ to: Int) -> NSTextRange? {
+            guard let a = content.location(content.documentRange.location, offsetBy: from),
+                  let b = content.location(content.documentRange.location, offsetBy: to) else { return nil }
+            return NSTextRange(location: a, end: b)
+        }
+        if let lines = selectedLines {
+            let start = paragraphRange(lines.lowerBound + 1), end = paragraphRange(lines.upperBound + 1)
+            if let range = textRange(start.location, end.location + end.length) {
+                tlm.addRenderingAttribute(.backgroundColor, value: Themed.color(\.accent), for: range)
+            }
+        }
+        for (i, match) in findMatches.enumerated() {
+            guard let range = textRange(match.location, NSMaxRange(match)) else { continue }
+            tlm.addRenderingAttribute(.backgroundColor, value: i == findIndex ? DiffStyle.searchMatchCurrent : DiffStyle.searchMatch, for: range)
+        }
     }
 
     /// The 0-based line under a point in the text view.

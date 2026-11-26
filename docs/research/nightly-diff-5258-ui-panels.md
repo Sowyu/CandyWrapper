@@ -556,7 +556,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | a8363dad7f | #40808 | fix(web): keybindings using '+' show a plus keycap instead of empty pills | settings | ported d476c29f |
 | a8f5237a3c | #39926 | fix(web): repository and loading-header PR links honor 'Open links in' | pull requests | ported 7835705c |
 | a9bec41729 | #41547 | fix(web): Office previews open files with malformed external links or spaced sheet names | files | n/a (QuickLook previews) † |
-| aa725f4bd4 | #39616 | fix(web): file find scrolls to matches below wrapped lines | other | holds: the TextKit find bar scrolls to matches under wrapped lines (diff read 2026-11-25) |
+| aa725f4bd4 | #39616 | fix(web): file find scrolls to matches below wrapped lines | other | ported with the search panel (next row's second commit): a match lays out every line above it before it scrolls |
 | aacdaba15c | #42852 | fix(web): panel resize handle no longer covers the chat scrollbar on touch devices | shell | n/a (touch devices) † |
 | ac3af66f21 | #41901 | fix(web): a copied issue or pull request error no longer ends in a broken character | other | n/a (Swift Characters) † |
 | acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | port (1.8) † |
@@ -579,7 +579,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | bac86471fe | #40507 | fix(web): links inside a PDF are clickable in the in-app PDF viewer | files | n/a (PDFKit links are clickable) |
 | bc13afaa3c | #40965 | Invalidate pending theme imports when a replacement is too large | settings | port (1.8) † |
 | bc6062805d | #39057 | fix(web): preserve file preview selection after scrolling back | files | holds: an NSTextView keeps its selection across scrolling (diff read 2026-11-25) |
-| bd3e495b5f | #42442 | fix(web): mod+f opens find in read-only source previews | files | ported 311e739a |
+| bd3e495b5f | #42442 | fix(web): mod+f opens find in read-only source previews | files | ported 311e739a, then FINDCOMMIT: T3 shows the diff view's search panel (`StyledDiffCodeView`), so CW shows `DiffFindWidget` instead of AppKit's find bar |
 | c14e9f9717 | #42810 | fix(server): preserve split terminal control sequences across scrollback clears | terminal | n/a (server only) † |
 | c198f73b37 | #40776 | fix(web): a click outside the project action editor no longer discards the draft | settings | ported 5dc3ddd9 |
 | c39c21f870 | #42361 | fix(web): Esc in a font family field closes Settings when no edit is pending | settings | port (1.3) † |
@@ -729,6 +729,7 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 2.6: #39840 adds DOM focus markers for the condensed header swap; AppKit focus never moves when the header condenses, so it is `n/a`.
 - 2.6: #42342 and #41773 sit on #41761 (78cffe29ec), which adds the head pin and the "New commits were pushed" banner. The thread note listed #41761 as `n/a (pull requests, other agent)`; it is ported in d727914e.
 - 3.3: CW's source preview is a TextKit view with the system find bar, so #39616, #39057 and #39574 hold without code. Only Cmd+F routing was missing: it went to thread find.
+- 3.3, fourth panels port: T3 5258 renders read-only sources through `StyledDiffCodeView` (ReadOnlySourcePreview.tsx), so Mod+F opens pierre's search panel, the one the diff panel shows, not the thread's find bar. CW's sources now show `DiffFindWidget`. CW's diff panel painted matches in system yellow; both now use T3's `--diffs-bg-search-match-override` colors (StyledDiffCodeView.tsx:24-33).
 - 3.4: #42932 changes `AttachmentFilePreview`'s fallback text, which CW replaces with QuickLook. #39142 was already ported. #42682 was already ported (62cbede9).
 - 3.4: CW resolved a Markdown preview's relative images against the project root, not the file's folder, before 5258 too (fixed with #41505).
 - 10.1: #42875 and #42745 are ported with the base feature: the pages' tabs join the closed-tab stack under `page:` keys.

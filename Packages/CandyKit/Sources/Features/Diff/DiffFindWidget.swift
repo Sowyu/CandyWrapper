@@ -78,6 +78,24 @@ final class DiffFindWidget: DSView {
 
     override func updateLayer() {
         let fg = Themed.color(\.popoverForeground), bg = Themed.color(\.popover)
+        let dark = effectiveAppearance.isDark
+        if ThemeRuntime.isDither(dark: dark) {
+            // Redesign: a floating surface (redesign-system.md, Surfaces), an inset card for the field, the accent
+            // rim while it has the keyboard.
+            var style = BoxStyle()
+            style.radius = RedesignTokens.Radius.card
+            style.fill = bg
+            style.border = RedesignTokens.Surface.rim(dark: dark)
+            style.shadows = [RedesignTokens.Shadow.floating.box]
+            box.boxStyle = style
+            var input = BoxStyle()
+            input.radius = RedesignTokens.Radius.control
+            input.fill = RedesignTokens.Card.fill
+            input.border = field.state.focused ? Themed.color(\.primary, Double(RedesignTokens.Surface.focusRim)) : RedesignTokens.Surface.rim(dark: dark)
+            fieldBox.boxStyle = input
+            count.color = Themed.color(\.mutedForeground)
+            return
+        }
         // `border: 1px solid` fg at 20% over what lies behind (`background-clip: padding-box`), `--diffs-widget-shadow`.
         var style = BoxStyle()
         style.radius = 9

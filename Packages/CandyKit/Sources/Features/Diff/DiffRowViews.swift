@@ -613,7 +613,7 @@ final class DiffCodeTextView: DSView {
         let baselineOffset = metrics.baseline(top: 0, lineHeight: DiffStyle.lineHeight)
         ctx.textMatrix = .identity
         for (rect, active) in searchRects {
-            ctx.setFillColor(NSColor.systemYellow.withAlphaComponent(active ? 0.65 : 0.28).cgColor)
+            ctx.setFillColor((active ? DiffStyle.searchMatchCurrent : DiffStyle.searchMatch).cgColor(in: self))
             ctx.fill(rect)
         }
         for piece in pieces {
