@@ -32,19 +32,21 @@ public actor ThreadStore {
     private let cacheKey: ThreadCache.Key
     private var cacheRead = false
     private var requestResolution = ThreadRequestResolutionTracker()
-    private let onRequestsResolved: (@Sendable (Set<String>) -> Void)?
+    /// The pending requests, and the ones that closed unanswered (cancelled or expired), whenever a request leaves pending
+    /// (threadRequests.ts:255-274 at 5258).
+    private let onRequestsResolved: (@Sendable (_ pending: Set<String>, _ unanswered: Set<String>) -> Void)?
     /// The last offer or removal sent to the cache.
     private var cacheTask: Task<Void, Never>?
     /// The sequence and paging state last loaded from or offered to the cache.
     private var cached: (sequence: Int, history: ThreadHistoryMeta)?
 
-    public init(threadId: ThreadId, cache: ThreadCache? = nil, environmentId: String = "", onChange: @escaping @Sendable () -> Void, onRequestsResolved: (@Sendable (Set<String>) -> Void)? = nil) {
+    public init(threadId: ThreadId, cache: ThreadCache? = nil, environmentId: String = "", onChange: @escaping @Sendable () -> Void, onRequestsResolved: (@Sendable (_ pending: Set<String>, _ unanswered: Set<String>) -> Void)? = nil) {
         self.init(threadId: threadId, cache: cache, environmentId: environmentId, onFirstChange: { _ in onChange() }, onRequestsResolved: onRequestsResolved)
     }
 
     /// `onFirstChange` learns whether the change that starts a window only grew a streaming text, so
     /// the caller can wait for T3's second message of the pair only while text streams.
-    public init(threadId: ThreadId, cache: ThreadCache? = nil, environmentId: String = "", onFirstChange: @escaping @Sendable (_ onlyStreamingText: Bool) -> Void, onRequestsResolved: (@Sendable (Set<String>) -> Void)? = nil) {
+    public init(threadId: ThreadId, cache: ThreadCache? = nil, environmentId: String = "", onFirstChange: @escaping @Sendable (_ onlyStreamingText: Bool) -> Void, onRequestsResolved: (@Sendable (_ pending: Set<String>, _ unanswered: Set<String>) -> Void)? = nil) {
         reducer = ThreadReducer(threadId: threadId)
         self.onChange = onFirstChange
         self.onRequestsResolved = onRequestsResolved
@@ -208,8 +210,11 @@ public actor ThreadStore {
     private func publish(_ changes: ThreadChangeSet, authoritative: Bool = true) {
         guard !changes.isEmpty else { return }
         if authoritative, onRequestsResolved != nil, reducer.status == .live || reducer.status == .deleted {
-            let ids = Set((reducer.projection?.runtimeRequests ?? []).filter { $0.status == "pending" }.map(\.id))
-            if requestResolution.update(pending: ids) { onRequestsResolved?(ids) }
+            let requests = reducer.projection?.runtimeRequests ?? []
+            let ids = Set(requests.filter { $0.status == "pending" }.map(\.id))
+            if requestResolution.update(pending: ids) {
+                onRequestsResolved?(ids, Set(requests.filter { $0.status == "cancelled" || $0.status == "expired" }.map(\.id)))
+            }
         }
         if pending == nil {
             pending = changes

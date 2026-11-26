@@ -557,10 +557,15 @@ final class ComposerController {
         // The send gate follows the connection, not only the session (`activeEnvironmentUnavailable`).
         environments.observe { [weak self] in self?.syncSendBlock() }
         refresh()
-        QuestionDraftResolution.observe { [weak self] threadId, pending in
+        QuestionDraftResolution.observe { [weak self] threadId, pending, unanswered in
             guard let self else { return }
             for key in ThreadRequestResolutionTracker.resolvedDraftKeys(Array(self.questionFiles.keys), threadId: threadId, pending: pending) {
-                self.releaseQuestionFiles(key)
+                // Stop or a timeout never sent the answer, so its files go back to the thread's own draft (#39569).
+                if let request = ThreadRequestResolutionTracker.requestId(ofDraftKey: key, threadId: threadId), unanswered.contains(request) {
+                    self.returnQuestionFiles(key, to: threadId.rawValue)
+                } else {
+                    self.releaseQuestionFiles(key)
+                }
             }
             if self.openThreadId == threadId {
                 self.panel.lazyQuestionPanel.loaded?.clearResolvedSession(pendingRequestIds: pending)
@@ -3758,6 +3763,38 @@ extension ComposerController {
         questionFiles[key] = nil
     }
 
+    /// `returnUnsentAnswersToThreadDraft` (questionAttachments.ts:186-215 at 5258): the question's files and screenshots
+    /// move to the thread's draft, `draft`, not to a queued edit the composer may show. An upload still running starts
+    /// again from the draft. A screenshot still preparing finds the question closed and lands in the draft itself
+    /// (`attachSnapShot`), so each picture ends up in one place.
+    private func returnQuestionFiles(_ key: String, to draft: String) {
+        let files = questionFiles.removeValue(forKey: key) ?? []
+        guard !files.isEmpty else { return }
+        let incoming = files.map { file in
+            var a = ComposerAttachment(id: file.id, kind: file.snapShot ? .image : .file, name: file.name, mimeType: file.mimeType,
+                                       sizeBytes: file.sizeBytes, fileURL: file.url, status: file.status, attachmentId: file.attachmentId,
+                                       environmentId: file.environmentId)
+            a.snapShotSource = file.snapShotSource
+            return a
+        }
+        let draftCount = (draftAttachments[draft]?.count ?? 0) + (preparingImages[draft] ?? 0)
+        let kept = ComposerAttachmentRules.returningQuestionFiles(incoming, draftCount: draftCount).kept
+        let keptIds = Set(kept.map(\.id))
+        for file in files {
+            if !keptIds.contains(file.id) { discard(file); continue }
+            // A ready upload moves with its server copy; any other is cancelled and its pending copy deleted.
+            guard kept.first(where: { $0.id == file.id })?.status != .ready else { continue }
+            file.task?.cancel()
+            if let id = file.attachmentId, let supervisor = environments.session(file.environmentId)?.supervisor {
+                Task { _ = try? await supervisor.request("attachments.delete", payload: .object(["attachmentId": .string(id)])) }
+            }
+        }
+        draftAttachments[draft, default: []].append(contentsOf: kept)
+        for a in kept where a.status != .ready { startUpload(a.id, key: draft) }
+        persistDraftAttachments()
+        refresh()
+    }
+
     /// Cancels an upload and deletes its pending server copy (`releaseAttachmentUpload`; a claimed
     /// upload is no longer pending, so the delete is a no-op).
     private func discard(_ file: QuestionFile) {
@@ -6932,9 +6969,10 @@ extension ComposerController {
 /// Only owned foreground and keep-alive subscriptions announce authoritative request state.
 @MainActor
 enum QuestionDraftResolution {
-    private static var observers: [(ThreadId, Set<String>) -> Void] = []
-    static func observe(_ observer: @escaping (ThreadId, Set<String>) -> Void) { observers.append(observer) }
-    static func sink(_ threadId: ThreadId) -> @Sendable (Set<String>) -> Void {
-        { pending in Task { @MainActor in for observer in observers { observer(threadId, pending) } } }
+    /// The thread, its pending requests and the ones that closed unanswered.
+    private static var observers: [(ThreadId, Set<String>, Set<String>) -> Void] = []
+    static func observe(_ observer: @escaping (ThreadId, Set<String>, Set<String>) -> Void) { observers.append(observer) }
+    static func sink(_ threadId: ThreadId) -> @Sendable (Set<String>, Set<String>) -> Void {
+        { pending, unanswered in Task { @MainActor in for observer in observers { observer(threadId, pending, unanswered) } } }
     }
 }
