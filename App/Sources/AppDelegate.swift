@@ -699,7 +699,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // under wrapped lines (#39616) and keeps the selection while it scrolls (#39057).
         shortcuts.onKey { event in
             guard event.charactersIgnoringModifiers?.lowercased() == "f", event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
-                  let text = NSApp.keyWindow?.firstResponder as? NSTextView, text.usesFindBar,
+                  let text = event.window?.firstResponder as? NSTextView, text.usesFindBar,
                   sequence(first: text as NSView, next: { $0.superview }).contains(where: { $0 is CodeFileView }) else { return false }
             let item = NSMenuItem()
             item.tag = NSTextFinder.Action.showFindInterface.rawValue
