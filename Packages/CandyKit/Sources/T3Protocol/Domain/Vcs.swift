@@ -361,4 +361,12 @@ public enum GitErrorText {
         default: return error.message ?? "An error occurred."
         }
     }
+
+    /// `toBranchActionErrorMessage` (5258 BranchToolbar.logic.ts:20-30, 6f94a06384 #23346): a toast clamps to a
+    /// few lines, so a git failure shows its sanitized detail without the operation and cwd prefix.
+    public static func branchAction(_ error: RPCTypedError) -> String {
+        guard error.tag == "GitCommandError" else { return message(error) }
+        let detail = error.fields["detail"]?.stringValue ?? ""
+        return error.fields["reason"]?.stringValue.map { "\(detail) (\($0))" } ?? detail
+    }
 }

@@ -204,6 +204,7 @@ struct BranchToolbarLogicTests {
         #expect(B.sanitizeNewRefName("  new  branch\tname ") == "new-branch-name")
         #expect(B.localBranchName(fromRemote: "origin/feature/x") == "feature/x")
         #expect(B.localBranchName(fromRemote: "main") == "main")
+        #expect(B.localBranchName(fromRemote: "team/origin/feature", remoteName: "team/origin") == "feature")
         #expect(B.isTemporaryWorktreeBranch("t3/734bbabe") && B.isTemporaryWorktreeBranch("t3code-0123abcd"))
         #expect(!B.isTemporaryWorktreeBranch("t3/feature") && !B.isTemporaryWorktreeBranch("main"))
         let refs = [VcsRef(name: "main", current: true, isDefault: true), VcsRef(name: "new-branch"), VcsRef(name: "feature/x")]

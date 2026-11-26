@@ -815,7 +815,7 @@ final class GitController {
             setThreadBranch(ref.name, worktreePath: selection.nextWorktreePath, on: target)
             return
         }
-        let name = ref.isRemote == true ? BranchToolbarLogic.localBranchName(fromRemote: ref.name) : ref.name
+        let name = ref.isRemote == true ? BranchToolbarLogic.localBranchName(fromRemote: ref.name, remoteName: ref.remoteName) : ref.name
         runBranchAction(optimistic: name) { shell in
             let value = try await shell.supervisor.request(VcsRPC.switchRef, payload: VcsRPC.switchRefInput(cwd: selection.checkoutCwd, refName: ref.name))
             let switched = ref.isRemote == true ? value.objectValue?["refName"]?.stringValue ?? name : name
@@ -851,7 +851,8 @@ final class GitController {
                 guard let self else { return }
                 self.optimisticBranch = nil
                 self.branchActionPending = false
-                self.toast(title(), Self.message(error), kind: .error)
+                let typed = (error as? RPCClientError)?.typedError
+                self.toast(title(), typed.map(GitErrorText.branchAction) ?? Self.message(error), kind: .error)
             }
             self?.refreshStatus()
             self?.loadRefs()

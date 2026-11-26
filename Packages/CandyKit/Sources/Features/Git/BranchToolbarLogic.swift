@@ -161,8 +161,10 @@ public enum BranchToolbarLogic {
             .replacingOccurrences(of: "[ \\t\\n\\r\\f\\x{0B}]+", with: "-", options: .regularExpression)
     }
 
-    /// `deriveLocalBranchNameFromRemoteRef`: `origin/feature/x` becomes `feature/x`.
-    public static func localBranchName(fromRemote name: String) -> String {
+    /// `deriveLocalBranchNameFromRemoteRef`: `origin/feature/x` becomes `feature/x`. A known remote name wins
+    /// over the first slash, since remote names can hold slashes (5258 shared/git.ts, 6c0621f78a #42301).
+    public static func localBranchName(fromRemote name: String, remoteName: String? = nil) -> String {
+        if let remoteName, !remoteName.isEmpty, name.hasPrefix(remoteName + "/") { return String(name.dropFirst(remoteName.count + 1)) }
         guard let i = name.firstIndex(of: "/"), i != name.startIndex, name.index(after: i) != name.endIndex else { return name }
         return String(name[name.index(after: i)...])
     }

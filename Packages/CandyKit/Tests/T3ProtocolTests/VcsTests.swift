@@ -65,5 +65,8 @@ struct VcsTests {
         #expect(GitErrorText.message(e) == "Text generation failed in generateCommitMessage: Failed to spawn Codex CLI process")
         let g = RPCTypedError(tag: "GitCommandError", fields: ["operation": .string("push"), "cwd": .string("/r"), "detail": .string("rejected"), "reason": .string("remote_unreachable")])
         #expect(GitErrorText.message(g) == "Git command failed in push (/r): rejected (remote_unreachable)")
+        #expect(GitErrorText.branchAction(g) == "rejected (remote_unreachable)")
+        #expect(GitErrorText.branchAction(RPCTypedError(tag: "GitCommandError", fields: ["detail": .string("local changes")])) == "local changes")
+        #expect(GitErrorText.branchAction(e) == GitErrorText.message(e))
     }
 }
