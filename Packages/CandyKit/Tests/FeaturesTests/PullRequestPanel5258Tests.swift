@@ -39,3 +39,21 @@ struct PullRequestSummaryMemoryTests {
         #expect(reopened.condensed)
     }
 }
+
+/// 5258: a clicked pull request pane scrolls from the keyboard (#39319).
+@MainActor
+struct PullRequestKeyScrollTests {
+    @Test func keysMoveTheFocusedPane() {
+        let at = { (key: UInt16, flags: NSEvent.ModifierFlags, top: CGFloat) in
+            KeyScroll.target(keyCode: key, flags: flags, top: top, page: 300, max: 1000)
+        }
+        #expect(at(125, [], 0) == 40)
+        #expect(at(126, [], 20) == 0)
+        #expect(at(121, [], 0) == 270)
+        #expect(at(49, [.shift], 500) == 230)
+        #expect(at(119, [], 0) == 1000)
+        #expect(at(126, [.command], 500) == 0)
+        #expect(at(125, [.option], 0) == nil)
+        #expect(at(0, [], 0) == nil)
+    }
+}

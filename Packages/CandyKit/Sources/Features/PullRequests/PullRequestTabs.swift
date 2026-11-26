@@ -24,6 +24,22 @@ final class StackDocument: DSView {
         return insets.top + insets.bottom + visible.map { $0.height(forWidth: w) }.reduce(0, +) + CGFloat(max(0, visible.count - 1)) * spacing
     }
 
+    // A click in the pane takes keyboard focus, so arrow, page, space, Home and End keys scroll it,
+    // as T3's `tabIndex={-1}` scrollers do (5258 PullRequestDetailPanel.tsx:2145, #39319).
+    override var acceptsFirstResponder: Bool { true }
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
+    override func keyDown(with event: NSEvent) {
+        guard let clip = enclosingScrollView?.contentView,
+              let top = KeyScroll.target(keyCode: event.keyCode, flags: event.modifierFlags, top: clip.bounds.minY,
+                                         page: clip.bounds.height, max: frame.height - clip.bounds.height)
+        else { super.keyDown(with: event); return }
+        clip.scroll(to: NSPoint(x: clip.bounds.minX, y: top))
+        enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+
     override func layout() {
         super.layout()
         let inner = bounds.width - insets.left - insets.right
@@ -35,6 +51,29 @@ final class StackDocument: DSView {
             item.frame = NSRect(x: x, y: y, width: w, height: h)
             y += h + spacing
         }
+    }
+}
+
+/// Where a focused scroller lands for a scrolling key, as a browser scrolls a focused
+/// `overflow-auto` element: 40 pt per arrow, a page less 10% per page key or space (Shift-space up).
+enum KeyScroll {
+    static func target(keyCode: UInt16, flags: NSEvent.ModifierFlags, top: CGFloat, page: CGFloat, max maxTop: CGFloat) -> CGFloat? {
+        let mods = flags.intersection([.command, .control, .option])
+        let step = page * 0.9
+        let next: CGFloat
+        switch keyCode {
+        case 125 where mods.isEmpty: next = top + 40 // down
+        case 126 where mods.isEmpty: next = top - 40 // up
+        case 121: next = top + step // page down
+        case 116: next = top - step // page up
+        case 49 where mods.isEmpty: next = flags.contains(.shift) ? top - step : top + step // space
+        case 115: next = 0 // home
+        case 119: next = maxTop // end
+        case 125 where mods == [.command]: next = maxTop
+        case 126 where mods == [.command]: next = 0
+        default: return nil
+        }
+        return min(Swift.max(0, maxTop), Swift.max(0, next))
     }
 }
 
