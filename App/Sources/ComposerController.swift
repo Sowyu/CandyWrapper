@@ -1882,6 +1882,7 @@ final class ComposerController {
         }
         panel.model.respondingApprovalRequestIds = responding
         panel.model.canOperateThread = environments.canOperate(threadId.environmentId)
+        panel.model.canSignInMcp = threadId.environmentId.flatMap { environments.authSession($0) }.map { $0.grants(AuthScopes.providersManage) } ?? true
         if let input = requests.activeUserInput {
             let question = panel.questionPanel
             question.markdownCwd = menuCwd

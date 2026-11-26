@@ -137,6 +137,11 @@ final class WorkLineView: DSView {
     /// (`text-foreground`, underlined on hover) and the closing quote (ThreadReadLabel, :3930-3958).
     private var threadLink: ThreadStatusLineAction?
     private let threadLinkClose = LabelView("\u{201D}", font: TL.font(14), color: TL.c(\.secondaryLabel))
+    /// An MCP sign-in notice's "Sign in" (`InlineButton`, medium foreground, underlined on hover) or "Signed in"
+    /// (`text-sm text-success-foreground`), `gap-1.5` after the label, which then only truncates
+    /// (McpSignInAction.tsx:106-125, TimelineWorkEntryRow.tsx:455-466, 595-640 at 5258).
+    private var signIn: ThreadStatusLineAction?
+    private var signedIn: LabelView?
 
 
     var showsTime = false { didSet { if showsTime != oldValue { time.alphaValue = showsTime ? 1 : 0; needsLayout = true } } }
@@ -166,7 +171,7 @@ final class WorkLineView: DSView {
     /// The row takes clicks (it toggles the entry), except on the line's own buttons.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
-        for control in [trailingAction, threadLink] {
+        for control in [trailingAction, threadLink, signIn] {
             if let control, !control.isHidden, control.frame.contains(local) { return control }
         }
         return nil
@@ -185,6 +190,30 @@ final class WorkLineView: DSView {
         trailingAction?.label.text = title ?? ""
         trailingAction?.setAccessibilityLabel(title)
         trailingAction?.action = action
+        needsLayout = true
+    }
+
+    /// nil hides it, false offers Sign in, true says Signed in.
+    func setSignIn(_ state: Bool?, server: String, _ action: (@MainActor () -> Void)?) {
+        if state == false, signIn == nil {
+            let a = ThreadStatusLineAction()
+            a.label.font = TL.font(14, .medium)
+            a.label.lineHeight = 24
+            a.tone = .foreground
+            a.label.text = "Sign in"
+            addSubview(a)
+            signIn = a
+        }
+        if state == true, signedIn == nil {
+            let l = LabelView("Signed in", font: TL.font(14), color: TL.c(\.successForeground))
+            l.lineHeight = 24
+            addSubview(l)
+            signedIn = l
+        }
+        signIn?.isHidden = state != false
+        signIn?.action = action
+        signIn?.setAccessibilityLabel("Sign in to \(server)")
+        signedIn?.isHidden = state != true
         needsLayout = true
     }
 
@@ -262,7 +291,11 @@ final class WorkLineView: DSView {
             a.frame = NSRect(x: right - w, y: 0, width: w, height: h)
             right = a.frame.minX - 6
         }
-        label.frame = NSRect(x: 30, y: 0, width: max(0, min(ceil(label.textWidth) + 1, right - 30)), height: h)
+        let after: NSView? = signIn.flatMap { $0.isHidden ? nil : $0 } ?? signedIn.flatMap { $0.isHidden ? nil : $0 }
+        let afterWidth = (after as? ThreadStatusLineAction)?.preferredWidth ?? (after as? LabelView).map { ceil($0.textWidth) + 1 } ?? 0
+        let labelRoom = right - 30 - (after == nil ? 0 : afterWidth + 6)
+        label.frame = NSRect(x: 30, y: 0, width: max(0, min(ceil(label.textWidth) + 1, labelRoom)), height: h)
+        after?.frame = NSRect(x: label.frame.maxX + 6, y: 0, width: afterWidth, height: h)
         if let link = threadLink, !link.isHidden {
             // The three runs sit flush, as inline text does.
             let closeWidth = ceil(threadLinkClose.textWidth) + 1
@@ -460,6 +493,12 @@ final class WorkRowView: WorkRowBase {
             let readTitle = readTarget.flatMap { model?.threadTitle?($0) }
             l.setThreadLink(prefix: readTitle == nil ? nil : WorkLog.threadReadLabelPrefix(label), title: readTitle,
                             readTarget.map { id in { model?.onOpenThread?(id) } })
+            let notice = e.projectedItem?.item
+            let server = notice?.mcpSignInServer
+            l.setSignIn(item.ui.mcpSignIn[e.id], server: server ?? "", server.map { server in {
+                guard let notice, let providerThread = notice.string("providerThreadId") else { return }
+                model?.onMcpSignIn?(notice.threadId, providerThread, server)
+            } })
             if pinnedTime.count <= i { pinnedTime.append(false) }
             pinnedTime[i] = severe
             l.showsTime = hoveredEntry == i || severe
