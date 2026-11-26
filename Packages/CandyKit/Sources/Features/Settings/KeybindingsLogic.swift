@@ -232,6 +232,28 @@ public enum KeybindingsLogic {
         return commands.sorted { compareCommands($0, $1, key: commandLabel) < 0 }
     }
 
+    /// `previewLabels` (KeybindingsSettings.logic.ts:310-326, T3 5258): each row's shortcut unless a later
+    /// binding of the same keys under the same or no condition shadows it. Turned-off rows show none.
+    public static func previewLabels(_ rows: [KeybindingRow]) -> [String: [String]] {
+        var out: [String: [String]] = [:]
+        var later = Set<String>()
+        // Rows are sorted for display; shadowing follows the config order, the index ending each row id.
+        let order = { (r: KeybindingRow) in Int(r.id.split(separator: "\u{0}", omittingEmptySubsequences: false).last ?? "") ?? 0 }
+        for row in rows.sorted(by: { order($0) < order($1) }).reversed() where row.when != "false" {
+            let key = row.binding.shortcut.label
+            let condition = "\(key):\(row.when == "true" ? "" : row.when)"
+            if !later.contains("\(key):"), !later.contains(condition) { out[row.id, default: []].append(key) }
+            later.insert(condition)
+        }
+        return out
+    }
+
+    /// The add-keybinding command search (KeybindingsSettings.tsx:1273-1276): the id or the label contains the query.
+    public static func commandMatches(_ command: String, query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return q.isEmpty || "\(command) \(commandLabel(command))".lowercased().contains(q)
+    }
+
     static let coreWhenVariables = ["terminalFocus", "terminalOpen", "isWeb", "isDesktop", "true", "false"]
 
     static func identifiers(_ node: KeybindingWhenNode?, into set: inout [String]) {

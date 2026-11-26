@@ -622,8 +622,9 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
     override func layout() { super.layout(); settingsRow.frame = bounds }
 }
 
-/// `NewKeybindingSettingsRow`: "New keybinding" with its When line, then the command select, the conflict
-/// warning, the recorder, Save and a cancel button, on `bg-muted/15`.
+/// `NewKeybindingSettingsRow`: "New keybinding" with its When line, then the command combobox, the conflict
+/// warning, the recorder, Save and a cancel button, on `bg-muted/15`. Since 5258 the command is a combobox
+/// that opens with the row and searches the actions (`defaultOpen`, KeybindingsSettings.tsx:1270-1320, #28612).
 final class NewKeybindingRowView: DSView, SettingsGroupRow {
     private let settingsRow: SettingsRowView
     private let command: SelectView
@@ -646,6 +647,7 @@ final class NewKeybindingRowView: DSView, SettingsGroupRow {
         self.commands = commands
         command = SelectView(options: commands.map(KeybindingsLogic.commandLabel), placeholder: "Command", size: .sm)
         command.alignItemWithTrigger = false
+        command.setAccessibilityLabel("Command")
         command.frame.size = NSSize(width: 224, height: 28)
         let group = SettingsControlGroup([command, warning, recorder, save, cancel])
         settingsRow = SettingsRowView(title: "New keybinding", control: group)
@@ -660,7 +662,7 @@ final class NewKeybindingRowView: DSView, SettingsGroupRow {
         cancel.setAccessibilityLabel("Cancel new keybinding")
         _ = TooltipController.attach(to: cancel, text: "Cancel")
         cancel.action = { [weak self] in self?.onCancel?() }
-        command.onChange = { [weak self] _ in self?.update() }
+        command.opensPopup = { [weak self] _ in self?.openCommandPicker() }
         recorder.onRecord = { [weak self] key in self?.keyDraft = key; self?.update() }
         recorder.onCancel = { [weak self] in self?.keyDraft = ""; self?.update() }
         save.action = { [weak self] in self?.commit() }
@@ -668,7 +670,35 @@ final class NewKeybindingRowView: DSView, SettingsGroupRow {
         update()
     }
 
-    func focusCommand() { window?.makeFirstResponder(recorder) }
+    /// `defaultOpen` with `autoFocus` on the search: the row arrives with its command search open.
+    func focusCommand() {
+        if popupHost != nil { openCommandPicker() } else { window?.makeFirstResponder(recorder) }
+    }
+
+    private func openCommandPicker() {
+        guard let host = popupHost else { return }
+        let picker = KeybindingCommandPickerView(commands: commands, shortcuts: commandShortcuts(), selected: selectedCommand)
+        // `ComboboxPopup` defaults: side bottom, align start, sideOffset 4.
+        let popup = host.open(PickerPopupView(picker), trigger: command,
+                              placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4), swallowsOutsideClick: true)
+        picker.onPick = { [weak self, weak host, weak popup] picked in
+            if let popup { host?.close(popup) }
+            guard let self, let i = self.commands.firstIndex(of: picked) else { return }
+            self.command.selectedIndex = i
+            self.update()
+            self.window?.makeFirstResponder(self.recorder)
+        }
+        window?.makeFirstResponder(picker.search)
+    }
+
+    /// Each command's shortcuts for the picker rows (KeybindingsSettings.tsx:1259-1268).
+    private func commandShortcuts() -> [String: [String]] {
+        let rows = allRows()
+        let labels = KeybindingsLogic.previewLabels(rows)
+        var out: [String: [String]] = [:]
+        for row in rows { out[row.command, default: []] += labels[row.id] ?? [] }
+        return out
+    }
 
     private var selectedCommand: String? { command.selectedIndex.map { commands[$0] } }
     private var whenExpression: String { KeybindingsLogic.expression(whenDraft) }

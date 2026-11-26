@@ -104,6 +104,22 @@ struct SettingsLogicTests {
         #expect(KeybindingsLogic.commandLabel("composer.sendAlternate") == "Composer: Opposite Queue or Steer Action")
     }
 
+    /// The add-keybinding command search (5258 #28612): id or label, and each command's unshadowed shortcuts.
+    @Test func commandSearchAndPreviewLabels() throws {
+        #expect(KeybindingsLogic.commandMatches("sidebar.toggle", query: " SIDEBAR "))
+        #expect(KeybindingsLogic.commandMatches("sidebar.toggle", query: "Sidebar: Tog"))
+        #expect(!KeybindingsLogic.commandMatches("sidebar.toggle", query: "terminal"))
+        var rules = Keymap.default.rules
+        rules.append(ResolvedKeybindingRule(key: "mod+b", command: "chat.new")!)
+        let rows = KeybindingsLogic.rows(rules)
+        let labels = KeybindingsLogic.previewLabels(rows)
+        let sidebar = try #require(rows.first { $0.command == "sidebar.toggle" && $0.key == "mod+b" })
+        let chat = try #require(rows.first { $0.command == "chat.new" && $0.key == "mod+b" })
+        // The later binding of the same keys with no condition hides the earlier one's chip.
+        #expect(labels[sidebar.id] == nil)
+        #expect(labels[chat.id] == [chat.binding.shortcut.label])
+    }
+
     /// 4928 unassigns a default by saving its keys under `when: "false"` (KeybindingsSettings.logic.ts, #28687).
     @Test func unassignedDefaultsKeepTheirDefault() throws {
         let rows = KeybindingsLogic.rows(Keymap.default.rules)

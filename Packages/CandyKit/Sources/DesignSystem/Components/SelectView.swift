@@ -64,6 +64,8 @@ public final class SelectView: ControlView {
     public var selectedIndices: Set<Int>?
     public final var onChangeMany: (@MainActor (Set<Int>) -> Void)?
     private var checkMarks: [Int: CheckboxView] = [:]
+    /// `ComboboxTrigger render={<SelectButton />}`: the trigger opens the caller's own popup instead of the list.
+    public var opensPopup: (@MainActor (SelectView) -> Void)?
 
     private let decoration = BoxDecorationLayer()
     private let label = LabelView()
@@ -217,6 +219,7 @@ public final class SelectView: ControlView {
 
     public override func performAction() {
         super.performAction()
+        if let opensPopup { opensPopup(self); return }
         guard let host = popupHost else { return }
         var items: [MenuItem] = []
         var optionAt: [Int: Int] = [:]
