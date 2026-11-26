@@ -1,5 +1,6 @@
 #!/bin/sh
-# Run with the research Node install when node is absent from PATH.
+# Needs Node 18 or later on PATH, or the research Node install.
 set -eu
 cd "$(dirname "$0")/.."
-exec "$HOME/CandyWrapper-research/tools/node-v24.22.1-darwin-arm64/bin/node" scripts/gen-math-spec.cjs
+node=$(command -v node || echo "$HOME/CandyWrapper-research/tools/node-v24.22.1-darwin-arm64/bin/node")
+exec "$node" scripts/gen-math-spec.cjs

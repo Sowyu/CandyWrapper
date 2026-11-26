@@ -1,68 +1,45 @@
 # Math reference captures
 
-Capture-only fixtures from KaTeX 0.16.47 with T3's compiled `design/t3-source/main.css`.
-The app does not load these scripts, stylesheets or fonts.
+Capture-only fixtures from T3 Nightly 5258, where Words (`@pierre/words` 0.2.2-t3.4,
+T3 #27866) draws each formula as an SVG of `<text>` glyphs in the system's STIX Two
+Math, with T3's compiled `design/t3-source/main.css`. The app does not load these
+scripts or the Words package.
 
-Source: `apps/web/src/components/chat/MarkdownMath.tsx:17-57` supplies all three
-wrapper spans and the fallback. `MathTypeset.tsx:17-25,39` supplies KaTeX's exact
-options and the extra typeset span. `ChatMarkdown.tsx:1591-1593` supplies body
-classes, including 14px text and relaxed line height. Paths refer to the research
-T3 checkout at the repository's `T3_VERSION`.
+Source, in the 5258 tree: `apps/web/src/markdown/wordsHast.ts:323-369` sanitizes the
+SVG, `:858-892` wraps it in the span that copying reads, and `:1146-1152` sets Words'
+options. `index.css:2348-2355` sets the SVG to 1.21em. `ChatMarkdown.tsx:2105-2112`
+supplies the body classes, including 14px text and relaxed line height.
 
-To regenerate, install the external dependency, then run from the repository root:
+To regenerate, unpack the Words tarball T3 ships outside the repository, then run from
+the repository root:
 
 ```sh
-PATH="$HOME/CandyWrapper-research/tools/node-v24.22.1-darwin-arm64/bin:$PATH" \
-  npm install --prefix "$HOME/CandyWrapper-research/tools/katex-0.16.47" \
-  --no-audit --no-fund katex@0.16.47
+mkdir -p ~/CandyWrapper-research/tools/pierre-words-0.2.2-t3.4
+tar xzf <t3code at 5258>/apps/web/deps/pierre-words-0.2.2-t3.4-7c04b7f1.tgz \
+  -C ~/CandyWrapper-research/tools/pierre-words-0.2.2-t3.4
 scripts/gen-math-spec
 scripts/component-reference design/component-reference/math.json
 ```
 
-The stylesheet stays beside its fonts outside the repository. The capture tool
-expands the spec's `~/` stylesheet path and waits for `document.fonts.ready`.
-Measurements fail if KaTeX fonts are absent or any formula metric is nonfinite.
+`gen-math-spec` needs Node 18 or later. It renders each case with Words'
+`renderToHtml(..., {math: true, texDelimiters: true})`, keeps only what
+`sanitizeMath` keeps, and fails if Words emits anything else. The capture fails when
+Chromium can't find STIX Two Math, which macOS ships.
 
 There are 39 cases, each in light and dark at device scale 1 and 2, for 156 PNGs.
 Filenames are `NN-short-name.rest.THEME.png` at 1x and
-`NN-short-name.rest.THEME@2x.png` at 2x. Display and paragraph containers are
-480 CSS px wide. Each capture uses the existing tool's 8 CSS px padding around
-the case element. Standalone cases capture the `.chat-markdown` root containing
-one math wrapper; paragraph cases capture that root containing one `<p>`.
+`NN-short-name.rest.THEME@2x.png` at 2x. Display and paragraph containers are 480
+CSS px wide, with the capture tool's 8 CSS px padding around the case element.
+Case 39 is `\frac{a}{`: Words closes the open group itself, so 5258 draws a
+fraction with an empty denominator rather than the source.
 
-`manifest.json` retains the tool's existing case-name to CSS size map. For
-paragraphs, that size describes the paragraph container, rather than the math.
-`metrics.json` maps each complete PNG filename to an object:
+`metrics.json` maps each PNG filename to an object:
 
-- `scale`: device scale, 1 or 2. `units`: `CSS px`.
-- `capture`: the CDP clip rectangle in document CSS coordinates, before scaling.
-- `wrapper`: width and height of `[data-markdown-math]`, excluding margins.
-- `formula.width`: the `.katex-html` bounding box width. Display boxes fill the
-  available width; `formula.contentWidth` is the union of their top-level `.base`
-  boxes and measures the centered equation itself.
-- `formula.height` and `formula.depth`: TeX layout extent above and below the
-  formula baseline. These come from the top-level `.base > .strut` CSS heights
-  and vertical offsets, rather than the font's inline bounding box. They are
-  layout metrics, not the visible glyph ink bounds.
-- `formula.baselineY`: formula baseline offset from the clip's top, in CSS px.
-  `formula.baselinePixelY` is the same offset multiplied by `scale`.
-- `textBaselineY` and `formulaBaselineY`: paragraph text and formula baseline
-  offsets from the clip's top in CSS px. Multiply by `scale` for PNG coordinates.
-- `fallbackBaselineY`: the fallback source text's baseline; no `formula` object
-  exists for case 39.
-- `background`: computed body color. `loadedKatexFonts`: loaded KaTeX font faces
-  for the entire corpus page, recorded as family, style and weight.
-
-Baseline probes are zero-area inline-blocks aligned to the baseline inside the
-measured element. The tool removes each probe before continuing. KaTeX's math
-baseline and T3's surrounding text baseline can differ because the outer inline
-wrapper uses `align-middle`.
-
-Validation: inspected both scales and themes, inline and display equations,
-matrices, running paragraphs and fallback source. No clipping or fallback fonts
-appeared. All 156 PNG dimensions agree with the clip and scale within raster
-rounding; metrics are finite, formula extents fit inside their clips, and CSS
-metrics agree at both scales. Background RGB matches badge references: 252 in
-light and 10 in dark for each channel. Recapturing `badge.json` before and after
-the tool change left its tracked PNGs and manifest unchanged. App tests were not
-run: preflight reported 36 GB free, below its 40 GB build threshold.
+- `scale` is the device scale, and `units` is `CSS px`.
+- `capture` is the CDP clip rectangle in document CSS coordinates.
+- `wrapper` is the size of `[data-markdown-math]`, without margins.
+- `formula.width` is the SVG's width, and `formula.em` its font size.
+- `formula.height` and `formula.depth` are Words' layout extent above and below the baseline, from the viewBox.
+- `formula.baselineY` is the formula baseline's offset from the clip's top.
+- `textBaselineY` and `formulaBaselineY` give the paragraph cases' two baselines.
+- `background` is the computed body color.
