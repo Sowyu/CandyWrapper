@@ -384,21 +384,9 @@ final class WorkflowChipView: DSView {
     override func draw(_ dirtyRect: NSRect) {
         let tone = Self.tones[WorkflowRuns.chip(name).tone]
         let dark = effectiveAppearance.isDark
-        Self.palette("\(tone)-500").withAlphaComponent(0.15).setFill()
+        Themed.base("\(tone)-500").withAlphaComponent(0.15).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: DesignGeometry.radius(4, in: self), yRadius: DesignGeometry.radius(4, in: self)).fill()
-        label.color = Self.palette("\(tone)-\(dark ? 300 : 700)")
-    }
-
-    /// The tokens come from 4928's stylesheet, which used none of these four; their values are 5258 main.css's
-    /// `--color-*` oklch in Display P3.
-    // ponytail: four hand-converted colours, drop them when scripts/extract-tokens runs on 5258.
-    static let missing: [String: (Double, Double, Double)] = [
-        "sky-700": (0.1303, 0.4046, 0.6408), "violet-700": (0.4016, 0.0842, 0.8712),
-        "rose-300": (0.9602, 0.6477, 0.6837), "rose-700": (0.7118, 0.0771, 0.2268),
-    ]
-    static func palette(_ name: String) -> NSColor {
-        if let c = missing[name], Tokens.baseColors[name] == nil { return NSColor(displayP3Red: c.0, green: c.1, blue: c.2, alpha: 1) }
-        return Themed.base(name)
+        label.color = Themed.base("\(tone)-\(dark ? 300 : 700)")
     }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }

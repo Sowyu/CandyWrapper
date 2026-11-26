@@ -376,7 +376,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 01794015f8 | #40998 | fix(web): prioritize visible saved notebook outputs | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | 02c5270a11 | #39328 | fix(web): keep SSH connection checks pending until they finish | connections | ported 5690b1b6: a check keeps every member host pending |
 | 036751b6f5 | #41856 | fix(web): Esc in project icon search clears it without closing the dialog | settings | ported cb5edfe1 |
-| 0591d32888 | #39179 | feat(issues): connect more than one Linear account | issues | ported 31648718 |
+| 0591d32888 | #39179 | feat(issues): connect more than one Linear account | issues | ported acc3e861 |
 | 0702c6fdca | #39856 | fix(web): Open on GitHub in a thread's PR panel honors 'Open links in' | pull requests | ported 7835705c |
 | 072611f65f | #42682 | fix(web): a 9.996 KB file reads "10.0 KB", not "10.00 KB" | files | ported 62cbede9 |
 | 07fe456146 | #34769 | feat(web): copy button for file previews | files | ported 3b118df1 |
@@ -393,7 +393,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 1458a42419 | #40424 | fix(server): transcript cleanup failures tell the user why | settings | n/a (voice transcription, server and voice input) |
 | 14c697c4f1 | #41514 | fix(web): RTF previews read text in an ANSI font as code page 1252 under any document code page | files | n/a (QuickLook previews; files read) |
 | 18d1c4db96 | #30407 | fix(web): usage limit refill stripes all render the same width | usage | ported 8f1d707d |
-| 18d5eda881 | #41630 | fix(web): Reset to default restores the built-in shortcut an edit replaced | settings | ported d476c29f |
+| 18d5eda881 | #41630 | fix(web): Reset to default restores the built-in shortcut an edit replaced | settings | ported d2a15075 |
 | 192ef9b7b2 | #41196 | fix(web): preserve alpha channel when previewing WhiteIsZero TIFF images | files | n/a (QuickLook previews; files read) |
 | 1a11aed1f8 | #41614 | fix(web): workflow steps on a linked environment open their thread | workflows | port (8.6) † |
 | 1a42ba1b5f | #39114 | fix(server,web): models stay in the picker after one failed provider check | settings | ported 87d939b0: the picker keeps an instance with retained models or a confirmed sign-in; a default pick still needs a healthy one |
@@ -429,7 +429,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | ported 3ebb2742: an open file and the tree read again when `deriveWorkspaceMutationId` changes; text replaces its view only when it changed, assets only when `fileRevision` moved; grant renewal 46522128 |
 | 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | ported a6197a0d, e7039927 (step line, panel note, timeline's "withdrawn by") |
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
-| 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
+| 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 9aa97c84 |
 | 3d4fd8346e | #42563 | fix(web): long Pull Requests author and label filters no longer end in a broken character | other | n/a (Swift Characters; files read) |
 | 3d54dc96f9 | #33110 | fix(web): focus popup search from anywhere in its row | shell | ported d39a9a88 (menus with a search field and the branch picker; the other hand-built comboboxes in Sidebar, Settings and Composer still focus only on the field), diff read 2026-11-25 |
 | 3dd4f14280 | #41932 | fix(web): IME keys no longer cancel or send a pull request review reply | pull requests | already (AppKit gives marked text to the input method before `doCommandBy`, PullRequestReviewAnnotationViews.swift:237, and no page monitor takes Esc) |
@@ -446,7 +446,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | ported a6197a0d, e7039927 (words, the queue card's hourglass) |
 | 46eb376dda | #41677 | fix(web): a new price row mapped to a model asks for its model ID | settings | ported 2075c1a4: a new row with no model ID shows its error and invalid field |
 | 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | ported 40fa9c76: only the latest check attempt lands, and Test stays enabled for a corrected URL. This is the user's own OpenTelemetry export, not T3 telemetry |
-| 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d476c29f |
+| 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d2a15075 |
 | 4b697be849 | #39331 | fix(web): keep deleted ACP sessions out of pending listings | settings | already: ProviderAcpSessionsView runs one request at a time (`busy`), so no list can be pending while a delete lands |
 | 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | ported 6b7f5c27: T3's Third-party notices header with the count and a search button; Esc clears and closes the search |
 | 4e6b1fa771 | #42585 | fix(web): element context preview no longer ends in a split surrogate | browser | n/a (Swift Characters never split a surrogate) |
@@ -532,7 +532,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 9842ca0c12 | #42120 | fix(web): an image no longer jumps while its pane is resized | files | already (NSImageView scales in its own bounds, FileSurfaceView.swift:316-330) |
 | 98d940f6b2 | #42332 | fix(web): an IME Escape no longer closes the theme editor or ends inspection | settings | already cb5edfe1 (the Esc monitor leaves a composing Esc to the input method) |
 | 9904124683 | #41540 | fix(web): EPUBs with a percent-encoded package path open in the file preview | files | n/a (QuickLook previews; files read) |
-| 9a3ad0bec2 | #42986 | fix(web): recognize composerEmpty in keybinding settings | settings | ported d476c29f |
+| 9a3ad0bec2 | #42986 | fix(web): recognize composerEmpty in keybinding settings | settings | ported d2a15075 |
 | 9a87dbb99a | #41194 | fix(web): chat file tooltips open beside the link instead of sliding in from the corner | files | holds: CW tooltips anchor to the hovered link view |
 | 9b8ab94b24 | #41603 | fix(i18n): hyphenate German compounds built on multi-word terms | other | n/a (translation strings; files read) |
 | 9c8f6427ab | #42276 | fix(web): a cached image no longer flashes at full size in the file preview | files | already (the image is set scaled after it decodes, FileSurfaceView.swift:326-330) |
@@ -553,7 +553,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | a686952304 | #42725 | fix(web): EPUB chapter titles no longer end in a broken emoji | other | n/a (Swift Characters; files read) |
 | a68a3539b8 | #41815 | fix(web): holding Esc in the Files search clears it without closing the sheet | files | ported 9ee37242 |
 | a76e554784 | #42935 | test(web): Files panel Refresh test no longer fails on a late tree render | other | n/a (test only; files read) |
-| a8363dad7f | #40808 | fix(web): keybindings using '+' show a plus keycap instead of empty pills | settings | ported d476c29f |
+| a8363dad7f | #40808 | fix(web): keybindings using '+' show a plus keycap instead of empty pills | settings | ported d2a15075 |
 | a8f5237a3c | #39926 | fix(web): repository and loading-header PR links honor 'Open links in' | pull requests | ported 7835705c |
 | a9bec41729 | #41547 | fix(web): Office previews open files with malformed external links or spaced sheet names | files | n/a (QuickLook previews; files read) |
 | aa725f4bd4 | #39616 | fix(web): file find scrolls to matches below wrapped lines | other | ported fdd1f7f8: a match lays out every line above it before it scrolls |
@@ -570,8 +570,8 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | b479ce21ed | #21667 | fix(client-runtime): stop sessions on incompatible server configuration | other | holds: CW reads config as raw JSON, so no decode failure ends the session, and an interrupted config stream resubscribes |
 | b4a5a4927f | #42915 | fix(web): reading position survives a panel resize right after a thread opens | shell | holds: CW reads the reading line synchronously from the old layout at the width change (`TimelineView.readingLine`), so a resize right after opening is held |
 | b51399fb38 | #42093 | fix(web): a held Esc or a search of spaces no longer closes Settings | settings | ported 66bacda5: spaces clear first; held Esc already ignored |
-| b5481adcd8 | #32841 | fix(web,mobile): scheduled tasks from Settings start from the project's default branch | scheduled tasks | ported 54702697 |
-| b568fcbaa6 | #40023 | feat(issues): a project can list issues from several Linear teams | issues | ported 31648718 |
+| b5481adcd8 | #32841 | fix(web,mobile): scheduled tasks from Settings start from the project's default branch | scheduled tasks | ported 3249144d |
+| b568fcbaa6 | #40023 | feat(issues): a project can list issues from several Linear teams | issues | ported acc3e861 |
 | b61af8a5d2 | #42863 | fix(web,mobile): mixed add/delete review selections no longer show backwards line ranges | pull requests | ported c3aa76c5 |
 | ba37a1afa1 | #41714 | fix(web): the PR checks count says how many are running instead of done/total | pull requests | ported fc8c0c41 |
 | ba588ef663 | #24034 | fix(web): match macOS Option shortcuts to the active keyboard layout | settings | already (charactersIgnoringModifiers reads the active layout) |
@@ -581,7 +581,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | bc6062805d | #39057 | fix(web): preserve file preview selection after scrolling back | files | holds: an NSTextView keeps its selection across scrolling (diff read 2026-11-25) |
 | bd3e495b5f | #42442 | fix(web): mod+f opens find in read-only source previews | files | ported 311e739a, then fdd1f7f8: T3 shows the diff view's search panel (`StyledDiffCodeView`), so CW shows `DiffFindWidget` instead of AppKit's find bar |
 | c14e9f9717 | #42810 | fix(server): preserve split terminal control sequences across scrollback clears | terminal | ported 78a51ad1: `cleared` carries `pendingControlSequence` and the reset starts with it |
-| c198f73b37 | #40776 | fix(web): a click outside the project action editor no longer discards the draft | settings | ported 5dc3ddd9 |
+| c198f73b37 | #40776 | fix(web): a click outside the project action editor no longer discards the draft | settings | ported d60e07f9 |
 | c39c21f870 | #42361 | fix(web): Esc in a font family field closes Settings when no edit is pending | settings | ported 66bacda5: Esc discards a typed family, else closes Settings |
 | c43e073123 | #39319 | fix(web): Arrow and page keys scroll the pull request pane after a click or when it opens | pull requests | ported 92620f14 and d6eba4a9: a click focuses the Summary or Timeline, and maximizing hands them panel focus. Focus on F6 waits for CW's area cycle (SideChatController.swift:177) |
 | c478fde9fe | #42791 | fix(web): bad workflow pane links no longer pick the first tab or crash | workflows | port (8.6) † |
@@ -592,7 +592,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | c8625cafce | #34588 | fix(web): Ctrl+B reaches a focused terminal again | terminal | ported 04b7ee0f |
 | c8f8ad17ac | #41277 | fix(web): RTF previews open files that declare code page 0 or 866 | files | n/a (QuickLook previews; files read) |
 | c991a91ec6 | #42827 | fix(web): GB18030 RTF files now preview instead of showing no preview | files | n/a (QuickLook previews; files read) |
-| c9e9e7d36a | #40708 | fix(web): a click outside the scheduled task editor no longer discards the draft | scheduled tasks | ported 5dc3ddd9 |
+| c9e9e7d36a | #40708 | fix(web): a click outside the scheduled task editor no longer discards the draft | scheduled tasks | ported d60e07f9 |
 | cb207e9f60 | #42228 | fix(web): long Issues and Pull Requests searches no longer end in a broken character | other | n/a (Swift Characters; files read) |
 | cb2a488c67 | #39302 | fix(web): an off-track desktop build no longer says "Up to date" | shell | n/a (Electron updater; files read) |
 | cbf4ea7ddc | #41264 | fix(web): shift-scroll and horizontal scrollers no longer navigate history | shell | n/a (web history swipe; files read) |
@@ -629,7 +629,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | e86a9c5169 | #41585 | fix(web): OpenDocument previews keep merged table cells | files | n/a (QuickLook previews; files read) |
 | e87df609e6 | #42329 | fix(web): large SVG project icons come back after their link expires | files | already (CW fetches the bytes as soon as it signs the URL and keeps the bitmap, ProjectIcons.swift:96-122) |
 | e97e360cfc | #39967 | fix(web): Option + a letter records the letter, not the macOS glyph | settings | already (charactersIgnoringModifiers drops Option) |
-| ece5f21b17 | #42311 | feat(connect): tell people when a new T3 Connect device signs in | connections | ported ed63905b; Review opens Access on the toast's environment 22b4414b |
+| ece5f21b17 | #42311 | feat(connect): tell people when a new T3 Connect device signs in | connections | ported 17e1f47e; Review opens Access on the toast's environment 22b4414b |
 | efea1aabe7 | #40381 | fix(web): CSV preview rows keep their height during horizontal scroll | files | already (DelimitedTableView measures every cell of a row, so rows never change height on scroll), diff read 2026-11-25 |
 | f15d908759 | #42027 | fix(web): Esc in voice alias input cancels it without closing Settings | settings | n/a (CW's Voice page is a notice) |
 | f1c13177d8 | #41263 | fix(web): spreadsheet text and fills no longer vanish when their cell scrolls out | files | n/a (QuickLook previews, diff read 2026-11-25) |
