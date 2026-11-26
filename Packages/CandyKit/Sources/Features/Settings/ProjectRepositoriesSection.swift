@@ -155,32 +155,154 @@ final class ProjectRepositoriesSection {
         }
     }
 
-    /// `AddTrackedFolderDialog`: a path field that starts at the project folder's parent.
-    // ponytail: takes a typed absolute path; T3 also lists the folder's subfolders to click through, add the browse list if users miss it
+    /// `AddTrackedFolderDialog` (5258 ProjectRepositoriesSettings.tsx:252-381): the path field in the header, starting at
+    /// the project folder's parent, and under it the folders `filesystem.browse` lists for the typed directory.
     private func openAdd(_ m: SettingsScopeProject.Member) {
         let dialog = DialogView(title: "Add folder", message: "Track a repository or folder anywhere on this project's machine.")
-        let label = LabelView()
-        label.text = "Folder path"
-        label.font = DSFont.ui(14, weight: .medium)
-        label.frame.size.height = 16
-        let input = InputView(placeholder: "/path/to/repository", text: ((m.workspaceRoot as NSString).deletingLastPathComponent as String) + "/", size: .default, font: .mono)
-        input.setAccessibilityLabel("Folder path")
-        input.frame.size.height = 36
-        dialog.panelContent = [label, input]
+        let field = FolderPathFieldView(query: TrackedFolderBrowse.initialQuery(workspaceRoot: m.workspaceRoot))
+        dialog.headerContent = field
+        let browser = TrackedFolderBrowserView()
+        dialog.panelContent = [browser]
         let cancel = ButtonView("Cancel", variant: .outline)
         let ok = ButtonView("Add folder")
         dialog.footerButtons = [cancel, ok]
-        dialog.initialFocus = input
+        dialog.initialFocus = field.input
         guard let host = context.presentDialog?(dialog) else { return }
         dialog.onClose = { [weak host] in host?.close() }
         cancel.action = { [weak host] in host?.close() }
-        let submit: @MainActor @Sendable () -> Void = { [weak self, weak host, weak input] in
-            guard let self, let text = input?.text, let folder = Self.resolve(text), !self.saving.contains(m.physicalKey) else { return }
+        let browse = FolderBrowseState(request: context.request, environmentId: m.environmentId, cwd: m.workspaceRoot)
+        var folder: (path: String, name: String)?
+        var picks: [String] = []
+        let refresh: @MainActor () -> Void = { [weak self, weak field, weak browser, weak ok, weak dialog] in
+            guard let self, let field, let browser else { return }
+            let view = browse.view(for: field.input.text)
+            folder = view.folder
+            picks = view.picks
+            browser.set(titles: view.titles, status: view.status)
+            ok?.isEnabled = folder != nil && !self.saving.contains(m.physicalKey)
+            browser.invalidateIntrinsicContentSize()
+            dialog?.needsLayout = true
+            dialog?.superview?.needsLayout = true
+        }
+        browse.onChange = refresh
+        browser.onPick = { [weak field] index in
+            guard let field, picks.indices.contains(index) else { return }
+            field.input.text = picks[index]
+            field.input.moveCaretToEnd()
+        }
+        field.input.onChange = { _ in refresh() }
+        let submit: @MainActor @Sendable () -> Void = { [weak self, weak host] in
+            guard let self, let folder, !self.saving.contains(m.physicalKey) else { return }
             self.save(m, track: folder, failure: "Failed to add folder") { host?.close() }
         }
-        ok.isEnabled = Self.resolve(input.text) != nil
-        input.onChange = { [weak ok] text in ok?.isEnabled = Self.resolve(text) != nil }
-        input.onSubmit = submit
+        field.input.onSubmit = submit
         ok.action = submit
+        refresh()
+    }
+}
+
+/// `Label` and the mono path `Input` in the dialog header (`flex flex-col gap-2 pt-1`).
+final class FolderPathFieldView: DSView {
+    private let label = LabelView("Folder path", font: DSFont.ui(14, weight: .medium), color: Themed.color(\.foreground))
+    let input: InputView
+
+    init(query: String) {
+        input = InputView(placeholder: "/path/to/repository", text: query, size: .default, font: .mono)
+        super.init(frame: .zero)
+        label.lineHeight = 18
+        input.setAccessibilityLabel("Folder path")
+        addSubview(label)
+        addSubview(input)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 4 + 18 + 8 + 32) }
+
+    override func layout() {
+        super.layout()
+        label.frame = NSRect(x: 0, y: 4, width: bounds.width, height: 18)
+        input.frame = NSRect(x: 0, y: 30, width: bounds.width, height: 32)
+    }
+}
+
+/// The browse listings of one Add folder dialog, by directory, each read once (`filesystem.browse` with the
+/// project folder as `cwd`).
+@MainActor
+final class FolderBrowseState {
+    enum Listing { case loading, loaded(parent: String, entries: [PaletteAddProjectPaths.Entry]), failed(String) }
+
+    struct View {
+        var titles: [String] = []
+        /// The query each row puts in the field.
+        var picks: [String] = []
+        var status: TrackedFolderBrowserView.Status = .none
+        var folder: (path: String, name: String)?
+    }
+
+    private let request: ((String, String, JSONValue) async throws -> JSONValue)?
+    private let environmentId: String
+    private let cwd: String
+    private var listings: [String: Listing] = [:]
+    var onChange: (@MainActor () -> Void)?
+
+    init(request: ((String, String, JSONValue) async throws -> JSONValue)?, environmentId: String, cwd: String) {
+        self.request = request; self.environmentId = environmentId; self.cwd = cwd
+    }
+
+    /// Seeds a listing, for tests.
+    func set(_ directory: String, _ listing: Listing) { listings[directory] = listing }
+
+    func view(for query: String) -> View {
+        let path = TrackedFolderBrowse.path(query, canBrowse: request != nil)
+        var out = View()
+        if let parent = path.parentPath { out.titles.append(".."); out.picks.append(parent) }
+        var listed: String?
+        var exact: String?
+        if path.isBrowsing, !path.directoryPath.isEmpty {
+            switch listing(path.directoryPath) {
+            case .loading: out.status = .loading
+            case .failed(let message): out.status = .error(message)
+            case .loaded(let parent, let entries):
+                listed = parent
+                let filtered = PaletteAddProjectPaths.filter(entries, query: path.filterQuery)
+                exact = filtered.exact?.fullPath
+                for e in filtered.visible.prefix(TrackedFolderBrowse.limit) {
+                    out.titles.append(e.name)
+                    out.picks.append(PaletteAddProjectPaths.appendSegment(path.directoryPath, e.name))
+                }
+                let hidden = filtered.visible.count - TrackedFolderBrowse.limit
+                if hidden > 0 { out.status = .more(hidden) }
+            }
+        } else if request == nil {
+            out.status = .cannotBrowse
+        }
+        out.folder = TrackedFolderBrowse.resolve(query: query, listedDirectory: listed, exactEntry: exact)
+        return out
+    }
+
+    private func listing(_ directory: String) -> Listing {
+        if let listing = listings[directory] { return listing }
+        listings[directory] = .loading
+        let payload: JSONValue = .object(["partialPath": .string(directory), "cwd": .string(cwd)])
+        let env = environmentId
+        Task { [weak self, request] in
+            let next: Listing
+            do {
+                guard let request else { return }
+                let result = try await request(env, "filesystem.browse", payload)
+                let entries = (result["entries"]?.arrayValue ?? []).compactMap { e -> PaletteAddProjectPaths.Entry? in
+                    guard let name = e["name"]?.stringValue, let full = e["fullPath"]?.stringValue else { return nil }
+                    return .init(name: name, fullPath: full)
+                }
+                next = .loaded(parent: result["parentPath"]?.stringValue ?? directory, entries: entries)
+            } catch {
+                next = .failed(String(describing: error))
+            }
+            guard let self else { return }
+            self.listings[directory] = next
+            self.onChange?()
+        }
+        return .loading
     }
 }
