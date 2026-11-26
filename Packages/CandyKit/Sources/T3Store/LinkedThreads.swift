@@ -100,3 +100,74 @@ public enum SideThreadOpen: String, Sendable, Equatable {
     /// `sideThreadOpenIntentOf` on macOS: the middle button or Cmd is the alternate intent.
     public static func intent(command: Bool, middleButton: Bool) -> Intent { middleButton || command ? .alternate : .primary }
 }
+
+/// "Connect to interact" (5258 client-runtime linkedThread.ts:64-110, web state/linkedThreadView.ts:186-275, T3
+/// commit d7f6b3efca #39439): pair this device with the linked environment through the one it reads by.
+public enum LinkedThreadConnect {
+    /// `LinkedEnvironmentConnection`.
+    public enum Outcome: Equatable, Sendable {
+        case connected
+        case unreachable(label: String)
+        /// Pair by hand: the address to prefill, when one answered or was offered.
+        case manual(label: String, host: String?)
+    }
+
+    /// `linkedEnvironmentConnectAtom`'s phases.
+    public enum Phase: Equatable, Sendable {
+        case idle, connecting
+        case unreachable(label: String)
+        case manual(label: String, host: String?)
+    }
+
+    /// `connectLinkedEnvironment`: asks for a pairing (nil when the linking environment could not answer or may not
+    /// be asked), probes every offered address at once and takes the first that answers in the offered order, then
+    /// pairs there with the one-time credential.
+    public static func connect(label: String,
+                               requestPairing: @Sendable () async -> PeerLinkClientPairingResult?,
+                               reaches: @escaping @Sendable (String) async -> Bool,
+                               pair: @Sendable (_ host: String, _ code: String) async -> Bool) async -> Outcome {
+        guard let pairing = await requestPairing() else { return .manual(label: label, host: nil) }
+        let probes = pairing.urls.map { url in Task { await reaches(url) ? url : nil } }
+        var host: String?
+        for probe in probes {
+            host = await probe.value
+            if host != nil { break }
+        }
+        for probe in probes { probe.cancel() }
+        if pairing.type == "unsupported" { return .manual(label: pairing.label, host: host ?? pairing.urls.first) }
+        guard let host else { return .unreachable(label: pairing.label) }
+        guard let code = pairing.credential else { return .manual(label: pairing.label, host: host) }
+        return await pair(host, code) ? .connected : .manual(label: pairing.label, host: host)
+    }
+
+    public static func phase(after outcome: Outcome) -> Phase {
+        switch outcome {
+        case .connected: .idle
+        case .unreachable(let label): .unreachable(label: label)
+        case .manual(let label, let host): .manual(label: label, host: host)
+        }
+    }
+
+    /// The notice above the bar (LinkedThreadPane.tsx:109-145): nil while idle.
+    public struct Notice: Equatable, Sendable {
+        public enum Kind: Equatable, Sendable { case connecting, unreachable, manual }
+        public var kind: Kind
+        public var title: String
+        public var detail: String?
+        /// "Enter code", only to pair by hand.
+        public var action: String?
+    }
+
+    public static func notice(_ phase: Phase, label: String) -> Notice? {
+        switch phase {
+        case .idle: nil
+        case .connecting: Notice(kind: .connecting, title: "Connecting to \(label)…")
+        case .unreachable(let named):
+            Notice(kind: .unreachable, title: "\(named) is not reachable from this device",
+                   detail: "Join a network it is on, such as its Tailscale network, and try again. You can keep reading here.")
+        case .manual(let named, _):
+            Notice(kind: .manual, title: "\(named) needs a pairing code",
+                   detail: "Create one on it, then add it to this device as an environment.", action: "Enter code")
+        }
+    }
+}

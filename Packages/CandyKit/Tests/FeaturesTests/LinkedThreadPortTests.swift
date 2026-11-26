@@ -42,3 +42,61 @@ struct SideThreadOpenTests {
         #expect(SideThreadOpen.intent(command: false, middleButton: false) == .primary)
     }
 }
+
+/// `connectLinkedEnvironment` (5258 linkedThread.ts:76-110) with linkedThread.test.ts's cases.
+struct LinkedThreadConnectTests {
+    static func pairing(_ type: String = "credential", urls: [String], credential: String? = "code") throws -> PeerLinkClientPairingResult {
+        var json: [String: Any] = ["type": type, "environmentId": "env-b", "label": "Studio", "urls": urls]
+        if let credential { json["credential"] = credential }
+        return try JSONDecoder().decode(PeerLinkClientPairingResult.self, from: JSONSerialization.data(withJSONObject: json))
+    }
+
+    @Test func noPairingAnswerMeansPairingByHand() async {
+        let outcome = await LinkedThreadConnect.connect(label: "box", requestPairing: { nil }, reaches: { _ in true }, pair: { _, _ in true })
+        #expect(outcome == .manual(label: "box", host: nil))
+    }
+
+    @Test func pairsAtTheFirstOfferedAddressThatAnswers() async throws {
+        let p = try Self.pairing(urls: ["http://a", "http://b", "http://c"])
+        let paired = SendableBox<String?>(nil)
+        let outcome = await LinkedThreadConnect.connect(label: "box", requestPairing: { p }, reaches: { $0 != "http://a" },
+                                                        pair: { host, code in paired.set("\(host) \(code)"); return true })
+        #expect(outcome == .connected)
+        #expect(paired.get() == "http://b code")
+    }
+
+    @Test func noAnsweringAddressIsUnreachableUnderTheServersLabel() async throws {
+        let p = try Self.pairing(urls: ["http://a"])
+        let outcome = await LinkedThreadConnect.connect(label: "box", requestPairing: { p }, reaches: { _ in false }, pair: { _, _ in true })
+        #expect(outcome == .unreachable(label: "Studio"))
+    }
+
+    @Test func unsupportedOrRefusedPairingFallsBackToTheCodeWithAnAddress() async throws {
+        let unsupported = try Self.pairing("unsupported", urls: ["http://a", "http://b"], credential: nil)
+        let none = await LinkedThreadConnect.connect(label: "box", requestPairing: { unsupported }, reaches: { _ in false }, pair: { _, _ in true })
+        #expect(none == .manual(label: "Studio", host: "http://a"))
+        let found = await LinkedThreadConnect.connect(label: "box", requestPairing: { unsupported }, reaches: { $0 == "http://b" }, pair: { _, _ in true })
+        #expect(found == .manual(label: "Studio", host: "http://b"))
+        let p = try Self.pairing(urls: ["http://a"])
+        let refused = await LinkedThreadConnect.connect(label: "box", requestPairing: { p }, reaches: { _ in true }, pair: { _, _ in false })
+        #expect(refused == .manual(label: "Studio", host: "http://a"))
+    }
+
+    @Test func noticesCarryT3sCopy() {
+        // LinkedThreadPane.tsx:109-145.
+        #expect(LinkedThreadConnect.notice(.idle, label: "box") == nil)
+        #expect(LinkedThreadConnect.notice(.connecting, label: "box")?.title == "Connecting to box…")
+        #expect(LinkedThreadConnect.notice(.unreachable(label: "Studio"), label: "box")?.title == "Studio is not reachable from this device")
+        let manual = LinkedThreadConnect.notice(.manual(label: "Studio", host: nil), label: "box")
+        #expect(manual?.title == "Studio needs a pairing code")
+        #expect(manual?.action == "Enter code")
+    }
+}
+
+final class SendableBox<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: T
+    init(_ value: T) { self.value = value }
+    func set(_ v: T) { lock.lock(); value = v; lock.unlock() }
+    func get() -> T { lock.lock(); defer { lock.unlock() }; return value }
+}

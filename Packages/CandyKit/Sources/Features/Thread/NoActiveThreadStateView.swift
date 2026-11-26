@@ -72,6 +72,8 @@ public final class ThreadUnavailableStateView: DSView {
     let empty = EmptyView(title: "Thread unavailable", message: "This thread is on an environment this app is not connected to.")
     /// Open Environments, to Settings > Connections.
     public var onOpenEnvironments: (() -> Void)?
+    /// T3's button, in the default themes only: Redesign shows `empty.action` in its place.
+    private var buttonRow: ButtonRow!
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -79,7 +81,7 @@ public final class ThreadUnavailableStateView: DSView {
         // `<Button size="sm">`, the default variant.
         let button = ButtonView("Open Environments", variant: .default, size: .sm)
         button.action = { [weak self] in self?.onOpenEnvironments?() }
-        empty.content = ButtonRow([button])
+        buttonRow = ButtonRow([button])
         empty.redesign = StateCopy(title: "Thread unavailable", detail: "This thread is on an environment this app is not connected to.",
                                    icon: .unplug)
         empty.action = StateAction("Open Environments", icon: .settings) { [weak self] in self?.onOpenEnvironments?() }
@@ -92,11 +94,15 @@ public final class ThreadUnavailableStateView: DSView {
         super.layout()
         let h = NoActiveThreadStateView.headerHeight
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: h)
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if (empty.content == nil) != redesign { empty.content = redesign ? nil : buttonRow }
         // `Empty className="flex-1"` (p-12, text in `max-w-sm`), centered in the whole inset.
         let w = min(max(0, bounds.width), 384 + 96)
         let eh = empty.height(forWidth: w)
         empty.frame = NSRect(x: ((bounds.width - w) / 2).rounded(), y: max(h, ((bounds.height - eh) / 2).rounded()), width: w, height: eh)
     }
+
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
 
     public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
 }

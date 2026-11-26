@@ -243,7 +243,7 @@ final class LinkedThreadNoticeCard: DSView {
 /// `LinkedThreadPage` (5258 components/chat/LinkedThreadPage.tsx:19-66): a linked thread on the main screen, for the
 /// "Main view" side-thread setting or a Cmd-click. `WorkspacePageHeader` holds a one-item "Thread breadcrumb" with the
 /// title in `text-sm font-medium text-foreground`, over the same read-only pane the panel tab uses. Redesign draws the
-/// title as its title pill (`DitherThreadTitleView`) at the header's start and runs the pane under the band.
+/// title as its title pill (`DitherThreadTitleView`) at the header's start.
 public final class LinkedThreadPageView: DSView {
     public let pane = LinkedThreadPaneView()
     private let header = NoActiveThreadHeaderView()
@@ -287,10 +287,22 @@ public final class LinkedThreadPageView: DSView {
             let w = min(pill.intrinsicContentSize.width, max(0, bounds.width - start - 16))
             pill.frame = NSRect(x: start, y: ((h - DitherThreadTitleView.height) / 2).rounded(), width: w, height: DitherThreadTitleView.height)
         }
-        // T3 stacks the header over the pane; Redesign lets the timeline run under its band as its threads do.
-        let top = redesign ? 0 : h
+        // The header stacks over the pane in both looks: an embedded pane has no top fade to run under the pill.
+        let top = h
         pane.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bounds.height - top))
     }
 
     public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+}
+
+extension LinkedThreadPaneView {
+    /// "Connect to interact"'s notice above the bar (`ComposerBannerStack detached`, LinkedThreadPane.tsx:109-145):
+    /// a spinner while it connects, `PlugIcon` otherwise, a warning when the machine can't be reached.
+    public func showConnectNotice(_ notice: LinkedThreadConnect.Notice?) {
+        guard let notice else { chat.showsNoticeBanner = false; return }
+        chat.noticeBanner.apply(.init(variant: notice.kind == .unreachable ? .warning : .neutral, icon: .plug, title: notice.title,
+                                      description: notice.detail, actions: notice.action.map { [$0] } ?? [],
+                                      spinner: notice.kind == .connecting))
+        chat.showsNoticeBanner = true
+    }
 }

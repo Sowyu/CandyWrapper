@@ -812,6 +812,8 @@ final class ThreadController {
         sideChats = SideChatController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         sideChats.parentId = { [weak self] in self?.openThreadId }
         linkedThreads = LinkedThreadController(panel: panel, environments: environments)
+        linkedThreads.openConnected = { [weak self] id in self?.open(id) }
+        linkedThreads.addWithCode = { [weak self] host in self?.addEnvironment?(host) }
         gallery = ThreadImageGalleryController(pill: panel.header.pill)
         gallery.onOpen = { [weak self] in self?.readSubagentCosts() }
         gallery.onOpenInThread = { [weak self] image in
@@ -2132,6 +2134,8 @@ final class ThreadController {
         view.onOpenEnvironments = { [weak self] in self?.openEnvironments?() }
         return view
     }()
+    /// Settings > Connections with the add dialog, its address filled in when one is known (Enter code).
+    var addEnvironment: ((String?) -> Void)?
     /// Settings > Connections, where T3's Open Environments goes (`/settings/connections`).
     var openEnvironments: (() -> Void)?
     /// Shows the unavailable page while the open thread's environment has no enabled entry, and takes it down when one
