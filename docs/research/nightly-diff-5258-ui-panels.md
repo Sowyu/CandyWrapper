@@ -431,7 +431,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
 | 3d4fd8346e | #42563 | fix(web): long Pull Requests author and label filters no longer end in a broken character | other | n/a (Swift Characters) † |
-| 3d54dc96f9 | #33110 | fix(web): focus popup search from anywhere in its row | shell | port (10.6) † |
+| 3d54dc96f9 | #33110 | fix(web): focus popup search from anywhere in its row | shell | ported d39a9a88 (menus with a search field and the branch picker; the other hand-built comboboxes in Sidebar, Settings and Composer still focus only on the field), diff read 2026-11-25 |
 | 3dd4f14280 | #41932 | fix(web): IME keys no longer cancel or send a pull request review reply | pull requests | port (1.3) † |
 | 3ea709e8bd | #39470 | fix(web): keep revealed folder in view while restored folders load | files | port (3.4) † |
 | 3fb76f1be8 | #41945 | fix(web): issue links in HTML renders open in the issue panel | issues | ported 7835705c (chat and HTML render issue links open the issue panel) |
@@ -488,7 +488,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 721542cac7 | #39994 | fix(web): the issue comment composer lines up with the chat composer | issues | port (2.6) † |
 | 732c7126c1 | #41595 | fix(web): RTF previews show a bold, italic or underlined emoji as one character | files | n/a (QuickLook previews) † |
 | 7380740efe | #42499 | fix(web): pooled limit refill shows when it lands again | usage | ported 8f1d707d |
-| 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables; stroked T3 icons stay default) |
+| 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables) and STROKED (the 18 stroked and 24px symbols: video, documents, Java, TOML, diff, XML and the rest) |
 | 73bb8ece1f | #41228 | fix(web): accept TIFF files containing standard IFD tag type 13 (SubIFDs) | files | n/a (QuickLook previews) † |
 | 75443857dc | #42085 | fix(web): Settings text typed before Navigation: Back is saved | shell | port (10.2) † |
 | 77c230e456 | #41511 | fix(web): notebook previews show errors saved without a traceback | files | n/a (QuickLook previews, diff read 2026-11-25) |
@@ -561,7 +561,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | ac3af66f21 | #41901 | fix(web): a copied issue or pull request error no longer ends in a broken character | other | n/a (Swift Characters) † |
 | acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | port (1.8) † |
 | aced664ed9 | #39024 | fix(client-runtime): prefer newer completed compaction over stale liveUsage | other | n/a (server only, wire) † |
-| ae926f6579 | #41852 | fix(web): Cmd/Ctrl+F opens the browser find bar while a pull request is maximized | shell | port (10.5) † |
+| ae926f6579 | #41852 | fix(web): Cmd/Ctrl+F opens the browser find bar while a pull request is maximized | shell | n/a (CW's Pull Requests page has no right panel to maximize over its list), diff read 2026-11-25 |
 | b042e4ee75 | #42722 | fix(web): hide the right panel add-surface menu when no surfaces are available | shell | already (Device is always available beside a thread, so the + menu is never empty), diff read 2026-11-25 |
 | b125918f4b | #42718 | fix(web): xlsx previews no longer fail on cells truncated mid-emoji | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | b2d51f35bb | #42224 | fix(web): a held Esc closing a nested menu or dialog no longer closes Usage or Settings | shell | already (AppRouteModalView ignores Esc repeats), diff read 2026-11-25 |
@@ -640,7 +640,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | ported cb5edfe1 |
 | f82de6567c | #41775 | fix(web): restoring a saved model mapping clears its typed prices | settings | port (1.8) † |
 | f89883c568 | #39875 | fix(web): a long commit name no longer runs under the PR code tab's icons | pull requests | port (2.6) † |
-| f8f4a0b057 | #29261 | feat: Verilog, SystemVerilog, and VHDL code is syntax highlighted | composer | port (3.6) † |
+| f8f4a0b057 | #29261 | feat: Verilog, SystemVerilog, and VHDL code is syntax highlighted | composer | ported 17a38daa (CW's own highlighter gets two profiles), diff read 2026-11-25 |
 | f9f34aab78 | #41361 | fix(web): start without WebAssembly by initialising Words in a guard | shell | n/a (web only) † |
 | fa2ee196b5 | #41539 | fix(web): archived threads settings stay responsive with thousands of threads | settings | ported c82cac6d |
 | fa9f154e1b | #41949 | fix(web): the Cite button appears when a selection ends on a file chip's icon in Firefox | files | port (3.4) † |
