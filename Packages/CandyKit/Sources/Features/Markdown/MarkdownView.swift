@@ -1229,7 +1229,9 @@ public final class MarkdownView: DSView {
         // The pointer anchors the button only when it let go on the selected text; past it (a drag that ended in the
         // margin) the button sits under the selection's last line (AssistantSelectionToolbar.tsx:64-81, T3 3105 55fc13ff6;
         // `resolveSelectionActionPosition`, lib/selectionActions.ts:5-26).
-        let onText = selectedLineRects(range).contains { $0.insetBy(dx: -8, dy: -8).contains(point) }
+        // A double- or triple-click withholds its pointer, so the button sits under the selection, clear of where a
+        // following click lands (`immediateMultiClick`, 5258 lib/selectionActions.ts:57-62,143, #33221).
+        let onText = event.clickCount < 2 && selectedLineRects(range).contains { $0.insetBy(dx: -8, dy: -8).contains(point) }
         let preferred = onText || last == nil ? NSPoint(x: point.x + 8, y: point.y + 8) : NSPoint(x: last!.maxX, y: last!.maxY + 4)
         button.frame = NSRect(x: max(0, min(preferred.x, bounds.width - size.width)),
                               y: max(0, min(preferred.y, bounds.height - size.height)), width: size.width, height: size.height)
