@@ -193,15 +193,35 @@ public enum FilePicker {
         SearchRanking.normalize(query, trimLeading: leadingMarks).filter { !$0.isWhitespace }
     }
 
+    /// `findMatchIndices` (5258 ProjectFilePicker.logic.ts:18-49): walks code points, so an emoji
+    /// is never split (#42805), and maps a lowercased "İ", which grows to two code points, back to
+    /// the letter it came from (#41216). Offsets are UTF-16, as the label draws them.
     static func matchIndices(_ value: String, _ query: String) -> [Int]? {
-        if query.isEmpty { return [] }
-        let v = Array(value.lowercased().utf16), q = Array(query.utf16)
+        let q = Array(query.unicodeScalars)
+        if q.isEmpty { return [] }
+        // Whole-string lowercasing keeps context rules like the Greek final sigma.
+        let normalized = value.lowercased()
+        var spans: [(Int, Int)] = []
+        if normalized.utf16.count != value.utf16.count {
+            var source = 0
+            for scalar in value.unicodeScalars {
+                let span = (source, source + scalar.utf16.count)
+                for _ in 0..<String(scalar).lowercased().utf16.count { spans.append(span) }
+                source = span.1
+            }
+        }
         var out: [Int] = []
-        var k = 0
-        for (i, c) in v.enumerated() where c == q[k] {
-            out.append(i)
-            k += 1
-            if k == q.count { return out }
+        var k = 0, offset = 0
+        for scalar in normalized.unicodeScalars {
+            let length = scalar.utf16.count
+            if scalar == q[k] {
+                let (start, end) = offset < spans.count ? spans[offset] : (offset, offset + length)
+                var i = max(start, (out.last ?? -1) + 1)
+                while i < end { out.append(i); i += 1 }
+                k += 1
+                if k == q.count { return out }
+            }
+            offset += length
         }
         return nil
     }

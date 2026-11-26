@@ -278,7 +278,7 @@ public final class FileSurfaceView: DSView {
                 notice.isHidden = false
             }
             if kind == .markdown, rendered {
-                view = MarkdownFileView(markdown: text, cwd: cwd)
+                view = MarkdownFileView(markdown: text, cwd: cwd, imageBase: Self.markdownImageBase(path: path, cwd: cwd))
             } else if case .table(let d) = kind, rendered {
                 let table = DelimitedTableView(text: text, delimiter: d)
                 if table.truncated, notice.isHidden {
@@ -640,14 +640,27 @@ final class FileFailureView: DSView {
     }
 }
 
+extension FileSurfaceView {
+    /// The folder a Markdown file's relative images resolve against: the file's own folder, kept
+    /// with its trailing separator so a timestamped name never reads as a line suffix and a file at
+    /// the root resolves against "/" (5258 FileMarkdownPreview.tsx:18-25, #41505).
+    static func markdownImageBase(path: String, cwd: String?) -> String? {
+        guard let i = path.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return cwd }
+        let folder = String(path[...i])
+        guard let cwd else { return folder }
+        return FileLinks.resolveAgainst(folder, cwd: cwd)
+    }
+}
+
 /// Rendered Markdown (FileMarkdownPreview.tsx): ChatMarkdown in `mx-auto max-w-4xl px-6 py-5`.
 final class MarkdownFileView: NSView {
     let scroll = NSScrollView()
     let markdown = MarkdownView()
     let document = FlippedFileView()
-    init(markdown text: String, cwd: String?) {
+    init(markdown text: String, cwd: String?, imageBase: String? = nil) {
         super.init(frame: .zero)
         markdown.cwd = cwd
+        markdown.imageBaseDir = imageBase
         markdown.setMarkdown(MarkdownFrontmatter.mask(text))
         document.addSubview(markdown)
         scroll.documentView = document

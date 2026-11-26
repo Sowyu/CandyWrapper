@@ -126,6 +126,11 @@ public final class MarkdownView: DSView {
     public var cwd: String? {
         didSet { if cwd != oldValue { invalidate() } }
     }
+    /// Where relative images resolve when it differs from `cwd`: a Markdown file preview's own
+    /// folder (`imageBaseDir`, 5258 FileMarkdownPreview.tsx:18-31).
+    public var imageBaseDir: String? {
+        didSet { if imageBaseDir != oldValue { invalidate() } }
+    }
 
     /// A plain click on a file chip (`inEditor` false) or a Cmd-click (`inEditor` true). T3 opens the file
     /// in its right files panel (`panelPath`; media in the media viewer, PDF and HTML in the browser
@@ -783,7 +788,7 @@ public final class MarkdownView: DSView {
             for item in layout(forWidth: bounds.width).images {
                 switch item {
                 case .remoteImage(let url, let alt, let rect):
-                    let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
+                    let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: imageBaseDir ?? cwd)
                     if InlineAudioSource.isAudio(name: url.absoluteString), source != .blocked {
                         let key = source.key
                         audioKeys.insert(key)
@@ -814,7 +819,7 @@ public final class MarkdownView: DSView {
                     }
                     let key = source.key
                     let reference: MediaReference? = switch source {
-                    case .workspaceFile(let path): MediaReference.file(path, workspaceRoot: cwd)
+                    case .workspaceFile(let path): MediaReference.file(path, workspaceRoot: imageBaseDir ?? cwd)
                     case .direct(let uri): MediaReference.link(uri)
                     case .blocked: nil
                     }

@@ -187,3 +187,32 @@ struct FilesLogicTests {
         #expect(FileSurfaceView.copyAction(.loading, attachment: false, fullTextLoading: true, copied: false) == nil)
     }
 }
+
+/// 5258 ProjectFilePicker.logic.test.ts (#41216, #42805): highlights stay on the typed letters
+/// after "İ" and never split an emoji.
+struct FilePickerHighlightTests {
+    private func indices(_ path: String, _ query: String) -> [[Int]] {
+        let m = FilePicker.matches([ProjectEntry(path: path, isDirectory: false)], query: query)[0]
+        return [m.nameMatches, m.pathMatches]
+    }
+    @Test func dottedCapitalI() {
+        #expect(indices("icons/İ-logo.svg", "logo") == [[2, 3, 4, 5], [8, 9, 10, 11]])
+        #expect(indices("icons/İ-logo.svg", "İ") == [[0], [0, 6]])
+    }
+    @Test func emojiStayWhole() {
+        #expect(indices("notes/📁-🔥.md", "🔥") == [[3, 4], [9, 10]])
+        #expect(indices("notes/İ-📁-🔥.md", "🔥") == [[5, 6], [11, 12]])
+    }
+}
+
+/// 5258 FileMarkdownPreview.tsx:18-25 (#41505): relative images resolve in the file's own folder,
+/// timestamped and root folders included.
+@MainActor
+struct MarkdownImageBaseTests {
+    @Test func theFilesFolder() {
+        #expect(FileSurfaceView.markdownImageBase(path: "README.md", cwd: "/repo") == "/repo")
+        #expect(FileSurfaceView.markdownImageBase(path: "docs/a.md", cwd: "/repo") == "/repo/docs/")
+        #expect(FileSurfaceView.markdownImageBase(path: "notes/2026-11-25T10:00/a.md", cwd: "/repo") == "/repo/notes/2026-11-25T10:00/")
+        #expect(FileSurfaceView.markdownImageBase(path: "/a.md", cwd: "/repo") == "/")
+    }
+}

@@ -59,8 +59,15 @@ public final class FilesPanelView: DSView {
         searchField.input.onChange = { [weak self] text in self?.searchChanged(text) }
         searchField.input.onCommand = { [weak self] selector in
             guard selector == #selector(NSResponder.cancelOperation(_:)), let self else { return false }
-            searchField.input.text = ""
-            searchChanged("")
+            // 5258 FileBrowserPanel.tsx:121-132 (#41616, #41815): Esc clears a query and keeps the
+            // field focused; a held Esc does nothing more; Esc in an empty field leaves it. An IME's
+            // Esc never gets here, the input method takes it first.
+            if !searchField.input.text.isEmpty {
+                searchField.input.text = ""
+                searchChanged("")
+                return true
+            }
+            if NSApp.currentEvent?.isARepeat == true { return true }
             window?.makeFirstResponder(nil)
             return true
         }
@@ -355,6 +362,9 @@ final class FileTreeRowView: DSView {
         label.lineHeight = 24
         addSubview(icon)
         addSubview(label)
+        // A clipped name shows in full on hover; the tree cannot scroll sideways (5258
+        // pierre-tree-theme.ts `titleClippedPierreTreeRow`, #40308).
+        label.tooltipWhenTruncated()
     }
 
     /// `--trees-fg-muted` and `--trees-status-ignored`, the chevron's and ignored rows' color: the theme's
