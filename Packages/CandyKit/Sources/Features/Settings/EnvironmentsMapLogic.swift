@@ -318,8 +318,18 @@ public enum LinkBackOffer: Equatable, Sendable {
     case blocked(String)
     case hidden
 
-    public struct Target { var connected: Bool; var offersLinks: Bool; var writable: Bool; var links: [PeerLinkSummary]? }
-    public struct Source { var environmentId: String; var connected: Bool; var writable: Bool; var urls: [String] }
+    public struct Target {
+        var connected: Bool; var offersLinks: Bool; var writable: Bool; var links: [PeerLinkSummary]?
+        public init(connected: Bool, offersLinks: Bool, writable: Bool, links: [PeerLinkSummary]?) {
+            self.connected = connected; self.offersLinks = offersLinks; self.writable = writable; self.links = links
+        }
+    }
+    public struct Source {
+        var environmentId: String; var connected: Bool; var writable: Bool; var urls: [String]
+        public init(environmentId: String, connected: Bool, writable: Bool, urls: [String]) {
+            self.environmentId = environmentId; self.connected = connected; self.writable = writable; self.urls = urls
+        }
+    }
 
     public static func evaluate(target: Target?, source: Source) -> LinkBackOffer {
         guard let target, target.connected, source.connected else { return .hidden }

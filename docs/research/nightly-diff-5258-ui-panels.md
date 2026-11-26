@@ -516,7 +516,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 898c22f990 | #39639 | fix(scheduled-tasks): clearing a task's thread no longer keeps the old one | scheduled tasks | n/a (wire B1) † |
 | 8b70e73371 | #42215 | fix(web): an unfinished PR inline comment survives a refresh that changes the diff | pull requests | port (2.3) † |
 | 8b8ec75b01 | #41937 | fix(web): copied startup error details no longer end in a broken character | shell | n/a (web boot error) † |
-| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | logic ported affd5423, dialog left (M) |
+| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | logic ported affd5423, dialog in the next commit |
 | 8ee2a8a9a0 | #40437 | fix(web): RTF previews no longer join text across section and column breaks | files | n/a (QuickLook previews) † |
 | 8f34bb193a | #42470 | fix(web): ArrowUp in a menu search field moves to the last item | shell | port (10.6) † |
 | 8f5fd287a4 | #42837 | fix(web,mobile): Usage says "1 session", not "1 sessions" | usage | port (9.2) † |

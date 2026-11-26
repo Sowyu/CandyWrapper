@@ -102,6 +102,8 @@ final class SettingsController {
     var mcpWizard: McpWizardState?
     /// "host/peer" keys whose Forget is in flight.
     var forgettingLinks: Set<String> = []
+    /// Refreshes an open "Link several" dialog when a links list lands.
+    var linkSeveralSync: (@MainActor () -> Void)?
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 
