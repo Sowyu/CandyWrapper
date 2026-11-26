@@ -88,8 +88,9 @@ final class SettingsController {
     var revokingOthers = false
     /// The pairing link id or key thumbprint whose approve, deny or revoke is in flight.
     var connectDeviceBusy: String?
-    /// `requireConnectDeviceApproval` as last saved from this page, ahead of the server's config push.
-    var connectApprovalSaved: Bool?
+    /// Access settings (`requireConnectDeviceApproval`, `enablePreviewTunnel`) as last saved from this page,
+    /// ahead of the server's config push.
+    var accessSettingsSaved: [String: Bool] = [:]
     var ticker: Timer?
     /// Rereads the T3 Connect link state every 30 s while Connections shows a tunnel (`updateLinkPoll`).
     var linkPoll: Timer?

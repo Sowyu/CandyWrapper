@@ -72,7 +72,7 @@ extension SettingsController {
         linkPoll?.invalidate()
         linkPoll = nil
         credentials = [:]
-        connectApprovalSaved = nil
+        accessSettingsSaved = [:]
     }
 
     /// Reads hosts that are connected and not read yet. Called on each refresh, so a machine that
@@ -201,6 +201,7 @@ extension SettingsController {
             rows.append(tailscaleRow())
             if canReadRelay || canManageRelay { rows += cloudRows(canReadRelay: canReadRelay, canManageRelay: canManageRelay) }
         }
+        if let row = previewTunnelRow(id, descriptor: d) { rows.append(row) }
         return ConnectionsPageModel.Machine(label: d?.label ?? environments.label(id) ?? "This machine",
                                             machine: environments.machine(id) ?? d?.platform?.machine ?? "desktop",
                                             rows: rows, permissions: permissions(id, routeContext: false), iconMenu: iconMenu(id))
@@ -252,6 +253,19 @@ extension SettingsController {
         return .init(id: "tailscale-https", title: "Tailscale HTTPS",
                      detail: "Use Tailscale Serve to expose this backend through a MagicDNS HTTPS URL.",
                      control: .toggle(.init(isOn: false, isEnabled: false, tooltip: Self.bridgeTooltip, label: "Enable Tailscale HTTPS")))
+    }
+
+    /// `Preview tunnel` (5258 ConnectionsSettings.tsx:1414-1431, #39415), only where the server honors
+    /// `enablePreviewTunnel` (`previewTunnelSetting`, contracts environment.ts:151). The setting defaults to on
+    /// (settings.ts:1447). CandyWrapper reads no managed policy, so `managedPolicy.limits.previewTunnel` is not applied.
+    private func previewTunnelRow(_ id: String, descriptor d: EnvironmentDescriptor?) -> ConnectionsPageModel.HostRow? {
+        guard (hosts[id]?.descriptor ?? d)?.capability("previewTunnelSetting") == true else { return nil }
+        let sent = composer?.config(id)?.settings.raw["enablePreviewTunnel"]?.boolValue ?? true
+        let canWrite = grants(id, AuthScopes.accessWrite)
+        return .init(id: "preview-tunnel", title: "Preview tunnel",
+                     detail: "Lets other devices open this machine's local servers: browser tabs loaded on the device, Open on this device, and port forwarding. Off: browser tabs stream from this machine.",
+                     control: .toggle(.init(isOn: accessSettingsSaved["enablePreviewTunnel"] ?? sent, isEnabled: canWrite,
+                                            tooltip: nil, label: "Allow the preview tunnel")))
     }
 
     /// `CloudLinkRow` and `ConfiguredCloudLinkRow` (ConnectionsSettings.tsx:1826-1996).
@@ -396,6 +410,8 @@ extension SettingsController {
             }
         case "connect-device-approval":
             setConnectApproval(on) { _ in }
+        case "preview-tunnel":
+            setAccessSetting("enablePreviewTunnel", on) { _ in }
         default:
             // Bridge-only rows are disabled; nothing reaches here.
             refreshPage()
@@ -543,7 +559,7 @@ extension SettingsController {
     var connectApprovalRequired: Bool? {
         guard let id = environments.primaryId else { return nil }
         guard let sent = composer?.config(id)?.settings.raw["requireConnectDeviceApproval"]?.boolValue else { return nil }
-        return connectApprovalSaved ?? sent
+        return accessSettingsSaved["requireConnectDeviceApproval"] ?? sent
     }
 
     /// `ConnectDeviceApprovalSettings`' rows, with `access:read`, once the snapshot has `connectDevices`.
@@ -564,15 +580,21 @@ extension SettingsController {
 
     /// `server.updateSettings({requireConnectDeviceApproval})`; `done` gets whether it saved.
     func setConnectApproval(_ on: Bool, done: @escaping (Bool) -> Void) {
+        setAccessSetting("requireConnectDeviceApproval", on, done: done)
+    }
+
+    /// `useUpdateEnvironmentSettings` for an access key on the primary server: shows the new value at once
+    /// and drops it again if the save fails.
+    private func setAccessSetting(_ key: String, _ on: Bool, done: @escaping (Bool) -> Void) {
         guard let id = environments.primaryId else { return done(false) }
-        connectApprovalSaved = on
+        accessSettingsSaved[key] = on
         refreshPage()
         Task {
             do {
-                _ = try await environments.request(id, "server.updateSettings", .object(["patch": .object(["requireConnectDeviceApproval": .bool(on)])]))
+                _ = try await environments.request(id, "server.updateSettings", .object(["patch": .object([key: .bool(on)])]))
                 done(true)
             } catch {
-                connectApprovalSaved = nil
+                accessSettingsSaved[key] = nil
                 toast("Could not save setting", "\(error)", .error)
                 refreshPage()
                 done(false)

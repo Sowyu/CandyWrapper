@@ -139,9 +139,9 @@ UNPORTED_IDS = {"screen-reader-announcements", "simlock-hosts",
                 "worktree-fast-checkout", "keep-awake-while-agents-work", "ghq-clone-layout", "welcome-page", "text-generators",
                 "device-sources",
                 # 5258 rows not drawn yet: workflows (no Workflows page), the HTML preview width, side thread
-                # target and agent feedback rows (thread port), and the project repositories and preview tunnel rows.
+                # target and agent feedback rows (thread port), and the project repositories row.
                 "workflows-beta", "workflow-skipped-runs", "html-preview-width", "side-thread-open-target",
-                "agent-feedback", "project-repositories", "preview-tunnel"}
+                "agent-feedback", "project-repositories"}
 
 
 def swift_string(literal):
