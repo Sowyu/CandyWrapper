@@ -242,8 +242,9 @@ final class LinkedThreadNoticeCard: DSView {
 
 /// `LinkedThreadPage` (5258 components/chat/LinkedThreadPage.tsx:19-66): a linked thread on the main screen, for the
 /// "Main view" side-thread setting or a Cmd-click. `WorkspacePageHeader` holds a one-item "Thread breadcrumb" with the
-/// title in `text-sm font-medium text-foreground`, over the same read-only pane the panel tab uses. Redesign draws the
-/// title as its title pill (`DitherThreadTitleView`) at the header's start.
+/// title in `text-sm font-medium text-foreground`, over the same read-only pane the panel tab uses. Redesign drops the
+/// header: the title is its breadcrumb pill (`DitherThreadTitleView`) in the tab band, where a thread's sits, and the
+/// page is clear, so the embedded chat lies on the art as a thread does instead of on a flat ground under a strip of art.
 public final class LinkedThreadPageView: DSView {
     public let pane = LinkedThreadPaneView()
     private let header = NoActiveThreadHeaderView()
@@ -268,31 +269,40 @@ public final class LinkedThreadPageView: DSView {
         pane.chat.isEmbedded = true
         addSubview(pane)
         addSubview(header)
-        header.addSubview(pill)
+        addSubview(pill)
         setAccessibilityLabel("Linked thread")
     }
 
+    /// Redesign: the title pill, for the tab strip to hold at its left end while the page shows.
+    public var bandTitle: DitherStripLeading { pill }
+
     public override var isFlipped: Bool { true }
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+        needsDisplay = true
+    }
 
     public override func layout() {
         super.layout()
         let h = NoActiveThreadStateView.headerHeight
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: h)
-        header.layoutSubtreeIfNeeded()
-        header.label.isHidden = redesign
+        header.isHidden = redesign
         pill.isHidden = !redesign || title.isEmpty
-        let start = header.contentStart
-        if redesign {
-            let w = min(pill.intrinsicContentSize.width, max(0, bounds.width - start - 16))
-            pill.frame = NSRect(x: start, y: ((h - DitherThreadTitleView.height) / 2).rounded(), width: w, height: DitherThreadTitleView.height)
+        // Without a strip to hold it (a preview), the pill sits where the strip puts it: in the band above the page.
+        if redesign, pill.superview == nil { addSubview(pill) }
+        if redesign, pill.superview === self {
+            let x = DitherTabStripView.accessoryRight
+            pill.frame = NSRect(x: x, y: (-DitherChrome.band / 2 - DitherThreadTitleView.height / 2).rounded(),
+                                width: pill.fittingWidth(max: max(0, bounds.width - x - 16)), height: DitherThreadTitleView.height)
         }
-        // The header stacks over the pane in both looks: an embedded pane has no top fade to run under the pill.
-        let top = h
+        let top = redesign ? 0 : h
         pane.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bounds.height - top))
     }
 
-    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    public override func updateLayer() {
+        layer?.backgroundColor = redesign ? NSColor.clear.cgColor : Themed.color(\.background).cgColor(in: self)
+    }
 }
 
 extension LinkedThreadPaneView {

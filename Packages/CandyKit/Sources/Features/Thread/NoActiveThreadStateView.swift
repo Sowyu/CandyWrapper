@@ -30,7 +30,17 @@ public final class NoActiveThreadStateView: DSView {
         empty.frame = NSRect(x: ((bounds.width - w) / 2).rounded(), y: y.rounded(), width: w, height: eh - 96)
     }
 
-    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+        DitherArtView.syncOverlayPage(self)
+    }
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); DitherArtView.syncOverlayPage(self) }
+
+    public override func updateLayer() {
+        layer?.backgroundColor = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? NSColor.clear.cgColor
+            : Themed.color(\.background).cgColor(in: self)
+    }
 }
 
 /// The header: label at the 20px gutter, centered on 52. T3 underlines it with `border-border`; the user removed header
@@ -102,9 +112,18 @@ public final class ThreadUnavailableStateView: DSView {
         empty.frame = NSRect(x: ((bounds.width - w) / 2).rounded(), y: max(h, ((bounds.height - eh) / 2).rounded()), width: w, height: eh)
     }
 
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+        needsDisplay = true
+        DitherArtView.syncOverlayPage(self)
+    }
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); DitherArtView.syncOverlayPage(self) }
 
-    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    public override func updateLayer() {
+        layer?.backgroundColor = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? NSColor.clear.cgColor
+            : Themed.color(\.background).cgColor(in: self)
+    }
 }
 
 /// `environmentUnreachableAtom` (5258 state/presentation.ts:30-47): once the catalog has loaded and the primary is

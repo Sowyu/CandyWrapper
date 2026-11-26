@@ -183,6 +183,35 @@ struct RedesignBaselineTests {
             let wall = ThreadImageWallView(frame: .zero)
             wall.images = Self.wallImages()
             try capture("image-gallery", wall, NSSize(width: 900, height: 640))
+            // A failed pass on a utility page: Back keeps its own width and the capsule says the whole status.
+            let utility = SidebarContentView()
+            utility.windowedMac = false; utility.stage = .nightly
+            utility.isOnUtilityPage = true
+            utility.updatePill.isHidden = false
+            utility.updatePill.capsule = SidebarUpdateCapsule(view: .init(tone: .failed, label: "studio failed", action: .retry), countdown: nil,
+                                                              popover: .init(local: nil, rows: [], showsDismiss: false))
+            try capture("sidebar-utility-capsule", utility, NSSize(width: 280, height: 420))
+            #expect(utility.updatePill.frame.minX >= utility.backButton.frame.maxX && utility.backButton.frame.width >= 60)
+            let notices = DSView(frame: NSRect(x: 0, y: 0, width: 560, height: 200))
+            for (i, warning) in [false, true].enumerated() {
+                let retry = ButtonView("Try again", variant: .outline, size: .sm)
+                let card = LinkedThreadNoticeCard(title: warning ? "Could not refresh" : "Could not read the thread",
+                                                  message: "Studio did not answer. Showing what was read before.", warning: warning, action: retry)
+                card.frame = NSRect(x: 16, y: 16 + CGFloat(i) * 92, width: 528, height: card.height(forWidth: 528))
+                notices.addSubview(card)
+            }
+            try capture("linked-thread-notice", notices, NSSize(width: 560, height: 200))
+            try capture("thread-unavailable", ThreadUnavailableStateView(frame: NSRect(origin: .zero, size: stateSize)), stateSize)
+            let find = DSView(frame: NSRect(x: 0, y: 0, width: 440, height: 120))
+            let diffFind = DiffFindWidget()
+            diffFind.countText = "2 of 5"; diffFind.hasMatches = true
+            diffFind.frame = NSRect(origin: NSPoint(x: 8, y: 8), size: diffFind.preferredSize)
+            find.addSubview(diffFind)
+            let threadFind = ThreadFindBarView(frame: NSRect(x: 16, y: 72, width: 384, height: 36))
+            threadFind.input.text = "greet"
+            threadFind.present(query: "greet", index: 1, total: 4)
+            find.addSubview(threadFind)
+            try capture("find-panels", find, NSSize(width: 440, height: 120))
             // Project avatars at the sizes they show: palette and chips, sidebar, account card, a large preview.
             for size in [CGFloat(16), 20, 28, 64] {
                 let strip = DSView(frame: .zero)
@@ -292,7 +321,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 126)
+        #expect(count == 134)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
