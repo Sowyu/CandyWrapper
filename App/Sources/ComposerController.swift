@@ -791,7 +791,13 @@ final class ComposerController {
     /// Claude instance. The reply and `settingsUpdated` redraw the menu and Settings.
     private func setUnrestricted(_ on: Bool) {
         guard let env = targetEnvironmentId, let id = pickers.current.instanceId else { return }
-        if on, pickers.unrestricted?.on == true { return pickers.chooseFullAccess() }
+        let machine = environments.label(env) ?? "this machine", provider = pickers.current.entry?.displayName ?? "Claude"
+        // Already on: someone who confirmed the older dialog confirms the one that covers CandyWrapper's approvals.
+        if on, pickers.unrestricted?.on == true {
+            return UnrestrictedAccess.confirm(in: composer.window, environment: env, instance: id.rawValue, machine: machine, provider: provider) { [weak self] in
+                self?.pickers.chooseFullAccess()
+            }
+        }
         let write: @MainActor () -> Void = { [weak self] in
             guard let self, let raw = serverConfigs[env]?.settings.raw else { return }
             if on { pickers.chooseFullAccess() }
@@ -805,8 +811,7 @@ final class ComposerController {
             }
         }
         guard on else { return write() }
-        UnrestrictedAccess.confirm(in: composer.window, environment: env, instance: id.rawValue, machine: environments.label(env) ?? "this machine",
-                                   provider: pickers.current.entry?.displayName ?? "Claude", then: write)
+        UnrestrictedAccess.confirm(in: composer.window, environment: env, instance: id.rawValue, machine: machine, provider: provider, then: write)
     }
 
     /// Applies the settings a `server.updateSettings` reply returned, before `settingsUpdated` arrives.

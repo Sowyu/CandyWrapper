@@ -1169,8 +1169,10 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                                        provider: displayName, then: write)
         }
         unrestrictedSwitch = (row.instanceId, toggle)
+        let unconfirmed = state.on && UnrestrictedAccess.needsConfirm(environment: env.id, instance: row.instanceId)
         return SettingsRowView(title: UnrestrictedAccess.label,
-                               detail: (state.unsupportedHint.map { $0 + " " } ?? "") + "Sets \(UnrestrictedAccess.variable)=1, so Claude Code deletes files without asking in Full access. Applies to every Full access thread on this instance, from each thread's next session. Anthropic recommends it only for throwaway containers.",
+                               detail: (state.unsupportedHint.map { $0 + " " } ?? "") + "Sets \(UnrestrictedAccess.variable)=1, so Claude Code deletes files without asking in Full access, from each thread's next session. While this window is connected, CandyWrapper also approves the safety checks Claude Code still stops on before commands. Applies to every Full access thread on this instance. Anthropic recommends it only for throwaway containers."
+                                   + (unconfirmed ? " " + UnrestrictedAccess.unconfirmedHint : ""),
                                control: toggle)
     }
 
