@@ -53,6 +53,16 @@ struct ProvidersGapsTests {
         #expect(keys(.object(["gcpLocation": .string("eu")])) == ["authMethod", "gcpLocation", "binaryPath"])
     }
 
+    /// #31637: hiding or showing one model keeps it in its group; the list regroups only after a bulk toggle.
+    @Test func toggledModelKeepsItsPlacement() {
+        let live = ["a", "b", "c"].map { ServerProviderModel(slug: $0, name: $0) }
+        let placed = ProvidersLogic.placedHidden(["b"], held: ["b": false, "c": true])
+        #expect(placed == ["c"])
+        let order = ProvidersLogic.displayModels(live: live, custom: [], favorites: [], hidden: placed, order: []).map(\.slug)
+        #expect(order == ["a", "b", "c"])
+        #expect(ProvidersLogic.placedHidden(["b"], held: [:]) == ["b"])
+    }
+
     @Test func viewportMathFollowsT3() {
         // `resolveResponsiveBrowserViewportSize` for an 800 by 600 panel: minus the rails and the toolbar.
         #expect(BrowserViewport.toggleOn(defaultViewport: BrowserViewport.fill, panel: CGSize(width: 800, height: 600), zoom: 1)

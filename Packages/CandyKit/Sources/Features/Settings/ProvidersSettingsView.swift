@@ -123,6 +123,11 @@ public enum ProvidersLogic {
         public var capabilities: [String]
     }
 
+    /// `placedHiddenSet` (ProviderModelsSection.tsx:166-170): a held model sits where it was before its own toggle.
+    public static func placedHidden(_ hidden: Set<String>, held: [String: Bool]) -> Set<String> {
+        hidden.subtracting(held.filter { !$0.value }.keys).union(held.filter(\.value).keys)
+    }
+
     /// `deriveProviderModelsForDisplay` then `groupModelsForDisplay`: favorites, visible, hidden; each in the
     /// saved order, then the server's.
     public static func displayModels(live: [ServerProviderModel], custom: [(slug: String, name: String, raw: JSONValue)],
@@ -280,6 +285,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
     private var selected: String?
     private var refreshing = false
     private var expandedModelAdd: Set<String> = []
+    /// `heldPlacements` (#31637, ProviderModelsSection.tsx:153-175): per instance, a model toggled on its own keeps the
+    /// group it was in before, until a bulk toggle or a new page regroups the list. The value is "placed as hidden".
+    private var heldPlacements: [String: [String: Bool]] = [:]
     /// Per instance: the variables the rows last matched or published, and the rows (`ProviderEnvironmentSection` state).
     private var environmentDrafts: [String: (published: [ProviderEnvironmentLogic.Variable], rows: [ProviderEnvironmentLogic.Draft])] = [:]
     private var environmentDraftId = 0
@@ -1070,10 +1078,18 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             let order = (prefs?["modelOrder"]?.arrayValue ?? []).compactMap(\.stringValue)
             let favorites = Set(resolved.favorites.filter { $0.provider.rawValue == row.instanceId }.map(\.model))
             let custom = ProvidersLogic.customModels(row.instance)
-            let models = ProvidersLogic.displayModels(live: provider?.models ?? [], custom: custom, favorites: favorites, hidden: Set(hidden), order: order)
+            let held = heldPlacements[row.instanceId] ?? [:]
+            let placed = ProvidersLogic.placedHidden(Set(hidden), held: held)
+            let models = ProvidersLogic.displayModels(live: provider?.models ?? [], custom: custom, favorites: favorites, hidden: placed, order: order)
             let modelsView = retainedModels ?? ProviderModelsView(models: models, favorites: favorites, hidden: Set(hidden), driver: row.driver, canManage: !readOnly,
                                                 sharedPreferences: shared)
+            modelsView.placedHidden = placed
             if retainedModels != nil { modelsView.update(models: models, favorites: favorites, hidden: Set(hidden)) }
+            modelsView.onHold = { [weak self] slug, wasHidden in
+                guard let self else { return }
+                if let slug { if self.heldPlacements[row.instanceId]?[slug] == nil { self.heldPlacements[row.instanceId, default: [:]][slug] = wasHidden } }
+                else { self.heldPlacements[row.instanceId] = nil }
+            }
             modelsView.builtinModels = provider?.models ?? []
             modelsView.addOpen = expandedModelAdd.contains(row.instanceId)
             modelsView.onAddOpen = { [weak self] open in
@@ -1528,6 +1544,10 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
     private let canManage: Bool
     var onFavorite: ((String) -> Void)?
     var onHidden: (([String]) -> Void)?
+    /// A single toggle passes its model and whether it was hidden; a bulk toggle passes nil to drop every held placement.
+    var onHold: ((String?, Bool) -> Void)?
+    /// The hidden set the groups follow, which keeps a toggled row in place; nil follows `hiddenSlugs`.
+    var placedHidden: Set<String>?
     var onOrder: (([String]) -> Void)?
     var onAdd: ((String) -> Void)?
     var onEdit: ((JSONValue) -> Void)?
@@ -1570,6 +1590,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         bulk.isHidden = builtIn.isEmpty
         bulk.action = { [weak self] in
             guard let self else { return }
+            self.onHold?(nil, false)
             self.onHidden?(ProvidersLogic.bulkToggle(self.models, hidden: Array(self.hiddenSlugs)))
         }
         addSubview(bulk)
@@ -1649,7 +1670,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
     private var filtering: Bool { !filter.isHidden && !filter.text.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private func group(_ m: ProvidersLogic.DisplayModel) -> String {
-        favorites.contains(m.slug) ? "favorite" : !m.isCustom && hiddenSlugs.contains(m.slug) ? "hidden" : "visible"
+        favorites.contains(m.slug) ? "favorite" : !m.isCustom && (placedHidden ?? hiddenSlugs).contains(m.slug) ? "hidden" : "visible"
     }
 
     private func rebuild() {
@@ -1690,6 +1711,8 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             row.onFavorite = { [weak self] in self?.onFavorite?(m.slug) }
             row.onHidden = { [weak self] hide in
                 guard let self else { return }
+                guard hide != self.hiddenSlugs.contains(m.slug) else { return }
+                self.onHold?(m.slug, self.hiddenSlugs.contains(m.slug))
                 var next = Array(self.hiddenSlugs)
                 if hide { next.append(m.slug) } else { next.removeAll { $0 == m.slug } }
                 self.onHidden?(next)
