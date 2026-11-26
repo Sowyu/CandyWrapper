@@ -260,12 +260,15 @@ public final class ToggleGroupView: DSView {
     public enum Variant: String, Sendable { case segmented, `default` }
 
     public let variant: Variant
+    /// Redesign draws every group as its segmented control, a quiet track with the selection on it, so a
+    /// `default` group such as Map and List reads like the other choices.
+    private var drawnVariant: Variant { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .segmented : variant }
     public private(set) var items: [ToggleView] = []
     /// Index of the pressed item, nil when none is.
     public var selectedIndex: Int? {
         didSet {
             // Redesign slides the selection from the old segment to the new one.
-            if variant == .segmented, window != nil, ThemeRuntime.isDither(dark: effectiveAppearance.isDark),
+            if drawnVariant == .segmented, window != nil, ThemeRuntime.isDither(dark: effectiveAppearance.isDark),
                let layer, let old = oldValue, items.indices.contains(old), let new = selectedIndex, new != old {
                 let from = items[old].shownFill(in: layer)
                 for (i, item) in items.enumerated() { item.setPressed(i == new, slidingFrom: i == new ? from : nil, in: layer) }
@@ -288,8 +291,8 @@ public final class ToggleGroupView: DSView {
         layer?.masksToBounds = false
         items = titles.enumerated().map { i, item in
             let toggle = ToggleView(item.title, icon: item.icon,
-                                    variant: variant == .segmented ? .segmented : .default,
-                                    size: variant == .segmented ? .segmented : .default)
+                                    variant: drawnVariant == .segmented ? .segmented : .default,
+                                    size: drawnVariant == .segmented ? .segmented : .default)
             toggle.onPressedChange = { [weak self] pressed in self?.itemChanged(i, pressed) }
             return toggle
         }
@@ -304,7 +307,7 @@ public final class ToggleGroupView: DSView {
         onChange?(selectedIndex)
     }
 
-    private var inset: CGFloat { variant == .segmented ? 2 : 0 }
+    private var inset: CGFloat { drawnVariant == .segmented ? 2 : 0 }
     /// `*:flex-1`: the items share the group's width equally instead of hugging their labels.
     public var fillsWidth = false { didSet { needsLayout = true } }
 
@@ -332,8 +335,14 @@ public final class ToggleGroupView: DSView {
     static func snap(_ v: CGFloat) -> CGFloat { (v * 2).rounded() / 2 }
 
     public override func updateLayer() {
+        // The items follow a theme switch into or out of Redesign.
+        let itemVariant: ToggleView.Variant = drawnVariant == .segmented ? .segmented : .default
+        if let first = items.first, first.variant != itemVariant {
+            for item in items { item.variant = itemVariant; item.size = itemVariant == .segmented ? .segmented : .default }
+            invalidateIntrinsicContentSize(); needsLayout = true; superview?.needsLayout = true
+        }
         var box = BoxStyle()
-        if variant == .segmented {
+        if drawnVariant == .segmented {
             box.radius = DesignGeometry.radius(10, in: self)
             box.fill = RedesignTokens.Segment.light(in: self) ? RedesignTokens.Segment.trackFill : Themed.color(\.contrastInput, 0.4)
         }

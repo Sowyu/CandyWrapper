@@ -140,6 +140,16 @@ struct RedesignBaselineTests {
             sidebar.state = SidebarListState(activeThreadId: SidebarPreview.referenceActiveThread)
             sidebar.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
             try capture("sidebar-many-threads", sidebar, NSSize(width: 280, height: 900))
+            // A failed update pass: the capsule takes its own line in the account card and the name keeps its row.
+            let footer = SidebarContentView()
+            footer.windowedMac = false; footer.stage = .nightly
+            footer.accountRow.set(name: "mrm", image: nil, initials: nil)
+            footer.updatePill.isHidden = false
+            footer.updatePill.capsule = SidebarUpdateCapsule(view: .init(tone: .failed, label: "studio failed", action: .retry), countdown: nil,
+                                                             popover: .init(local: nil, rows: [], showsDismiss: false))
+            try capture("sidebar-update-capsule", footer, NSSize(width: 280, height: 420))
+            #expect(footer.updatePill.frame.minY >= footer.accountRow.frame.minY + SidebarAccountRowView.height)
+            #expect(footer.updatePill.frame.width > 200)
             for c in PickersFidelityTests.redesignCases {
                 let (view, size) = c.make(try PickersFidelityTests.pickers())
                 try capture(c.reference, view, size)
@@ -282,7 +292,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 124)
+        #expect(count == 126)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

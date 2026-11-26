@@ -147,6 +147,9 @@ public final class SettingsSidebarView: DSView {
     let ditherBack = DitherSettingsNavRow("Back", icon: .arrowLeft)
     let ditherSignIn = DitherSettingsNavRow("Sign in to T3 Connect", icon: .logIn)
     private let searchFill = CALayer()
+    /// Redesign: the hairline between the scrolling nav and the sign-in row under it, so rows cut off at the
+    /// nav's foot read as more to scroll rather than the end of the list.
+    private let footerRule = CALayer()
     private var isDither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     /// `T3ConnectSidebarSignIn`: shown while signed out of T3 Connect.
     public let signIn = SidebarMenuButtonView("Sign in to T3 Connect", icon: .logIn)
@@ -249,6 +252,8 @@ public final class SettingsSidebarView: DSView {
         searchFill.cornerRadius = DitherChrome.controlRadius
         searchFill.borderWidth = 0.5
         layer?.insertSublayer(searchFill, at: 0)
+        footerRule.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull(), "hidden": NSNull()]
+        layer?.addSublayer(footerRule)
         addSubview(navScroll)
         navScroll.scrollsHorizontally = false
         navScroll.hideScrollbars = true
@@ -374,6 +379,7 @@ public final class SettingsSidebarView: DSView {
         // Capy's search field: a `--section` fill under a `--border-1` hairline.
         searchFill.backgroundColor = Themed.color(light: \.foreground, 0.04, dark: \.foreground, 0.035).cgColor(in: self)
         searchFill.borderColor = Themed.color(light: \.foreground, 0.08, dark: \.foreground, 0.08).cgColor(in: self)
+        footerRule.backgroundColor = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
     }
 
     private func applyStage() {
@@ -402,6 +408,7 @@ public final class SettingsSidebarView: DSView {
         groupLabels.values.forEach { $0.isHidden = isSearching }
         ditherSignIn.isHidden = !dither || t3Connect != .signedOut
         searchFill.isHidden = !dither
+        footerRule.isHidden = !dither || ditherSignIn.isHidden || isSearching
         if dither { layoutDither(); return }
         if isRouteModal { layoutModal(); return }
         let w = bounds.width, h = bounds.height
@@ -498,12 +505,14 @@ public final class SettingsSidebarView: DSView {
             layoutConcernNavigation(top: y, bottom: h - (avatar.isHidden ? (ditherSignIn.isHidden ? 0 : rowH + 16) : 52), dither: true)
             avatar.frame = NSRect(x: 8, y: h - 44, width: 36, height: 36)
             ditherSignIn.frame = NSRect(x: 8, y: h - 8 - rowH, width: max(0, w - 16), height: rowH)
+            footerRule.frame = CGRect(x: 16, y: ditherSignIn.frame.minY - 4.5, width: max(0, w - 32), height: 1)
             return
         }
         layoutConcernNavigation(top: y, bottom: h - (t3Connect == .signedOut ? 88 : 48), dither: true)
         ditherBack.frame = NSRect(x: 8, y: rowY + (footer - rowH) / 2, width: w - 16 - (avatar.isHidden ? 0 : 36 + 4), height: rowH)
         avatar.frame = NSRect(x: w - 8 - 36, y: rowY, width: 36, height: 36)
         ditherSignIn.frame = NSRect(x: 8, y: rowY - 2 - rowH, width: w - 16, height: rowH)
+        footerRule.frame = CGRect(x: 16, y: ditherSignIn.frame.minY - 4.5, width: max(0, w - 32), height: 1)
     }
     private func layoutConcernNavigation(top: CGFloat, bottom: CGFloat, dither: Bool) {
         navScroll.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bottom - top))
