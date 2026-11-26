@@ -148,6 +148,10 @@ public struct ConnectionsActions {
     public var mapLink: (_ sourceId: String, _ targetId: String?, _ ticked: [String]) -> Void = { _, _, _ in }
     /// The map's "Link several…": the source environment, when one is chosen, and the ticked environments.
     public var linkSeveral: (_ sourceEnvironmentId: String?, _ environmentIds: [String]) -> Void = { _, _ in }
+    /// `requestOneLink`: one link from a node to a node, whatever is ticked (the details' "Link back…").
+    public var mapLinkOne: (_ sourceId: String, _ targetId: String) -> Void = { _, _ in }
+    /// "Add environment" from a machine known only through a link, its address filled in (`initialHost`).
+    public var addEnvironmentAt: (String?) -> Void = { _ in }
     public var addRoute: (String) -> Void = { _ in }
     /// The diagnosis's "Retry now" (`environmentCatalog.retryNow`).
     public var retryNow: (String) -> Void = { _ in }
@@ -253,10 +257,25 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     let viewSwitch = ToggleGroupView(variant: .default, items: [("Map", nil), ("List", nil)], selected: 0)
     public private(set) lazy var mapView: EnvironmentsMapView = {
         let map = EnvironmentsMapView()
-        map.canvas.onLink = { [weak self, weak map] source, target in
-            self?.actions.mapLink(source, target, map?.canvas.state.ticked ?? [])
-        }
+        map.onLink = { [weak self] source, target, ticked in self?.actions.mapLink(source, target, ticked) }
+        map.onLinkOne = { [weak self] source, target in self?.actions.mapLinkOne(source, target) }
         map.onLinkSeveral = { [weak self] source, ids in self?.actions.linkSeveral(source, ids) }
+        map.details.onHeightChange = { [weak self] in self?.environmentsSection.needsLayout = true; self?.relayout() }
+        var details = EnvironmentsMapDetailsActions()
+        // `renderSavedEnvironment` (ConnectionsSettings.tsx:1880-1894): the list's row, its routes open.
+        details.savedRow = { [weak self] id in
+            guard let self, let row = self.rows[id] else { return nil }
+            if !self.openRoutes.contains(id) { self.openRoutes.insert(id); row.routesOpen = true }
+            return row
+        }
+        details.connectRow = { [weak self] id in self?.cloudRows[id] }
+        details.linkFrom = { [weak map] id in map?.requestLink(id, nil) }
+        details.linkBack = { [weak self] source, target in self?.actions.mapLinkOne(source, target) }
+        details.forget = { [weak self] host, peer in self?.actions.forgetLink(host, peer) }
+        details.reconnect = { [weak self] id in self?.actions.retryNow(id) }
+        details.addEnvironment = { [weak self] host in self?.actions.addEnvironmentAt(host) }
+        details.retryConnect = { [weak self] in self?.actions.retryCloud() }
+        map.details.actions = details
         return map
     }()
     /// The list was picked over the map.
@@ -406,8 +425,9 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         // The map stands for the whole list where there is room (`useMediaQuery("md")`, 768 wide).
         environmentsSection.titleAction = roomForMap ? viewSwitch : nil
         if let map = model.map, roomForMap, !showsList {
+            mapView.wide = (window?.frame.width ?? 1024) >= 1024
             mapView.set(map)
-            groupRows = [mapView]
+            groupRows = [mapView, mapView.details]
         }
         environmentsSection.group.rows = groupRows
         applyLinkedEnvironments(model.linkedEnvironments)

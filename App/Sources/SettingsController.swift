@@ -131,6 +131,8 @@ final class SettingsController {
         actions.addEnvironment = { [weak self] in self?.presentAdd(routeTarget: nil) }
         actions.mapLink = { [weak self] source, target, ticked in self?.mapLink(source, target, ticked: ticked) }
         actions.linkSeveral = { [weak self] source, ids in self?.presentLinkSeveral(source, ids) }
+        actions.mapLinkOne = { [weak self] source, target in self?.mapLinkOne(source, target) }
+        actions.addEnvironmentAt = { [weak self] host in self?.presentAdd(routeTarget: nil, initialHost: host) }
         actions.addRoute = { [weak self] id in self?.presentAdd(routeTarget: id) }
         actions.retryNow = { [weak self] id in self?.environments.reconnect(id) }
         actions.setEnabled = { [weak self] id, on in self?.setEnabled(id, on) }
@@ -451,10 +453,11 @@ final class SettingsController {
         toasts?.show(ToastView(title: title, message: message, kind: kind))
     }
 
-    func presentAdd(routeTarget: String?) {
+    func presentAdd(routeTarget: String?, initialHost: String? = nil) {
         guard let window, modal == nil else { return }
         let targetLabel = routeTarget.flatMap { environments.label($0) }
         let (dialog, form) = AddEnvironmentDialog.make(routeTarget: targetLabel)
+        if let initialHost { form.host.text = initialHost }
         form.splitPairingURL = { Pairing.splitPairingURL($0) }
         form.onSubmit = { [weak self, weak form] host, code in
             guard let self, let form else { return }

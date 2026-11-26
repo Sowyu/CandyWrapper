@@ -70,8 +70,9 @@ extension SettingsController {
         }
     }
 
-    /// "Link": the shared dialog, then `peerLinks.link` on the host.
-    func presentLinkEnvironment(_ hostId: String) {
+    /// "Link": the shared dialog, then `peerLinks.link` on the host. A map offer prefills the machine or the address
+    /// (EnvironmentsMap.tsx:448-468 `openLinkDialog`).
+    func presentLinkEnvironment(_ hostId: String, offer: FleetLinkOffer.Link? = nil) {
         guard let window, modal == nil else { return }
         let linked: Set<String> = {
             guard case .links(let links)? = peerLinks[hostId] else { return [] }
@@ -79,8 +80,14 @@ extension SettingsController {
         }()
         let machines = PeerLinkDialog.machines(environments, hostId: hostId, primaryLabel: primaryDescriptor?.label, linked: linked,
                                                   reported: { composer?.config($0)?.directEndpoints ?? [] })
+        var choice: String?, address: String?
+        switch offer?.target {
+        case .machine(let id)?: choice = id
+        case .address(let a, _)?: address = a ?? ""
+        case nil: break
+        }
         let host = PeerLinkDialog.present(
-            in: window, environments: environments, machines: machines,
+            in: window, environments: environments, machines: machines, initialChoice: choice, address: address,
             toast: { [weak self] title, message, kind in self?.toast(title, message, kind) },
             failureMessage: { PeerLinkDialog.message($0, fallback: "Could not link the environment.") },
             commit: { [weak self] choice in
@@ -175,8 +182,31 @@ extension SettingsController {
                 }
             }())
         }
-        return EnvironmentsMapModel(clientLabel: "This device", environments: inputs, connectMachines: connect,
-                                    awaitingApproval: Set(inputs.map(\.environmentId).filter { environments.state($0)?.awaitingApproval == true }))
+        var map = EnvironmentsMapModel(clientLabel: "This device", environments: inputs, connectMachines: connect,
+                                       awaitingApproval: Set(inputs.map(\.environmentId).filter { environments.state($0)?.awaitingApproval == true }))
+        map.details = mapDetailsModel(primary)
+        return map
+    }
+
+    /// What the map's details panel says beyond the graph (EnvironmentsMapDetails.tsx).
+    func mapDetailsModel(_ primary: String?) -> EnvironmentsMapDetailsModel {
+        var d = EnvironmentsMapDetailsModel()
+        for r in environments.saved {
+            d.statusText[r.environmentId] = EnvironmentRowStatus(enabled: r.enabled, state: environments.state(r.environmentId)).text
+        }
+        if let primary {
+            // `EnvironmentRow` for the primary (:805-820): `transport · connectionStatusTitle · serverVersion`.
+            let status = EnvironmentRowStatus(enabled: true, state: environments.state(primary)).text
+            // `environmentTransportLabel` names a primary target "This machine" (EnvironmentRow.tsx:32).
+            let version = primaryDescriptor?.serverVersion
+            let transport = "This machine"
+            d.primary = .init(environmentId: primary, label: primaryDescriptor?.label ?? environments.label(primary) ?? "This machine",
+                              machine: environments.machine(primary) ?? "server",
+                              subtitle: [transport, status, version].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+        }
+        if case .failed(let reason) = t3.cloudModel(primaryId: primary) { d.connectProblem = reason }
+        d.forgetting = forgettingLinks
+        return d
     }
 
     static func routeKind(_ url: URL) -> String {
@@ -196,8 +226,19 @@ extension SettingsController {
         let stacks = fleetStacks(graph, expanded: [])
         switch fleetLinkAction(graph, stacks, selected: ticked, sourceId: sourceId, targetId: targetId) {
         case .batch(let source, let ids)?: presentLinkSeveral(source, ids)
-        case .single(let source, _)?, .codeOnly(_, let source, _)?: presentLinkEnvironment(source)
+        case .single(let source, let offer)?: presentLinkEnvironment(source, offer: offer)
+        case .codeOnly(_, let source, _)?: presentLinkEnvironment(source)
         case nil: break
+        }
+    }
+
+    /// `requestOneLink` (EnvironmentsMap.tsx:469-473): one link from `sourceId` to `targetId`, whatever is ticked.
+    func mapLinkOne(_ sourceId: String, _ targetId: String) {
+        let model = environmentsMapModel()
+        let graph = buildFleetGraph(clientLabel: model.clientLabel, environments: model.environments,
+                                    connectMachines: model.connectMachines, now: Date())
+        if case .link(let offer) = fleetLinkOffer(graph, sourceId, targetId) {
+            presentLinkEnvironment(offer.sourceEnvironmentId, offer: offer)
         }
     }
 

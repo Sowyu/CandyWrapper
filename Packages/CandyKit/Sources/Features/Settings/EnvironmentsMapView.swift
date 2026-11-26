@@ -15,6 +15,8 @@ public struct EnvironmentsMapModel: Equatable {
     /// Environments waiting for this device's approval on the host: "Waiting for approval" (:1155).
     public var awaitingApproval: Set<String>
     public var now: Date
+    /// What the details panel shows beyond the graph.
+    public var details = EnvironmentsMapDetailsModel()
     public init(clientLabel: String = "This app", environments: [FleetEnvironmentInput] = [],
                 connectMachines: [FleetConnectMachineInput] = [], awaitingApproval: Set<String> = [], now: Date = Date()) {
         self.clientLabel = clientLabel; self.environments = environments; self.connectMachines = connectMachines
@@ -166,6 +168,8 @@ enum EnvironmentsMapIcons {
     static let help = IconDefinition(viewBox: box, elements: [IconElement(.circle(cx: 12, cy: 12, r: 10)),
                                                               IconElement(.path(d: "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3")),
                                                               IconElement(.path(d: "M12 17h.01"))])
+    /// lucide clock-alert, `HealthGlyph` for a link that expires within days.
+    static let clockAlert = paths(["M12 6v6l4 2", "M20 12v5", "M20 21h.01", "M21.25 8.2A10 10 0 1 0 16 21.16"])
     static let appWindow = IconDefinition(viewBox: box, elements: [IconElement(.rect(x: 2, y: 4, w: 20, h: 16, rx: 2, ry: 2)),
                                                                    IconElement(.path(d: "M10 4v4")), IconElement(.path(d: "M2 8h20")),
                                                                    IconElement(.path(d: "M6 4v4"))])
@@ -249,6 +253,8 @@ public struct EnvironmentsMapState: Equatable {
     public var ticked: [String] = []
     public var expanded: Set<String> = []
     public var query = ""
+    /// The machine a search landed on inside the selected stack (`found`).
+    public var found: String?
     /// The view set by hand; nil follows the fit.
     public var held: FleetViewTransform?
     public var roving = fleetClientNodeId
@@ -340,6 +346,7 @@ public final class EnvironmentsMapCanvasView: DSView {
     }
 
     var fit: FleetViewTransform { fitFleetLayout(width: fleetLayout.width, height: fleetLayout.height, viewport: bounds.size) }
+    /// Where the view rests: set by hand, or the fit.
     public var view: FleetViewTransform { state.held ?? fit }
 
     public override func layout() {
@@ -1219,7 +1226,7 @@ struct FleetSceneRenderer {
         case .reachable(nil):
             cg.setFillColor(c(paint.success)); cg.fillEllipse(in: CGRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8))
         case .reachable:
-            fleetDrawIcon(IconName.clock.definition, in: icon, color: c(tone, a), context: cg)
+            fleetDrawIcon(EnvironmentsMapIcons.clockAlert, in: icon, color: c(tone, a), context: cg)
         }
     }
 }
