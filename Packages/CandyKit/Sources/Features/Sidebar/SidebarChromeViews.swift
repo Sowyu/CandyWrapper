@@ -368,13 +368,22 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         surface.borderWidth = 0
         surface.cornerRadius = 8
         CATransaction.commit()
-        icon.strokeColor = SB.c(\.sidebarIconColor)
         field.textColor = SB.c(\.sidebarForeground)
-        // Dither: the nav rows' 13pt, so search reads as the first of them.
-        let size: CGFloat = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 13 : 14
-        if field.font?.pointSize != size { field.font = SB.font(size, .medium); fieldHeight = 0; needsLayout = true }
+        // Dither: the nav rows' 13pt at 400 in their resting color, so search reads as the first of them.
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        let size: CGFloat = dither ? 13 : 14
+        let weight: NSFont.Weight = dither ? .regular : .medium
+        if field.font?.pointSize != size || field.font != SB.font(size, weight) { field.font = SB.font(size, weight); fieldHeight = 0; needsLayout = true }
+        // The placeholder drops a dynamic color's alpha, so Redesign's resting color goes in opaque, mixed over the sidebar.
+        var resting = SB.c(\.sidebarMutedForeground)
+        if dither {
+            effectiveAppearance.performAsCurrentDrawingAppearance {
+                resting = SidebarRowBase.composite(SB.c(\.foreground, RedesignTokens.Text.quiet), over: SB.c(\.sidebar))
+            }
+        }
+        icon.strokeColor = dither && hovered ? SB.c(\.foreground) : dither ? SB.c(\.sidebarMutedForeground) : SB.c(\.sidebarIconColor)
         field.placeholderAttributedString = NSAttributedString(string: "Search", attributes: [
-            .font: SB.font(size, .medium), .foregroundColor: hovered ? SB.c(\.sidebarForeground) : SB.c(\.sidebarMutedForeground)])
+            .font: SB.font(size, weight), .foregroundColor: hovered ? SB.c(\.sidebarForeground) : resting])
     }
 
     override func layout() {
@@ -393,15 +402,18 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
 }
 
 /// Dither (after Capy's sidebar nav): a 28pt row with a 16pt line icon and a 13pt label, `rounded-md`, the row hover
-/// fill on hover.
+/// fill on hover. At rest the label is 400 a step under the text color and the icon muted; hover, a press or the
+/// selected row bring both to full strength.
 final class SidebarNavRowView: ControlView {
     static let height: CGFloat = 28
     private let icon: IconView
     private let label: LabelView
+    /// The row's page is open in the content area.
+    var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true; setAccessibilitySelected(isSelected) } } }
 
     init(_ name: IconName, _ text: String) {
         icon = IconView(name: name, size: 16)
-        label = LabelView(text, font: SB.font(13, .medium), color: SB.c(\.foreground))
+        label = LabelView(text, font: SB.font(13), color: SB.c(\.foreground, RedesignTokens.Text.quiet))
         super.init(frame: .zero)
         label.lineHeight = 20
         addSubview(icon)
@@ -426,8 +438,11 @@ final class SidebarNavRowView: ControlView {
 
     override func updateLayer() {
         layer?.cornerRadius = DitherChrome.controlRadius
-        layer?.backgroundColor = state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
-        icon.strokeColor = SB.c(\.sidebarMutedForeground)
+        layer?.backgroundColor = isSelected ? SB.c(\.sidebarRowActive).cgColor(in: self)
+            : state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        let strong = isSelected || state.hoverOrPressed
+        icon.strokeColor = strong ? SB.c(\.foreground) : SB.c(\.sidebarMutedForeground)
+        label.color = strong ? SB.c(\.foreground) : SB.c(\.foreground, RedesignTokens.Text.quiet)
     }
 }
 
