@@ -1,4 +1,5 @@
 import CoreGraphics
+import DesignSystem
 import Foundation
 import T3Protocol
 
@@ -714,38 +715,8 @@ func fleetSCurve(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double, _ fanX:
     return "M\(js(x0)) \(js(y0))\(lead)C\(js(fanX + reach)) \(js(y0)) \(js(x1 - reach)) \(js(y1)) \(js(x1)) \(js(y1))"
 }
 
-/// Reads the absolute M, H, V, Q and C paths the layout writes into a `CGPath`.
-public func fleetCGPath(_ d: String) -> CGPath {
-    let path = CGMutablePath()
-    var numbers: [Double] = []
-    var command: Character?
-    var current = CGPoint.zero
-    func flush() {
-        guard let command else { return }
-        let n = numbers.map { CGFloat($0) }
-        switch command {
-        case "M" where n.count >= 2: current = CGPoint(x: n[0], y: n[1]); path.move(to: current)
-        case "H" where n.count >= 1: current = CGPoint(x: n[0], y: current.y); path.addLine(to: current)
-        case "V" where n.count >= 1: current = CGPoint(x: current.x, y: n[0]); path.addLine(to: current)
-        case "Q" where n.count >= 4:
-            current = CGPoint(x: n[2], y: n[3]); path.addQuadCurve(to: current, control: CGPoint(x: n[0], y: n[1]))
-        case "C" where n.count >= 6:
-            current = CGPoint(x: n[4], y: n[5])
-            path.addCurve(to: current, control1: CGPoint(x: n[0], y: n[1]), control2: CGPoint(x: n[2], y: n[3]))
-        default: break
-        }
-        numbers = []
-    }
-    var token = ""
-    func endToken() { if let v = Double(token) { numbers.append(v) }; token = "" }
-    for ch in d {
-        if "MHVQC".contains(ch) { endToken(); flush(); command = ch }
-        else if ch == " " || ch == "," { endToken() }
-        else { token.append(ch) }
-    }
-    endToken(); flush()
-    return path
-}
+/// The layout's `d` strings as a `CGPath`, through the icon set's SVG parser.
+public func fleetCGPath(_ d: String) -> CGPath { (try? SVGPath.parse(d)) ?? CGMutablePath() }
 
 // MARK: - Sorting
 

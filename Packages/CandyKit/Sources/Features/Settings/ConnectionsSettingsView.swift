@@ -121,6 +121,8 @@ public struct ConnectionsPageModel: Equatable {
     public var linkedEnvironments: [LinkedEnvironments] = []
     /// `ServerUpdatesAction` ("Update all") in the Environments header: some machine can take a remote update.
     public var canUpdateAll = false
+    /// The Environments map (5258 EnvironmentsMap.tsx). Nil keeps the list only.
+    public var map: EnvironmentsMapModel?
 
     /// A saved machine's update control.
     public enum UpdateAction: Equatable {
@@ -142,6 +144,10 @@ public struct ConnectionsPageModel: Equatable {
 @MainActor
 public struct ConnectionsActions {
     public var addEnvironment: () -> Void = {}
+    /// The map's link handle: pressed (target nil) or dropped on a machine. Node ids, `env:<environmentId>`.
+    public var mapLink: (_ sourceId: String, _ targetId: String?, _ ticked: [String]) -> Void = { _, _, _ in }
+    /// The map's "Link several…": the source environment, when one is chosen, and the ticked environments.
+    public var linkSeveral: (_ sourceEnvironmentId: String?, _ environmentIds: [String]) -> Void = { _, _ in }
     public var addRoute: (String) -> Void = { _ in }
     /// The diagnosis's "Retry now" (`environmentCatalog.retryNow`).
     public var retryNow: (String) -> Void = { _ in }
@@ -243,6 +249,18 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     private var openPermissions: Set<String> = []
     private var openDiagnoses: Set<String> = []
     private let environmentsSection: SettingsSectionView
+    /// `ToggleGroup aria-label="Show environments as"` (ConnectionsSettings.tsx:1839-1852): map by default, not stored.
+    let viewSwitch = ToggleGroupView(variant: .default, items: [("Map", nil), ("List", nil)], selected: 0)
+    public private(set) lazy var mapView: EnvironmentsMapView = {
+        let map = EnvironmentsMapView()
+        map.canvas.onLink = { [weak self, weak map] source, target in
+            self?.actions.mapLink(source, target, map?.canvas.state.ticked ?? [])
+        }
+        map.onLinkSeveral = { [weak self] source, ids in self?.actions.linkSeveral(source, ids) }
+        return map
+    }()
+    /// The list was picked over the map.
+    var showsList = false
     private let addButton = ButtonView("Add environment", icon: .plus, variant: .ghostMuted, size: .xs)
     /// `ServerUpdatesAction variant="ghost-muted"`, before "Add environment" (`flex items-center gap-1`).
     let updateAllButton = ButtonView("Update all", variant: .ghostMuted, size: .xs)
@@ -270,6 +288,12 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         updateAllButton.isHidden = true
         headerButtons.buttons = [updateAllButton, addButton]
         environmentsSection.headerAction = headerButtons
+        viewSwitch.setAccessibilityLabel("Show environments as")
+        viewSwitch.onChange = { [weak self] index in
+            guard let self, let index else { return }
+            self.showsList = index == 1
+            self.set(self.model)
+        }
         addSubview(environmentsSection)
         set(model)
     }
@@ -378,6 +402,12 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
                 empty = (message, view)
             }
             groupRows.append(empty!.view)
+        }
+        // The map stands for the whole list where there is room (`useMediaQuery("md")`, 768 wide).
+        environmentsSection.titleAction = roomForMap ? viewSwitch : nil
+        if let map = model.map, roomForMap, !showsList {
+            mapView.set(map)
+            groupRows = [mapView]
         }
         environmentsSection.group.rows = groupRows
         applyLinkedEnvironments(model.linkedEnvironments)
@@ -602,6 +632,9 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         return parts
     }
+
+    /// T3 asks the window for md (768); the settings column here is narrower than the window by the nav.
+    var roomForMap: Bool { model.map != nil && (window?.frame.width ?? 1024) >= 768 }
 
     public func searchAnchor(_ id: String) -> NSView? {
         switch id {
