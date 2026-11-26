@@ -194,6 +194,9 @@ private struct Profile {
         (["diff", "patch"], Profile(family: .diff, lineComments: [], blockComment: nil)),
         (["sql", "postgres", "postgresql", "mysql", "sqlite"], .sql),
         (["markdown", "md", "mdx"], Profile(family: .markdown, lineComments: [], blockComment: nil)),
+        // #29261 (composer-code-languages.ts:40-46 at 5258): Verilog `.v` `.vh`, SystemVerilog `.sv` `.svh`, VHDL `.vhd` `.vhdl`.
+        (["verilog", "v", "vh", "systemverilog", "system-verilog", "sv", "svh"], .verilog),
+        (["vhdl", "vhd"], .vhdl),
     ]
     private static let byID = Dictionary(table.flatMap { row in row.ids.map { ($0, row.profile) } }, uniquingKeysWith: { a, _ in a })
 
@@ -280,6 +283,29 @@ private struct Profile {
                    "with", "returning", "exists", "between", "name"],
         constants: ["true", "false"],
         punctuation: .plain, caseInsensitive: true)
+
+    static let verilog = Profile(
+        family: .cLike, quotes: [0x22],
+        keywords: ["module", "endmodule", "input", "output", "inout", "begin", "end", "if", "else", "case", "casez", "casex",
+                   "endcase", "default", "for", "while", "repeat", "forever", "always", "always_ff", "always_comb", "always_latch",
+                   "initial", "assign", "posedge", "negedge", "or", "and", "not", "function", "endfunction", "task", "endtask",
+                   "generate", "endgenerate", "genvar", "parameter", "localparam", "package", "endpackage", "import", "interface",
+                   "endinterface", "modport", "class", "endclass", "extends", "return", "typedef", "struct", "enum", "union",
+                   "packed", "unique", "priority", "automatic", "virtual", "fork", "join", "wait", "disable"],
+        storage: ["wire", "reg", "logic", "bit", "byte", "int", "integer", "shortint", "longint", "real", "time", "signed",
+                  "unsigned", "tri", "supply0", "supply1", "string", "void"],
+        constants: [])
+
+    static let vhdl = Profile(
+        family: .cLike, lineComments: ["--"], blockComment: ("/*", "*/"), quotes: [0x22],
+        keywords: ["entity", "architecture", "of", "is", "begin", "end", "port", "map", "generic", "in", "out", "inout", "buffer",
+                   "signal", "variable", "constant", "process", "if", "then", "elsif", "else", "case", "when", "others", "for",
+                   "loop", "while", "generate", "component", "library", "use", "all", "package", "body", "function", "procedure",
+                   "return", "type", "subtype", "range", "to", "downto", "and", "or", "not", "xor", "nand", "nor", "after", "wait",
+                   "until", "with", "select", "rising_edge", "falling_edge", "array", "record", "null", "open"],
+        storage: ["std_logic", "std_logic_vector", "std_ulogic", "std_ulogic_vector", "signed", "unsigned", "integer", "natural",
+                  "positive", "boolean", "bit", "bit_vector", "string", "real", "time"],
+        constants: ["true", "false"], caseInsensitive: true)
 }
 
 // MARK: - Lexer
