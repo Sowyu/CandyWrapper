@@ -1188,6 +1188,26 @@ public final class MarkdownView: DSView {
         }) else { return nil }
         return hit.offset + hit.box.character(at: CGPoint(x: point.x - hit.origin.x, y: point.y - hit.origin.y))
     }
+    /// The character on the line under `point`, the text a reader keeps their place by when the lane rewraps
+    /// (`preserveReadingPosition`, 5258 lib/preserveReadingPosition.ts:37-60, #41184). Nil off the text.
+    func readingCharacter(at point: CGPoint) -> Int? {
+        guard selectionBoxes.contains(where: { point.y >= $0.origin.y && point.y < $0.origin.y + $0.box.height }) else { return nil }
+        return selectionIndex(point)
+    }
+
+    /// The top of the line holding `index` at the current width.
+    func readingLineTop(_ index: Int) -> CGFloat? {
+        for (box, origin, offset) in selectionBoxes {
+            let length = (box.text as NSString).length
+            guard index >= offset, index <= offset + length else { continue }
+            guard length > 0 else { return origin.y }
+            let local = min(index - offset, length - 1)
+            guard let span = box.spans(NSRange(location: local, length: 1)).first else { return origin.y }
+            return origin.y + box.lineTop(baseline: span.baseline)
+        }
+        return nil
+    }
+
     public func clearAssistantSelection() {
         let hadSelection = assistantRange != nil
         selectionAnchor = nil; assistantRange = nil

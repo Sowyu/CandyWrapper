@@ -845,8 +845,10 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             setScroll(maxScroll)
             updatePill()
         }
+        var reading: ReadingLine?
         if width != laidOutWidth || document.frame.width != width {
             let anchor = captureAnchor()
+            if anchor?.disclosure == false { reading = readingLine() }
             laidOutWidth = width
             adjusting = true
             document.setFrameSize(NSSize(width: width, height: document.frame.height))
@@ -857,9 +859,57 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             restore(anchor)
         }
         tile(relayoutAll: true)
+        if let reading { hold(reading) }
         layoutPill()
         layoutHeader()
         layoutMinimap()
+    }
+
+    // MARK: Reading position (5258 lib/preserveReadingPosition.ts, #41184)
+
+    /// The line a reader is on: a character of a message near the viewport's top and how far below the top it sits.
+    struct ReadingLine { var markdown: MarkdownView; var character: Int; var offset: CGFloat }
+
+    /// Anchoring keeps a row's top fixed, which loses the visible line of a long message when the lane rewraps. T3
+    /// probes the middle of the lane 24 to 64px below the top, 8px apart, for the first text it finds
+    /// (preserveReadingPosition.ts:37-60). Nil while following the end, at the top, or off text.
+    func readingLine() -> ReadingLine? {
+        guard !followsEnd, viewport.minY > 0, laidOutWidth > 0 else { return nil }
+        let x = laneFrame.x + laneFrame.width / 2, height = viewport.height
+        for inset in stride(from: min(24, height / 2), to: min(64, height), by: 8) {
+            let point = CGPoint(x: x, y: viewport.minY + inset)
+            guard let row = visible.values.first(where: { !$0.isHidden && $0.frame.contains(point) }) else { continue }
+            row.layoutSubtreeIfNeeded()
+            guard let markdown = Self.markdown(in: row, at: document.convert(point, to: row)) else { continue }
+            let local = document.convert(point, to: markdown)
+            guard let character = markdown.readingCharacter(at: local), let top = markdown.readingLineTop(character) else { continue }
+            let y = markdown.convert(CGPoint(x: 0, y: top), to: document).y
+            guard y - viewport.minY >= 0, y - viewport.minY < height else { continue }
+            return ReadingLine(markdown: markdown, character: character, offset: y - viewport.minY)
+        }
+        return nil
+    }
+
+    private static func markdown(in view: NSView, at point: CGPoint) -> MarkdownView? {
+        for sub in view.subviews.reversed() where !sub.isHidden && sub.frame.contains(point) {
+            if let markdown = sub as? MarkdownView { return markdown }
+            if let found = markdown(in: sub, at: sub.convert(point, from: view)) { return found }
+        }
+        return nil
+    }
+
+    /// Scrolls the reader's line back to where it was once the rows rewrapped.
+    private func hold(_ reading: ReadingLine) {
+        guard reading.markdown.window === window, reading.markdown.isDescendant(of: document) else { return }
+        var row: NSView = reading.markdown
+        while let parent = row.superview, parent !== document { row = parent }
+        row.layoutSubtreeIfNeeded()
+        guard let top = reading.markdown.readingLineTop(reading.character) else { return }
+        let y = reading.markdown.convert(CGPoint(x: 0, y: top), to: document).y
+        guard abs(y - reading.offset - viewport.minY) > 0.5 else { return }
+        setScroll(y - reading.offset)
+        followsEnd = maxScroll - viewport.minY <= 1
+        tile()
     }
 
     private func relayout() {

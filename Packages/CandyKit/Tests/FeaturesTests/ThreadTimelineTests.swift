@@ -113,6 +113,23 @@ struct ThreadTimelineTests {
         #expect(abs(Self.viewport(t).maxY - t.documentHeight) < 1)
     }
 
+    /// A side panel narrowing the lane keeps the line being read where it was, not just its row's top
+    /// (5258 lib/preserveReadingPosition.ts, #41184).
+    @Test func aRewrapKeepsTheLineBeingRead() throws {
+        let t = Self.timeline(try Self.manyItems())
+        var reading: TimelineView.ReadingLine?
+        for f in stride(from: 0.2, through: 0.9, by: 0.05) {
+            t.scroll(toFraction: f)
+            if let line = t.readingLine(), line.character > 200 { reading = line; break }
+        }
+        let line = try #require(reading)
+        t.setFrameSize(NSSize(width: t.frame.width - 260, height: t.frame.height))
+        t.layoutSubtreeIfNeeded()
+        let top = try #require(line.markdown.readingLineTop(line.character))
+        let y = line.markdown.convert(CGPoint(x: 0, y: top), to: t.scrollView.documentView).y
+        #expect(abs(y - Self.viewport(t).minY - line.offset) <= 1)
+    }
+
     /// A terminal drawer opening with a thread switch shrinks the viewport; the newest row stays in view.
     @Test func staysAtTheEndWhenTheViewportShrinks() throws {
         let items = try Self.manyItems()
