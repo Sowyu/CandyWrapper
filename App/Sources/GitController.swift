@@ -363,7 +363,7 @@ final class GitController {
         syncDefaultBranchDialog()
         panel.proactiveRepositoryIsGit = status?.isRepo
         defer { onRender?() }
-        composer.draftIsGitRepo = target?.isDraft == true && isRepo
+        composer.draftIsGitRepo = target?.isDraft == true && BranchToolbarLogic.offersWorkspaceModes(isScratchProject: isScratchTarget, isGitRepo: isRepo)
         guard let target else { renderCard(); renderDeviceRow(); return }
         if !target.isDraft {
             panel.contextStrip.showsGitControls = isRepo

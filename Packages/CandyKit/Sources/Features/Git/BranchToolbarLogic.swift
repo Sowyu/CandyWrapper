@@ -33,6 +33,11 @@ public enum BranchToolbarLogic {
         return (threadBranch, currentBranch)
     }
 
+    /// `offersWorkspaceModes` (BranchToolbar.logic.ts:84-92 at 5258, #41269): No project never has git, even while its
+    /// status loads and `isGitRepo` still assumes it does.
+    // ponytail: no `tracksGitRepositories` term, add it with multi-repository projects (#35925)
+    public static func offersWorkspaceModes(isScratchProject: Bool, isGitRepo: Bool) -> Bool { !isScratchProject && isGitRepo }
+
     /// `resolveEnvModeLabel`.
     public static func envModeLabel(_ mode: EnvMode) -> String { mode == .worktree ? "New worktree" : "Current checkout" }
 

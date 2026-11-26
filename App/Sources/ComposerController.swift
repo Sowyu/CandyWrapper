@@ -2065,6 +2065,38 @@ final class ComposerController {
         composer.needsLayout = true
     }
 
+    /// A worktree command approval is being read or asked for this composer's send (`sendInFlightRef`).
+    private var layoutApprovalInFlight = false
+
+    /// `ensureWorktreeLayoutApproved` (worktreeLayoutApproval.ts at 5258, #42386). The server refuses unapproved
+    /// commands either way, so a read that fails lets the send go on to that answer.
+    // ponytail: no managed-policy check (`managedCapabilityDenial`); the server's refusal names the policy instead
+    private func ensureWorktreeLayoutApproved(projectId: String, projectTitle: String) async -> WorktreeLayoutApprovalView.Outcome {
+        let scoped = ProjectId(projectId)
+        guard let env = scoped.environmentId, let session = environments.session(env) else { return .proceed }
+        let auth = environments.authSession(env)
+        if let auth, !auth.grants(AuthScopes.filesystemRead) { return .proceed }
+        let project = WorkspaceRPC.project(ProjectId(EnvironmentScope.localId(of: projectId)))
+        guard let read = try? await session.supervisor.request(WorkspaceRPC.layoutCommands, payload: project),
+              let all = try? (read["commands"] ?? .array([])).decode(as: [WorktreeLayoutCommand].self) else { return .proceed }
+        let commands = all.filter { !$0.approved }
+        guard !commands.isEmpty else { return .proceed }
+        if let auth, !auth.grants(AuthScopes.terminalOperate) { return .blocked(WorktreeLayoutApprovalView.cannotApproveMessage) }
+        guard let window = panel.window else { return .cancelled }
+        let approved = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            WorktreeLayoutApprovalView.present(projectTitle: projectTitle, commands: commands, in: window) { done.resume(returning: $0) }
+        }
+        guard approved else { return .cancelled }
+        let input = WorkspaceRPC.approveInput(projectId: ProjectId(EnvironmentScope.localId(of: projectId)),
+                                              approvals: commands.map { (kind: $0.kind, command: Optional($0.command)) })
+        do {
+            _ = try await session.supervisor.request(WorkspaceRPC.approveLayoutCommands, payload: input)
+            return .proceed
+        } catch {
+            return .blocked(Self.message(error) ?? "Could not approve the worktree layout command.")
+        }
+    }
+
     /// `noProviderAvailable`, the catalog still loading included: the send button is blocked.
     private var noProviderAvailable = false
 
@@ -2079,7 +2111,9 @@ final class ComposerController {
     /// `background`: a draft starts in the background behind a fresh draft (`beginBackgroundDraftSubmission`,
     /// ChatView.tsx:9905-10032); a thread sends and then opens a new thread in its project.
     /// `redirecting`: the pending approvals were just declined for this send, which now goes.
-    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false) {
+    /// `layoutApproved`: the project's worktree commands were just checked or approved for this send.
+    private func send(_ text: String, mode: ComposerLogic.SendMode, background: Bool = false, redirecting: Bool = false, compactConfirmed: Bool = false,
+                      layoutApproved: Bool = false) {
         guard !threadRewindBusy, !declineInFlight else { return }
         let sentText = text
         // A send now would leave a still-compressing image out of the turn, so it waits and goes once they finish
@@ -2322,6 +2356,36 @@ final class ComposerController {
         if case .draft(let d) = target, d.envMode == .worktree, d.worktreePath == nil, d.branch == nil, draftIsGitRepo {
             if let picksKey { threadErrors.set(picksKey, "Select a base branch before sending in New worktree mode.") }
             refresh()
+            return
+        }
+        // A project may set its worktrees up with its own commands, which run only once a person approved their text.
+        // Asking takes as long as the user does, so the draft is compared across the wait (useComposerSend.ts:1041-1071 at 5258, #42386).
+        if !layoutApproved, case .draft(let d) = target,
+           (d.envMode == .worktree && d.worktreePath == nil && draftIsGitRepo) || pickers.currentMultiple != nil {
+            guard !layoutApprovalInFlight else { return }
+            let typed = composer.text, attachmentIds = currentAttachments.map(\.id)
+            let title = sidebar?.snapshot?.projects.first { $0.id == ProjectId(d.projectId) }?.title ?? "This project"
+            layoutApprovalInFlight = true
+            Task { [weak self] in
+                guard let self else { return }
+                let outcome = await self.ensureWorktreeLayoutApproved(projectId: d.projectId, projectTitle: title)
+                self.layoutApprovalInFlight = false
+                switch outcome {
+                case .cancelled: return
+                case .blocked(let message):
+                    if let picksKey { self.threadErrors.set(picksKey, message) }
+                    self.refresh()
+                    return
+                case .proceed: break
+                }
+                guard case .draft(let now) = self.target, now.draftId == d.draftId else { return }
+                guard self.composer.text == typed, self.currentAttachments.map(\.id) == attachmentIds else {
+                    if let picksKey { self.threadErrors.set(picksKey, "Draft changed while preparing this message. Review it and send again.") }
+                    self.refresh()
+                    return
+                }
+                self.send(text, mode: mode, background: background, redirecting: redirecting, compactConfirmed: compactConfirmed, layoutApproved: true)
+            }
             return
         }
         // Several models picked: one thread and worktree each, the draft stays (ChatView.tsx:8824-8845, 9464-9680).
