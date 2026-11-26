@@ -148,7 +148,19 @@ public final class LabelView: DSView {
         lineHeight ?? ceil(font.ascender - font.descender + font.leading)
     }
 
+    /// `font` as drawn here: Redesign's chrome stops at 500 (`RedesignTokens.Weight`).
+    private var drawnFont: NSFont { RedesignTokens.Weight.chrome(font, dark: effectiveAppearance.isDark) }
+    private var emphasisWeight: NSFont.Weight { RedesignTokens.Weight.chrome(.semibold, dark: effectiveAppearance.isDark) }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if (fontRecipe?.weight.rawValue ?? 0) > RedesignTokens.Weight.heaviest.rawValue || emphasizedSuffix != nil || highlightedIndices != nil {
+            invalidate()
+        }
+    }
+
     private func attributed() -> NSAttributedString {
+        let font = drawnFont
         var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         if tracking != 0 { attributes[.kern] = tracking }
         let result = NSMutableAttributedString(string: text, attributes: attributes)
@@ -156,11 +168,11 @@ public final class LabelView: DSView {
             result.addAttribute(.foregroundColor, value: prefixColor.color, range: NSRange(location: 0, length: prefixColor.count))
         }
         if let emphasizedSuffix {
-            attributes[.font] = DSFont.ui(fontRecipe?.size ?? font.pointSize, weight: .semibold)
+            attributes[.font] = DSFont.ui(fontRecipe?.size ?? font.pointSize, weight: emphasisWeight)
             result.append(NSAttributedString(string: emphasizedSuffix, attributes: attributes))
         }
         if let highlightedIndices {
-            let bold = DSFont.ui(fontRecipe?.size ?? font.pointSize, weight: .semibold)
+            let bold = DSFont.ui(fontRecipe?.size ?? font.pointSize, weight: emphasisWeight)
             for i in highlightedIndices where i < result.length {
                 let range = (result.string as NSString).rangeOfComposedCharacterSequence(at: i)
                 result.addAttributes([.font: bold, .foregroundColor: highlightColor ?? color], range: range)
@@ -194,7 +206,7 @@ public final class LabelView: DSView {
             let line = TextLine(string)
             guard truncates, line.width > bounds.width, bounds.width > 0 else { return line }
             let ellipsis = CTLineCreateWithAttributedString(
-                NSAttributedString(string: "\u{2026}", attributes: [.font: font, .foregroundColor: color].merging(extra) { $1 }))
+                NSAttributedString(string: "\u{2026}", attributes: [.font: drawnFont, .foregroundColor: color].merging(extra) { $1 }))
             return CTLineCreateTruncatedLine(line.line, Double(bounds.width), truncation, ellipsis).map { TextLine(line: $0) } ?? line
         }
         let line = fitted(attributed())

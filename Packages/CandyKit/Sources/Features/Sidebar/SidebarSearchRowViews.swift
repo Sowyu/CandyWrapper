@@ -354,7 +354,7 @@ final class SearchExcerptView: DSView {
     }
 
     func attributed() -> NSAttributedString {
-        let font = SB.font(12), bold = SB.font(12, .semibold)
+        let font = SB.font(12), bold = SB.font(12, RedesignTokens.Weight.chrome(.semibold, dark: effectiveAppearance.isDark))
         let base = NSColor(cgColor: SB.c(\.mutedForeground, 0.85).cgColor(in: self)) ?? .gray
         let fg = NSColor(cgColor: SB.c(\.foreground).cgColor(in: self)) ?? .black
         let tag = NSColor(cgColor: (isUser ? SB.c(\.infoForeground) : SB.c(\.successForeground)).cgColor(in: self)) ?? .gray

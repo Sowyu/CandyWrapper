@@ -9,6 +9,14 @@ import AppKit
     func fittingWidth(max: CGFloat) -> CGFloat
 }
 
+/// A page that puts its title and controls in Redesign's tab band, as a thread puts its breadcrumb and header pills there.
+/// The app hands them to the strip while the page shows. Without them the page's own 52pt header would sit under an
+/// empty band.
+@MainActor public protocol DitherBandPage: NSView {
+    var bandLeading: DitherStripLeading? { get }
+    var bandTrailing: NSView? { get }
+}
+
 public final class DitherTabStripView: TopbarDragView {
     public struct Tab: Equatable, Sendable {
         public var id: String

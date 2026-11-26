@@ -106,6 +106,8 @@ public final class PullRequestsPageView: DSView {
     public var onShowStack: ((PullRequestListEntry, NSView) -> Void)?
 
     public let header = SettingsHeaderView()
+    /// Redesign: the title as a pill in the tab band (`DitherBandPage`).
+    let bandTitle = DitherThreadTitleView()
     public let search = InputGroupView(placeholder: "Search pull requests, or label:bug", leading: .icon(.search))
     let sortButton = ButtonView("Sort", icon: .arrowDownUp, variant: .outline).menuTrigger()
     let filtersButton = ButtonView("Filters", icon: .listFilter, variant: .outline).menuTrigger()
@@ -129,6 +131,7 @@ public final class PullRequestsPageView: DSView {
         scroll = ScrollAreaView(documentView: document, scrollbars: .native) // `scrollbar-gutter-both overflow-y-auto` (_chat.pull-requests.tsx:2671)
         super.init(frame: frameRect)
         header.plainTitle = "Pull Requests"
+        bandTitle.set(project: "", title: "Pull Requests")
         addSubview(scroll)
         addSubview(header)
         search.input.setAccessibilityLabel("Search pull requests")
@@ -447,11 +450,17 @@ public final class PullRequestsPageView: DSView {
 
     // MARK: Layout
 
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
+
     public override func layout() {
         super.layout()
         let width = max(0, bounds.width - contentInsetRight)
+        // Redesign: the title sits in the tab band above the page as a pill, so the page starts at its top.
+        let band = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        header.isHidden = band
+        let top: CGFloat = band ? 0 : 52
         header.frame = NSRect(x: 0, y: 0, width: width, height: 52)
-        scroll.frame = NSRect(x: 0, y: 52, width: width, height: max(0, bounds.height - 52))
+        scroll.frame = NSRect(x: 0, y: top, width: width, height: max(0, bounds.height - top))
         layoutDocument(width: scroll.bounds.width)
     }
 

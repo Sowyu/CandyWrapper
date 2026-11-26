@@ -152,6 +152,12 @@ public final class TextBlockView: DSView {
         layer?.isOpaque = false
     }
 
+    /// The cached layouts carry the font, and Redesign's chrome stops at 500 (`RedesignTokens.Weight`).
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if (fontRecipe?.weight.rawValue ?? 0) > RedesignTokens.Weight.heaviest.rawValue || boldPrefix != nil { invalidate() }
+    }
+
     private var cache: [CGFloat: TextBlockLayout] = [:]
 
     private func invalidate() {
@@ -166,14 +172,17 @@ public final class TextBlockView: DSView {
         if let hit = cache[width] { return hit }
         // ponytail: unbounded per-width cache, cleared on any text change; cap it if a resize drag measures hundreds of widths
         // Color comes from the context at draw time, so one cached layout serves both themes.
+        let font = RedesignTokens.Weight.chrome(self.font, dark: effectiveAppearance.isDark)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true]
         let string = NSMutableAttributedString(string: text, attributes: attributes)
         if tracking != 0 { string.addAttribute(.kern, value: tracking, range: NSRange(location: 0, length: string.length)) }
         if let boldPrefix, text.hasPrefix(boldPrefix), !boldPrefix.isEmpty {
             let range = NSRange(location: 0, length: (boldPrefix as NSString).length)
-            let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+            let dark = effectiveAppearance.isDark
+            let bold = ThemeRuntime.isDither(dark: dark) ? font : NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+            let weight = RedesignTokens.Weight.chrome(.semibold, dark: dark)
             string.addAttribute(.font, value: NSFont(descriptor: font.fontDescriptor.addingAttributes(
-                [.traits: [NSFontDescriptor.TraitKey.weight: NSFont.Weight.semibold]]), size: font.pointSize) ?? bold, range: range)
+                [.traits: [NSFontDescriptor.TraitKey.weight: weight]]), size: font.pointSize) ?? bold, range: range)
             if let boldColor {
                 string.removeAttribute(NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String), range: range)
                 string.addAttribute(NSAttributedString.Key(kCTForegroundColorAttributeName as String), value: boldColor.cgColor(in: self), range: range)
@@ -206,7 +215,9 @@ public final class TextBlockView: DSView {
     }
 
     /// Unwrapped advance of the whole text, for shrink-to-fit layouts.
-    public var naturalWidth: CGFloat { TextLine(NSAttributedString(string: text, attributes: [.font: font])).width }
+    public var naturalWidth: CGFloat {
+        TextLine(NSAttributedString(string: text, attributes: [.font: RedesignTokens.Weight.chrome(font, dark: effectiveAppearance.isDark)])).width
+    }
 
     public override var intrinsicContentSize: NSSize {
         NSSize(width: NSView.noIntrinsicMetric, height: bounds.width > 0 ? height(forWidth: bounds.width) : resolvedLineHeight)

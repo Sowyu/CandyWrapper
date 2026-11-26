@@ -1,5 +1,6 @@
-import Foundation
+import AppKit
 import Testing
+@testable import DesignSystem
 
 /// Redesign draws every corner radius, shadow, surface opacity and animation duration from `RedesignTokens` (docs/research/redesign-system.md).
 /// This reads the sources and fails on a literal one on a Redesign code path, so a tenth radius can't come back.
@@ -29,6 +30,10 @@ struct RedesignTokenGuardTests {
           #"(?:setAnimationDuration\(|withDuration:\s*|\bduration:\s*)"# + number]),
     ]
     static let flag = #"(?:ThemeRuntime\.isDither\([^)]*\)|isDither|dither\w*|capy|plain|frost)"#
+
+    /// A font weight of 600 or heavier: `weight: .semibold`, `Weight.bold`, or a helper's positional `, .semibold)`.
+    /// `RedesignTokens.Weight.chrome(.semibold, ...)` is how a weight reaches 500 under Redesign, so it stays allowed.
+    static let heavyWeight = regex(#"(?<!chrome\()(?:weight:\s*|Weight|,\s*)\.(?:semibold|bold|heavy)\b"#)
 
     static func regex(_ p: String) -> NSRegularExpression { try! NSRegularExpression(pattern: p) }
 
@@ -93,6 +98,10 @@ struct RedesignTokenGuardTests {
                 }
             }
             if scoped {
+                for _ in matches(heavyWeight, redesignArm(s)) {
+                    let path = url.path.replacingOccurrences(of: root.path + "/", with: "")
+                    hits.append(Hit(kind: "weight", value: 600, place: "\(path):\(i + 1)", line: raw.trimmingCharacters(in: .whitespaces)))
+                }
                 let t = matches(ternary, s).first
                 let arm = redesignArm(s)
                 for (kind, keyword, literals) in patterns {
@@ -157,6 +166,46 @@ struct RedesignTokenGuardTests {
         #expect(hits.isEmpty, "Use RedesignTokens.Radius.control for a control inside an 8pt surface:\n\(hits.joined(separator: "\n"))")
     }
 
+    /// Message content keeps its weights (docs/research/redesign-system.md, Type): Markdown, the prompt's rich text and code.
+    static let contentFiles = ["Features/Markdown/", "ComposerRichText", "ComposerEditor.swift", "FontRuntime.swift"]
+
+    /// Shared views draw in Redesign too. A weight of 600 or heavier outside Redesign's own branches has to reach a
+    /// `LabelView` or `TextBlockView`, which stop chrome at 500 under Redesign, or go through `RedesignTokens.Weight`.
+    /// A font built for custom drawing at 600 would bypass both, so this fails on it.
+    @Test func sharedChromeWeightsStopAt500() throws {
+        let heavy = Self.regex(#"\.(?:semibold|bold|heavy)\b"#)
+        let helper = Self.regex(#"func (\w+)\([^)]*\)\s*->\s*(?:LabelView|TextBlockView)\b"#)
+        var hits: [String] = []
+        for file in Self.sources() where !Self.contentFiles.contains(where: { file.path.contains($0) }) {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            let helpers = Self.matches(helper, text).compactMap { Range($0.range(at: 1), in: text).map { "\(text[$0])(" } }
+            let feeds = ["LabelView(", "TextBlockView(", ".font = ", "Weight.chrome(", "UsageStyle.label("] + helpers
+            for (i, raw) in text.components(separatedBy: "\n").enumerated() {
+                let s = raw.components(separatedBy: "//")[0]
+                guard !Self.matches(heavy, s).isEmpty, !s.contains("case "), !feeds.contains(where: { s.contains($0) }) else { continue }
+                hits.append("\(file.lastPathComponent):\(i + 1): \(raw.trimmingCharacters(in: .whitespaces))")
+            }
+        }
+        #expect(hits.isEmpty, "600 or heavier drawn outside LabelView and TextBlockView; wrap it in RedesignTokens.Weight.chrome:\n\(hits.joined(separator: "\n"))")
+    }
+
+    /// A label set at 600 draws at 500 in Redesign and keeps 600 in the default themes.
+    @MainActor @Test func labelsStopAt500InRedesign() {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        func width(_ weight: NSFont.Weight, redesign: Bool) -> CGFloat {
+            var input = ThemeRuntimeInput()
+            input.ditherLight = redesign; input.ditherDark = redesign
+            ThemeRuntime.apply(input)
+            let label = LabelView("Workflows", font: DSFont.ui(16, weight: weight))
+            label.appearance = NSAppearance(named: .darkAqua)
+            return label.textWidth
+        }
+        #expect(width(.semibold, redesign: true) == width(.medium, redesign: true))
+        #expect(width(.semibold, redesign: false) > width(.medium, redesign: false))
+        #expect(RedesignTokens.Weight.chrome(.bold, dark: true) == .bold, "the default themes keep T3's weights")
+    }
+
     /// The scanner itself: each kind of literal on a Redesign path is caught, the stock arm and tokens are not.
     @Test func scannerCatchesLiterals() throws {
         let dir = FileManager.default.temporaryDirectory.appending(path: "RedesignTokenGuard-\(getpid())")
@@ -179,10 +228,13 @@ struct RedesignTokenGuardTests {
             send = isDither ? color("#2b948b") : color("#346bf1")
             if dither { a.duration = 0.18 }
             a.duration = dither ? RedesignTokens.Motion.fast : 0.2
+            if dither { title.font = DSFont.ui(16, weight: .semibold); ok.font = DSFont.ui(16, weight: RedesignTokens.Weight.chrome(.semibold, dark: d)) }
+            name.font = dither ? DSFont.ui(13, weight: .medium) : DSFont.ui(14, weight: .bold)
         }
         """.write(to: file, atomically: true, encoding: .utf8)
         let hits = Self.scan(file: file, root: dir)
-        #expect(hits.filter { $0.kind != "hue" }.map(\.value).sorted() == [0.07, 0.18, 0.3, 9, 10], "\(hits)")
+        #expect(hits.filter { $0.kind != "hue" && $0.kind != "weight" }.map(\.value).sorted() == [0.07, 0.18, 0.3, 9, 10], "\(hits)")
+        #expect(hits.filter { $0.kind == "weight" }.count == 1, "only the bare .semibold on the Redesign path: \(hits)")
         // The system purple and the teal on the Redesign arm; not the gray, not T3's blue on the stock arm.
         #expect(hits.filter { $0.kind == "hue" }.map(\.value) == [0, Double(0x2b948b)], "\(hits)")
     }

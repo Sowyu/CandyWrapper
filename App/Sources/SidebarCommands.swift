@@ -1337,6 +1337,7 @@ final class SidebarCommands {
         layout.mainContent = view
         utilityPage = view
         utilityKind = page
+        setBandAccessories(view)
         // Clears the active row and draft while the page shows.
         sidebar.isOnUtilityPage = true
         if page == .pullRequests {
@@ -1354,6 +1355,19 @@ final class SidebarCommands {
         onRouteChange?()
     }
 
+    /// Redesign's tab band shows a page's own title and controls while it shows (`DitherBandPage`), and the thread's
+    /// breadcrumb and header pills again once the thread panel is back.
+    private func setBandAccessories(_ page: NSView?) {
+        guard let strip = layout?.tabStrip else { return }
+        if let band = page as? DitherBandPage {
+            strip.leadingAccessory = band.bandLeading
+            strip.trailingAccessory = band.bandTrailing
+        } else {
+            strip.leadingAccessory = threads.panel.titlePill
+            strip.trailingAccessory = threads.panel.header.pill
+        }
+    }
+
     /// Back (`navigateToMainApp`): the thread panel returns as it was. `record` false leaves the route
     /// history to the navigation that follows.
     func closeUtilityPage(record: Bool = true) {
@@ -1366,6 +1380,7 @@ final class SidebarCommands {
         utilityPage = nil
         utilityKind = nil
         layout.mainContent = threads.panel
+        setBandAccessories(nil)
         sidebar?.isOnUtilityPage = false
         sidebar?.state.activeThreadId = threads.openThreadId
         threads.composer.syncSidebarDrafts()
