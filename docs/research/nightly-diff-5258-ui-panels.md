@@ -596,7 +596,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | cb207e9f60 | #42228 | fix(web): long Issues and Pull Requests searches no longer end in a broken character | other | n/a (Swift Characters) † |
 | cb2a488c67 | #39302 | fix(web): an off-track desktop build no longer says "Up to date" | shell | n/a (Electron updater) † |
 | cbf4ea7ddc | #41264 | fix(web): shift-scroll and horizontal scrollers no longer navigate history | shell | n/a (web history swipe) † |
-| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4, details panel and code-only notice 3c28ca0f, glide 086a837d, chrome and panel reference b10691a9 (scene reference left); first-visit load, clip and scroll fixed 674feadb, From menu 0637c827 |
+| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4, details panel and code-only notice 3c28ca0f, glide 086a837d, chrome and panel reference b10691a9 (scene reference left); first-visit load, clip and scroll fixed 674feadb, From menu 0637c827, canvas height glide 9a9254ae |
 | cef38e408d | #42805 | fix(web): file picker highlights no longer break emoji in file names | files | port (3.4) † |
 | d15123668e | #39579 | fix(web): keep reopened pairing link dialogs open on completion | connections | already (Create link closes only the dialog that started it, SettingsHostAccess.swift:481-490) |
 | d1f8636f49 | #39225 | fix(mobile,web): quote and port messages are translated in every language | other | n/a (translation strings) † |
@@ -629,7 +629,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | e86a9c5169 | #41585 | fix(web): OpenDocument previews keep merged table cells | files | n/a (QuickLook previews) † |
 | e87df609e6 | #42329 | fix(web): large SVG project icons come back after their link expires | files | port (3.5) † |
 | e97e360cfc | #39967 | fix(web): Option + a letter records the letter, not the macOS glyph | settings | already (charactersIgnoringModifiers drops Option) |
-| ece5f21b17 | #42311 | feat(connect): tell people when a new T3 Connect device signs in | connections | ported ed63905b |
+| ece5f21b17 | #42311 | feat(connect): tell people when a new T3 Connect device signs in | connections | ported ed63905b; Review opens Access on the toast's environment 22b4414b |
 | efea1aabe7 | #40381 | fix(web): CSV preview rows keep their height during horizontal scroll | files | already (DelimitedTableView measures every cell of a row, so rows never change height on scroll), diff read 2026-11-25 |
 | f15d908759 | #42027 | fix(web): Esc in voice alias input cancels it without closing Settings | settings | n/a (CW's Voice page is a notice) |
 | f1c13177d8 | #41263 | fix(web): spreadsheet text and fills no longer vanish when their cell scrolls out | files | n/a (QuickLook previews, diff read 2026-11-25) |
@@ -706,7 +706,7 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - Section 1 misses five 5258 settings rows, all in `settingsSearch.ts`: Projects > Repositories (`project-repositories`, #35925), Access > Preview tunnel (`preview-tunnel`, #39415), Chat > Open subagents and side chats in (`side-thread-open-target`, #39515), Appearance > HTML preview width (thread note 1.16) and Labs > Agent feedback (thread note 1.5). They stay out of CW's search through `UNPORTED_IDS` until their rows land.
 - The five rows above are ported: Preview tunnel 61294005, the side chat target, HTML preview width and Agent feedback a2b09b17, Projects > Repositories 640d7b91. Agent feedback reports go out through the server's analytics service (FeedbackStore.ts:208), so CW hides the row for servers it starts.
 - 1.1's second send-shortcut chip under multiline send is ported in a56e4677.
-- 7.4's Review opens Access for the primary environment only: CW's Access page has no environment picker (T3's `accessEnvironmentPicker`, ConnectionsSettings.tsx:1293). Opening it for the toast's environment needs that picker first (M).
+- 7.4's Review opens Access for the primary environment only: CW's Access page has no environment picker (T3's `accessEnvironmentPicker`, ConnectionsSettings.tsx:1293). Opening it for the toast's environment needs that picker first (M). Both are ported in 22b4414b; the picker predates 4928, so no row in this table names it.
 - 1.7 stays unported until CW has Workflows: the row returns nothing unless `workflowsEnabled` is on.
 - 1.3 is partly ported (cb5edfe1): settings search fields clear on Esc and an IME Esc reaches the input method. The rows outside Settings (Files, PR, diff comments, dictation, right panel sheet) and the font family, voice and custom model rows stay open.
 
@@ -748,5 +748,6 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 
 - 1.8 is not all subject-only work: #39114 also changes which instance becomes the default pick (`isProviderInstanceHealthy`), #29550 also commits a focused field before an inspector pick, and #39312 lives in the thread's actions menu (App/Sources/ProjectScriptsController.swift), not Settings.
 - The price table's new test found a crash that predates this range: filling a row's fields fired `onChange`, which rebuilt the table from inside its own rebuild without end (2075c1a4).
+- Projects > Repositories' Add folder dialog now has T3's browse list (ea13818e), the part 640d7b91 left out.
 - CW's licenses page still draws each notice as a settings row with a chevron button; T3's rows are full-width collapsible triggers. The header now matches.
 
