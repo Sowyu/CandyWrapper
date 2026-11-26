@@ -203,11 +203,36 @@ public enum ComposerAttachmentRules {
         return nil
     }
 
-    /// `shouldHandleComposerAttachmentPaste`: images always win; other files only when the paste has no text.
-    public static func shouldHandlePaste(files: [(name: String, mimeType: String)], plainText: String) -> Bool {
-        if files.contains(where: { isDng(name: $0.name, mimeType: $0.mimeType) || isSvg(name: $0.name, mimeType: $0.mimeType) || classify(name: $0.name, mimeType: $0.mimeType) != .file }) { return true }
-        if !plainText.isEmpty { return false }
-        return !files.isEmpty
+    /// `shouldHandleComposerAttachmentPaste` (composerAttachmentFiles.ts:279-303 at 5258, #40686). Paste as Text is
+    /// checked by the editor before. Without text, any image or file attaches. With text, an image attaches only when
+    /// the HTML holds nothing but it (a browser's Copy Image adds its URL as text) or the text is the files' names
+    /// (a Finder copy). Rich text sources (Word, Pages) add a picture of the text, and the text wins.
+    public static func shouldHandlePaste(files: [(name: String, mimeType: String)], plainText: String, htmlIsOnlyImage: Bool = false) -> Bool {
+        if files.contains(where: { isDng(name: $0.name, mimeType: $0.mimeType) || isSvg(name: $0.name, mimeType: $0.mimeType) }) { return true }
+        let hasImage = files.contains { classify(name: $0.name, mimeType: $0.mimeType) != .file }
+        if plainText.isEmpty { return !files.isEmpty }
+        let names = Set(files.map(\.name))
+        let onlyNames = plainText.split(whereSeparator: { $0 == "\n" || $0 == "\r\n" }).allSatisfy { names.contains(String($0)) }
+        return hasImage && (htmlIsOnlyImage || onlyNames)
+    }
+
+    /// `clipboardHtmlImageContent` (composerAttachmentFiles.ts:254-259 at 5258, #40909).
+    public enum HTMLImageContent: Equatable, Sendable { case onlyImage, imageAndText, none }
+    // ponytail: tag-stripping regex in place of a DOM parse, use an HTML parser if a source hides text in odd markup
+    public static func htmlImageContent(_ html: String) -> HTMLImageContent {
+        guard !html.isEmpty, html.range(of: "<img\\b", options: [.regularExpression, .caseInsensitive]) != nil else { return .none }
+        let body = html.replacingOccurrences(of: "<(head|style|script)\\b[\\s\\S]*?</\\1\\s*>", with: "", options: [.regularExpression, .caseInsensitive])
+            .replacingOccurrences(of: "<!--[\\s\\S]*?-->", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "<[^>]*>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+        return body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .onlyImage : .imageAndText
+    }
+
+    /// `imagesToAttachBesidePastedText` (:266-277): a chat message copied with its pictures pastes its text and
+    /// attaches the pictures. Indices into `files`.
+    public static func imagesBesidePastedText(files: [(name: String, mimeType: String)], plainText: String, htmlImageContent: HTMLImageContent) -> [Int] {
+        guard !plainText.isEmpty, htmlImageContent == .imageAndText else { return [] }
+        return files.indices.filter { classify(name: files[$0].name, mimeType: files[$0].mimeType) != .file }
     }
 
     /// `middleTruncateAttachmentName` (composerInlineChip.ts:4-14).
