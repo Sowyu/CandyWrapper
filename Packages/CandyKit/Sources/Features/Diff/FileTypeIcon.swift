@@ -11,8 +11,8 @@ public enum FileTypeIcon {
 
     /// The icon token for a path: the file name table, then each extension suffix (`a.test.ts`
     /// tries `test.ts`, then `ts`), the complete set's overrides first; else `default`.
-    // ponytail: T3's own extra icons (C#, Java, Kotlin, TOML, video and a few more) fall back to
-    // `default`; port the t3-file-icon-* symbols from pierre-icons.ts when someone works in those
+    // ponytail: T3's stroked extra icons (Java, TOML, Lua, video, documents and a few more) fall back to
+    // `default`; scripts/gen-file-icons.py says how to add them
     static func token(for path: String) -> String {
         let name = (path.split(separator: "/").last.map(String.init) ?? path).lowercased()
         if let hit = FileIcons.byFileName[name] { return hit }
