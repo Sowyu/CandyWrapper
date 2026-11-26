@@ -617,6 +617,22 @@ Row note: the `mod+shift+c` PR copy shortcut in docs shares its key with `thread
 | `/usage-limits` slash command result above composer | docs/usage.md | 🟡 | WP7.7c: subscribes with `usageLimitsCommand`, picked or typed `/usage-limits` opens `UsageLimitsBannerView` from the snapshot (compact window rows, Manage usage, reset credits); drops on send, thread change and provider change; toast when unavailable. Fidelity `usage` limits-banner 4.0% |
 | Enable Cursor usage (Keychain) | comp/settings/UsageProviderSettings.tsx | 🟡 | WP7.7c: Enable rows on Cost and Tokens, the Cursor box on Limits, the Providers switch. Never switched on here (it reads the Keychain) |
 
+## Workflows (beta, 5258)
+
+| Feature | Official source (file path) | Status | Notes |
+|---|---|---|---|
+| Labs: Workflows switch and Skipped runs kept | comp/settings/LabsSettingsPanel.tsx:212-290 | 🟡 | `BetaSettingsView.workflowRows` (76baceb4); search items `workflows-beta`, `workflow-skipped-runs` |
+| Open workflows (palette) and the `/workflows` route | comp/CommandPalette.tsx:1787-1797, routes/_chat.workflows.tsx | 🟡 | `SidebarCommands.UtilityPage.workflows`, `RouteHistory.Route.workflows`, a Dither tab (a6197a0d). No sidebar entry, as in T3 |
+| Runs subscription | client-runtime state/server.ts:1473-1485 | 🟡 | `WorkflowsPageController` subscribes with `changes: true` only while the page shows; `WorkflowRunsStore` folds frames |
+| Run list: Needs you, Running, All, workflow select, kinds, Show skipped | comp/workflows/WorkflowRunsView.tsx | 🟡 | `WorkflowsPageView`, `WorkflowsPageLogic.listing`. Missing: subject chips, the Environment select (one environment shown), mobile one-column layout |
+| Run feed: Part of, title, state, Stop, meta line, steps, end | comp/workflows/WorkflowRunFeed.tsx | ➖ | `WorkflowRunFeedView`: steps as a flat list. Missing: the railed timeline, folded quick steps, parallel rows, the side panel, agent cards, pause card with Resume, references |
+| Questions: choices with descriptions, required reasons, links, answers, withdrawals | WorkflowRunFeed.tsx:1890-2047, :1538-1600 | 🟡 | Answered on screen against 5258. Answers read by name: no session id for "You". "Ask the agent first" is missing |
+| Definitions editor | comp/workflows/WorkflowDefinitionEditor.tsx | ⏳ | No Definitions button yet |
+| Run pane (thread, issue, PR beside the run) | comp/workflows/WorkflowPane.tsx, WorkflowThreadPane.tsx | ⏳ | |
+| Runs about an issue, PR or thread | comp/workflows/WorkflowRunsAbout.tsx | ⏳ | `workflows.about` is in `WorkflowsRPC` |
+| Open run from a workflow step thread | comp/ChatView.tsx:995-1010 | ⏳ | |
+| Redesign variant | n/a | 🟡 | Themed tokens and `DesignGeometry`, no header rule, Redesign card for questions; checked in dark only |
+
 ## Scheduled tasks
 
 | Feature | Official source (file path) | Status | Notes |

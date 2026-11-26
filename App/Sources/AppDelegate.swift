@@ -297,6 +297,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings?.peerLinksChanged(env)
             threads?.composer.peerLinksChanged(env)
         }
+        let configChange = threads.composer.onConfigChange
+        threads.composer.onConfigChange = { [weak commands] env in configChange?(env); commands?.workflowsConfigChanged() }
         commands.openSettingsItem = { [weak settings] item in
             settings?.open()
             settings?.jump(to: item)
@@ -595,6 +597,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .pullRequests: return .pullRequests
                 case .issues: return .issues
                 case .usage: return .usage
+                case .workflows: return .workflows
                 }
             }
             switch threads?.composer.target {
@@ -654,6 +657,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 settings.close(); commands.openUtilityPage(.issues)
             case .usage:
                 settings.close(); commands.openUtilityPage(.usage)
+            case .workflows:
+                guard commands.workflowsReachable else { return false }
+                settings.close(); commands.openUtilityPage(.workflows)
             }
             return true
         }

@@ -108,7 +108,9 @@ extension SettingsController {
             self.refreshPages()
         }
         clientObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.refreshPages() }
-        composer?.onConfigChange = { [weak self] _ in self?.refreshPages() }
+        // Chained: the Workflows page also follows config changes.
+        let configChange = composer?.onConfigChange
+        composer?.onConfigChange = { [weak self] env in configChange?(env); self?.refreshPages() }
         themeObserver = NotificationCenter.default.addObserver(forName: ThemeLibrary.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.themeChanged() }
         }
