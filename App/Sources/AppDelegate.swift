@@ -526,7 +526,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         // `themeEditor.toggle` (CommandPalette.tsx:557-565).
-        shortcuts.on("themeEditor.toggle") { _ in
+        shortcuts.on("themeEditor.toggle") { call in
+            // A held key toggles once (commandPaletteCommands.ts at 5258, #42757).
+            if call.isRepeat { return true }
             editor.toggle(initialAppearance: ThemeLibrary.shared.resolvedAppearance)
             return true
         }

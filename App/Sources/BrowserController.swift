@@ -465,6 +465,8 @@ final class BrowserController {
             guard !connected else { return }
             viewer.control = nil
             viewer.fileChooser = nil
+            // A menu's answer only reaches the server session that offered it.
+            viewer.selectMenu = nil
             if !mini, self?.panelControl == true { self?.panelControl = false; self?.render() }
         }
         events.onUnauthorized = { [weak self] in
@@ -531,6 +533,10 @@ final class BrowserController {
             viewer.fileChooser = (multiple, accept)
         case .fileChooserClosed(let id):
             if stream?.chooser == id { stream?.chooser = nil; viewer.fileChooser = nil }
+        case .selectMenu(let menu):
+            viewer.selectMenu = menu
+        case .selectMenuClosed(let id):
+            if viewer.selectMenu?.id == id { viewer.selectMenu = nil }
         case .popup(let tabId):
             // `showPreviewPopup`: a floating opener floats the popup, else the panel switches to it.
             whenKnown(tabId) { [weak self] in
@@ -724,7 +730,7 @@ final class BrowserController {
     /// A new server tab at `url` (an HTML render's "Open in panel").
     func openURL(_ url: String) { openTab(url: url) }
 
-    private func openTab(url: String?, profileId: String? = nil) {
+    private func openTab(url: String?, profileId: String? = nil, failureTitle: String = "Unable to open browser") {
         guard let id = threadId, let env = id.environmentId, let shell = environments.session(env) else { return }
         Task { [weak self] in
             do {
@@ -735,19 +741,21 @@ final class BrowserController {
                 if self.threadId == id { self.panel.mutatePanel { $0.openBrowser(snapshot.tabId); return [] } }
                 self.render()
             } catch {
-                self?.panel.toasts.show(ToastView(title: "Unable to open browser", message: "\(error)", kind: .error))
+                self?.panel.toasts.show(ToastView(title: failureTitle, message: "\(error)", kind: .error))
             }
         }
     }
 
-    /// `reopenClosedView` for a server tab: a new tab at the closed one's page.
+    /// `reopenClosedView` for a server tab: a new tab at the closed one's page. The thread opens before the tab does,
+    /// and a tab that lands after you moved on stays in its thread's panel, so newer navigation wins
+    /// (ReopenClosedViewShortcut.tsx at 5258, #40516). A failure says "Could not reopen view" (:215).
     private func reopen(thread: ThreadId, url: String?) {
         guard thread == threadId else {
             // The thread opens first; its sync runs before this retry.
-            DispatchQueue.main.async { [weak self] in if self?.threadId == thread { self?.openTab(url: url) } }
+            DispatchQueue.main.async { [weak self] in if self?.threadId == thread { self?.openTab(url: url, failureTitle: "Could not reopen view") } }
             return
         }
-        openTab(url: url)
+        openTab(url: url, failureTitle: "Could not reopen view")
     }
 
     /// The panel closed browser tabs: `preview.close` each (`closePreviewSession`), optimistically.

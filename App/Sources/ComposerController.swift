@@ -1100,7 +1100,13 @@ final class ComposerController {
         case .draft(let s): projectId = ProjectId(s.projectId)
         case nil: break
         }
-        let project = chosen ?? snapshot.projects.first { $0.id == projectId } ?? snapshot.projects[0]
+        // With no current project, the first project's group starts in its root checkout on that environment
+        // (`resolveGroupDefaultProject`, useHandleNewThread.ts at 5258, #37191).
+        let project = chosen ?? snapshot.projects.first { $0.id == projectId } ?? {
+            let first = snapshot.projects[0]
+            let members = (group(of: first.id)?.members ?? []).filter { $0.id.environmentId == first.id.environmentId }
+            return members.first(where: SidebarModel.isRepositoryRootProject) ?? first
+        }()
         showDraft(project)
         return true
     }

@@ -174,4 +174,16 @@ struct FilesLogicTests {
         #expect(FullFileText.lineCount(Data()) == 1)
         #expect(FullFileText.maxBytes == 67_108_864 && FullFileText.maxLines == 1_200_000)
     }
+
+    /// Copy contents shows on a whole file, and on a large file while its whole text downloads (LargeFileActions at 5258).
+    @Test @MainActor func copyButtonFollowsTheLoadedText() {
+        let part = FileSurfaceView.Content.text("a", truncated: true, byteLength: 2_000_000, editable: false)
+        let whole = FileSurfaceView.Content.text("a", truncated: false, byteLength: 1, editable: false)
+        #expect(FileSurfaceView.copyAction(part, attachment: false, fullTextLoading: false, copied: false) == nil)
+        #expect(FileSurfaceView.copyAction(part, attachment: false, fullTextLoading: true, copied: false) == "Copy contents")
+        #expect(FileSurfaceView.copyAction(part, attachment: true, fullTextLoading: false, copied: false) == "Copy preview")
+        #expect(FileSurfaceView.copyAction(whole, attachment: false, fullTextLoading: false, copied: true) == "Copied")
+        #expect(FileSurfaceView.copyAction(.text("", truncated: false, byteLength: 0, editable: true), attachment: false, fullTextLoading: false, copied: false) == nil)
+        #expect(FileSurfaceView.copyAction(.loading, attachment: false, fullTextLoading: true, copied: false) == nil)
+    }
 }

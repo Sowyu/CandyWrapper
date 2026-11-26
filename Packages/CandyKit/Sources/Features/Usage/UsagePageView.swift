@@ -440,7 +440,9 @@ final class UsageSummarySectionView: DSView, UsageSectionSizing {
         big = UsageStyle.label(cost ? UsageFormat.usd(m.merged.costUsd) : UsageFormat.tokens(m.merged.totalTokens), 36, .semibold, tabular: true,
                                lineHeight: 40)
         big.alphaValue = m.partial ? 0.4 : 1
-        caption = UsageStyle.label("\(UsageFormat.count(m.merged.sessions)) sessions" + (cost ? " · API estimate" : ""), 12,
+        // "1 session" (UsagePage.tsx:705 at 5258, #42837).
+        let sessions = m.merged.sessions
+        caption = UsageStyle.label("\(UsageFormat.count(sessions)) \(sessions == 1 ? "session" : "sessions")" + (cost ? " · API estimate" : ""), 12,
                                    color: Themed.color(\.mutedForeground))
         if cost, m.merged.unpricedShare > 0 {
             let i = IconView(name: .info, size: 12, strokeColor: Themed.color(\.mutedForeground))

@@ -751,6 +751,8 @@ public final class ThreadPanelView: DSView {
         }
         if event.keyCode == 53 {
             if lazyDiffPanel.loaded?.handleReviewEscape() == true { return true }
+            // A held Esc that closed a nested menu leaves the sheet open (RightPanelSheet.tsx at 5258, #42262).
+            if event.isARepeat { return false }
             mutatePanel { $0.isOpen = false; return [] }
             return true
         }

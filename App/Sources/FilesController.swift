@@ -91,6 +91,7 @@ final class FilesController {
         }
         panel.lazyFileSurface.configure { [weak self] surface in
             surface.onEdit = { [weak self] text in self?.edited(text) }
+            surface.onCopyFailed = { [weak self] title, message in _ = self?.panel.toasts.show(ToastView(title: title, message: message, kind: .error)) }
             surface.onOpenFile = { [weak self] path in self?.openFile(path, line: nil) }
             surface.browseDirectory = { [weak self] dir in await self?.listDirectory(dir) }
             surface.fetchData = { url in
@@ -484,6 +485,7 @@ final class FilesController {
         panel.filesPanel.treeView.selectedPath = path.hasPrefix("/") ? nil : path
         if sameFile, !force { return }
         surface.attachment = nil
+        surface.fullTextLoading = false
         attachmentShown = nil
         if surface.path == path, !sameFile { surface.setContent(.loading) }
         shownFile = nil
@@ -528,9 +530,12 @@ final class FilesController {
             self.shownFile = k
             // A file past the 1 MB read shows its preview at once, then the whole text once it downloads
             // (5258 LargeFilePreview.tsx and fullFileText.ts, fb4558d77d #40631).
-            if case .text(_, true, let bytes, _) = content, bytes <= FullFileText.maxBytes,
-               let full = await Self.fullText(shell, threadId: ws.threadId, path: FileLinks.isAbsolutePath(path) ? path : ws.cwd + "/" + path) {
+            if case .text(_, true, let bytes, _) = content, bytes <= FullFileText.maxBytes {
+                surface.fullTextLoading = true
+                let full = await Self.fullText(shell, threadId: ws.threadId, path: FileLinks.isAbsolutePath(path) ? path : ws.cwd + "/" + path)
                 guard !Task.isCancelled, self.activeFilePath == path, let now = self.workspace, self.key(path, in: now) == k else { return }
+                surface.fullTextLoading = false
+                guard let full else { return }
                 let whole = FileSurfaceView.Content.text(full, truncated: false, byteLength: bytes, editable: false)
                 self.reads[k] = whole
                 self.panel.fileSurface.setContent(whole)

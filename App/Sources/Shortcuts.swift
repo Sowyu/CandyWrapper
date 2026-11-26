@@ -202,7 +202,8 @@ final class Shortcuts {
     @discardableResult
     func run(_ stroke: KeyStroke, paletteOpen: Bool? = nil) -> Bool {
         let paletteOpen = paletteOpen ?? self.paletteOpen()
-        let command = resolve(stroke)
+        var command = resolve(stroke)
+        if Keymap.leavesKeyToTerminal(command, stroke, context: context()) { command = nil }
         if command != "thread.undo" { releaseUndoShortcut() }
         lastCommand = command
         guard let command else { return false }

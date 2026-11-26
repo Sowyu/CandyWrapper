@@ -64,8 +64,9 @@ final class PaletteCommands {
     func registerShortcuts(_ shortcuts: Shortcuts) {
         shortcuts.paletteOpen = { [weak self] in self?.isOpen ?? false }
         // `commandPalette.toggle` (`ToggleMode "command"`): closes an open palette.
-        shortcuts.on("commandPalette.toggle") { [weak self] _ in
-            guard let self else { return false }
+        shortcuts.on("commandPalette.toggle") { [weak self] call in
+            // A held key toggles once (`toggleOverlay`, commandPaletteCommands.ts at 5258, #42757).
+            guard let self, !call.isRepeat else { return true }
             if self.isOpen { self.close() } else { self.open() }
             return true
         }

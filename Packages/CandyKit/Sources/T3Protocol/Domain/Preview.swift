@@ -393,6 +393,8 @@ public enum PreviewStream {
         case resize(width: Int, height: Int)
         case navigate(url: String)
         case history(delta: Int)
+        /// The option picked in a page's native select (serverBrowserStream.ts at 5258, #31561).
+        case selectMenu(id: String, index: Int)
         case reload(ignoreCache: Bool)
         /// Stop a loading page (4928 serverBrowserStream.ts, ServerBrowser.ts:3141, #29475). Older servers ignore it.
         case stopLoading
@@ -423,6 +425,7 @@ public enum PreviewStream {
             case .resize(let w, let h): return .object(["type": .string("resize"), "width": .number(Double(w)), "height": .number(Double(h))])
             case .navigate(let url): return .object(["type": .string("navigate"), "url": .string(url)])
             case .history(let delta): return .object(["type": .string("history"), "delta": .number(Double(delta))])
+            case .selectMenu(let id, let index): return .object(["type": .string("selectMenu"), "id": .string(id), "index": .number(Double(index))])
             case .reload(let ignoreCache):
                 return ignoreCache ? .object(["type": .string("reload"), "ignoreCache": .bool(true)]) : .object(["type": .string("reload")])
             }
@@ -465,6 +468,23 @@ public enum PreviewStream {
         }
     }
 
+    /// `PreviewStreamSelectMenu`: a native select the controller pressed. The box is in page CSS px.
+    public struct SelectMenu: Sendable, Equatable {
+        public struct Option: Sendable, Equatable {
+            public var label: String
+            public var disabled: Bool
+            public init(label: String, disabled: Bool) { self.label = label; self.disabled = disabled }
+        }
+        public var id: String
+        public var options: [Option]
+        public var selectedIndex: Int
+        public var x: Double, y: Double, width: Double, height: Double
+        public init(id: String, options: [Option], selectedIndex: Int, x: Double, y: Double, width: Double, height: Double) {
+            self.id = id; self.options = options; self.selectedIndex = selectedIndex
+            self.x = x; self.y = y; self.width = width; self.height = height
+        }
+    }
+
     /// Server-to-client JSON messages.
     public enum Message: Sendable, Equatable {
         case viewport(width: Double, height: Double)
@@ -473,6 +493,8 @@ public enum PreviewStream {
         case download(id: String, fileName: String, sizeBytes: Double)
         case fileChooser(id: String, multiple: Bool, accept: String)
         case fileChooserClosed(id: String)
+        case selectMenu(SelectMenu)
+        case selectMenuClosed(id: String)
         case popup(tabId: String)
         case pointer(phase: String, x: Double, y: Double, sequence: Int)
         case probe(x: Double, y: Double, editable: Bool)
@@ -490,6 +512,17 @@ public enum PreviewStream {
                 return .fileChooser(id: id, multiple: multiple, accept: accept)
             case "fileChooserClosed":
                 return str("id").map { .fileChooserClosed(id: $0) }
+            case "selectMenu":
+                guard let id = str("id"), case .array(let list)? = o["options"], let selected = o["selectedIndex"]?.intValue,
+                      let x = num("x"), let y = num("y"), let w = num("width"), let h = num("height") else { return nil }
+                var options: [SelectMenu.Option] = []
+                for item in list {
+                    guard let label = item["label"]?.stringValue, case .bool(let disabled)? = item["disabled"] else { return nil }
+                    options.append(.init(label: label, disabled: disabled))
+                }
+                return .selectMenu(SelectMenu(id: id, options: options, selectedIndex: selected, x: x, y: y, width: w, height: h))
+            case "selectMenuClosed":
+                return str("id").map { .selectMenuClosed(id: $0) }
             case "pointer":
                 guard let phase = str("phase"), phase == "move" || phase == "click", let x = num("x"), let y = num("y"),
                       let sequence = o["sequence"]?.intValue else { return nil }

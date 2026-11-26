@@ -100,6 +100,7 @@ struct SettingsLogicTests {
         #expect(KeybindingsLogic.commandLabel("sidebar.toggle") == "Sidebar: Toggle")
         #expect(KeybindingsLogic.commandLabel("rightPanel.toggleMaximized") == "Right Panel: Toggle Maximized")
         #expect(KeybindingsLogic.commandLabel("usage.period.week") == "Usage: Period: 7 days")
+        #expect(KeybindingsLogic.commandLabel("usage.open") == "Usage: Toggle")
         #expect(KeybindingsLogic.commandLabel("script.build-app.run") == "Run Script: Build App")
         #expect(KeybindingsLogic.commandLabel("composer.sendAlternate") == "Composer: Opposite Queue or Steer Action")
     }

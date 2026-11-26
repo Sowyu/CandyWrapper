@@ -21,9 +21,10 @@ args = ap.parse_args()
 src = open(args.bundle, encoding="utf-8").read()
 
 
-def table(var):
-    """A `var={key:`value`,...}` object literal from the minified bundle."""
-    start = src.index(var + "={") + len(var) + 2
+def table(first):
+    """The `x={key:`value`,...}` object literal from the minified bundle whose first entry starts
+    with `first`. Minified names change between releases; the first keys have not."""
+    start = re.search(r"[A-Za-z0-9_$]+=\{" + re.escape(first), src).end() - len(first)
     end = src.index("}", start)
     out = {}
     for m in re.finditer(r'(?:"([^"]+)"|([A-Za-z0-9_$]+)):`([^`]*)`', src[start:end]):
@@ -33,11 +34,39 @@ def table(var):
 
 # The resolver (`xe` in the bundle): file name table, then for each extension suffix the
 # complete set's overrides, then the extension table; else `default`.
-by_name, by_ext, overrides = table("he"), table("ge"), table("_e")
-# T3's own byFileName entries that point at built-in icons (pierre-icons.ts T3_PIERRE_ICONS).
-by_name.update({"package.json": "npm", "tsconfig.json": "typescript"})
-
+by_name, by_ext, overrides = table('".babelrc":'), table('"7z":'), table("jsx:`react`")
 symbols = {}
+colors = {}
+
+# T3's own icons (pierre-icons.ts T3_FILE_ICON_SPRITE): the filled ones that carry their own
+# `light-dark` color, the Pierre VS Code icons of #42493. The stroked Lucide and the 24px
+# document icons fall back to `default`.
+# ponytail: stroked t3-file-icon-* symbols (video, diff, xml, documents, java, toml...) are skipped;
+# parse <g>/stroke paths here when someone works in those file types
+pierre = open(os.path.join(args.t3, "apps/web/src/pierre-icons.ts"), encoding="utf-8").read()
+for m in re.finditer(r'<symbol id="(t3-file-icon-[a-z-]+)" viewBox="([^"]*)" style="color: light-dark\(#([0-9a-f]{6}), #([0-9a-f]{6})\)">(.*?)</symbol>', pierre, re.S):
+    name, box, light, dark, body = m.groups()
+    elements = []
+    for p in re.finditer(r"<path([^>]*)/?>", body):
+        attrs = dict(re.findall(r'([\w-]+)="([^"]*)"', p.group(1)))
+        elements.append((attrs["d"], float(attrs.get("opacity", "1")), attrs.get("fill-rule") == "evenodd"))
+    symbols[name] = (box, elements)
+    colors[name] = (light, dark)
+
+
+def t3_table(var):
+    """`var: { "key": "icon", ... }` inside T3_PIERRE_ICONS, keeping the entries whose icon exists here."""
+    start = pierre.index(var + ": {", pierre.index("T3_PIERRE_ICONS"))
+    end = pierre.index("\n  },", start)
+    out = {}
+    for k1, k2, icon in re.findall(r'(?:"([^"]+)"|([A-Za-z0-9_]+)): "([^"]+)"', pierre[start:end]):
+        out[k1 or k2] = icon[len("file-tree-builtin-"):] if icon.startswith("file-tree-builtin-") else icon
+    return out
+
+
+# T3's tables win over the built-in ones; a `test.ts` suffix is tried before `ts`.
+t3_names, t3_exts = t3_table("byFileName"), t3_table("byFileExtension")
+
 for m in re.finditer(r'<symbol id="file-tree-builtin-([a-z0-9]+)" viewBox="([^"]*)">(.*?)</symbol>', src, re.S):
     name, box, body = m.groups()
     elements = []
@@ -49,8 +78,11 @@ for m in re.finditer(r'<symbol id="file-tree-builtin-([a-z0-9]+)" viewBox="([^"]
         elements.append((attrs["d"], opacity, even))
     symbols[name] = (box, elements)
 
+known = lambda icon: icon in symbols
+by_name.update({k: v for k, v in t3_names.items() if known(v)})
+overrides.update({k: v for k, v in t3_exts.items() if known(v)})
+
 # ICON_COLORS (PierreEntryIcon.tsx): light and dark per token.
-colors = {}
 entry = open(os.path.join(args.t3, "apps/web/src/components/chat/PierreEntryIcon.tsx"), encoding="utf-8").read()
 for m in re.finditer(r'(\w+): \["#([0-9a-f]{6})", "#([0-9a-f]{6})"\]', entry):
     colors[m.group(1)] = (m.group(2), m.group(3))

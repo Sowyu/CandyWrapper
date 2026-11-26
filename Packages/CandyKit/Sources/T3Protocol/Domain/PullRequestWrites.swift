@@ -20,6 +20,19 @@ public enum PullRequestReviewPosition: Hashable, Sendable {
         }
     }
 
+    /// Reads `json` back, nil for a shape the contract's schema refuses.
+    public init?(json: JSONValue) {
+        switch json["kind"]?.stringValue {
+        case "added": guard let n = json["newLine"]?.intValue else { return nil }; self = .added(newLine: n)
+        case "deleted": guard let o = json["oldLine"]?.intValue else { return nil }; self = .deleted(oldLine: o)
+        case "context":
+            guard let o = json["oldLine"]?.intValue, let n = json["newLine"]?.intValue, let side = json["side"]?.stringValue,
+                  side == "left" || side == "right" else { return nil }
+            self = .context(oldLine: o, newLine: n, side: side)
+        default: return nil
+        }
+    }
+
     /// `getReviewPositionAnchor`: the side and line an annotation sits on.
     public var anchor: (side: String, line: Int) {
         switch self {
@@ -40,6 +53,19 @@ public struct PullRequestReviewCommentDraft: Hashable, Sendable, Identifiable {
     public var body: String
     public init(id: String, path: String, oldPath: String? = nil, position: PullRequestReviewPosition, body: String) {
         self.id = id; self.path = path; self.oldPath = oldPath; self.position = position; self.body = body
+    }
+
+    /// A persisted draft: the wire shape plus its local `id` (`isPendingComment`, pullRequestReviewStore.ts:39-41 at 5258).
+    public init?(stored json: JSONValue) {
+        guard let id = json["id"]?.stringValue, let path = json["path"]?.stringValue, let body = json["body"]?.stringValue,
+              let position = json["position"].flatMap(PullRequestReviewPosition.init(json:)) else { return nil }
+        self.init(id: id, path: path, oldPath: json["oldPath"]?.stringValue, position: position, body: body)
+    }
+
+    public var stored: JSONValue {
+        guard case .object(var o) = json else { return json }
+        o["id"] = .string(id)
+        return .object(o)
     }
 
     /// The wire shape: `oldPath` only where it differs from `path`, no local id.

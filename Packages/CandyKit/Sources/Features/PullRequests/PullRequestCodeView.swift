@@ -62,7 +62,8 @@ public final class PullRequestCodeView: DSView {
     private var reviewKey: String?
     private var actions: PullRequestReviewThreadActions?
     private var nowMs: Int64 = 0
-    private var draft: (target: DiffLineTarget, view: PullRequestDraftCommentView)?
+    /// `fileVersion` is the content of the file the draft sits in, so a refresh that changes it drops the draft.
+    private var draft: (target: DiffLineTarget, view: PullRequestDraftCommentView, fileVersion: Int?)?
     private var threadCards: [String: PullRequestReviewThreadCardView] = [:]
     /// Conversations shown on their line. Open ones join when seen, so one resolved under the reader stays (#34644).
     private var shownThreads: Set<String> = []
@@ -240,7 +241,7 @@ public final class PullRequestCodeView: DSView {
         list.reveal(path: path, line: range.start, side: range.side)
     }
 
-    /// The loaded files in file tree order, tests left out while hidden (PullRequestCodeTab.tsx, #26730, #29083).
+    /// The loaded files in review order, tests left out while hidden (PullRequestCodeTab.tsx, #26730, #29083).
     private func rebuildDiff() {
         let joined = patches.joined(separator: patches.allSatisfy { $0.hasSuffix("\n") } ? "" : "\n")
         var full = UnifiedDiff(PullRequestDetailLogic.splicingWithheld(joined, loaded: withheldLoaded))
@@ -248,12 +249,21 @@ public final class PullRequestCodeView: DSView {
         for i in full.files.indices where full.files[i].hunks.isEmpty && full.files[i].additions == 0 && full.files[i].deletions == 0 {
             if let stat = omitted[full.files[i].path] { full.files[i].additions = stat.additions; full.files[i].deletions = stat.deletions }
         }
-        let order = orderDiffPathsLikeTree(full.files.map(\.path))
+        // Review order (PullRequestCodeTab.tsx at 5258, #26760): hunk lines on either side are read for imports.
+        let order = orderDiffFilesForReview(full.files.map(\.path)) { i in
+            full.files[i].hunks.flatMap { h in h.lines.map { full.text(full.lines[$0]) } }
+        }
         let tests = Set(full.files.indices.filter { ChangedFileKind.isTest(full.files[$0].path) })
         testFileCount = tests.count
         let shown = DiffHideTestFiles.value ? order.filter { !tests.contains($0) } : order
         hiddenTestFileCount = order.count - shown.count
         let diff = full.selecting(shown)
+        // #42215 (PullRequestCodeTab.tsx:812-827 at 5258): never attach the draft to lines of a changed file. A file
+        // missing while more slices load may come back.
+        if let draft {
+            let version = Self.fileVersion(diff, path: draft.target.path)
+            if version != draft.fileVersion, version != nil || nextCursor == nil { self.draft = nil }
+        }
         paths = diff.files.map(\.path)
         list.setDiff(diff, collapsedByDefault: false)
         filePane.tree.changes = Dictionary(diff.files.map { ($0.path, $0.change) }, uniquingKeysWith: { a, b in a == b ? a : .change })
@@ -327,7 +337,7 @@ public final class PullRequestCodeView: DSView {
         view.onCancel = { [weak self] in self?.draft = nil; self?.updateAnnotations() }
         view.onComment = { [weak self] body in self?.addPending(target, body) }
         view.onResize = { [weak self] in self?.list.reloadAnnotations() }
-        draft = (target, view)
+        draft = (target, view, Self.fileVersion(list.diff, path: target.path))
         updateAnnotations()
         DispatchQueue.main.async { [weak view] in view?.focus() }
     }
@@ -344,6 +354,18 @@ public final class PullRequestCodeView: DSView {
         draft = nil
         store.add(reviewKey, PullRequestReviewCommentDraft(id: store.nextId(), path: t.path, oldPath: t.oldPath == t.path ? nil : t.oldPath,
                                                            position: position, body: body))
+    }
+
+    /// `buildFileDiffContentVersion`: what the file's hunks say, nil when the diff lacks the file.
+    static func fileVersion(_ diff: UnifiedDiff, path: String) -> Int? {
+        guard let file = diff.files.first(where: { $0.path == path }) else { return nil }
+        var hasher = Hasher()
+        hasher.combine(file.oldPath)
+        for h in file.hunks {
+            hasher.combine(h.oldStart); hasher.combine(h.newStart)
+            for i in h.lines { hasher.combine(diff.lines[i].kind); hasher.combine(diff.text(diff.lines[i])) }
+        }
+        return hasher.finalize()
     }
 
     private func updateAnnotations() {

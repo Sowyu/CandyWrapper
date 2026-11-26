@@ -52,6 +52,9 @@ final class IssueDetailBinding {
     private var generation = 0
     private var picker: (view: PullRequestCandidatePickerView, popup: OpenPopup?)?
 
+    /// Where the issue's links go. A thread's Issue panel follows "Open links in" (#42824).
+    var openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
+
     init(surface: LazyView<IssueDetailView>, environments: Environments, capabilities: PullRequestCapabilities) {
         self.surface = surface
         self.environments = environments
@@ -62,7 +65,7 @@ final class IssueDetailBinding {
     private func wire(_ v: IssueDetailView) {
         v.onRetry = { [weak self] in self?.reload() }
         v.onRefresh = { [weak self] in self?.reload(manual: true) }
-        v.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
+        v.onOpenURL = { [weak self] url in if let u = SafeExternalURL.parse(url) { self?.openURL(u) } }
         v.onSetState = { [weak self] s in self?.setState(s) }
         v.onSaveTitle = { [weak self] t in self?.update(title: t) }
         v.onSaveBody = { [weak self] b in self?.update(body: b) }

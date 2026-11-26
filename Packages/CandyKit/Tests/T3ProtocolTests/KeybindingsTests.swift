@@ -125,4 +125,13 @@ import Testing
         let missing = rules.filter { !ours.contains($0) }.map(\.command)
         #expect(missing.isEmpty, "server rules not in DEFAULT_KEYBINDINGS: \(missing)")
     }
+
+    @Test func sidebarToggleLeavesCtrlChordsToAFocusedTerminal() {
+        let ctrlB = KeyStroke(key: "b", ctrl: true), cmdB = KeyStroke(key: "b", meta: true)
+        let focused = KeybindingContext(["terminalFocus": true])
+        #expect(Keymap.leavesKeyToTerminal("sidebar.toggle", ctrlB, context: focused))
+        #expect(!Keymap.leavesKeyToTerminal("sidebar.toggle", ctrlB, context: KeybindingContext()))
+        #expect(!Keymap.leavesKeyToTerminal("sidebar.toggle", cmdB, context: focused))
+        #expect(!Keymap.leavesKeyToTerminal("terminal.toggle", ctrlB, context: focused))
+    }
 }

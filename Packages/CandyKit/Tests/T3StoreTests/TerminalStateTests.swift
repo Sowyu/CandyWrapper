@@ -57,6 +57,10 @@ struct TerminalStateTests {
         #expect(state.resolvedActiveId == "term-1" && state.height == 400)
         state.close("term-1")
         #expect(state == TerminalDrawerState()) // closed, default height
+        // #39260: the terminal button after the last close opens the drawer with a new terminal.
+        // CW keeps no server listing in the drawer state, so T3's stale reconcile cannot close it.
+        state.newTerminal("term-1")
+        #expect(state.open && state.terminalIds == ["term-1"] && state.resolvedActiveId == "term-1")
     }
 
     @Test func activityCountsRunningSubprocesses() {

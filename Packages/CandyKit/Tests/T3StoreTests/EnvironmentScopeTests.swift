@@ -106,6 +106,26 @@ struct EnvironmentScopeTests {
         #expect(SidebarModel.buildProjectGroups([remote, local]).first?.representative.id == "remote:p1")
     }
 
+    /// projectGrouping.test.ts "represents a repository group by its root checkout, even when it was added last" (#37191).
+    @Test func repositoryRootCheckoutRepresentsItsGroup() {
+        func p(_ id: String, _ root: String, _ env: String, repoRoot: String) -> ProjectShell {
+            EnvironmentScope.scope(project(id) { $0.workspaceRoot = root; $0.repositoryIdentity = identity("github.com/x/workspace"); $0.repositoryIdentity?.rootPath = repoRoot }, env)
+        }
+        let tool = p("old-tool", "/work/workspace/_archive/old-tool", "local", repoRoot: "/work/workspace")
+        let app = p("app-a", "/work/workspace/app-a", "local", repoRoot: "/work/workspace")
+        let remoteApp = p("remote-app", "/srv/workspace/app-a", "remote", repoRoot: "/srv/workspace")
+        let remoteRoot = p("remote-root", "/srv/workspace", "remote", repoRoot: "/srv/workspace")
+        let root = p("workspace", "/work/workspace", "local", repoRoot: "/work/workspace")
+        func rep(_ projects: [ProjectShell], _ env: String? = "local") -> String? {
+            SidebarModel.buildProjectGroups(projects, preferredEnvironmentId: env).first?.representative.id.rawValue
+        }
+        #expect(rep([tool, app, root]) == "local:workspace")
+        #expect(rep([tool, app, remoteApp, remoteRoot, root]) == "local:workspace")
+        #expect(rep([tool, app, remoteApp, remoteRoot, root], "remote") == "remote:remote-root")
+        #expect(rep([tool, root, remoteApp], "remote") == "remote:remote-app")
+        #expect(rep([tool, app]) == "local:old-tool")
+    }
+
     /// projectGrouping.test.ts "labels a group by its repository when clones disagree on its casing" (#35614).
     @Test func repositoryGroupsTakeTheRepositoryName() {
         var id = identity("github.com/pingdotgg/t3code")
