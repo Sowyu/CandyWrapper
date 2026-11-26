@@ -376,6 +376,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
             threads?.openCitedFile(meta) { meta in if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) } }
         }
+        // A pull request's Markdown beside a thread opens its file links in the Files panel (#41073).
+        threads.panel.lazyPullRequestView.configure { [weak threads, weak openIn] view in
+            view.onOpenFile = { meta, editor, cwd in if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta, renderedIn: cwd) } }
+        }
         if let shortcuts, !Self.isPreview {
             let captures = SnapShotController(window: window, composer: threads.composer, shortcuts: shortcuts)
             snapShots = captures
@@ -665,8 +669,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return true
         }
-        shortcuts.on(["navigation.back", "navigation.forward"]) { [weak history] call in
+        shortcuts.on(["navigation.back", "navigation.forward"]) { [weak history, weak self] call in
             guard let history else { return false }
+            // Leaving a page unmounts its focused field before it ends editing, so a commit-on-blur
+            // Settings row would drop what was typed: end text editing first, other controls keep
+            // their focus (5258 AppRouteModal.tsx, #42085).
+            if self?.settings?.isOpen == true, let window = NSApp.keyWindow, let text = window.firstResponder as? NSTextView, text.isEditable {
+                window.makeFirstResponder(nil)
+            }
             if call.command == "navigation.back" { history.back() } else { history.forward() }
             return true
         }
@@ -691,6 +701,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   let panel, panel.panelState.isOpen, panel.panelState.active?.kind == .diff,
                   let responder = panel.window?.firstResponder as? NSView, let diff = panel.lazyDiffPanel.loaded, responder.isDescendant(of: diff) else { return false }
             diff.showFind(); return true
+        }
+        // Cmd+F in a file's source, read-only or editable, opens that file's find bar instead of the
+        // thread's (5258 ReadOnlySourcePreview.tsx, #42442). TextKit's find bar scrolls to matches
+        // under wrapped lines (#39616) and keeps the selection while it scrolls (#39057).
+        shortcuts.onKey { event in
+            guard event.charactersIgnoringModifiers?.lowercased() == "f", event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
+                  let text = event.window?.firstResponder as? NSTextView, text.usesFindBar,
+                  sequence(first: text as NSView, next: { $0.superview }).contains(where: { $0 is CodeFileView }) else { return false }
+            let item = NSMenuItem()
+            item.tag = NSTextFinder.Action.showFindInterface.rawValue
+            text.performTextFinderAction(item)
+            return true
         }
         shortcuts.registerChat { threads.registerShortcuts(shortcuts) }
         commands.registerShortcuts(shortcuts) { [weak threads] in threads?.composer.pickers.isModelPickerOpen ?? false }

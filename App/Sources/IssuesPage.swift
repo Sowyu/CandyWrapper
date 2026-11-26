@@ -72,6 +72,20 @@ final class IssuesPageController {
         pullRequest.onStatus = { [weak self] id, tone in self?.container.pullRequestStatus[id] = tone }
         detail.onChanged = { [weak self] in self?.reload(keepRows: true) }
         detail.onOpenPullRequest = { [weak self] target in self?.container.mutate { $0.openPullRequest(target) } }
+        // A pull request link in an issue opens beside it on this page when a project here reads it
+        // (`PullRequestMarkdownPanelContext`, 5258 IssuesPage.tsx, openPullRequestLink.ts, #39937).
+        detail.openURL = { [weak self] url in
+            let modified = NSApp.currentEvent.map { $0.modifierFlags.contains(.command) || $0.modifierFlags.contains(.control) || $0.buttonNumber == 2 } ?? false
+            guard let self, !modified, ClientSettingsStore.shared.current.bool("pullRequestLinksOpenInApp"),
+                  let env = self.detail.environmentId else { NSWorkspace.shared.open(url); return }
+            let projects = (self.sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env }
+                .map { (id: $0.id.localId.rawValue, identity: $0.repositoryIdentity) }
+            guard var ref = PullRequestWriteLogic.previewTarget(url: url.absoluteString, pullRequestsEnabled: self.capabilities.has(env, "pullRequests"),
+                                                               projects: projects) else { NSWorkspace.shared.open(url); return }
+            if !self.capabilities.has(env, "threadPullRequests") { ref.host = nil }
+            self.container.mutate { $0.openPullRequest(PullRequestSurfaceTarget(environmentId: env, projectId: ref.projectId, host: ref.host,
+                                                                               repository: ref.repository, number: ref.number, url: url.absoluteString)) }
+        }
         detail.onSearchThreads = { [weak self] url in self?.onSearchThreads?(url) }
         detail.pickerSnapshot = { [weak self] in self?.sidebar?.snapshot }
         detail.cwd = { [weak self] env, projectId in

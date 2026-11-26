@@ -9,6 +9,14 @@ import T3Protocol
 /// lays out once per width and caches the result until the document changes, so the virtualized
 /// timeline can measure rows cheaply. Reuse a view for another message by setting `document`.
 // ponytail: one backing layer per message; a very long message gets a large layer. Switch to tiled drawing if memory shows it.
+/// A view that opens the files Markdown inside it links to, for Markdown that has no `onOpenFile`
+/// of its own. `cwd` is the folder that Markdown resolved its paths against.
+@MainActor
+public protocol MarkdownFileLinkHost: AnyObject {
+    var opensMarkdownFiles: Bool { get }
+    func openMarkdownFile(_ meta: FileLinkMeta, inEditor: Bool, cwd: String?)
+}
+
 public final class MarkdownView: DSView {
     /// Search changes only the paint of visible rows, never their Markdown layout.
     public var threadFindOccurrence: Int? { didSet { if threadFindOccurrence != oldValue { needsDisplay = true } } }
@@ -126,12 +134,27 @@ public final class MarkdownView: DSView {
     public var cwd: String? {
         didSet { if cwd != oldValue { invalidate() } }
     }
+    /// Where relative images resolve when it differs from `cwd`: a Markdown file preview's own
+    /// folder (`imageBaseDir`, 5258 FileMarkdownPreview.tsx:18-31).
+    public var imageBaseDir: String? {
+        didSet { if imageBaseDir != oldValue { invalidate() } }
+    }
 
     /// A plain click on a file chip (`inEditor` false) or a Cmd-click (`inEditor` true). T3 opens the file
     /// in its right files panel (`panelPath`; media in the media viewer, PDF and HTML in the browser
     /// preview when one is available) and Cmd-click opens it in the preferred editor. Without a
     /// handler a click shows the chip's menu, as T3 does when no open action is available.
     public var onOpenFile: ((FileLinkMeta, _ inEditor: Bool) -> Void)?
+    /// `onOpenFile`, or else the nearest enclosing view that opens files for the Markdown inside
+    /// it, told which folder this Markdown resolved its paths against (a pull request's body, 5258
+    /// ChatMarkdown.tsx `panelRoot`, #41073).
+    var fileOpener: ((FileLinkMeta, _ inEditor: Bool) -> Void)? {
+        if let onOpenFile { return onOpenFile }
+        guard let host = sequence(first: superview, next: { $0?.superview }).lazy.compactMap({ $0 as? MarkdownFileLinkHost }).first,
+              host.opensMarkdownFiles else { return nil }
+        let cwd = cwd
+        return { [weak host] meta, inEditor in host?.openMarkdownFile(meta, inEditor: inEditor, cwd: cwd) }
+    }
 
     /// Mermaid fences render as diagrams.
     public var diagramsEnabled = true {
@@ -737,9 +760,9 @@ public final class MarkdownView: DSView {
     fileprivate func contextChipClicked(_ chip: MarkdownContextChip, view: NSView) {
         if case .skill(let stored) = chip.action {
             let skill = inlineSkills.first { $0.name == stored.name } ?? stored
-            let open: (() -> Void)? = skill.path.isEmpty || onOpenFile == nil ? nil : { [weak self] in
+            let open: (() -> Void)? = skill.path.isEmpty || fileOpener == nil ? nil : { [weak self] in
                 let path = skill.path
-                self?.onOpenFile?(FileLinkMeta(filePath: path, targetPath: path, workspaceRelativePath: path,
+                self?.fileOpener?(FileLinkMeta(filePath: path, targetPath: path, workspaceRelativePath: path,
                     basename: (path as NSString).lastPathComponent, line: nil, column: nil), false)
             }
             SkillDetailsView.show(skill: skill, from: view, onViewInstructions: open)
@@ -783,7 +806,7 @@ public final class MarkdownView: DSView {
             for item in layout(forWidth: bounds.width).images {
                 switch item {
                 case .remoteImage(let url, let alt, let rect):
-                    let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: cwd)
+                    let source = MarkdownImageSource.classify(url.absoluteString, workspaceRoot: imageBaseDir ?? cwd)
                     if InlineAudioSource.isAudio(name: url.absoluteString), source != .blocked {
                         let key = source.key
                         audioKeys.insert(key)
@@ -794,7 +817,7 @@ public final class MarkdownView: DSView {
                             if case .workspaceFile(let path) = source {
                                 open = { [weak self] in
                                     guard let self, let meta = FileLinks.resolveLink(path, cwd: self.cwd) else { return }
-                                    self.onOpenFile?(meta, false)
+                                    self.fileOpener?(meta, false)
                                 }
                             } else { open = nil }
                             view = ThreadMediaAttachmentView(id: key, name: url.scheme == "data" || url.lastPathComponent.isEmpty ? (alt.isEmpty ? "Audio" : alt) : url.lastPathComponent,
@@ -814,7 +837,7 @@ public final class MarkdownView: DSView {
                     }
                     let key = source.key
                     let reference: MediaReference? = switch source {
-                    case .workspaceFile(let path): MediaReference.file(path, workspaceRoot: cwd)
+                    case .workspaceFile(let path): MediaReference.file(path, workspaceRoot: imageBaseDir ?? cwd)
                     case .direct(let uri): MediaReference.link(uri)
                     case .blocked: nil
                     }
@@ -944,13 +967,13 @@ public final class MarkdownView: DSView {
         let actions = chipActions(chip.meta)
         guard actions.editor || actions.browser || actions.panel || actions.media else { chipMenu(chip, event: event, view: view); return }
         if modifiers.contains(.command), !modifiers.contains(.control), actions.editor {
-            if let onOpenFile { onOpenFile(chip.meta, true) } else { Self.onOpenFileInEditor?(chip.meta) }
+            if let open = fileOpener { open(chip.meta, true) } else { Self.onOpenFileInEditor?(chip.meta) }
             return
         }
         if actions.browser, chip.meta.filePath.lowercased().hasSuffix(".pdf") || (!actions.editor && !actions.panel) {
             Self.onOpenFileInBrowser?(chip.meta)
         } else if actions.panel {
-            onOpenFile?(chip.meta, false)
+            fileOpener?(chip.meta, false)
         } else if actions.media {
             previewMedia(chip.meta)
         } else {
@@ -961,7 +984,7 @@ public final class MarkdownView: DSView {
     /// Which of T3's file actions this chip has (`fileLinkChip`, ChatMarkdown.tsx:2639-2690). A thread is open
     /// when the owner handles clicks (`onOpenFile`).
     private func chipActions(_ meta: FileLinkMeta) -> (editor: Bool, browser: Bool, panel: Bool, media: Bool) {
-        let thread = onOpenFile != nil
+        let thread = fileOpener != nil
         let kind = FilePreviewKind.of(meta.filePath)
         return (Self.fileChipShell?().openLabel != nil,
                 thread && (kind == .html || kind == .pdf) && Self.canOpenFileInBrowser?() == true && Self.onOpenFileInBrowser != nil,
@@ -973,7 +996,7 @@ public final class MarkdownView: DSView {
     /// opens in the file viewer, which plays it.
     private func previewMedia(_ meta: FileLinkMeta) {
         if FilePreviewKind.of(meta.filePath) == .video {
-            if meta.panelPath != nil { onOpenFile?(meta, false) }
+            if meta.panelPath != nil { fileOpener?(meta, false) }
             return
         }
         // `openMarkdownMedia` (ChatMarkdown.tsx:510-575): sign the URL first and open the preview only when that works,

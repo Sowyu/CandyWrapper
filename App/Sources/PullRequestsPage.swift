@@ -48,6 +48,12 @@ final class PullRequestsPageController {
         var reviewing: [PullRequestListEntry]?
     }
     private var answer: Answer?
+    /// Each environment's last good read and the ones that failed, so Retry reads only the failed
+    /// ones (`retry`, 5258 state/pullRequests.ts:704-712, #39536).
+    private struct EnvRead { var result: PullRequestListResult; var authored: [PullRequestListEntry]?; var reviewing: [PullRequestListEntry]? }
+    private var envReads: [String: EnvRead] = [:]
+    private var failedEnvs: Set<String> = []
+    private var readInput = ""
     private var error: String?
     private var loading = false
     private var refreshing = false
@@ -116,7 +122,7 @@ final class PullRequestsPageController {
         page.onProject = { [weak self] v in self?.projectKey = v; self?.reload() }
         page.onFilters = { [weak self] f in self?.changeFilters(f) }
         page.onRefresh = { [weak self] in self?.refreshFromHost() }
-        page.onRetry = { [weak self] in self?.reload() }
+        page.onRetry = { [weak self] in self?.retry() }
         page.onLoadMore = { [weak self] in self?.loadMore() }
         page.onShowChecks = { [weak self] entry, anchor in self?.showChecks(entry, from: anchor) }
         page.onShowStack = { [weak self] entry, anchor in self?.showStack(entry, from: anchor) }
@@ -303,7 +309,19 @@ final class PullRequestsPageController {
         }
     }
 
-    func reload(keepRows: Bool = false, periodic: Bool = false) {
+    /// Reads again only the environments whose last read failed, keeping the others' rows.
+    private func retry() {
+        guard !failedEnvs.isEmpty, readInput == currentReadInput() else { reload(); return }
+        reload(keepRows: true, only: failedEnvs)
+    }
+
+    private func currentReadInput() -> String {
+        let scoped = scopedProject()
+        return [state, involvement, host ?? "", "\(pageSize)", sentQuery, scoped?.env ?? "", scoped?.projectId ?? "",
+                "\(menuFilters)"].joined(separator: "\u{1}")
+    }
+
+    func reload(keepRows: Bool = false, periodic: Bool = false, only: Set<String>? = nil) {
         // Final rows stay cached on timed refreshes. An explicit refresh still reads the host.
         if periodic, PullRequestListLogic.periodicRefreshState(state) == nil { return }
         guard visible else { return }
@@ -331,7 +349,25 @@ final class PullRequestsPageController {
             var failure: String?
             var cursors: [String: [String: String]] = [:]
             var truncated: [String] = []
+            let input = self.currentReadInput()
+            var reads = only == nil ? [:] : self.envReads
+            var failed: Set<String> = []
             for env in targets {
+                if let only, !only.contains(env), let kept = reads[env] {
+                    let held = Set(merged.entries.map(\.url))
+                    merged.entries += kept.result.entries.filter { !held.contains($0.url) }
+                    merged.errors += kept.result.errors
+                    merged.providers += kept.result.providers.filter { p in !merged.providers.contains { $0.host == p.host } }
+                    merged.truncated = merged.truncated || kept.result.truncated
+                    for (h, v) in kept.result.viewers { merged.viewers["\(env) \(h)"] = v; if targets.count == 1 { merged.viewers[h] = v } }
+                    cursors[env] = kept.result.nextCursors.isEmpty ? nil : kept.result.nextCursors
+                    if kept.result.truncated { truncated.append(env) }
+                    if wantsPartitions, !kept.result.entries.isEmpty {
+                        if let a = kept.authored { authored? += a } else { authored = nil }
+                        if let b = kept.reviewing { reviewing? += b } else { reviewing = nil }
+                    }
+                    continue
+                }
                 func read(_ inv: String, _ filters: PullRequestListFilters, _ text: String?) async throws -> PullRequestListResult {
                     let input = PullRequestPayloads.list(state: state, involvement: inv, limit: pageSize, projectId: scoped?.projectId, host: host,
                                                          filters: filters, query: text)
@@ -351,13 +387,17 @@ final class PullRequestsPageController {
                     merged.truncated = merged.truncated || r.truncated
                     for (h, v) in r.viewers { merged.viewers["\(env) \(h)"] = v; if targets.count == 1 { merged.viewers[h] = v } }
                     // The priority groups' own reads, only once the feed has rows (`partitionTargets`).
+                    var a: PullRequestListResult?, b: PullRequestListResult?
                     if wantsPartitions, !r.entries.isEmpty {
-                        let a = try? await read("authored", self.menuFilters, nil)
-                        let b = try? await read("reviewing", self.menuFilters, nil)
+                        a = try? await read("authored", self.menuFilters, nil)
+                        b = try? await read("reviewing", self.menuFilters, nil)
                         if let a { authored? += a.entries } else { authored = nil }
                         if let b { reviewing? += b.entries } else { reviewing = nil }
                     }
+                    reads[env] = EnvRead(result: r, authored: a?.entries, reviewing: b?.entries)
                 } catch {
+                    failed.insert(env)
+                    reads[env] = nil
                     // The failure names its environment (#27882, PullRequestsPage.tsx at 4928).
                     let name = self.environments.label(env).flatMap { $0.isEmpty ? nil : $0 } ?? "Environment"
                     failure = "\(name): \(PullRequestDetailBinding.failure(error, number: 0).1)"
@@ -365,6 +405,9 @@ final class PullRequestsPageController {
                 }
             }
             guard self.generation == gen else { return }
+            self.envReads = reads
+            self.failedEnvs = failed
+            self.readInput = input
             // An open PR that left the live page may just have closed. Read that transition once,
             // then cache the final result along with the other closed and merged rows.
             for var entry in previousOpen where !merged.entries.contains(where: { PullRequestListLogic.key($0) == PullRequestListLogic.key(entry) }) {

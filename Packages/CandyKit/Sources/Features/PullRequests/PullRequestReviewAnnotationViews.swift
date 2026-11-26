@@ -173,6 +173,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
     private let canResolve: Bool
     private let canReact: Bool
     private let lineBreaks: Bool
+    private let emoji: Bool
     private let canEdit: (PullRequestThreadComment) -> Bool
     private let actions: PullRequestReviewThreadActions
     private let cwd: String
@@ -200,8 +201,9 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
 
     public init(thread: PullRequestReviewThread, canReply: Bool, canResolve: Bool, canReact: Bool,
                 canEdit: @escaping (PullRequestThreadComment) -> Bool, actions: PullRequestReviewThreadActions, cwd: String, nowMs: Int64,
-                startsExpanded: Bool? = nil, lineBreaks: Bool = false) {
+                startsExpanded: Bool? = nil, lineBreaks: Bool = false, emoji: Bool = false) {
         self.lineBreaks = lineBreaks
+        self.emoji = emoji
         self.thread = thread
         self.canReply = canReply; self.canResolve = canResolve; self.canReact = canReact
         self.canEdit = canEdit; self.actions = actions; self.cwd = cwd; self.nowMs = nowMs
@@ -293,7 +295,7 @@ public final class PullRequestReviewThreadCardView: PullRequestAnnotationCardVie
         resolve.title = thread.isResolved ? "Unresolve" : "Resolve"
         commentViews.forEach { $0.removeFromSuperview() }
         commentViews = expanded ? comments.map { c in
-            let v = PullRequestThreadCommentView(c, cwd: cwd, nowMs: nowMs, canReact: canReact, canEdit: canEdit(c), editing: editingId == c.id, lineBreaks: lineBreaks)
+            let v = PullRequestThreadCommentView(c, cwd: cwd, nowMs: nowMs, canReact: canReact, canEdit: canEdit(c), editing: editingId == c.id, lineBreaks: lineBreaks, emoji: emoji)
             v.onEdit = { [weak self] in self?.editingId = c.id; self?.rebuild() }
             v.onCancel = { [weak self] in self?.editingId = nil; self?.rebuild() }
             v.onSave = { [weak self] body in
@@ -418,7 +420,8 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
     private var hover: HoverGroup?
     private var focusWithin = false
 
-    init(_ c: PullRequestThreadComment, cwd: String, nowMs: Int64, canReact: Bool, canEdit: Bool, editing: Bool, lineBreaks: Bool = false) {
+    init(_ c: PullRequestThreadComment, cwd: String, nowMs: Int64, canReact: Bool, canEdit: Bool, editing: Bool, lineBreaks: Bool = false,
+         emoji: Bool = false) {
         super.init(frame: .zero)
         avatar.actor = c.author
         login.text = c.author?.login ?? "ghost"
@@ -427,7 +430,7 @@ final class PullRequestThreadCommentView: DSView, FocusWithinObserver {
         reactions.canReact = canReact
         reactions.reactions = c.reactions ?? []
         body.cwd = cwd
-        body.setMarkdown(c.body, preservesLineBreaks: lineBreaks)
+        body.setMarkdown(emoji ? GitHubEmoji.expandMarkdown(c.body) : c.body, preservesLineBreaks: lineBreaks)
         edit.iconSize = 12
         edit.setAccessibilityLabel("Edit comment")
         edit.isHidden = !canEdit || editing

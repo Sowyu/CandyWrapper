@@ -726,8 +726,11 @@ public enum PullRequestPayloads {
     }
 
     /// `PullRequestSubmitReviewInput` (pullRequest.ts:1175) with the pending line comments.
-    public static func submitReview(_ ref: PullRequestRef, verdict: String, body: String, comments: [PullRequestReviewCommentDraft] = []) -> JSONValue {
+    /// `expectedHeadSha` pins the review to the head on screen (5258 pullRequest.ts:923, #41761).
+    public static func submitReview(_ ref: PullRequestRef, verdict: String, body: String, comments: [PullRequestReviewCommentDraft] = [],
+                                    expectedHeadSha: String? = nil) -> JSONValue {
         var o = ref.json
+        if let expectedHeadSha, !expectedHeadSha.isEmpty { o["expectedHeadSha"] = .string(expectedHeadSha) }
         o["verdict"] = .string(verdict)
         o["body"] = .string(body)
         o["comments"] = .array(comments.map(\.json))

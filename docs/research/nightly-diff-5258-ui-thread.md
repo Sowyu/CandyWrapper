@@ -471,7 +471,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | c5918e5d24 | #41803 | fix(web): align composer banner details with status text | composer | already: CW's details button shares the 24pt row with the text, so it is centered |
 | eecb58c6d6 | #41769 | fix: approvals and hosted pairing show what is being approved | composer | ported 956f0e5a for the approval half; `draftSupportedRuntimeModes` is the composer's (2.x), hosted pairing the other note's |
 | 46f360d8dd | #41722 | fix(client): a link to a newly linked machine's thread opens without a reload | thread | ported 7c048ec6: a link naming a machine the cached peerLinks.names lack reads the names once more (`refreshNamesLacking`) |
-| 78cffe29ec | #41761 | fix: a merge or review stays on the commit you opened the pull request on | other | n/a (pull requests, other agent) |
+| 78cffe29ec | #41761 | fix: a merge or review stays on the commit you opened the pull request on | other | ported d727914e (panels lane) |
 | 5e62206e7d | #41757 | fix(desktop): preview pages run in their own JavaScript world and popups open web links only | thread | n/a (Electron only) |
 | d4d08aed56 | #41745 | fix: XML assets open sandboxed and MCP apps bind to their document | thread | ported 7a0e6330 for the MCP app half (`attachMcpAppDocumentLink` in the bridge's isolated world, probes over the document's port); XML assets opening sandboxed is server side |
 | 1c6d41a9ba | #41317 | feat(web,mobile): remove the changed-files card under assistant turns | thread | ported 31bbc675 |

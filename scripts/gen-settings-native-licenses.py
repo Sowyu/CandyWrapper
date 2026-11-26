@@ -13,6 +13,9 @@ for name, version, license, source, path in [
      'Packages/CandyKit/Sources/Features/Resources/LICENSE-latin-modern-math.txt'),
     # The model picker's descriptions and facts, bundled by scripts/gen-model-notes.
     ('models.dev', None, 'MIT', 'https://github.com/anomalyco/models.dev', 'docs/research/models-dev/LICENSE.txt'),
+    # The pull request viewer's `:alias:` emoji, bundled by scripts/gen-github-emoji.py.
+    ('GitHub gemoji alias data', None, 'MIT', 'https://github.com/github/gemoji/blob/fadaeaf1f1a9be82b321316a6c5502e43138b2f6/db/emoji.json',
+     'docs/research/gemoji/LICENSE.txt'),
 ]:
     entries.append(dict(bundles=['CandyWrapper'], kind='package', license=license, name=name,
                         noticeText=(root/path).read_text(), sourceUrl=source, version=version))

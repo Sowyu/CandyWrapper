@@ -193,6 +193,39 @@ public final class PullRequestDetailView: DSView {
     public var stack: PullRequestStackDetail? { didSet { rebuildActions() } }
     /// "Stack data may be stale…" or "Refreshing stack…", shown in the menu and the tooltip.
     public var stackNotice: String? { didSet { rebuildActions() } }
+
+    /// The head the reader was shown, which a background read can run ahead of (5258
+    /// PullRequestDetailPanel.tsx:742-755, #41761). Merges and reviews are pinned to it.
+    private var seenHead: PullRequestDetailLogic.SeenHead?
+    public var shownHeadSha: String? { seenHead?.sha ?? detail?.headSha }
+    private var unseenHeadSha: String? {
+        guard let d = detail, d.state == "open", d.headSha != shownHeadSha else { return nil }
+        return d.headSha
+    }
+    /// "New commits were pushed." (PullRequestDetailPanel.tsx:1967-1992): `col-span-2 px-4 pb-2`
+    /// across the header (#42342), an `Alert variant="warning"` with "Load new commits".
+    private let newCommits = AlertView(nil, icon: .triangleAlert, variant: .warning)
+    private let loadNewCommits = ButtonView("Load new commits", variant: .outline, size: .xs)
+    /// "Load new commits": the caller asks the host for a fresh read, then calls `acceptHead`.
+    public var onLoadNewCommits: ((String) -> Void)?
+    /// A file link in the pull request's Markdown: (link, in the editor, the folder it resolved against).
+    /// Nil leaves the links to the editor and the chip menu.
+    public var onOpenFile: ((FileLinkMeta, Bool, String?) -> Void)?
+    /// `isInvalidating` while that host read runs.
+    public var loadingNewCommits = false { didSet { loadNewCommits.isEnabled = !loadingNewCommits } }
+    /// The pin moves to `sha` once the host read that reloads the diff has been asked for.
+    public func acceptHead(_ sha: String) {
+        guard let d = detail else { return }
+        seenHead = PullRequestDetailLogic.SeenHead(key: d.url, sha: sha)
+        updateNewCommits()
+    }
+    private func updateNewCommits() {
+        let unseen = unseenHeadSha
+        let show = unseen != nil && shownHeadSha != nil
+        newCommits.message = "New commits were pushed. A merge or review still applies to \((shownHeadSha ?? "").prefix(7))."
+        if newCommits.isHidden == show { newCommits.isHidden = !show; needsLayout = true }
+    }
+    private var newCommitsHeight: CGFloat { newCommits.isHidden ? 0 : newCommits.height(forWidth: max(1, bounds.width - 32)) + 8 }
     /// The stack read failed: the menu offers "Retry stack refresh" and the button wears a warning.
     public var stackFailed = false { didSet { rebuildActions() } }
     /// Stack merge and rebase are allowed (`canMerge`, `canRebase` of the menu).
@@ -290,6 +323,10 @@ public final class PullRequestDetailView: DSView {
             self.confirmStack(self.stackLeadsWithAutoMerge ? "enable-auto-merge" : "merge")
         }
         [stackButton, stackMergeButton].forEach(headerBox.addSubview)
+        newCommits.isHidden = true
+        newCommits.actions = [loadNewCommits]
+        headerBox.addSubview(newCommits)
+        loadNewCommits.action = { [weak self] in if let sha = self?.unseenHeadSha { self?.onLoadNewCommits?(sha) } }
         threadsButton.iconSize = 14
         threadsButton.isHidden = true
         threadsButton.action = { [weak self] in self?.onShowLinkedThreads?() }
@@ -367,6 +404,8 @@ public final class PullRequestDetailView: DSView {
     public func show(_ detail: PullRequestDetail) {
         let sameIdentity = self.detail?.url == detail.url
         self.detail = detail
+        seenHead = PullRequestDetailLogic.seenHead(seenHead, key: detail.url, settledHead: detail.headSha)
+        updateNewCommits()
         more.setAccessibilityLabel("More \(terminology.singular) actions")
         titleInput.setAccessibilityLabel("\(terminology.title) title")
         phase = .loaded
@@ -375,8 +414,11 @@ public final class PullRequestDetailView: DSView {
             inlineConfirm.disarm()
             code.reset()
             titleDraft = nil
-            condensed = false
-            condensedByTab = [:]
+            // The Summary's header comes back as its scroll left it, so restoring that scroll
+            // moves nothing (PullRequestDetailPanel.tsx:342, #42179).
+            let summaryCondensed = PullRequestSummaryView.memory[detail.url]?.condensed ?? false
+            condensedByTab = [.summary: summaryCondensed]
+            condensed = tab == .summary && summaryCondensed
             closeComposer()
             composer = nil
             stack = nil
@@ -1044,6 +1086,7 @@ public final class PullRequestDetailView: DSView {
         let (next, refund) = PullRequestWriteLogic.condensed(previous: condensed, scrollTop: top, foldHeight: foldHeight,
                                                               condensedRowHeight: Self.condensedRowHeight)
         condensedByTab[tab] = next
+        if tab == .summary { summary.rememberScroll(top); summary.rememberCondensed(next) }
         guard next != condensed else { return }
         let oldRule = tabRule.frame.minY
         condensed = next
@@ -1144,7 +1187,7 @@ public final class PullRequestDetailView: DSView {
     // MARK: Layout
 
     /// The header's height: the 28pt top row, the fold (or the condensed row) and the tab bar.
-    public var headerHeight: CGFloat { 28 + (condensed ? Self.condensedRowHeight : foldHeight) + 1 + 44 }
+    public var headerHeight: CGFloat { 28 + (condensed ? Self.condensedRowHeight : foldHeight) + newCommitsHeight + 1 + 44 }
 
     public override func layout() {
         super.layout()
@@ -1253,6 +1296,10 @@ public final class PullRequestDetailView: DSView {
             let hx = arrow.frame.maxX + 6 + 4 // `PullRequestCopyableCode` is `px-1`
             head.frame = NSRect(x: hx, y: y + 2, width: min(ceil(head.textWidth) + 1, max(0, 16 + branchesWidth - hx)), height: 16)
             y += 20 + 16
+        }
+        if !newCommits.isHidden {
+            newCommits.frame = NSRect(x: 16, y: y, width: max(0, w - 32), height: newCommitsHeight - 8)
+            y += newCommitsHeight
         }
         // Tab bar (`border-t border-border/60 px-4 py-2`).
         tabRule.frame = CGRect(x: 0, y: y, width: w, height: 1)
@@ -1472,4 +1519,12 @@ extension PullRequestDetailView {
         }
         return next == .code ? PullRequestAnchor.linkCommit(url) : nil
     }
+}
+
+/// File links in the pull request's Markdown open through the thread (#41073): T3 resolves a
+/// relative link against the checkout the body was rendered for, which can be another folder
+/// than the thread's (5258 ChatMarkdown.tsx, `panelRoot`).
+extension PullRequestDetailView: MarkdownFileLinkHost {
+    public var opensMarkdownFiles: Bool { onOpenFile != nil }
+    public func openMarkdownFile(_ meta: FileLinkMeta, inEditor: Bool, cwd: String?) { onOpenFile?(meta, inEditor, cwd) }
 }
