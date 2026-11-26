@@ -1188,6 +1188,7 @@ final class ThreadController {
     private func sessionChanged(_ environmentId: String) {
         migrationToast.sessionChanged(environmentId)
         permissionNotice.sessionChanged(environmentId)
+        connectDeviceNotice.sessionChanged(environmentId)
         serverUpdates.sessionChanged(environmentId)
         composer.sessionChanged(environmentId)
         terminal.sessionChanged(environmentId)
@@ -1752,13 +1753,21 @@ final class ThreadController {
     /// The legacy thread migration toast on the primary environment.
     lazy var permissionNotice: ThreadPermissionUpdateNotice = {
         let notice = ThreadPermissionUpdateNotice(environments: environments, toasts: panel.toasts)
-        notice.onGrants = { [weak self] _ in
+        notice.onGrants = { [weak self] env in
+            self?.connectDeviceNotice.sessionChanged(env)
             self?.composer.grantsChanged()
             self?.serverUpdates.changed()
         }
         return notice
     }()
     private lazy var migrationToast = LegacyThreadMigrationToast(environments: environments, toasts: panel.toasts)
+    /// "New device signed in" toasts (ConnectDeviceApprovalCoordinator.tsx, 5258 #42311).
+    lazy var connectDeviceNotice: ConnectDeviceNotice = {
+        let notice = ConnectDeviceNotice(environments: environments, toasts: panel.toasts)
+        notice.approvalRequired = { [weak self] env in self?.composer.config(env)?.settings.raw["requireConnectDeviceApproval"]?.boolValue }
+        composer.configObservers.append { [weak notice] env in notice?.configChanged(env) }
+        return notice
+    }()
     /// Whether an environment offers threads without a project, for the hero's second button.
     var offersScratch: () -> Bool = { false }
     /// The panel moved to another thread or draft (route history).

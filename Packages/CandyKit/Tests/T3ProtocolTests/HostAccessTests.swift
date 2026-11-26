@@ -96,4 +96,20 @@ struct HostAccessTests {
         #expect(down.reachability?.helpURL == "https://github.com/pingdotgg/t3code/blob/main/docs/user/t3-connect-troubleshooting.md#port-7844-is-blocked-on-the-host")
         #expect(up.reachability?.helpURL == nil)
     }
+
+    /// 5258 #42311: devices first seen after this client's watermark, and the toast's words.
+    @Test func newConnectDeviceNotice() {
+        let a = AuthConnectDevice(proofKeyThumbprint: "a", verificationCode: "1", client: .init(label: "Ana's phone"), approvedAt: T3Timestamp(epochMs: 1_000))
+        let b = AuthConnectDevice(proofKeyThumbprint: "b", verificationCode: "2", approvedAt: T3Timestamp(epochMs: 2_000))
+        // A client that never looked announces nothing and starts from the newest key.
+        #expect(ConnectDeviceNames.unseen([a, b], seenThrough: nil).unseen.isEmpty)
+        #expect(ConnectDeviceNames.unseen([a, b], seenThrough: nil).newest == 2_000)
+        #expect(ConnectDeviceNames.unseen([a, b], seenThrough: 1_000).unseen.map(\.proofKeyThumbprint) == ["b"])
+        #expect(ConnectDeviceNames.unseen([a, b], seenThrough: 5_000).newest == 5_000)
+        let one = ConnectDeviceNames.newDeviceToast(label: "Studio", unseen: [a])
+        #expect(one.title == "New device signed in to Studio")
+        #expect(one.message == "Ana's phone connected through T3 Connect. Not you? Review it.")
+        #expect(ConnectDeviceNames.newDeviceToast(label: "Studio", unseen: [a, b]).message
+            == "2 devices connected through T3 Connect. Not you? Review them.")
+    }
 }

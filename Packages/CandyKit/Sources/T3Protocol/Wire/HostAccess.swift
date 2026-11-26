@@ -215,6 +215,23 @@ public struct AuthConnectDevice: Decodable, Sendable, Equatable {
 }
 
 public enum ConnectDeviceNames {
+    /// `unseenConnectDevices` (client-runtime connectDeviceNotices.ts, T3 5258): keys first seen after `seenThrough`.
+    /// A client that never looked starts from the newest key, so it does not announce itself.
+    public static func unseen(_ devices: [AuthConnectDevice], seenThrough: Int64?) -> (unseen: [AuthConnectDevice], newest: Int64) {
+        let newest = max(0, devices.compactMap(\.approvedAt.epochMs).max() ?? 0)
+        guard let seenThrough else { return ([], newest) }
+        return (devices.filter { ($0.approvedAt.epochMs ?? 0) > seenThrough }, max(seenThrough, newest))
+    }
+
+    /// The "New device signed in" toast (ConnectDeviceApprovalCoordinator.tsx:113-130, T3 5258).
+    public static func newDeviceToast(label: String, unseen: [AuthConnectDevice]) -> (title: String, message: String) {
+        let title = "New device signed in to \(label)"
+        if unseen.count == 1, let first = unseen.first {
+            return (title, "\(describe(first.client)) connected through T3 Connect. Not you? Review it.")
+        }
+        return (title, "\(unseen.count) devices connected through T3 Connect. Not you? Review them.")
+    }
+
     /// `connectDeviceName` (ConnectionsSettings.logic.ts:513-522).
     public static func name(_ client: AuthClientSession.Client?) -> String {
         client?.label ?? client?.os ?? client?.browser ?? "this device"
