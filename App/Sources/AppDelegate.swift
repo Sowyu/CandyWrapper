@@ -885,7 +885,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let path = args[i + 1]
         let delay = args.firstIndex(of: "--snapshot-delay").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 4
         #if DEBUG
-        // `--snapshot-open thread,panel,terminal,pulls,collapsed` puts a test app in those states halfway through the delay,
+        // `--snapshot-open thread,panel,terminal,pulls,collapsed,picker,access` puts a test app in those states halfway through the delay,
         // since keys sent to an app behind the other windows don't reach its palette.
         if Self.isTestBuild, let o = args.firstIndex(of: "--snapshot-open"), o + 1 < args.count {
             let steps = args[o + 1].split(separator: ",").map(String.init)
@@ -900,6 +900,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         case "terminal": threads.panel.onTerminalToggle?()
                         case "pulls": self.sidebarCommands?.openUtilityPage(.pullRequests)
                         case "collapsed": (window.contentView as? SidebarLayoutView)?.setOpen(false)
+                        case "picker": threads.composer.pickers.toggleModelPicker()
+                        case "access": threads.composer.pickers.openAccessMode()
                         default: break
                         }
                     }
