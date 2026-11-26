@@ -462,7 +462,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 5ac27b4007 | #42008 | feat(workflows): questions have kinds and runs have tags, and Needs you filters by kind | workflows | port (8.4) |
 | 5bd0616f05 | #41020 | fix: restart linked thread reads when trying again | connections | port (7.5) † |
 | 5bf6b122b5 | #41838 | fix(web): a long pull request search no longer ends in a broken character | other | n/a (Swift Characters) † |
-| 605980d397 | #43017 | fix(web): pressing Escape on the Environments map clears selection without closing Settings | connections | left (with the map) |
+| 605980d397 | #43017 | fix(web): pressing Escape on the Environments map clears selection without closing Settings | connections | ported 07228df4 |
 | 60eed627d0 | #42914 | fix(web): PR timeline "Open activity on host" buttons honor 'Open links in' | pull requests | port (2.6) † |
 | 617d6ab628 | #42502 | fix(web): translate the pooled limit refill line as one sentence | usage | port (9.1) † |
 | 6205330563 | #30253 | fix(web): allow setting reasoning effort for scheduled tasks | scheduled tasks | ported 7d3c372e |
@@ -473,7 +473,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 637cd28599 | #41845 | fix(client-runtime): Remove is no longer offered on a route the environment cannot lose | connections | port (7.5) † |
 | 65b2e6dae6 | #41122 | fix(web): stop telemetry refresh spinning after data arrives | settings | n/a (telemetry refresh) † |
 | 65cd644623 | #41301 | fix(web): archive folders with leading or repeated slashes show their names | files | n/a (QuickLook previews) † |
-| 65d2b4f081 | #41081 | fix(web): center the Connections map zoom controls | connections | left (with the map) |
+| 65d2b4f081 | #41081 | fix(web): center the Connections map zoom controls | connections | ported 07228df4 (diff read: footer items centred) |
 | 66a4d99d1d | #37215 | fix(web): git action progress text centers with its spinner | git | already (ThreadDetailsCardView centres the label and time in the 32pt row) |
 | 670092dcf6 | #40152 | fix(web): screen readers can tell removed lines from added ones in diffs | files | port (3.7) † |
 | 6972026121 | #40951 | fix(web): show clone failure after progress is dismissed | git | ported 05d384e0 |
@@ -516,7 +516,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 898c22f990 | #39639 | fix(scheduled-tasks): clearing a task's thread no longer keeps the old one | scheduled tasks | n/a (wire B1) † |
 | 8b70e73371 | #42215 | fix(web): an unfinished PR inline comment survives a refresh that changes the diff | pull requests | port (2.3) † |
 | 8b8ec75b01 | #41937 | fix(web): copied startup error details no longer end in a broken character | shell | n/a (web boot error) † |
-| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | left (M) |
+| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | logic ported affd5423, dialog left (M) |
 | 8ee2a8a9a0 | #40437 | fix(web): RTF previews no longer join text across section and column breaks | files | n/a (QuickLook previews) † |
 | 8f34bb193a | #42470 | fix(web): ArrowUp in a menu search field moves to the last item | shell | port (10.6) † |
 | 8f5fd287a4 | #42837 | fix(web,mobile): Usage says "1 session", not "1 sessions" | usage | port (9.2) † |
@@ -596,7 +596,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | cb207e9f60 | #42228 | fix(web): long Issues and Pull Requests searches no longer end in a broken character | other | n/a (Swift Characters) † |
 | cb2a488c67 | #39302 | fix(web): an off-track desktop build no longer says "Up to date" | shell | n/a (Electron updater) † |
 | cbf4ea7ddc | #41264 | fix(web): shift-scroll and horizontal scrollers no longer navigate history | shell | n/a (web history swipe) † |
-| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | left (Environments map, L) |
+| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4 (map, no details panel) |
 | cef38e408d | #42805 | fix(web): file picker highlights no longer break emoji in file names | files | port (3.4) † |
 | d15123668e | #39579 | fix(web): keep reopened pairing link dialogs open on completion | connections | port (7.5) † |
 | d1f8636f49 | #39225 | fix(mobile,web): quote and port messages are translated in every language | other | n/a (translation strings) † |
@@ -709,3 +709,5 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 7.4's Review opens Access for the primary environment only: CW's Access page has no environment picker (T3's `accessEnvironmentPicker`, ConnectionsSettings.tsx:1293). Opening it for the toast's environment needs that picker first (M).
 - 1.7 stays unported until CW has Workflows: the row returns nothing unless `workflowsEnabled` is on.
 - 1.3 is partly ported (cb5edfe1): settings search fields clear on Esc and an IME Esc reaches the input method. The rows outside Settings (Files, PR, diff comments, dictation, right panel sheet) and the font family, voice and custom model rows stay open.
+- 7.1 reads the footer as zoom group then legend. EnvironmentsMap.tsx:1056-1088 puts the legend first and the zoom group on the right, and #41081 only centres both vertically (`items-center py-1`).
+- 7.1's layout engine sorts lanes with a comparator that is not a total order (`crossings`, environmentsMap.logic.ts:1482-1486), so a port has to sort as V8 does to get T3's lanes. CW copies V8's binary insertion run below 64 items.
