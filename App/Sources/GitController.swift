@@ -59,6 +59,8 @@ final class GitController {
     /// between threads of a few workspaces doesn't run `git for-each-ref` on every switch.
     private var refsCache: [String: (at: ContinuousClock.Instant, refs: [VcsRef])] = [:]
     private static let refsReuse: Duration = .seconds(30)
+    /// The `refsDigest` of each workspace's last status refresh (5258 vcsRefInvalidation.ts:83-110).
+    private var refsDigests: [String: String] = [:]
     private var optimisticBranch: String?
     private var branchActionPending = false
 
@@ -168,6 +170,7 @@ final class GitController {
     func sessionChanged(_ environmentId: String) {
         // A new connection refetches refs (vcs.ts:183-189 refreshes on each connection generation).
         refsCache.removeAll()
+        refsDigests.removeAll()
         guard target?.environmentId == environmentId else { return }
         statusKey = nil
         refresh()
@@ -214,18 +217,27 @@ final class GitController {
     /// `vcs.refreshStatus`: the server re-reads the workspace and pushes the change on the stream.
     private func refreshStatus(onRefreshed: (@MainActor () -> Void)? = nil) {
         // Every git action here ends with this, and T3 drops cached refs when any of them settles (vcs.ts:296-356),
-        // so a switch back within `refsReuse` never shows refs from before a pull, init or branch change.
-        refsCache.removeAll()
-        guard let target, let shell else { return }
+        // so a switch back within `refsReuse` never shows refs from before a pull, init or branch change. A 5258 server
+        // answers with `refsDigest` (git.ts:274-279), and the cache stays when the refs did not move
+        // (`invalidateCachedVcsRefsIfChanged`, vcs.ts:344-349). Without a digest, or on a failure, it drops as before.
+        guard let target, let shell else { refsCache.removeAll(); return }
         let key = statusKey
         Task { [weak self] in
-            guard let value = try? await shell.supervisor.request(VcsRPC.refreshStatus, payload: VcsRPC.cwd(target.cwd)),
-                  let fresh = try? value.decode(as: VcsStatus.self) else { return }
-            guard let self, self.statusKey == key else { return }
+            let value = try? await shell.supervisor.request(VcsRPC.refreshStatus, payload: VcsRPC.cwd(target.cwd))
+            guard let self else { return }
+            self.settleRefs(key, digest: value?["refsDigest"]?.stringValue)
+            guard let value, let fresh = try? value.decode(as: VcsStatus.self) else { return }
+            guard self.statusKey == key else { return }
             self.status = fresh
             self.statusChanged()
             onRefreshed?()
         }
+    }
+
+    private func settleRefs(_ key: String?, digest: String?) {
+        if let key, let digest, refsDigests[key] == digest { return }
+        refsCache.removeAll()
+        if let key { refsDigests[key] = digest }
     }
 
     /// `GIT_STATUS_WINDOW_REFRESH_DEBOUNCE_MS`.
