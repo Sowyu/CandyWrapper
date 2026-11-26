@@ -395,10 +395,10 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 18d1c4db96 | #30407 | fix(web): usage limit refill stripes all render the same width | usage | port (9.1) † |
 | 18d5eda881 | #41630 | fix(web): Reset to default restores the built-in shortcut an edit replaced | settings | ported d476c29f |
 | 192ef9b7b2 | #41196 | fix(web): preserve alpha channel when previewing WhiteIsZero TIFF images | files | n/a (QuickLook previews) † |
-| 1a11aed1f8 | #41614 | fix(web): workflow steps on a linked environment open their thread | workflows | port (8.6) † |
+| 1a11aed1f8 | #41614 | fix(web): workflow steps on a linked environment open their thread | workflows | port (8.6): CW opens no step threads yet † |
 | 1a42ba1b5f | #39114 | fix(server,web): models stay in the picker after one failed provider check | settings | port (1.8) † |
 | 1a51984153 | #32697 | fix(web): a tool call's diff names its files relative to the workspace | files | port (3.4) † |
-| 20a3bed880 | #42617 | fix(web): long Workflows links no longer end in a broken character | workflows | port (8.6) † |
+| 20a3bed880 | #42617 | fix(web): long Workflows links no longer end in a broken character | workflows | n/a (CW keeps no route params) † |
 | 20b8a9e695 | #39497 | fix(web): the preview only embeds PDFs from its own environment | files | port (3.5) † |
 | 210996207d | #26760 | feat(mobile): pull request files follow the same review order as web | pull requests | left: not n/a, the Code tab now orders files with orderDiffFilesForReview (source, tests, generated) (S) |
 | 21a96989b0 | #42745 | fix(web): include reopened issue selection in the /issues URL | shell | port (10.1) † |
@@ -427,7 +427,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 369b46900c | #42480 | fix(web): Enter saves the default viewport size and skipped runs kept | settings | port (1.8) † |
 | 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | port (2.6) † |
 | 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | left: workspace HTML previews keep their page across agent commands (S, browser preview) |
-| 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | port (8.3) |
+| 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | ported a6197a0d (step line and note; summary line not yet) |
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
 | 3d4fd8346e | #42563 | fix(web): long Pull Requests author and label filters no longer end in a broken character | other | n/a (Swift Characters) † |
@@ -443,7 +443,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 4568a1b741 | #42932 | fix(web): unsupported file preview no longer calls extensionless filenames a file type | files | port (3.4) † |
 | 457a52eb0a | #42312 | fix(web): opening a resolved PR comment keeps its toggle under the cursor | pull requests | port (2.6) † |
 | 45c011e218 | #42875 | fix(web): reopening a closed pull request tab keeps saved list filters | shell | port (10.1) † |
-| 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | port (8.2) |
+| 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | ported a6197a0d (words; no hourglass icon) |
 | 46eb376dda | #41677 | fix(web): a new price row mapped to a model asks for its model ID | settings | port (1.8) † |
 | 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | n/a (telemetry URL check) † |
 | 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d476c29f |
@@ -459,7 +459,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 59651c1761 | #39536 | fix(web): Retry on the Pull Requests list only refetches the environments that failed | pull requests | port (2.6) † |
 | 597c8de32b | #26965 | fix(web): hidden preview tabs larger than the window capture whole | browser | port (6.2) † |
 | 59fe770e01 | #42090 | fix(web): pull request review drafts survive a reload | pull requests | port (2.3) |
-| 5ac27b4007 | #42008 | feat(workflows): questions have kinds and runs have tags, and Needs you filters by kind | workflows | port (8.4) |
+| 5ac27b4007 | #42008 | feat(workflows): questions have kinds and runs have tags, and Needs you filters by kind | workflows | ported bb22ade3, a6197a0d |
 | 5bd0616f05 | #41020 | fix: restart linked thread reads when trying again | connections | port (7.5) † |
 | 5bf6b122b5 | #41838 | fix(web): a long pull request search no longer ends in a broken character | other | n/a (Swift Characters) † |
 | 605980d397 | #43017 | fix(web): pressing Escape on the Environments map clears selection without closing Settings | connections | left (with the map) |
@@ -497,7 +497,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 7913360b2e | #41876 | fix(server): saving a voice key reference needs provider management | settings | port (1.8) † |
 | 7922611cee | #37978 | fix(i18n): correct wrong and ambiguous Simplified Chinese strings | other | n/a (translation strings) † |
 | 7997916673 | #41505 | fix(web): Markdown previews load relative images in timestamped and root folders | files | port (3.4) † |
-| 7be3a767cc | #42515 | feat(server): workflow questions take described choices, required reasons, links, and keep who answered | workflows | port (8.3) |
+| 7be3a767cc | #42515 | feat(server): workflow questions take described choices, required reasons, links, and keep who answered | workflows | ported a6197a0d (answers read by name: CW has no session id for "You") |
 | 7d3677fe70 | #40389 | fix(web): picker branch switches no longer re-read the full local status | git | port (4.1) † |
 | 7dd35d324d | #41742 | fix(server): link codes and guest links require the access they hand out | connections | n/a (server side, wire) † |
 | 7e004b80e2 | #39142 | fix(client-runtime): a chat file link opens a file that overlapping projects both list | other | n/a (server only, wire) † |
@@ -512,7 +512,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 849d19447f | #42129 | fix(web): Esc clears the Voice model search without closing Settings | settings | port (1.3) † |
 | 86272b11f0 | #42419 | fix(web): keybindings search ignores modified Esc and keeps focus on a held Esc | settings | port (1.3) † |
 | 887e3a569f | #41216 | fix(web): file picker highlights stay on the typed letters after İ | files | port (3.4) † |
-| 8987ba39d4 | #42517 | feat(workflows): a run can declare its subject and be found by it | workflows | port (8.5) |
+| 8987ba39d4 | #42517 | feat(workflows): a run can declare its subject and be found by it | workflows | port (8.5): subject chips and WorkflowRunsAbout not yet |
 | 898c22f990 | #39639 | fix(scheduled-tasks): clearing a task's thread no longer keeps the old one | scheduled tasks | n/a (wire B1) † |
 | 8b70e73371 | #42215 | fix(web): an unfinished PR inline comment survives a refresh that changes the diff | pull requests | port (2.3) † |
 | 8b8ec75b01 | #41937 | fix(web): copied startup error details no longer end in a broken character | shell | n/a (web boot error) † |
@@ -584,9 +584,9 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | c198f73b37 | #40776 | fix(web): a click outside the project action editor no longer discards the draft | settings | ported 5dc3ddd9 |
 | c39c21f870 | #42361 | fix(web): Esc in a font family field closes Settings when no edit is pending | settings | port (1.3) † |
 | c43e073123 | #39319 | fix(web): Arrow and page keys scroll the pull request pane after a click or when it opens | pull requests | port (2.6) † |
-| c478fde9fe | #42791 | fix(web): bad workflow pane links no longer pick the first tab or crash | workflows | port (8.6) † |
+| c478fde9fe | #42791 | fix(web): bad workflow pane links no longer pick the first tab or crash | workflows | port (8.6): CW has no run pane yet † |
 | c5dc20f9f5 | #37191 | fix(client): new threads from a grouped repository start in its root checkout | shell | port (10.3) † |
-| c6162da7ec | #42353 | fix(server): skipped workflow runs no longer keep their webhook payloads forever | workflows | port (1.7) |
+| c6162da7ec | #42353 | fix(server): skipped workflow runs no longer keep their webhook payloads forever | workflows | ported 76baceb4 (Labs row) |
 | c6ca01b373 | #40516 | fix(web): preserve newer navigation when reopening closed views | shell | port (10.1) † |
 | c8014ad590 | #42622 | fix(web): project name field restores the saved name when cleared | settings | port (1.8) † |
 | c8625cafce | #34588 | fix(web): Ctrl+B reaches a focused terminal again | terminal | port (5.2) † |
@@ -709,3 +709,11 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 7.4's Review opens Access for the primary environment only: CW's Access page has no environment picker (T3's `accessEnvironmentPicker`, ConnectionsSettings.tsx:1293). Opening it for the toast's environment needs that picker first (M).
 - 1.7 stays unported until CW has Workflows: the row returns nothing unless `workflowsEnabled` is on.
 - 1.3 is partly ported (cb5edfe1): settings search fields clear on Esc and an IME Esc reaches the input method. The rows outside Settings (Files, PR, diff comments, dictation, right panel sheet) and the font family, voice and custom model rows stay open.
+
+## Corrections from the workflows port (2026-11-25)
+
+- 8.1: T3's web sidebar has no Workflows entry or count badge at 5258. The page opens from the palette's "Open workflows" (CommandPalette.tsx:1787-1797), a workflow step thread's "Open run" (ChatView.tsx:995-1010) and WorkflowRunsAbout links. `workflows.counts` is used only by mobile, so nothing keeps a subscription while the page is closed.
+- 8.1: workflows arrived in this range (69c1d53826 #38884 is in 4928..5258), so the whole client-runtime `workflows.ts` is new, not only the rows above.
+- 8.2: the queued words are "queued, next in line" and "queued, {count} ahead" (WorkflowRunFeed.tsx:198-205), not "queued · {length}".
+- 1.7: the field is a stepper-less `NumberField`, committing on Enter and blur, with "Mixed" for differing environments.
+
