@@ -250,7 +250,7 @@ public final class ThreadContextWindowMeterView: ControlView {
         let fraction = min(1, max(0, (usage?.percentage ?? 0) / 100))
         let color: CGColor
         if capy {
-            // Redesign: the fill at full strength over a hairline track, in the status colors as the window fills.
+            // Redesign: the fill at full strength over the track, in the status colors as the window fills.
             let level = usage?.level ?? .neutral
             color = Themed.color(level == .danger ? \.destructive : level == .warning ? \.warning : \.foreground).cgColor(in: self)
         } else {
@@ -295,7 +295,8 @@ public final class ThreadContextWindowMeterView: ControlView {
         let center = ringCenter
         let radius = ringRadius
         ctx.setLineWidth(ringWidth)
-        ctx.setStrokeColor(capy ? RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
+        // Redesign's track reads at a glance next to the arc: the strong rim, not the hairline (C3 review, 2026-11-26).
+        ctx.setStrokeColor(capy ? Themed.color(\.foreground, RedesignTokens.Surface.strongRim).cgColor(in: self)
                                 : Themed.color(\.mutedForeground, 0.24).cgColor(in: self))
         ctx.strokeEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
     }
