@@ -268,7 +268,11 @@ public final class UsagePriceTableView: DSView {
 
     func editAlias(_ id: String, _ value: String) {
         guard var row = rows.first(where: { $0.id == id }) else { return }
-        row.alias = matchesSaved(row, UsagePriceLogic.aliasCell(selected, model: row.model), value) ? nil : value
+        if matchesSaved(row, UsagePriceLogic.aliasCell(selected, model: row.model), value) {
+            row.alias = nil
+            // A restored mapping hides the price inputs, so their typed values go too (#41775, UsagePriceOverrides.tsx:232-240).
+            if !value.isEmpty { row.values = [:] }
+        } else { row.alias = value }
         updateOrDrop(row)
     }
 
@@ -424,10 +428,10 @@ final class UsagePriceRowView: DSView {
         super.init(frame: .zero)
         for v in [modelInput, modelLabel, aliasInput, span, reset, error] as [NSView] { addSubview(v) }
         rateInputs.forEach(addSubview)
-        modelInput.onChange = { [weak self] t in guard let self else { return }; self.owner?.editModel(self.rowId, t) }
-        aliasInput.onChange = { [weak self] t in guard let self else { return }; self.owner?.editAlias(self.rowId, t) }
+        modelInput.onChange = { [weak self] t in guard let self, !self.filling else { return }; self.owner?.editModel(self.rowId, t) }
+        aliasInput.onChange = { [weak self] t in guard let self, !self.filling else { return }; self.owner?.editAlias(self.rowId, t) }
         for (i, f) in UsagePriceLogic.Field.allCases.enumerated() {
-            rateInputs[i].onChange = { [weak self] t in guard let self else { return }; self.owner?.editCell(self.rowId, f, t) }
+            rateInputs[i].onChange = { [weak self] t in guard let self, !self.filling else { return }; self.owner?.editCell(self.rowId, f, t) }
         }
         reset.action = { [weak self] in guard let self else { return }; self.owner?.toggleRemoved(self.rowId) }
         tip = TooltipController.attach(to: reset, text: "")
@@ -445,7 +449,15 @@ final class UsagePriceRowView: DSView {
 
     func focusModel() { window?.makeFirstResponder(modelInput) }
 
-    private func set(_ input: InputView, _ text: String) { if input.text != text, !input.isFirstResponderInside { input.text = text } }
+    /// Set while `apply` fills the fields: a programmatic `text` fires `onChange`, which would stage the
+    /// saved value as an edit and rebuild the table from inside its own rebuild, without end.
+    private var filling = false
+    private func set(_ input: InputView, _ text: String) {
+        guard input.text != text, !input.isFirstResponderInside else { return }
+        filling = true
+        defer { filling = false }
+        input.text = text
+    }
 
     func apply(_ r: UsagePriceDraft, targets: [UsagePriceTarget], error message: String?, locked: Bool) {
         row = r
@@ -482,9 +494,10 @@ final class UsagePriceRowView: DSView {
         let blank = { (v: String?) in (v ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
         let awaitingPrice = r.isNew && blank(r.alias) && r.values.values.allSatisfy(blank)
             && message != "Enter a model ID." && message != "This model already has a row. Edit its prices there."
-        let showError = message != nil && !awaitingPrice && (!r.model.trimmingCharacters(in: .whitespaces).isEmpty || r.values.values.contains { !$0.isEmpty })
+        // A new row mapped to a model with no model ID says so too (#41677, UsagePriceOverrides.tsx:432-462).
+        let showError = message != nil && !awaitingPrice
         error.text = showError ? message! : ""
-        modelInput.isInvalid = showError && !r.model.trimmingCharacters(in: .whitespaces).isEmpty
+        modelInput.isInvalid = showError
         needsLayout = true
     }
 
