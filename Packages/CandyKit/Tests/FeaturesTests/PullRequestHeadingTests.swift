@@ -20,3 +20,24 @@ struct PullRequestHeadingTests {
         #expect(issue.heading.accessibilityValue() as? Int == 3)
     }
 }
+
+/// #39319: panel focus lands on the open tab's scroller, so keys scroll it at once.
+@MainActor
+struct PullRequestFocusContentTests {
+    @Test func focusGoesToTheOpenTab() throws {
+        let view = PullRequestDetailView(frame: NSRect(x: 0, y: 0, width: 600, height: 500))
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: true)
+        window.contentView = view
+        view.show(try PullRequestFixtures.detail())
+        view.activityPending = false
+        view.layoutSubtreeIfNeeded()
+        #expect(view.focusContent())
+        #expect(window.firstResponder === view.summary.stack.document)
+        view.tab = .timeline
+        view.layoutSubtreeIfNeeded()
+        #expect(view.focusContent())
+        #expect(window.firstResponder === view.timeline.stack.document)
+        view.tab = .code
+        #expect(!view.focusContent())
+    }
+}

@@ -1068,7 +1068,7 @@ final class CollapsedSummaryLine: DSView {
 /// The Timeline tab (PullRequestTimelineTab.tsx): a rail at 15pt with one row per lifecycle event,
 /// commit and verdict, and runs of remarks folded into one conversation row; newest first.
 public final class PullRequestTimelineView: DSView {
-    private let stack = StackScrollView()
+    let stack = StackScrollView()
     private let rail = CALayer()
     var newestFirst = true { didSet { rebuild() } }
     var onOpenCommit: ((String) -> Void)?
