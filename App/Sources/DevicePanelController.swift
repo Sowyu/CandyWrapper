@@ -162,7 +162,9 @@ final class DevicePanelController {
         if let operationError { view.showError(operationError) }
         guard visible, state?.onboardingCompleted == true, let device = active,
               let thread, let env = thread.environmentId, let shell = environments.session(env) else { stopStream(); return }
-        let key = thread.rawValue + ":" + device.key + (floating ? ":float" : "")
+        // A floating player's stream is per device, not per thread, so switching threads that float the same device
+        // keeps it (ThreadPreviewMiniPlayer.tsx at 5258, #40240).
+        let key = (floating ? env : thread.rawValue) + ":" + device.key + (floating ? ":float" : "")
         guard key != streamKey else { return }
         stopStream(); streamKey = key
         let http = shell.http, token = shell.token, hub = state?.hubBasePath ?? "/api/device-hub"
