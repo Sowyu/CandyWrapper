@@ -102,6 +102,9 @@ public final class IssuesPageView: DSView {
     let refreshButton = ButtonView(nil, icon: .refreshCw, variant: .outline, size: .icon)
     /// `PanelLayoutControls`' right panel toggle; "Select an issue first" until one is picked.
     let panelToggle = ButtonView(nil, icon: .panelRight, variant: .ghost, size: .iconSm)
+    /// Redesign: the page title and the panel toggle as pills in the tab band (`DitherBandPage`).
+    let bandTitle = DitherThreadTitleView()
+    let bandControls = DitherBandControls()
     private let document = PullRequestsPageView.Document()
     private let scroll: ScrollAreaView
     private var bodyView: NSView?
@@ -125,6 +128,8 @@ public final class IssuesPageView: DSView {
         refreshButton.setAccessibilityLabel("Refresh issues")
         refreshButton.setTooltip("Refresh issues")
         panelToggle.iconSize = 16
+        bandTitle.set(project: "", title: "Issues")
+        bandControls.toggle.action = { [weak self] in self?.onTogglePanel?() }
         banner.suffix = " Showing the issues that loaded."
         for v in [search, sortButton, filtersButton, views.button, trackerButton, refreshButton, banner] as [NSView] { document.addSubview(v) }
         sortButton.action = { [weak self] in self?.showSortMenu() }
@@ -136,6 +141,8 @@ public final class IssuesPageView: DSView {
         views.onResize = { [weak self] in self?.needsLayout = true }
         apply(old: nil)
     }
+
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
 
     public override var acceptsFirstResponder: Bool { true }
 
@@ -157,6 +164,9 @@ public final class IssuesPageView: DSView {
         panelToggle.isEnabled = m.panelAvailable
         panelToggle.setTooltip(m.panelAvailable ? (m.panelOpen ? "Close right panel" : "Open right panel") : "Select an issue first")
         panelToggle.setAccessibilityLabel(panelToggle.currentTooltip)
+        bandControls.toggle.isEnabled = panelToggle.isEnabled
+        bandControls.toggle.setTooltip(panelToggle.currentTooltip ?? "")
+        bandControls.toggle.setAccessibilityLabel(panelToggle.currentTooltip)
         views.preferences = preferences
         rebuildBody(old: old)
         needsLayout = true
@@ -375,9 +385,14 @@ public final class IssuesPageView: DSView {
     public override func layout() {
         super.layout()
         let width = max(0, bounds.width - contentInsetRight)
+        // Redesign: the title and toggle sit in the tab band above the page, so the page starts at its top.
+        let band = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        header.isHidden = band
+        panelToggle.isHidden = band
+        let top: CGFloat = band ? 0 : 52
         header.frame = NSRect(x: 0, y: 0, width: width, height: 52)
         panelToggle.frame = NSRect(x: width - 12 - 28, y: 12, width: 28, height: 28)
-        scroll.frame = NSRect(x: 0, y: 52, width: width, height: max(0, bounds.height - 52))
+        scroll.frame = NSRect(x: 0, y: top, width: width, height: max(0, bounds.height - top))
         layoutDocument(width: scroll.bounds.width)
     }
 
@@ -771,7 +786,9 @@ final class IssueRowView: DSView {
 
 /// The Issues route's main area: the list column and beside it the page's own right panel, whose
 /// tabs are the issues and pull requests opened from it (IssuesPage.tsx:747-860, `ISSUES_PANEL_REF`).
-public final class IssuesPageContainer: DSView {
+public final class IssuesPageContainer: DSView, DitherBandPage {
+    public var bandLeading: DitherStripLeading? { page.bandTitle }
+    public var bandTrailing: NSView? { page.bandControls }
     public let page = IssuesPageView()
     public let toasts = ToastViewport()
     let rightPanel = RightPanelView()
@@ -838,4 +855,29 @@ public final class IssuesPageContainer: DSView {
     public override var acceptsFirstResponder: Bool { true }
     public var onEscape: (() -> Void)?
     public override func cancelOperation(_ sender: Any?) { onEscape?() }
+}
+
+/// Redesign's controls pill for a page in the tab band: the header pill's surface, inset and 24pt controls.
+final class DitherBandControls: DSView {
+    let toggle = ButtonView(nil, icon: .panelRight, variant: .ghost, size: .xs)
+    private let frost = DitherPillSurface()
+    private static let inset: CGFloat = 2, control: CGFloat = 24
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        layer?.masksToBounds = false
+        frost.radius = RedesignTokens.Radius.control
+        addSubview(frost)
+        toggle.iconSize = 16
+        addSubview(toggle)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: Self.control + 2 * Self.inset, height: DitherTabStripView.tabHeight) }
+
+    override func layout() {
+        super.layout()
+        frost.frame = bounds
+        toggle.frame = NSRect(x: Self.inset, y: ((bounds.height - Self.control) / 2).rounded(), width: Self.control, height: Self.control)
+    }
 }

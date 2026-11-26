@@ -5,7 +5,9 @@ import T3Store
 /// The Pull Requests route's main area (_chat.pull-requests.tsx:2195-2320): the list column, and
 /// beside it the page's own right panel whose tabs are the pull requests opened from the list. The
 /// panel is session state (`PULL_REQUESTS_PANEL_REF`, not persisted), half the window wide by default.
-public final class PullRequestsPageContainer: DSView {
+public final class PullRequestsPageContainer: DSView, DitherBandPage {
+    public var bandLeading: DitherStripLeading? { page.bandTitle }
+    public var bandTrailing: NSView? { nil }
     public let page = PullRequestsPageView()
     public let toasts = ToastViewport()
     let rightPanel = RightPanelView()
