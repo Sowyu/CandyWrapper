@@ -99,16 +99,18 @@ public enum GitActionsLogic {
             if hasOpenPr || isDefaultRef { return run("Commit & push", .commitPush) }
             return run("Commit, push & \(terms.shortLabel)", .commitPushPr)
         }
+        // A clean tree pushes, even on the default branch, so files changed while the confirmation is open
+        // stay out of it (5258 GitActionsControl.logic.ts, a5d86e6382 #41844).
         if !s.hasUpstream {
             if !hasPrimaryRemote { return QuickAction(label: "Publish repository", disabled: false, kind: .openPublish) }
             if !isAhead { return hasOpenPr ? hint("Commit", upToDate) : hint("Push", "No local commits to push.") }
-            if hasOpenPr || isDefaultRef { return run("Push", isDefaultRef ? .commitPush : .push) }
+            if hasOpenPr || isDefaultRef { return run("Push", .push) }
             return run("Push & create \(terms.shortLabel)", .createPr)
         }
         if isAhead && isBehind { return hint("Sync ref", "Branch has diverged from upstream. Rebase/merge first.") }
         if isBehind { return QuickAction(label: "Pull", disabled: false, kind: .runPull) }
         if isAhead {
-            if hasOpenPr || isDefaultRef { return run("Push", isDefaultRef ? .commitPush : .push) }
+            if hasOpenPr || isDefaultRef { return run("Push", .push) }
             return run("Push & create \(terms.shortLabel)", .createPr)
         }
         if hasOpenPr && s.hasUpstream { return hint("Commit", upToDate) }
