@@ -3421,8 +3421,10 @@ final class ComposerController {
     /// Cancel: back to the thread's own prompt (`cancelEditingQueuedRun`).
     private func endEdit() {
         guard let edit = queuedEdit else { return }
+        // Nothing reached the server: the message keeps its text and attachments. A save in flight still sends its
+        // uploads, so they are released only once it fails (`clearEditDraft`, useQueuedRunEdit.ts:262-270 at 5258).
+        if !queuedEdits.isSaving(edit.threadId) { discardStagedAttachments(edit.pickerKey) }
         queuedEdits.end(edit.threadId)
-        discardStagedAttachments(edit.pickerKey)
         pickers.store.didSend(edit.pickerKey)
         stopQueuedEditWatch(edit.threadId)
         loadPrompt()
@@ -3534,6 +3536,8 @@ final class ComposerController {
                 guard let self else { return }
                 queueBusy = false
                 _ = queuedEdits.finishSave(claim, succeeded: false)
+                // A cancelled edit's uploads have no one left to send them.
+                if !queuedEdits.isOpen(claim), queuedEdit?.pickerKey != edit.pickerKey { discardStagedAttachments(edit.pickerKey) }
                 if let message, let key { threadErrors.set(key, message) }
                 if let runs = queuedEditRuns[edit.threadId] { settleQueuedEdit(edit.threadId, runs: runs) }
                 refresh()
@@ -3552,13 +3556,16 @@ final class ComposerController {
                 queueBusy = false
                 // The server claimed the new uploads; the timeline shows the local copies until it serves its own.
                 for a in staged { if let id = a.attachmentId { sentFiles[id] = a.fileURL } }
-                if draftAttachments[edit.pickerKey]?.map(\.id) == staged.map(\.id) { draftAttachments[edit.pickerKey] = nil }
-                if queuedEdits.finishSave(claim, succeeded: true) {
+                let sent = Set(staged.map(\.id))
+                draftAttachments[edit.pickerKey]?.removeAll { sent.contains($0.id) }
+                let ended = queuedEdits.finishSave(claim, succeeded: true)
+                if ended {
                     pickers.store.didSend(edit.pickerKey)
                     stopQueuedEditWatch(edit.threadId)
-                    discardStagedAttachments(edit.pickerKey)
                     if target == .thread(edit.threadId) { loadPrompt(); updateReplyBanner() }
                 }
+                // Anything added during the save, or left by an edit cancelled meanwhile, is released.
+                if ended || (!queuedEdits.isOpen(claim) && queuedEdit?.pickerKey != edit.pickerKey) { discardStagedAttachments(edit.pickerKey) }
                 if steer, target == .thread(edit.threadId), panel.queue.state.activeRunId != nil { promoteToSteer(edit.runId) }
                 refresh()
             } catch {

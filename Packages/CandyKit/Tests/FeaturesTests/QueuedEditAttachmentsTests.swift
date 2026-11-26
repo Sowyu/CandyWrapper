@@ -120,4 +120,27 @@ struct QueuedEditAttachmentsTests {
         #expect(!finished)
         #expect(edits.edit(Self.thread)?.text == "again")
     }
+
+    @Test func cancelLeavesTheMessageAsItWasAndTheNextEditStartsFromIt() throws {
+        var edits = Self.editing(text: "look \(Self.imageChip)")
+        edits.removeAttachment(Self.thread, id: "img-1")
+        edits.removeAttachment(Self.thread, id: "file-1")
+        // Removals were local: cancelling sends nothing, so the message keeps both.
+        edits.end(Self.thread)
+        #expect(edits.edit(Self.thread) == nil)
+        edits.begin(thread: Self.thread, run: Self.run, text: "look \(Self.imageChip)")
+        edits.setAttachments(Self.thread, [Self.image, Self.file], records: Self.records)
+        #expect(edits.edit(Self.thread)?.existingAttachments == [Self.image, Self.file])
+        #expect(edits.edit(Self.thread)?.removedAttachments.isEmpty == true)
+    }
+
+    @Test func aCancelDuringASaveLeavesTheSavesUploadsAlone() throws {
+        var edits = Self.editing(text: "hi")
+        let started = edits.startSave(Self.thread)
+        let claim = try #require(started)
+        edits.end(Self.thread)
+        // The controller releases staged uploads on cancel only when no save holds them.
+        #expect(edits.isSaving(Self.thread))
+        #expect(!edits.isOpen(claim))
+    }
 }
