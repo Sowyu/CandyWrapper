@@ -129,6 +129,8 @@ final class SettingsController {
         connections.onHeightChange = { [weak self] in self?.page.needsLayout = true }
         var actions = ConnectionsActions()
         actions.addEnvironment = { [weak self] in self?.presentAdd(routeTarget: nil) }
+        actions.mapLink = { [weak self] source, target, ticked in self?.mapLink(source, target, ticked: ticked) }
+        actions.linkSeveral = { [weak self] source, ids in self?.presentLinkSeveral(source, ids) }
         actions.addRoute = { [weak self] id in self?.presentAdd(routeTarget: id) }
         actions.retryNow = { [weak self] id in self?.environments.reconnect(id) }
         actions.setEnabled = { [weak self] id, on in self?.setEnabled(id, on) }
@@ -370,6 +372,7 @@ final class SettingsController {
         m.cloud = t3.cloudModel(primaryId: environments.primaryId)
         m.loadBalancing = loadBalancingModel(primaryLabel: m.thisMachine?.label)
         m.linkedEnvironments = linkedEnvironmentsModel()
+        m.map = environmentsMapModel()
         return m
     }
 

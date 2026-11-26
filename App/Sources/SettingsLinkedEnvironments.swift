@@ -122,3 +122,89 @@ extension SettingsController {
         }
     }
 }
+
+/// Settings > Environments as a map (T3 5258 EnvironmentsMap.tsx:269-357 `useFleetGraph`): every environment this app
+/// knows with its saved routes and the links it holds, and the T3 Connect machines not added here.
+extension SettingsController {
+    func environmentsMapModel() -> EnvironmentsMapModel {
+        let primary = environments.primaryId
+        // Where another machine can reach each one, as the Link dialog offers it (`hasLinkAddress`).
+        let reachable = Dictionary(PeerLinkDialog.machines(environments, hostId: "", primaryLabel: primaryDescriptor?.label, linked: [],
+                                                           reported: { self.composer?.config($0)?.directEndpoints ?? [] })
+                                       .map { ($0.environmentId, !$0.urls.isEmpty) }, uniquingKeysWith: { a, _ in a })
+        let hostsOffering = Set(peerLinkHosts())
+        func input(_ id: String, label: String, enabled: Bool, routes: [FleetRouteInput], active: String?) -> FleetEnvironmentInput {
+            let state = environments.state(id)
+            let phase = FleetPhase(rawValue: (state?.status ?? .available).rawValue) ?? .available
+            let offers = composer?.config(id).map { PeerLinks.offered(capabilities: $0.capabilities, settings: $0.settings.raw) } ?? false
+            let outgoing: FleetOutgoingLinks = switch peerLinks[id] {
+            case nil: phase == .connected && !offers ? .off : .unknown
+            case .loading?: hostsOffering.contains(id) ? .loading : .unknown
+            case .failed(let reason)?: .error(reason)
+            case .links(let links)?: .loaded(links)
+            }
+            return FleetEnvironmentInput(environmentId: id, label: label, machine: environments.machine(id), phase: phase, enabled: enabled,
+                                         routes: routes, activeRouteId: phase == .connected ? active : nil, outgoing: outgoing,
+                                         offersLinks: offers, canWriteAccess: hosts[id]?.session?.grants(AuthScopes.accessWrite) == true,
+                                         hasLinkAddress: reachable[id] ?? false)
+        }
+        var inputs: [FleetEnvironmentInput] = []
+        if let primary, let shell = environments.session(primary) {
+            let origin = EnvironmentRoute.origin(shell.http.baseURL)
+            inputs.append(input(primary, label: primaryDescriptor?.label ?? environments.label(primary) ?? "This machine", enabled: true,
+                                routes: [FleetRouteInput(id: origin, kind: Self.routeKind(shell.http.baseURL))], active: origin))
+        }
+        for r in environments.saved where r.environmentId != primary {
+            let routes = r.routes.map { url in
+                FleetRouteInput(id: EnvironmentRoute.origin(url),
+                                kind: r.isRelayRoute(url) ? "relay" : r.sshTarget != nil && url == r.httpBaseURL ? "ssh" : Self.routeKind(url))
+            }
+            let session = environments.session(r.environmentId)
+            let active = session?.isRelay == true ? r.relayRoute.map(EnvironmentRoute.origin)
+                : environments.routeInUse(r.environmentId).map(EnvironmentRoute.origin)
+            inputs.append(input(r.environmentId, label: r.label, enabled: r.enabled, routes: routes, active: active))
+        }
+        let saved = Set(inputs.map(\.environmentId))
+        let connect = (t3.machines ?? []).filter { !saved.contains($0.environmentId) }.map { m in
+            FleetConnectMachineInput(environmentId: m.environmentId, label: m.record.label, machine: m.machine, availability: {
+                switch m.availability {
+                case .online: .online
+                case .offline: .offline
+                case .checking: .checking
+                case .error: .error
+                }
+            }())
+        }
+        return EnvironmentsMapModel(clientLabel: "This device", environments: inputs, connectMachines: connect,
+                                    awaitingApproval: Set(inputs.map(\.environmentId).filter { environments.state($0)?.awaitingApproval == true }))
+    }
+
+    static func routeKind(_ url: URL) -> String {
+        switch EnvironmentRoute.kind(url) {
+        case .loopback: "loopback"
+        case .lan: "lan"
+        case .tailnet: "tailnet"
+        case .public: "public"
+        }
+    }
+
+    /// The map's link handle (EnvironmentsMap.tsx:735-800 `onLink`): pressed, or dropped on a machine or stack.
+    func mapLink(_ sourceId: String, _ targetId: String?, ticked: [String]) {
+        let model = environmentsMapModel()
+        let graph = buildFleetGraph(clientLabel: model.clientLabel, environments: model.environments,
+                                    connectMachines: model.connectMachines, now: Date())
+        let stacks = fleetStacks(graph, expanded: [])
+        switch fleetLinkAction(graph, stacks, selected: ticked, sourceId: sourceId, targetId: targetId) {
+        case .batch(let source, let ids)?: presentLinkSeveral(source, ids)
+        case .single(let source, _)?, .codeOnly(_, let source, _)?: presentLinkEnvironment(source)
+        case nil: break
+        }
+    }
+
+    /// "Link several…". Until the batch dialog lands, it opens the single Link dialog on the source.
+    // ponytail: one machine at a time; replace with LinkSeveralEnvironments (7.2) when it is ported
+    func presentLinkSeveral(_ sourceEnvironmentId: String?, _ environmentIds: [String]) {
+        guard let source = sourceEnvironmentId ?? peerLinkHosts().first else { return }
+        presentLinkEnvironment(source)
+    }
+}

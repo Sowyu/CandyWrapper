@@ -404,6 +404,8 @@ public final class SettingsSectionView: DSView {
     public var title: String { didSet { titleLabel.text = title } }
     /// The header's trailing action slot (`min-h-7 min-w-7`).
     public var headerAction: NSView? { didSet { oldValue?.removeFromSuperview(); headerAction.map(addSubview); needsLayout = true } }
+    /// `titleAction`, right after the title (`flex items-center gap-1`), such as the Environments Map and List switch.
+    public var titleAction: NSView? { didSet { if titleAction !== oldValue { oldValue?.removeFromSuperview(); titleAction.map(addSubview); needsLayout = true } } }
     /// The `icon` before the title (`gap-2`), such as the machine glyph of "This machine".
     public var icon: NSView? { didSet { oldValue?.removeFromSuperview(); icon.map(addSubview); needsLayout = true } }
     private let titleLabel = LabelView()
@@ -445,6 +447,12 @@ public final class SettingsSectionView: DSView {
         icon?.frame = NSRect(x: 16, y: 6, width: 16, height: 16)
         let line: CGFloat = DesignGeometry.usesClassic(self) ? 20 : 24
         titleLabel.frame = NSRect(x: titleX, y: (28 - line) / 2, width: max(0, bounds.width - titleX - 16 - 28 - 16), height: line)
+        if let action = titleAction {
+            let textWidth = ceil((title as NSString).size(withAttributes: [.font: titleLabel.font]).width)
+            let s = action.intrinsicContentSize
+            titleLabel.frame.size.width = min(titleLabel.frame.width, textWidth)
+            action.frame = NSRect(x: titleLabel.frame.maxX + 8, y: (28 - s.height) / 2, width: s.width, height: s.height)
+        }
         if let action = headerAction {
             let s = action.intrinsicContentSize
             action.frame = NSRect(x: bounds.width - 16 - s.width, y: (28 - s.height) / 2, width: s.width, height: s.height)
