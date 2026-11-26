@@ -131,4 +131,26 @@ extension IssueListLogicTests {
         #expect(IssueListLogic.group([("sandbox", page)], query: "", sort: "updated").isEmpty)
         #expect(IssueListLogic.hostOptions(page.answer.trackers, chosen: nil).count == 1)
     }
+
+    /// 5258 issueListTargets and the hidden-project rows (issuesSearch.logic.test.ts, 9fde959ac0 #38799).
+    @Test func hiddenProjects() throws {
+        let projects = [(environmentId: "a", projectId: "p1"), (environmentId: "a", projectId: "p2"), (environmentId: "b", projectId: "q")]
+        let targets = IssueListLogic.listTargets(environments: ["a", "b", "c"], projects: projects, hidden: ["a:p1", "b:q", "c:r"])
+        #expect(targets.map(\.environmentId) == ["a", "c"])
+        #expect(targets[0].excludeProjectIds == ["p1"])
+        // An environment whose projects have not loaded leaves out its saved keys.
+        #expect(targets[1].excludeProjectIds == ["r"])
+        var input = IssueListInput()
+        input.excludeProjectIds = ["p1"]
+        guard case .object(let o) = input.json else { Issue.record("json"); return }
+        #expect(o["excludeProjectIds"] == .array([.string("p1")]))
+        let page = IssueListLogic.HeldPage(answer: try Self.list())
+        let first = try #require(page.entries.first)
+        let dropped = IssueListLogic.dropHidden(page, environmentId: "sandbox", hidden: ["sandbox:\(first.projectId)"])
+        #expect(!dropped.entries.contains { $0.projectId == first.projectId })
+        #expect(IssueListLogic.dropHidden(page, environmentId: "sandbox", hidden: []) == page)
+        var m = IssuesPageView.Model()
+        m.hiddenProjects = ["a:p1", "a:p2"]
+        #expect(m.filterCount == 1)
+    }
 }

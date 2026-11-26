@@ -18,6 +18,8 @@ public final class IssuesPageView: DSView {
         case unavailable(message: String, retrying: Bool)
         /// "No trackers to read".
         case noTrackers
+        /// Every project is hidden (5258 IssuesPage.tsx:519-534, 9fde959ac0 #38799).
+        case everyProjectHidden
         case list
     }
 
@@ -42,7 +44,8 @@ public final class IssuesPageView: DSView {
         public var sort = "updated"
         public var host: String?
         public var hostOptions: [IssueListLogic.HostOption] = []
-        public var projectKey: String?
+        /// `environmentId:projectId` keys the list leaves out (`hideProjects`).
+        public var hiddenProjects: [String] = []
         public var projects: [ProjectOption] = []
         public var labels: [String] = []
         public var assignee: String?
@@ -59,7 +62,7 @@ public final class IssuesPageView: DSView {
 
         /// The Filters count (IssueListFilterPickers.tsx:58-64).
         public var filterCount: Int {
-            [state != "open", involvement != "all", projectKey != nil, assignee != nil].filter { $0 }.count + labels.count
+            [state != "open", involvement != "all", !hiddenProjects.isEmpty, assignee != nil].filter { $0 }.count + labels.count
         }
     }
 
@@ -78,7 +81,7 @@ public final class IssuesPageView: DSView {
     public var onState: ((String) -> Void)?
     public var onInvolvement: ((String) -> Void)?
     public var onHost: ((String?) -> Void)?
-    public var onProject: ((String?) -> Void)?
+    public var onHiddenProjects: (([String]) -> Void)?
     public var onLabels: (([String]) -> Void)?
     public var onAssignee: ((String?) -> Void)?
     /// The Filters menu is opening: read the scopes' candidates.
@@ -162,7 +165,7 @@ public final class IssuesPageView: DSView {
     /// The list controls a saved view keeps (`issueListPreferences`, issueListPreferences.ts:55-77).
     public var preferences: [String: JSONValue] {
         var p: [String: JSONValue] = ["who": .string(model.involvement), "status": .string(model.state)]
-        if let k = model.projectKey { p["project"] = .string(k) }
+        if !model.hiddenProjects.isEmpty { p["hideProjects"] = .array(model.hiddenProjects.prefix(IssueListInput.maxExcludedProjects).map { .string($0) }) }
         if let h = model.host { p["host"] = .string(h) }
         let q = search.input.text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !q.isEmpty { p["q"] = .string(q) }
@@ -193,6 +196,12 @@ public final class IssuesPageView: DSView {
             case .noTrackers:
                 let empty = EmptyView(title: "No trackers to read", message: "Add a project whose remote is on a supported tracker.", icon: .circleDot)
                 empty.mediaOutsideHeader = true
+                bodyView = empty
+            case .everyProjectHidden:
+                let empty = EmptyView(title: "Every project is hidden", message: nil, icon: .circleDot)
+                let b = ButtonView("Show all projects", variant: .outline, size: .default)
+                b.action = { [weak self] in self?.onHiddenProjects?([]) }
+                empty.content = ButtonRow([b])
                 bodyView = empty
             case .list:
                 bodyView = nil
@@ -248,6 +257,42 @@ public final class IssuesPageView: DSView {
         MenuPopupView.show(items, from: trackerButton, placement: .dropdown)
     }
 
+    /// The Projects row and its `ProjectChoices` (5258 IssueListFilterPickers.tsx:94-213, 9fde959ac0 #38799):
+    /// "Show all", then a checkbox per project that is checked while it shows, searchable past eight.
+    private func projectsSubmenu(_ m: Model) -> MenuItem {
+        // One set for every row, so toggling two rows in the open menu keeps both.
+        final class Hidden { var keys: [String]; init(_ k: [String]) { keys = k } }
+        let hidden = Hidden(m.hiddenProjects)
+        let projects = m.projects
+        let rows: @MainActor (String) -> [MenuItem] = { [weak self] query in
+            let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+            var all = MenuItem.checkbox("Show all", checked: hidden.keys.isEmpty) { [weak self] shown in
+                hidden.keys = shown ? [] : projects.map(\.key)
+                self?.onHiddenProjects?(hidden.keys)
+            }
+            all.icon = .layers
+            all.closesOnClick = true
+            var items = [all, MenuItem.separator]
+            let visible = projects.filter { needle.isEmpty || $0.title.lowercased().contains(needle) }
+            if visible.isEmpty { items.append(MenuItem("No matching projects.", disabled: true)) }
+            for project in visible {
+                var item = MenuItem.checkbox(project.title, checked: !hidden.keys.contains(project.key)) { [weak self] shown in
+                    hidden.keys.removeAll { $0 == project.key }
+                    if !shown { hidden.keys.append(project.key) }
+                    self?.onHiddenProjects?(hidden.keys)
+                }
+                if let icon = project.icon { item.leading = { ProjectMonogramView(icon, size: 14) } } else { item.icon = .folderGit2 }
+                items.append(item)
+            }
+            _ = self
+            return items
+        }
+        var item = MenuItem.submenu("Projects", icon: .folderGit2, rows(""))
+        if projects.count > 8 { item.submenuSearch = MenuSearch(placeholder: "Search projects", filter: rows) }
+        item.trailingDetail = m.hiddenProjects.isEmpty ? "All projects" : "\(m.hiddenProjects.count) hidden"
+        return item
+    }
+
     /// `IssueFiltersMenu` (IssueListFilterPickers.tsx:31-163): State, Involvement, Project (two or
     /// more), then Labels and Assignee from the scopes' candidates.
     // ponytail: the candidate submenus list the first 30 without their search field; add the
@@ -272,12 +317,7 @@ public final class IssuesPageView: DSView {
             radios("Involvement", [("all", "Everyone", .users), ("assigned", "Assigned to me", .userCheck), ("authored", "Opened by me", .penLine),
                                    ("mentioned", "Mentioning me", .atSign)], m.involvement) { [weak self] in self?.onInvolvement?($0) },
         ]
-        if m.projects.count > 1 || m.projectKey != nil {
-            var options: [(String, String, IconName)] = [("all", "All projects", .layers)]
-            if let k = m.projectKey, !m.projects.contains(where: { $0.key == k }) { options.append((k, "Unavailable project", .folderGit2)) }
-            options += m.projects.map { ($0.key, $0.title, IconName.folderGit2) }
-            items.append(radios("Project", options, m.projectKey ?? "all") { [weak self] v in self?.onProject?(v == "all" ? nil : v) })
-        }
+        if !m.projects.isEmpty || !m.hiddenProjects.isEmpty { items.append(projectsSubmenu(m)) }
         items.append(.separator)
         // Labels and Assignee filter as you type (4928 IssueListFilterPickers.tsx:170-294): chosen ones lead, so
         // one the first page lacks can still be cleared, and at most 30 show.
