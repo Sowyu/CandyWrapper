@@ -3166,7 +3166,9 @@ final class ComposerController {
     /// `replyBannerItems` (ChatComposer.tsx at 4928): "Replying to", the response's opening as a link to it, and Cancel reply.
     private func updateReplyBanner() {
         let key = draftKey
-        let record = key.flatMap { replyTargets[$0] }
+        // A queued edit shows its own reply (useQueuedRunEdit.ts:321 at 5258).
+        let editing = queuedEdit
+        let record = editing.map { $0.reply } ?? key.flatMap { replyTargets[$0] }
         let shown = record.flatMap { $0["contextId"]?.stringValue }
         if let record, let shown, let key, panel.replyKey != shown, let citation = ComposerReply.citation(record) {
             let banner = panel.lazyReplyBanner.view
@@ -3175,8 +3177,12 @@ final class ComposerController {
             banner.onLink = { _ in MarkdownView.onOpenCitation?(citation) }
             banner.onAction = { [weak self] index in
                 guard index == nil, let self else { return }
-                self.replyTargets[key] = nil
-                self.scheduleSave()
+                if let editing, self.queuedEdit?.id == editing.id {
+                    self.queuedEdits.cancelReply(editing.threadId)
+                } else {
+                    self.replyTargets[key] = nil
+                    self.scheduleSave()
+                }
                 self.updateReplyBanner()
             }
         }
@@ -3328,8 +3334,15 @@ final class ComposerController {
         let message = projection?.messages.first(where: { $0.id == item.messageId })
         let follows = message?.followsThreadSelection == true
         let runModel = projection?.runs.first(where: { $0.id == runId })?.modelSelection
-        let edit = queuedEdits.begin(thread: threadId, run: runId, text: item.text, followsThreadSelection: follows,
-                                     originalModel: follows ? shellThread?.modelSelection : runModel)
+        // A reply shows above the composer while its message is edited, not as a chip in the text. Only the reply the
+        // text still points at (useQueuedRunEdit.ts:296-301 at 5258).
+        let referenced = Set(ComposerContext.referencedIds(item.text))
+        let reply = (message?.context?["records"]?.arrayValue ?? []).first {
+            $0["kind"]?.stringValue == "response" && $0["contextId"]?.stringValue.map(referenced.contains) == true
+        }
+        let text = reply.flatMap { $0["contextId"]?.stringValue }.map { ComposerReply.draftText(item.text, contextId: $0) } ?? item.text
+        let edit = queuedEdits.begin(thread: threadId, run: runId, text: text, followsThreadSelection: follows,
+                                     originalModel: follows ? shellThread?.modelSelection : runModel, reply: reply)
         if !follows, let runModel { pickers.store.setExplicitSelection(edit.pickerKey, runModel) } else { pickers.store.didSend(edit.pickerKey) }
         watchQueuedEdit(threadId)
         if let message {
@@ -3338,9 +3351,10 @@ final class ComposerController {
             }
         }
         composer.resetPromptHistory()
-        composer.text = item.text
-        pickers.prompt = item.text
+        composer.text = text
+        pickers.prompt = text
         refresh()
+        updateReplyBanner()
         composer.focus()
     }
 
@@ -3351,6 +3365,7 @@ final class ComposerController {
         pickers.store.didSend(edit.pickerKey)
         stopQueuedEditWatch(edit.threadId)
         loadPrompt()
+        updateReplyBanner()
     }
 
     /// Keep observing an edit when navigation closes the panel (queuedRunEdit.ts:143-157, 3814).
@@ -3391,13 +3406,17 @@ final class ComposerController {
         let pick = pickers.store.pickedSelection(edit.pickerKey)
         let modelChanged = pick.map { p in edit.originalModel.map { !ComposerSelectionStore.pickMatchesThread(p, $0) } ?? true } ?? false
         pickers.store.didSend(edit.pickerKey)
-        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText, threadPrompt: saved, modelChanged: modelChanged)
+        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText,
+                                                          threadPrompt: replyTargets[key] == nil ? saved : "reply",
+                                                          modelChanged: modelChanged || edit.replyChanged)
         if recovery == .kept {
             prompts[key] = edit.text
+            // The edit's reply moves to the thread's draft with its text (`moveComposerContent`).
+            if let reply = edit.reply { replyTargets[key] = reply }
             if modelChanged, let pick { pickers.store.setExplicitSelection(key, pick) }
             scheduleSave()
         }
-        if target == .thread(id), questionRequestId == nil { loadPrompt() }
+        if target == .thread(id), questionRequestId == nil { loadPrompt(); updateReplyBanner() }
         if recovery != .clean { report(.queuedEditLeft(kept: recovery == .kept), key: nil) }
     }
 
@@ -3406,6 +3425,12 @@ final class ComposerController {
     /// as its row's "Send now" would (`steerSavedRun`, useQueuedRunEdit.ts:350-374 at 4928, #37507).
     private func saveEdit(_ edit: QueuedEdit, text: String, steer: Bool = false) {
         guard let shell, !queueBusy, let claim = queuedEdits.startSave(edit.threadId) else { return }
+        // The reply goes back in front of the text, as a send leads with it (useQueuedRunEdit.ts:173 at 5258).
+        var text = text
+        if let reply = claim.reply, let id = reply["contextId"]?.stringValue {
+            menuState.records[id] = reply
+            text = ComposerReply.prompt(text, replyingTo: reply)
+        }
         var fields: [String: JSONValue] = [
             "type": .string("queued-run.edit"), "commandId": .string(UUID().uuidString.lowercased()),
             "threadId": .string(edit.threadId.localId.rawValue), "runId": .string(edit.runId.rawValue), "text": .string(text),
@@ -3430,7 +3455,7 @@ final class ComposerController {
                 if queuedEdits.finishSave(claim, succeeded: true) {
                     pickers.store.didSend(edit.pickerKey)
                     stopQueuedEditWatch(edit.threadId)
-                    if target == .thread(edit.threadId) { loadPrompt() }
+                    if target == .thread(edit.threadId) { loadPrompt(); updateReplyBanner() }
                 }
                 if steer, target == .thread(edit.threadId), panel.queue.state.activeRunId != nil { promoteToSteer(edit.runId) }
                 refresh()
