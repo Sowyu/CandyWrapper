@@ -713,6 +713,14 @@ final class ThreadController {
         lineage.acknowledgeWake = { [weak self] id, time in self?.acknowledgeWake(id, at: time) }
         // The open thread's snooze ended with no push: the visit rules see it woke while shown.
         lineage.onWake = { [weak self] in self?.syncVisit() }
+        // `viewingAtom` (ThreadVisitWatermark.tsx:12-29 at 5258, #42084): the visit waits for the window to be shown
+        // and key, so it catches up when the user comes back.
+        for name in [NSWindow.didBecomeKeyNotification, NSWindow.didChangeOcclusionStateNotification] {
+            // Any window: `syncVisit` reads its own window's state, and the notification can't cross into the main actor.
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.syncVisit() }
+            }
+        }
         panel.header.cost.onOpen = { [weak self] in self?.readSubagentCosts() }
         // HTML renders and MCP Apps: a signed inline URL per attachment, reused while it has 5 minutes left
         // (HtmlRenderFrame.tsx:62-92), and the app's RPCs on the open thread's environment.
@@ -1486,14 +1494,19 @@ final class ThreadController {
     func syncVisit() {
         visitTimer?.cancel()
         visitTimer = nil
-        // In a window counts as shown, minimized or covered too: T3's visit effect has no visibility
-        // gate (ChatView.tsx:2938-3000), so the open thread is visited as activity lands in either app.
+        // In a window counts as shown for the dedupe below; the visit itself also needs the window on screen and key
+        // (`isDocumentViewed`: visible and focused, ThreadVisitWatermark.tsx:12-15 at 5258, #42084). Until then
+        // nothing is recorded, the open included, and a run that finishes in a background window stays unread.
         let shown = panel.window != nil
         // Settings and Usage unmount ChatView in T3, so its per-watermark dedupe starts over on the way back.
         if shown, !visitViewShown { visits.reset() }
         if !shown { recordedOpen = nil }
         visitViewShown = shown
-        guard shown, let id = openThreadId, let sidebar,
+        // A popup or menu window of this one that took key keeps the document focused, as it does in a browser.
+        let key = NSApp.keyWindow
+        guard shown, let window = panel.window, NSApp.isActive, key === window || key?.parent === window,
+              window.occlusionState.contains(.visible),
+              let id = openThreadId, let sidebar,
               let shell = sidebar.snapshot?.threads.first(where: { $0.id == id }) else { return }
         let now = TimestampFormat.nowMs()
         // Opening a thread is one visit that also counts toward search ranking; a palette pick already sent it with
