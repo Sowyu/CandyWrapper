@@ -72,6 +72,11 @@ public final class FileSurfaceView: DSView {
     /// An edit moved a file comment: its record with the new lines.
     public var onUpdateReviewComment: ((JSONValue) -> Void)?
     public var onEdit: (@MainActor (String) -> Void)?
+    /// A copy that could not run: the toast's title and description.
+    public var onCopyFailed: (@MainActor (String, String) -> Void)?
+    /// The whole text of a file past the 1 MB read is downloading. Copy contents shows and says so until it lands
+    /// (`LargeFileActions` and `CopyText`, 5258 FilePreviewPanel.tsx:1965-2001, LargeFilePreview.tsx:93-107).
+    public var fullTextLoading = false { didSet { if fullTextLoading != oldValue { updateActions() } } }
     public var onOpenFile: (@MainActor (String) -> Void)?
     /// Lists a folder for a breadcrumb menu.
     public var browseDirectory: ((String) async -> [ProjectEntry]?)?
@@ -380,20 +385,12 @@ public final class FileSurfaceView: DSView {
         wrapToggle.setAccessibilityLabel(wrapLabel)
         wrapToggle.setTooltip(wrapLabel)
         explorerToggle.isHidden = attachmentMode || path.hasPrefix("/") || isDirectory
-        // Copy once text loaded, Save once there is a file, Remove and Close when the owner offers them.
-        // A workspace file copies its loaded text when it is whole and not empty (5258 FilePreviewPanel.tsx:1400-1409
-        // and 1652-1659, 07fe456146 #34769); an attachment copies what it shows (AttachmentFilePreview.tsx:462).
-        switch content {
-        case .text(let text, let truncated, _, _): copyButton.isHidden = attachment == nil && (truncated || text.isEmpty)
-        default: copyButton.isHidden = true
-        }
-        let copied = (copiedUntil ?? .distantPast) > Date()
-        copyButton.icon = copied ? .check : .copy
-        let copyLabel: String = {
-            if copied { return "Copied" }
-            if case .text(_, true, _, _) = content { return "Copy preview" }
-            return "Copy contents"
-        }()
+        // Save once there is a file, Remove and Close when the owner offers them.
+        let copy = Self.copyAction(content, attachment: attachment != nil, fullTextLoading: fullTextLoading,
+                                   copied: (copiedUntil ?? .distantPast) > Date())
+        copyButton.isHidden = copy == nil
+        copyButton.icon = copy == "Copied" ? .check : .copy
+        let copyLabel = copy ?? "Copy contents"
         copyButton.setAccessibilityLabel(copyLabel)
         copyButton.setTooltip(copyLabel)
         saveButton.isHidden = attachment?.onSave == nil
@@ -427,8 +424,23 @@ public final class FileSurfaceView: DSView {
     private var isDirectory: Bool { if case .directory = content { true } else { false } }
 
     /// `useCopyToClipboard`: the button shows a check while "Copied".
+    /// The Copy button's label, nil while it hides. Copy shows once text loaded. A workspace file copies its loaded text
+    /// when it is whole and not empty (5258 FilePreviewPanel.tsx:1400-1409 and 1652-1659, 07fe456146 #34769), and while a
+    /// large file's whole text downloads (`LargeFileActions`, :1965-2001). An attachment copies what it shows
+    /// (AttachmentFilePreview.tsx:462).
+    static func copyAction(_ content: Content, attachment: Bool, fullTextLoading: Bool, copied: Bool) -> String? {
+        guard case .text(let text, let truncated, _, _) = content else { return nil }
+        if !attachment, truncated ? !fullTextLoading : text.isEmpty { return nil }
+        if copied { return "Copied" }
+        return truncated && attachment ? "Copy preview" : "Copy contents"
+    }
+
     private func copyContents() {
-        guard case .text(let text, _, _, _) = content else { return }
+        guard case .text(let text, let truncated, _, _) = content else { return }
+        if truncated, attachment == nil {
+            onCopyFailed?("Could not read file", "The file is still loading. Try again in a moment.")
+            return
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         copiedUntil = Date().addingTimeInterval(2)
