@@ -234,10 +234,23 @@ public final class ExpandedImagePreviewView: DSView {
         frameView.layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self)
     }
 
-    /// `--media-width: calc(92vw - 96px)` from `sm`, `--media-height: min(86vh, 100vh - 160px)`.
+    /// The 52pt macOS titlebar the media dialog leaves clear (windowControlsOverlay.ts:11).
+    private static let titlebar: CGFloat = 52
+
+    /// `--media-width: calc(92vw - 96px)` from `sm`, `--media-height: min((100vh - titlebar) * 0.86,
+    /// 100vh - titlebar - 160px)` (ExpandedImageDialog.tsx:183).
     private var mediaBox: CGSize {
-        let w = bounds.width, h = bounds.height
+        let w = bounds.width, h = bounds.height - Self.titlebar
         return CGSize(width: max(0, w * 0.92 - (w >= 640 ? 96 : 0)), height: max(0, min(h * 0.86, h - 160)))
+    }
+
+    /// The popup's rows: the viewport pads `pt-[min(titlebar + 1.5rem, 50dvh)] pb-6` (dialog.tsx:163-168) and
+    /// centers the `h-full max-h-[92vh]` popup in what is left.
+    private var popupRows: (top: CGFloat, height: CGFloat) {
+        let h = bounds.height
+        let top = min(Self.titlebar + 24, h / 2), row = max(0, h - top - 24)
+        let height = min(row, h * 0.92)
+        return ((top + (row - height) / 2).rounded(), height)
     }
 
     /// The image at zoom 1: its pixel size scaled down to fit the media box. The decode is capped at the box
@@ -261,9 +274,10 @@ public final class ExpandedImagePreviewView: DSView {
         // The data pane is `h-[min(var(--media-height),40rem)] w-[min(var(--media-width),42rem)]`.
         let size = showingDetails ? CGSize(width: min(box.width, 672), height: min(box.height, 640))
             : CGSize(width: min(fitted.width * zoom, box.width), height: min(fitted.height * zoom, box.height))
-        // The caption row is `items-center`: the 20pt micro button sets its height.
-        let block = size.height + 8 + captionHeight
-        return CGRect(x: (bounds.width - size.width) / 2, y: (bounds.height - block) / 2, width: size.width, height: size.height)
+        // The caption row is `items-center`: the 20pt micro button sets its height. The popup is
+        // `flex-col items-center justify-center`, so the pair centers in the popup's rows.
+        let block = size.height + 8 + captionHeight, rows = popupRows
+        return CGRect(x: (bounds.width - size.width) / 2, y: rows.top + (rows.height - block) / 2, width: size.width, height: size.height)
     }
 
     /// Zooms keeping the image point under `point` (or the frame's center) where it is (`changeZoom`).
@@ -284,7 +298,7 @@ public final class ExpandedImagePreviewView: DSView {
 
     public override func layout() {
         super.layout()
-        let w = bounds.width, h = bounds.height
+        let w = bounds.width
         let popupWidth = (w * 0.92).rounded()
         let inner = viewport(zoom: zoom), scaled = zoomedSize
         scroll.x = min(max(0, scaled.width - inner.width), max(0, scroll.x))
@@ -305,14 +319,11 @@ public final class ExpandedImagePreviewView: DSView {
             caption.frame = NSRect(x: inner.minX, y: row, width: inner.width, height: 16)
         }
         let popupX = ((w - popupWidth) / 2).rounded()
-        // The viewport pads `pt-[min(52px + 1.5rem, 50dvh)] pb-6` (dialog.tsx:163-168, the macOS titlebar is 52,
-        // windowControlsOverlay.ts:11) and centers the `h-full max-h-[92vh]` popup in that row. The × sits at its
-        // `end-0 top-0` (ExpandedImageDialog.tsx:198).
-        let top = min(76, h / 2), rowHeight = max(0, h - top - 24)
-        let popupTop = (top + (rowHeight - min(rowHeight, h * 0.92)) / 2).rounded()
-        close.frame = NSRect(x: popupX + popupWidth - 32, y: popupTop, width: 32, height: 32)
-        previous.frame = NSRect(x: popupX, y: (h / 2 - 16).rounded(), width: 32, height: 32)
-        next.frame = NSRect(x: popupX + popupWidth - 32, y: (h / 2 - 16).rounded(), width: 32, height: 32)
+        // The × sits at the popup's `end-0 top-0` (ExpandedImageDialog.tsx:198), the chevrons at its middle.
+        let rows = popupRows, middle = (rows.top + rows.height / 2 - 16).rounded()
+        close.frame = NSRect(x: popupX + popupWidth - 32, y: rows.top, width: 32, height: 32)
+        previous.frame = NSRect(x: popupX, y: middle, width: 32, height: 32)
+        next.frame = NSRect(x: popupX + popupWidth - 32, y: middle, width: 32, height: 32)
     }
 
     /// Decode only the pixels this zoom can show, in 128px steps while a wheel gesture grows.

@@ -98,6 +98,21 @@ struct ThreadTimelineTests {
         #expect(!t.isPillVisible)
     }
 
+    /// T3 #41843 (MessagesTimeline.tsx, the restore owns the scroll until it lands): a thread opened while the
+    /// previous one was read mid-way lands at its end, and a taller footer that arrives after the rows (a working
+    /// parent's subagents) keeps it there instead of landing short.
+    @Test func aSwitchedThreadOpensAtItsEndWithoutLandingShort() throws {
+        let items = try Self.manyItems()
+        let t = Self.timeline(Array(items.prefix(40)))
+        t.scroll(toFraction: 0.2)
+        #expect(!t.followsEnd)
+        t.setItems(Array(items.suffix(60)), change: .thread)
+        #expect(abs(Self.viewport(t).maxY - t.documentHeight) < 1)
+        t.setFooter(NSView(), height: 300)
+        #expect(t.followsEnd)
+        #expect(abs(Self.viewport(t).maxY - t.documentHeight) < 1)
+    }
+
     /// A terminal drawer opening with a thread switch shrinks the viewport; the newest row stays in view.
     @Test func staysAtTheEndWhenTheViewportShrinks() throws {
         let items = try Self.manyItems()

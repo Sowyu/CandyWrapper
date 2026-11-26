@@ -419,7 +419,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | port (4.4) |
 | 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | port (1.18) |
 | d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | port (3.6) |
-| 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394 (the 32pt media-close at the popup's top end; reference preview.rest still from 4928, recapture from 5258) |
+| 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394, reference recaptured from 5258 in the next commit with the popup's titlebar inset and centering |
 | 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | ported 98004311 |
 | 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | port (1.1) |
 | 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | port (3.8) |
@@ -437,7 +437,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | n/a (CW has no reference sources, so the card is always typed) |
 | d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | port (1.18) |
 | 14ea095b0a | #41663 | feat(web): add an HTML preview width setting separate from chat width | thread | left: needs the `htmlPreviewWidth` setting row (settings agent) before the lane can widen; default `chat` matches CW now. Medium |
-| 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | left unchecked: it fixes the web list's scroll anchoring during a thread swap; check CW's restore lands at the end without a jump. Small |
+| 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | already: a `.thread` change sets `followsEnd` before the anchor is taken, so the restore and every later footer change land at the end (test `aSwitchedThreadOpensAtItsEndWithoutLandingShort`) |
 | 4162207ddd | #29771 | fix(web): file menu opens remote files over SSH instead of on the server | thread | n/a (web icons, wire A18) |
 | 8ef195587d | #33030 | fix(web): tell update-all users where to update desktop servers it can't reach | sidebar | port (3.6) |
 | d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | port (2.4) |

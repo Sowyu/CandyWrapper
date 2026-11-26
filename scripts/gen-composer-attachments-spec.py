@@ -58,19 +58,22 @@ def tile(name, progress=None, failed=False):
             f'<span class="absolute right-1 top-1 flex">{btn("media-close", "icon-xs", lucide("x"))}</span></div>')
 shelf = f'<div class="flex max-w-full gap-2 flex-wrap">{tile("a.png")}{tile("b.png", progress="42%")}{tile("c.png", failed=True)}</div>'
 
-# MARK: preview, for a 720x480 window: --media-width 92vw - 96px, --media-height min(86vh, 100vh - 160px)
+# MARK: preview, for a 720x480 window at T3 5258 (ExpandedImageDialog.tsx:178-300, dialog.tsx:96-175).
+# The macOS titlebar is 52px (windowControlsOverlay.ts:11): the viewport pads pt-[min(52px+1.5rem,50dvh)] pb-6,
+# --media-width is 92vw - 96px and --media-height min((100vh - 52px) * 0.86, 100vh - 52px - 160px).
 W, H = 720, 480
-media_w, media_h = W * 0.92 - 96, min(H * 0.86, H - 160)
+TB = 52
+media_w, media_h = W * 0.92 - 96, min((H - TB) * 0.86, H - TB - 160)
 fit = min(1, media_w / 640, media_h / 480)
 iw, ih = 640 * fit, 480 * fit
-nav = lambda side, icon: btn("media-navigation", "icon", lucide(icon, "size-5"), f"{side}-0 sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2")
+nav = lambda side, icon: btn("media-navigation", "icon", lucide(icon, "size-5"), f"{side}-0 top-auto bottom-0 translate-y-0 sm:top-1/2 sm:bottom-auto sm:-translate-y-1/2")
 preview = (f'<div style="position:relative;width:{W}px;height:{H}px;overflow:hidden">'
            '<div class="absolute inset-0 bg-black/75 backdrop-blur-none"></div>'
-           '<div class="absolute inset-0 grid grid-rows-1 place-items-center px-4 py-6">'
-           f'<div class="relative flex min-h-0 min-w-0 flex-col items-center overflow-visible" style="width:{W * 0.92}px;--media-width:{media_w}px;--media-height:{media_h}px">'
+           f'<div class="absolute inset-0 grid grid-rows-1 place-items-center justify-items-center px-4 pb-6" style="padding-top:{min(TB + 24, H / 2)}px">'
+           f'<div class="relative flex min-h-0 min-w-0 flex-col h-full items-center justify-center overflow-visible" style="width:{W * 0.92}px;max-height:{H * 0.92}px;--media-width:{media_w}px;--media-height:{media_h}px">'
+           + btn("media-close", "icon", lucide("x"), "absolute end-0 top-0 z-20")
            + nav("left", "chevron-left") +
-           '<div class="relative isolate z-10 max-w-[var(--media-width)]">'
-           + btn("media-close", "icon-xs", lucide("x"), "absolute right-0 -top-10 z-20") +
+           '<div class="relative isolate z-10 flex max-h-full max-w-[var(--media-width)] flex-col items-center">'
            f'<div class="min-w-0"><div class="max-w-[var(--media-width)] overflow-auto overscroll-contain rounded-lg bg-background shadow-2xl ring-1 ring-border/70 outline-none" style="width:{iw}px;height:{ih}px">'
            f'<img src="{IMG}" alt="" class="block max-w-none select-none" style="width:{iw}px;height:{ih}px"></div></div>'
            '<div class="mt-2 flex max-w-[var(--media-width)] items-center justify-center gap-1.5 text-xs text-white/80"><span class="truncate">screenshot.png (1/2)</span></div>'
@@ -131,7 +134,7 @@ cases = [
     {"name": "stash-empty", "html": empty, "native": {"case": "stash-empty"}, "wrapperStyle": "display:block;width:692px"},
     {"name": "stash-badge", "html": badge, "native": {"case": "stash-badge"}, "wrapperStyle": "display:inline-block"},
 ]
-spec = {"sourceVersion": "v0.1.4-nightly.20261028.3824", "component": "composer-attachments", "source": "apps/web/src/components/chat/ChatComposer.tsx, ExpandedImageDialog.tsx, ComposerStashMenu.tsx, ComposerStashBadge.tsx",
+spec = {"sourceVersion": "v0.1.13-nightly.20261125.5258", "component": "composer-attachments", "source": "apps/web/src/components/chat/ChatComposer.tsx, ExpandedImageDialog.tsx, ComposerStashMenu.tsx, ComposerStashBadge.tsx",
         "states": ["rest"], "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/composer-attachments.json"), "w") as f:
     json.dump(spec, f, indent=1, ensure_ascii=False)
