@@ -485,7 +485,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 6f8282c2c8 | #41837 | fix(web): an IME Escape no longer blurs the file editor | files | port (1.3) † |
 | 6f94a06384 | #23346 | fix(vcs): explain checkout failures caused by local changes | git | ported 32cc3467 |
 | 7105792176 | #42201 | fix(web): notebook previews show a progress bar's last frame | files | n/a (QuickLook previews) † |
-| 721542cac7 | #39994 | fix(web): the issue comment composer lines up with the chat composer | issues | ported COMMIT (20pt bottom inset), diff read 2026-11-25 |
+| 721542cac7 | #39994 | fix(web): the issue comment composer lines up with the chat composer | issues | ported 59500419 (20pt bottom inset), diff read 2026-11-25 |
 | 732c7126c1 | #41595 | fix(web): RTF previews show a bold, italic or underlined emoji as one character | files | n/a (QuickLook previews) † |
 | 7380740efe | #42499 | fix(web): pooled limit refill shows when it lands again | usage | ported 8f1d707d |
 | 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables) and 57524d5b (the 18 stroked and 24px symbols: video, documents, Java, TOML, diff, XML and the rest) |
@@ -546,7 +546,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 9fde959ac0 | #38799 | feat(web): choose which projects the issues list shows | issues | ported 93e4e41a |
 | a0ef9d8d95 | #39574 | fix(web): editable file drag selection no longer breaks across virtualized scroll windows | other | n/a (server only, wire) † |
 | a149bdc4f6 | #42321 | fix(web): Voice Models language menu resets its search filter on close | settings | port (1.8) † |
-| a2231ca59b | #42417 | fix(web): Cmd/Ctrl+W closes the active tab on the Issues page | issues | ported COMMIT, diff read 2026-11-25 |
+| a2231ca59b | #42417 | fix(web): Cmd/Ctrl+W closes the active tab on the Issues page | issues | ported 59500419, diff read 2026-11-25 |
 | a23085273f | #33279 | fix(web): adding the last snooze option no longer reorders rows mid-edit | settings | port (1.8) † |
 | a3001b33fe | #40468 | fix(web): RTF previews break the line at TextEdit soft line breaks | files | n/a (QuickLook previews) † |
 | a5d86e6382 | #41844 | fix(web): Push on the default branch no longer commits files changed while confirming | git | ported eda2a88d |
