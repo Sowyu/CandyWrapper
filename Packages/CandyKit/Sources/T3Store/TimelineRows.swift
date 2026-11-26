@@ -447,6 +447,19 @@ public enum TimelineRows {
         return failed
     }
 
+    /// `itemizedFailedRunIds` (5258 MessagesTimeline.logic.ts:1045-1061, #40905): a usage-limit pause keeps its tool
+    /// groups; any other failure itemizes the run's work. CW keeps the limit's error row in the timeline, so its
+    /// failure class names the paused run (T3 also passes `usageLimitRunId` because it hides that row).
+    static func itemizedFailedRunIds(_ entries: [TimelineEntry], failed: Set<RunId>) -> Set<RunId> {
+        guard !failed.isEmpty else { return [] }
+        var usageLimited = Set<RunId>(), other = Set<RunId>()
+        for entry in entries {
+            guard let item = failedItem(entry), let run = item.runId else { continue }
+            if item["failure"]?["class"]?.stringValue == "usage_limit" { usageLimited.insert(run) } else { other.insert(run) }
+        }
+        return failed.filter { !usageLimited.contains($0) || other.contains($0) }
+    }
+
     // MARK: Folds (L:739-806, 961-1138)
 
     struct TurnFold {
@@ -791,6 +804,7 @@ public enum TimelineRows {
         let terminalIds = terminalAssistantMessageIds(entries)
         let unsettled = unsettledRunId(input.latestRun, runningRunId: input.runningRunId)
         let failed = failedRunIds(entries, latestRun: input.latestRun)
+        let itemized = itemizedFailedRunIds(entries, failed: failed)
         let liveSubagents = liveSubagentCardEntryIds(entries)
         let completeReplies = completeSupersededReplyEntryIds(entries)
         let attemptFolds = supersededAttemptFolds(entries, unfoldedRunIds: failed, liveSubagentEntryIds: liveSubagents,
@@ -1004,7 +1018,7 @@ public enum TimelineRows {
                 continue
 
             case .work(let work):
-                if (work.runId.map { failed.contains($0) } ?? false) || (work.itemType == .error && work.toolLifecycleStatus == .failed)
+                if (work.runId.map { itemized.contains($0) } ?? false) || (work.itemType == .error && work.toolLifecycleStatus == .failed)
                     || work.tone == .error || work.sourceActivityKind == "runtime.error" || work.itemType == .systemNotice
                     || work.itemType == .notification || work.itemType == .todoList || work.questionAnswer != nil
                 {

@@ -99,6 +99,21 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
     }
 
     // LT:1026
+    /// 5258 MessagesTimeline.logic.ts:1045-1061 (#40905): a usage-limit pause keeps its tool groups; another failure in
+    /// the same run itemizes them.
+    @Test func usageLimitPausesKeepTheirToolGroups() {
+        func failure(_ run: String, _ cls: String) -> TimelineEntry {
+            let item = turnItem(#"{"id":"e-\#(run)-\#(cls)","type":"error","status":"failed","runId":"\#(run)","failure":{"class":"\#(cls)","message":"x"}}"#)
+            var entry = WorkLogEntry(id: item.id.rawValue, createdAt: "2026-01-01T00:00:09.000Z", runId: RunId(run), label: "x", tone: .error)
+            entry.projectedItem = ProjectedTurnItem(local: item)
+            return .work(item.id.rawValue, entry)
+        }
+        let limited = [failure("r1", "usage_limit")]
+        #expect(TimelineRows.itemizedFailedRunIds(limited, failed: ["r1"]).isEmpty)
+        #expect(TimelineRows.itemizedFailedRunIds(limited + [failure("r1", "provider_error")], failed: ["r1"]) == ["r1"])
+        #expect(TimelineRows.itemizedFailedRunIds([], failed: ["r2"]) == ["r2"])
+    }
+
     @Test func keepsContextCompactionVisibleOutsideFoldedWork() {
         let rows = derive([work("compaction-entry", "compaction", at: "2026-01-01T00:00:00Z", label: "Compacted context 899K → 19K tokens", tone: .info) {
             $0.sourceActivityKind = "context-compaction"
