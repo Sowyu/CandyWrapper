@@ -20,6 +20,20 @@ import T3Store
         #expect(ModelDetailContent.dollars(0.075) == "$0.075" && ModelDetailContent.dollars(1.25) == "$1.25" && ModelDetailContent.dollars(40) == "$40")
     }
 
+    /// The plain-terms cost: 1,000 words each way is 1,333 tokens each way, at the row's input plus output price.
+    @Test func plainCostIsWorkedFromThePrices() {
+        // Sonnet 5.5, $2 in and $10 out: 1,333.3 x $12 / 1M = $0.016, so 2¢.
+        #expect(ModelDetailContent.example(input: 2, output: 10) == "about 2¢")
+        // Haiku-sized prices round below a cent.
+        #expect(ModelDetailContent.example(input: 0.1, output: 0.5) == "under 1¢")
+        // $150 and $600: 1,333.3 x $750 / 1M = $1.00.
+        #expect(ModelDetailContent.example(input: 150, output: 600) == "about $1")
+        #expect(ModelDetailContent.example(input: 300, output: 600) == "about $1.20")
+        let sonnet = ModelDetailContent.perMillion(driver: "claudeAgent", slug: "claude-sonnet-5-5")
+        #expect(sonnet?.input == 2 && sonnet?.output == 10)
+        #expect(ModelDetailContent.perMillion(driver: "custom", slug: "house-model") == nil)
+    }
+
     // MARK: Snapshot
 
     @Test func theBundledSnapshotLoadsAndCreditsModelsDev() throws {
@@ -353,6 +367,29 @@ import T3Store
                 rig.lay()
                 #expect(rig.dock.naturalSize == size, "\(rail)")
             }
+        }
+    }
+
+    /// A tab whose list is longer than the one the popup opened on grows the popup to fit it, up to the ceiling, so no
+    /// row is clipped; going back to the shorter tab keeps that height, so the rail never moves twice.
+    @Test func theHeightFollowsALongerList() throws {
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let codex = (1...9).map { ServerProviderModel(slug: "gpt-\($0)", name: "GPT Model #\($0)") }
+            let catalog = ProviderCatalog([ServerProvider(instanceId: "claudeAgent", driver: "claudeAgent", displayName: "Claude", models: [ServerProviderModel(slug: "m1", name: "Claude Model #1")]),
+                                           ServerProvider(instanceId: "codex", driver: "codex", displayName: "Codex", models: codex)])
+            let rig = ModelPickerShrinkTests.Rig(catalog: catalog)
+            let opened = rig.dock.detailTopHeight
+            rig.picker.selectRail(.instance("codex"))
+            rig.lay()
+            let list = rig.picker.naturalSize.height
+            #expect(list > opened, "the fixture's second tab must need more room than the first")
+            // At least the list; the details card can ask for more.
+            let grown = rig.dock.detailTopHeight
+            #expect(grown >= min(DockedModelPickerView.detailMaxHeight, list) && grown > opened)
+            #expect(rig.picker.rowViews.allSatisfy { $0.frame.maxY <= ($0.superview?.bounds.height ?? 0) })
+            rig.picker.selectRail(.instance("claudeAgent"))
+            rig.lay()
+            #expect(rig.dock.detailTopHeight == grown)
         }
     }
 
