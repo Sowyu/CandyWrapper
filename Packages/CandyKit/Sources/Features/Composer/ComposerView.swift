@@ -170,6 +170,18 @@ public final class ComposerView: DSView {
     public let fileList = ComposerFileListView()
     /// The draft's images above the files (`expandedComposerImages`).
     public let imageShelf = ComposerImageShelfView()
+    /// The attachments of the queued message being edited, already uploaded, above the draft's own
+    /// (`ComposerQueuedAttachmentRow`, ChatComposer.tsx:3896-3903 at 5258).
+    public let queuedShelf = ComposerImageShelfView()
+    public var queuedTiles: [ComposerImageShelfView.Tile] {
+        get { queuedShelf.tiles }
+        set {
+            let before = shelfHeight
+            queuedShelf.tiles = newValue
+            queuedShelf.isHidden = newValue.isEmpty || replacement != nil
+            if shelfHeight != before { needsLayout = true; onHeightChange?() }
+        }
+    }
 
     public func imagePreviewItem(_ item: ExpandedImagePreviewView.Item, for id: String) -> ExpandedImagePreviewView.Item {
         imageShelf.previewItem(item, for: id)
@@ -203,7 +215,8 @@ public final class ComposerView: DSView {
     /// `bg-accent/45 ring-1 ring-primary/70` while files hover over the composer.
     private let dropHighlight = CALayer()
     private var laidOutShelfHeight: CGFloat = 0
-    private var shelfHeight: CGFloat { imageShelf.preferredHeight(width: max(0, bounds.width - 2 * (Self.inset + Self.pad))) }
+    private var queuedShelfHeight: CGFloat { queuedShelf.preferredHeight(width: max(0, bounds.width - 2 * (Self.inset + Self.pad))) }
+    private var shelfHeight: CGFloat { queuedShelfHeight + imageShelf.preferredHeight(width: max(0, bounds.width - 2 * (Self.inset + Self.pad))) }
     public var fileRows: [ComposerFileRow] {
         get { fileList.rows }
         set {
@@ -249,6 +262,7 @@ public final class ComposerView: DSView {
             let replaced = replacement != nil
             for v in [scroll, placeholder, attach, primary] as [NSView] { v.isHidden = replaced }
             imageShelf.isHidden = replaced || imageShelf.tiles.isEmpty
+            queuedShelf.isHidden = replaced || queuedShelf.tiles.isEmpty
             fileList.isHidden = replaced || fileList.rows.isEmpty
             refresh()
             needsLayout = true
@@ -369,6 +383,8 @@ public final class ComposerView: DSView {
         addSubview(fileList)
         imageShelf.isHidden = true
         addSubview(imageShelf)
+        queuedShelf.isHidden = true
+        addSubview(queuedShelf)
         dropHighlight.cornerRadius = cardRadius
         dropHighlight.borderWidth = 1
         dropHighlight.isHidden = true
@@ -1017,6 +1033,7 @@ public final class ComposerView: DSView {
             return
         }
         imageShelf.isHidden = imageShelf.tiles.isEmpty
+        queuedShelf.isHidden = queuedShelf.tiles.isEmpty
         fileList.isHidden = fileList.rows.isEmpty
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.
         let textWidth = max(0, w - 2 * (Self.inset + Self.pad))
@@ -1026,8 +1043,11 @@ public final class ComposerView: DSView {
         let shelf = shelfHeight
         // The shelf wraps by width: a new width can change the box height the parent planned with.
         if shelf != laidOutShelfHeight { laidOutShelfHeight = shelf; DispatchQueue.main.async { [weak self] in self?.onHeightChange?() } }
-        imageShelf.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad, width: textWidth,
-                                  height: max(0, shelf - ComposerImageShelfView.marginBottom))
+        let queued = queuedShelfHeight
+        queuedShelf.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad, width: textWidth,
+                                   height: max(0, queued - ComposerImageShelfView.marginBottom))
+        imageShelf.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad + queued, width: textWidth,
+                                  height: max(0, shelf - queued - ComposerImageShelfView.marginBottom))
         fileList.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad + shelf, width: textWidth,
                                 height: max(0, fileList.preferredHeight - ComposerFileListView.marginBottom))
         let textTop = Self.inset + Self.pad + shelf + fileList.preferredHeight

@@ -283,6 +283,8 @@ final class ComposerController {
     }
     private var queuedEditWatches: [ThreadId: Task<Void, Never>] = [:]
     private var queuedEditRuns: [ThreadId: Set<RunId>] = [:]
+    /// Server copies of queued messages' images, by attachment id.
+    private var queuedImageFiles: [String: URL] = [:]
     /// A queue command is in flight: the strip's actions wait (`busyRunId`).
     private var queueBusy = false
 
@@ -3341,9 +3343,14 @@ final class ComposerController {
         let reply = (message?.context?["records"]?.arrayValue ?? []).first {
             $0["kind"]?.stringValue == "response" && $0["contextId"]?.stringValue.map(referenced.contains) == true
         }
-        let text = reply.flatMap { $0["contextId"]?.stringValue }.map { ComposerReply.draftText(item.text, contextId: $0) } ?? item.text
+        // An attachment-only message opens with an empty prompt (`stripAttachmentOnlyBootstrapPrompt`, useQueuedRunEdit.ts:291).
+        let sent = item.text.trimmingCharacters(in: .whitespacesAndNewlines) == ComposerAttachmentRules.attachmentOnlyPrompt ? "" : item.text
+        let text = reply.flatMap { $0["contextId"]?.stringValue }.map { ComposerReply.draftText(sent, contextId: $0) } ?? sent
         let edit = queuedEdits.begin(thread: threadId, run: runId, text: text, followsThreadSelection: follows,
                                      originalModel: follows ? shellThread?.modelSelection : runModel, reply: reply)
+        queuedEdits.setAttachments(threadId, message?.attachments ?? item.message?.attachments ?? [],
+                                   records: (message?.context ?? item.message?.context)?["records"]?.arrayValue ?? [])
+        fetchQueuedImages(threadId)
         if !follows, let runModel { pickers.store.setExplicitSelection(edit.pickerKey, runModel) } else { pickers.store.didSend(edit.pickerKey) }
         watchQueuedEdit(threadId)
         if let message {
@@ -3357,6 +3364,38 @@ final class ComposerController {
         refresh()
         updateReplyBanner()
         composer.focus()
+    }
+
+    /// The server copies of the edited message's images, for its shelf. A tile shows the name until its copy arrives.
+    private func fetchQueuedImages(_ threadId: ThreadId) {
+        guard let edit = queuedEdits.edit(threadId) else { return }
+        for a in edit.originalAttachments where a["type"]?.stringValue == "image" {
+            guard let id = a["id"]?.stringValue, queuedImageFiles[id] == nil else { continue }
+            Task { [weak self] in
+                guard let url = await self?.attachmentSource(id, environmentId: threadId.environmentId), let self,
+                      queuedEdits.edit(threadId)?.id == edit.id else { return }
+                queuedImageFiles[id] = url
+                if queuedEdit?.id == edit.id { syncAttachmentViews() }
+            }
+        }
+    }
+
+    /// The edited message's kept attachments as shelf tiles.
+    private var queuedTiles: [ComposerImageShelfView.Tile] {
+        guard let edit = queuedEdit else { return [] }
+        return edit.existingAttachments.compactMap { a in
+            guard let id = a["id"]?.stringValue else { return nil }
+            return ComposerImageShelfView.Tile(id: id, name: a["name"]?.stringValue ?? "Attachment", status: .ready,
+                                               fileURL: a["type"]?.stringValue == "image" ? queuedImageFiles[id] : nil, removable: false)
+        }
+    }
+
+    /// The kept queued attachment a chip of the edit's text points at.
+    private func queuedAttachment(contextId: String) -> JSONValue? {
+        guard let edit = queuedEdit else { return nil }
+        return edit.existingAttachments.first { a in
+            a["id"]?.stringValue.flatMap { edit.attachmentContextIds[$0] }?.contains(contextId) == true
+        }
     }
 
     /// Cancel: back to the thread's own prompt (`cancelEditingQueuedRun`).
@@ -4420,8 +4459,12 @@ extension ComposerController {
                 SkillDetailsView.show(skill: skill, from: self.composer, onViewInstructions: open)
                 return true
             }
-            guard case .context(_, let contextId, _) = token.kind,
-                  let attachment = self.currentAttachments.first(where: { $0.contextId == contextId }) else { return false }
+            guard case .context(_, let contextId, _) = token.kind else { return false }
+            if let queued = self.queuedAttachment(contextId: contextId), let id = queued["id"]?.stringValue {
+                if queued["type"]?.stringValue == "image" { self.expandQueuedImage(id) } else { self.openSentAttachment(queued, download: false) }
+                return true
+            }
+            guard let attachment = self.currentAttachments.first(where: { $0.contextId == contextId }) else { return false }
             // A file to attach again has nothing to open (composerContextPresentation.tsx:237-242).
             if attachment.needsReattach { return true }
             if attachment.kind == .image { self.expandDraftImage(attachment.id) }
@@ -4429,6 +4472,7 @@ extension ComposerController {
             return true
         }
         composer.imageShelf.onExpand = { [weak self] id in self?.expandDraftImage(id) }
+        composer.queuedShelf.onExpand = { [weak self] id in self?.expandQueuedImage(id) }
         panel.model.onOpenAttachment = { [weak self] file, download in self?.openSentAttachment(file, download: download) }
         panel.model.onRollbackCheckpoint = { [weak self] checkpoint, scope in self?.rollBack(checkpointId: checkpoint, scopeId: scope) }
         panel.model.onReplyToResponse = { [weak self] message, projected in self?.replyToResponse(message, projected) }
@@ -4598,6 +4642,7 @@ extension ComposerController {
         composer.imageTiles = hidden ? [] : attachments.filter { $0.kind == .image }.map {
             ComposerImageShelfView.Tile(id: $0.id, name: $0.name, status: $0.status, fileURL: $0.fileURL, source: $0.snapShotSource)
         }
+        composer.queuedTiles = hidden ? [] : queuedTiles
         composer.attachmentCount = questionRequestId == nil ? attachments.count : 0
         if attachments != chipAttachments {
             chipAttachments = attachments
@@ -5360,7 +5405,14 @@ extension ComposerController {
 
     /// The chip for an attachment link: its icon, middle-truncated name and size, and the upload state.
     fileprivate func attachmentChipLook(kind: String, contextId: String, label: String) -> ComposerChipLook? {
-        guard kind == "image" || kind == "file", let a = currentAttachments.first(where: { $0.contextId == contextId }) else { return nil }
+        guard kind == "image" || kind == "file" else { return nil }
+        guard let a = currentAttachments.first(where: { $0.contextId == contextId }) else {
+            // A chip of the edited queued message resolves to its uploaded attachment (#40945, composerContextPresentation.tsx at 5258).
+            guard let q = queuedAttachment(contextId: contextId), let name = q["name"]?.stringValue else { return nil }
+            return ComposerChipLook(kind: q["type"]?.stringValue == "image" ? .image : .file(name: name),
+                                    label: ComposerAttachmentRules.middleTruncate(name),
+                                    detail: ComposerFileRow.formatSize(q["sizeBytes"]?.intValue ?? 0), state: nil, previewSource: nil)
+        }
         var detail = ComposerFileRow.formatSize(a.sizeBytes)
         // FileContextChip (composerContextPresentation.tsx:217-247): "attach again" on a dashed chip, a failed
         // upload in the destructive colors.
@@ -5456,6 +5508,22 @@ extension ComposerController {
                 await ComposerImageIO.thumbnail(url, side: side, cover: false, measurementKey: url.path)
             }
             return composer.imagePreviewItem(item, for: image.id)
+        }
+        presentPreview(items, index: index)
+    }
+
+    /// The edited queued message's images, from their server copies.
+    private func expandQueuedImage(_ id: String) {
+        let images = (queuedEdit?.existingAttachments ?? []).filter { $0["type"]?.stringValue == "image" }
+        guard let index = images.firstIndex(where: { $0["id"]?.stringValue == id }) else { return }
+        let env = openThreadId?.environmentId
+        let items = images.map { image in
+            let id = image["id"]?.stringValue ?? ""
+            return ExpandedImagePreviewView.Item(key: "attachment:" + id, name: image["name"]?.stringValue ?? "Image", source: image["source"],
+                                                 cacheable: true) { [weak self] side in
+                guard let url = await self?.attachmentSource(id, environmentId: env) else { return nil }
+                return await ComposerImageIO.thumbnail(url, side: side, cover: false, measurementKey: url.path)
+            }
         }
         presentPreview(items, index: index)
     }
