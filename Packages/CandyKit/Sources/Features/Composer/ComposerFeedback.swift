@@ -112,8 +112,10 @@ extension ComposerFeedback {
 }
 
 /// The thread error banner's state (ChatView.tsx:2058-2199, 2262-2268, ThreadErrorBanner.tsx):
-/// a local error per thread key over the shell's `lastError`, and dismissals remembered for the
-/// session per thread key plus message, so a different error on the same thread shows again.
+/// a local error per thread key over the shell's `lastError`. Only the server's runtime error gets a session
+/// dismissal, keyed `threadKey NUL source NUL error`, so a later run that fails with the same text shows again
+/// (5258 ThreadErrorBanner.tsx:54-60, ChatView.logic.ts:1250-1295, #37419). A local error clears on dismiss and
+/// masks nothing, so a repeat shows (#40042).
 public struct ThreadErrorState: Sendable {
     public enum Variant: Sendable, Equatable { case error, warning }
     public struct Banner: Equatable, Sendable {
@@ -141,13 +143,21 @@ public struct ThreadErrorState: Sendable {
         local[key] = ComposerFeedback.sanitize(message)
     }
 
-    private static func bannerKey(_ key: String, _ error: String) -> String { "\(key)\u{0}\(error)" }
+    /// `getThreadErrorBannerKey`: nil for an error that is not the server's runtime error (`threadErrorIsServerRuntime`).
+    /// The source is the latest run and when it ended (`threadErrorSource`, threadExecution.ts at 5258).
+    // ponytail: keys on the shell's latest run, not the failure item; read the projection's failure item if two
+    // failures in one run must each show again.
+    private static func sessionKey(_ key: String, local: String?, shell: ThreadShell?) -> String? {
+        guard let shell, let error = shell.lastError, local == nil || local == error else { return nil }
+        let source = shell.latestRunId.map { "\($0.rawValue)@\(shell.latestRunCompletedAt.value?.raw ?? "")" } ?? ""
+        return "\(key)\u{0}\(source)\u{0}\(error)"
+    }
 
     /// What the banner shows for a thread key. `shell` is nil for a draft.
     public func visible(_ key: String, shell: ThreadShell?) -> Banner? {
         let localError = local[key]
-        guard let error = localError ?? shell?.lastError,
-              !dismissed.contains(Self.bannerKey(key, error)) else { return nil }
+        guard let error = localError ?? shell?.lastError else { return nil }
+        if let session = Self.sessionKey(key, local: localError, shell: shell), dismissed.contains(session) { return nil }
         let fromShell = localError == nil && shell != nil
         // A usage limit on a failed run shows the usage-limit recovery banner instead.
         if fromShell, shell?.status == .failed, shell?.lastErrorClass == .usageLimit, shell?.latestRunId != nil { return nil }
@@ -165,9 +175,9 @@ public struct ThreadErrorState: Sendable {
         return Banner(message: error, variant: variant)
     }
 
-    /// The X: clears the local error and masks the shown one for the session.
+    /// The X: clears the local error and masks the server's runtime error for the session.
     public mutating func dismiss(_ key: String, shell: ThreadShell?) {
-        if let error = local[key] ?? shell?.lastError { dismissed.insert(Self.bannerKey(key, error)) }
+        if let session = Self.sessionKey(key, local: local[key], shell: shell) { dismissed.insert(session) }
         local[key] = nil
     }
 }

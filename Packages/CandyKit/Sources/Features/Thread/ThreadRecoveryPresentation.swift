@@ -52,6 +52,30 @@ public enum ThreadUsageLimitRecovery {
     public static func scheduled(_ thread: ThreadShell) -> Bool {
         thread.limitRecovery?.runId == thread.latestRunId && thread.limitRecovery?.resetAt == thread.usageLimitResetAt && thread.limitRecovery?.autoResume == true
     }
+
+    /// `limitRecoveryScheduleState` (5258 UsageLimitRecoveryBanner.tsx:48-72): when an auto-resume shows, the later
+    /// of the reset and a snooze past it.
+    public static func displayAt(_ thread: ThreadShell, requestPending: Bool = false) -> T3Timestamp? {
+        let resumes = !requestPending && canSchedule(thread) && scheduled(thread)
+        if resumes, let reset = thread.usageLimitResetAt?.date, let snooze = thread.snoozedUntil, let until = snooze.date, until > reset { return snooze }
+        return thread.usageLimitResetAt
+    }
+
+    /// The banner's line (UsageLimitRecoveryBanner.tsx:90-112, #39889): "Resumes {time}" while an auto-resume is ahead,
+    /// "Reset {time}" once the reset passed, else "Resets {time}". The copy changes when either time passes.
+    @MainActor public static func description(_ thread: ThreadShell, requestPending: Bool = false, now: Date = Date()) -> String {
+        guard let reset = thread.usageLimitResetAt, let resetDate = reset.date else { return "Reset time unavailable; retry manually" }
+        let display = displayAt(thread, requestPending: requestPending)
+        let resumesUpcoming = !requestPending && canSchedule(thread) && scheduled(thread) && (display?.date ?? .distantPast) > now
+        let shown = resumesUpcoming ? display ?? reset : reset
+        let time = UsageTime.upcoming(shown.raw, nowMs: Int64(now.timeIntervalSince1970 * 1000))
+        return resumesUpcoming ? "Resumes \(time)" : resetDate <= now ? "Reset \(time)" : "Resets \(time)"
+    }
+
+    /// The times the banner's copy changes at: the reset and the shown resume time.
+    public static func copyDeadlines(_ thread: ThreadShell) -> [Date] {
+        [thread.usageLimitResetAt?.date, displayAt(thread)?.date].compactMap { $0 }
+    }
 }
 
 /// `presentPendingBackgroundWork` (threadExecution.ts:281-357): the background work banner's title and items,

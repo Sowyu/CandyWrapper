@@ -6281,7 +6281,7 @@ extension ComposerController {
         if let thread, limited {
             let reset = thread.usageLimitResetAt?.date
             let pending = recoveryPending.contains(thread.id)
-            let description = recoveryErrors[thread.id] ?? thread.usageLimitResetAt.flatMap { reset == nil ? nil : "Resets " + UsageTime.upcoming($0.raw, nowMs: TimestampFormat.nowMs()) } ?? "Reset time unavailable; retry manually"
+            let description = recoveryErrors[thread.id] ?? ThreadUsageLimitRecovery.description(thread, requestPending: pending)
             var actions: [String] = []
             if ThreadUsageLimitRecovery.canSchedule(thread) {
                 actions = [pending ? "Saving..." : ThreadUsageLimitRecovery.scheduled(thread) ? "Cancel auto-resume" : "Resume at reset"]
@@ -6292,20 +6292,22 @@ extension ComposerController {
             let resetPassed = (reset ?? .distantPast) <= Date()
             panel.recoveryBanner.disabledActions = pending ? Set(actions.indices) : resetPassed && !ThreadUsageLimitRecovery.snoozed(thread) ? [1] : []
         }
-        let resetKey = limited ? thread.map { $0.id.rawValue + ":" + ($0.usageLimitResetAt?.raw ?? "") } : nil
+        let deadlines = limited ? thread.map(ThreadUsageLimitRecovery.copyDeadlines) ?? [] : []
+        let resetKey = limited ? thread.map { $0.id.rawValue + ":" + deadlines.map { "\($0.timeIntervalSince1970)" }.joined(separator: ",") } : nil
         if resetKey != recoveryResetKey {
             recoveryResetWork?.cancel(); recoveryResetWork = nil; recoveryResetKey = resetKey
-            if limited, let reset = thread?.usageLimitResetAt?.date, reset > Date() {
-                scheduleRecoveryResetWake(at: reset)
-            }
+            if let next = deadlines.filter({ $0 > Date() }).min() { scheduleRecoveryResetWake(at: next, then: deadlines) }
         }
     }
-    /// Snooze greys out at the reset (`useDeadlinePassed`, UsageLimitRecoveryBanner.tsx:48 at 3814). A deadline weeks away
-    /// wakes early at the timer's 2^31 s cap and re-arms for the rest, so the banner still updates exactly at the reset.
-    private func scheduleRecoveryResetWake(at reset: Date) {
+    /// Snooze greys out at the reset and the copy changes at the reset and the resume time (`useDeadlinePassed`,
+    /// UsageLimitRecoveryBanner.tsx:77-82 at 5258). A deadline weeks away wakes early at the timer's 2^31 s cap and
+    /// re-arms for the rest, so the banner still updates exactly on time.
+    private func scheduleRecoveryResetWake(at reset: Date, then deadlines: [Date]) {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            if reset > Date() { self.scheduleRecoveryResetWake(at: reset) } else { self.updateThreadBanners() }
+            if reset > Date() { self.scheduleRecoveryResetWake(at: reset, then: deadlines); return }
+            self.updateThreadBanners()
+            if let next = deadlines.filter({ $0 > Date() }).min() { self.scheduleRecoveryResetWake(at: next, then: deadlines) }
         }
         recoveryResetWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + min(reset.timeIntervalSinceNow + 0.01, 2_147_483), execute: work)

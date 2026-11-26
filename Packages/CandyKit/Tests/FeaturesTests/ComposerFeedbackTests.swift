@@ -78,6 +78,18 @@ struct ComposerFeedbackTests {
         state.set("k", "Could not resume thread.")
         #expect(state.visible("k", shell: failed)?.message == "Could not resume thread.")
         #expect(state.visible("other", shell: nil) == nil)
+        // A dismissed local error masks nothing: the same one set again shows (5258 #40042).
+        state.dismiss("k", shell: failed)
+        state.set("k", "Could not resume thread.")
+        #expect(state.visible("k", shell: failed)?.message == "Could not resume thread.")
+        state.set("k", nil)
+        // A later run that fails with the same text shows its banner again (5258 #37419).
+        let again = Self.shell(#""status":"failed","latestRunId":"r2","lastError":"Provider crashed","lastErrorClass":"provider_error""#)
+        #expect(state.visible("k", shell: again)?.message == "Provider crashed")
+        // A draft's error has no session dismissal either.
+        state.set("draft", "Select a base branch before sending in New worktree mode.")
+        state.dismiss("draft", shell: nil)
+        #expect(state.visible("draft", shell: nil) == nil)
         // Transport errors clear instead of showing.
         state.set("k", "Socket is not connected")
         #expect(state.visible("k", shell: nil) == nil)
@@ -99,6 +111,21 @@ struct ComposerFeedbackTests {
         let after = ISO8601DateFormatter().date(from: "2026-06-20T06:00:00Z")!
         #expect(ThreadUsageLimitRecovery.snoozed(snoozed, now: before))
         #expect(!ThreadUsageLimitRecovery.snoozed(snoozed, now: after))
+    }
+
+    /// The recovery banner's line follows the reset and the resume time (5258 UsageLimitRecoveryBanner.tsx:90-112, #39889).
+    @MainActor @Test func usageLimitCopyFollowsTheClock() {
+        let at = { ISO8601DateFormatter().date(from: $0)! }
+        let plain = Self.shell(#""status":"failed","latestRunId":"r1","lastErrorClass":"usage_limit","latestRunCompletedAt":"2026-06-20T01:00:00.000Z","usageLimitResetAt":"2026-06-20T05:00:00.000Z""#)
+        #expect(ThreadUsageLimitRecovery.description(plain, now: at("2026-06-20T04:00:00Z")).hasPrefix("Resets "))
+        #expect(ThreadUsageLimitRecovery.description(plain, now: at("2026-06-20T06:00:00Z")).hasPrefix("Reset "))
+        let resuming = Self.shell(#""status":"failed","latestRunId":"r1","lastErrorClass":"usage_limit","latestRunCompletedAt":"2026-06-20T01:00:00.000Z","usageLimitResetAt":"2026-06-20T05:00:00.000Z","snoozedUntil":"2026-06-20T07:00:00.000Z","limitRecovery":{"runId":"r1","resetAt":"2026-06-20T05:00:00.000Z","autoResume":true,"snooze":false}"#)
+        #expect(ThreadUsageLimitRecovery.displayAt(resuming)?.raw == "2026-06-20T07:00:00.000Z")
+        #expect(ThreadUsageLimitRecovery.description(resuming, now: at("2026-06-20T06:00:00Z")).hasPrefix("Resumes "))
+        #expect(ThreadUsageLimitRecovery.description(resuming, now: at("2026-06-20T08:00:00Z")).hasPrefix("Reset "))
+        #expect(ThreadUsageLimitRecovery.copyDeadlines(resuming).count == 2)
+        let none = Self.shell(#""status":"failed","latestRunId":"r1","lastErrorClass":"usage_limit""#)
+        #expect(ThreadUsageLimitRecovery.description(none) == "Reset time unavailable; retry manually")
     }
 
     /// A ChatGPT plan limit swaps the error for T3's ChatGPT face (ThreadErrorBanner.tsx:83-123, 6f75bcb374).
