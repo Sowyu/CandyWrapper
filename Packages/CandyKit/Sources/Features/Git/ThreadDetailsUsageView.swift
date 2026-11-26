@@ -39,36 +39,74 @@ public struct ThreadDetailsUsageRow: Equatable, Sendable {
                                      tooltip: tooltip, muted: true)
     }
 
-    /// `LimitRow` (ThreadDetailsUsage.tsx:158-205): room left, the time left as the tick, the pace and reset.
-    public static func limit(_ w: UsageLimitWindow, nowMs: Int64) -> ThreadDetailsUsageRow {
+    /// `LimitRow` (5258 ThreadDetailsUsage.tsx:185-233): room left, the time left as the tick, the pace and reset.
+    /// An HTTP quota's row names its account under the first line.
+    public static func limit(_ w: UsageLimitWindow, nowMs: Int64, accountLabel: String? = nil) -> ThreadDetailsUsageRow {
         let left = UsageLimitsLogic.remainingPercent(w)
         let elapsed = UsageLimitsLogic.elapsedShare(w, nowMs: nowMs)
         let timeLeft = elapsed.map { Int(((1 - $0) * 100).rounded()) }  // `paceRemainingPercent`
         var tooltip = ["\(w.label): \(left)% left"]
+        if let accountLabel { tooltip.append(accountLabel) }
         if let pace = UsageLimitsLogic.pace(w, nowMs: nowMs), let timeLeft {
-            let word = switch pace { case .ahead: "Ahead of pace"; case .on: "On pace"; case .under: "Under pace" }
-            tooltip.append("\(word) · \(timeLeft)% of the window left")
+            tooltip.append("\(paceWord(pace)) · \(timeLeft)% of the window left")
         }
         if let reset = w.resetsAt.flatMap(T3Timestamp.parseEpochMs), reset > nowMs {
-            // ponytail: the reset time is a short local time; T3's formatUpcomingTimestamp adds the day when it isn't today
-            let time = Date(timeIntervalSince1970: Double(reset) / 1000).formatted(date: .omitted, time: .shortened)
-            tooltip.append("Resets in \(UsageLimitsLogic.duration(Double(reset - nowMs))) · \(time)")
+            tooltip.append("Resets in \(UsageLimitsLogic.duration(Double(reset - nowMs))) · \(resetTime(reset))")
         }
-        return ThreadDetailsUsageRow(label: w.label, fill: Double(left), tone: left <= 10 ? .error : left <= 20 ? .warning : nil,
+        return ThreadDetailsUsageRow(label: w.label, fill: Double(left), tone: tone(left),
                                      tick: timeLeft.map(Double.init), value: "\(left)%", tooltip: tooltip, opensUsage: true)
     }
 
-    /// The selected instance's windows, or one "Limits · Unavailable" row with the reason (ThreadDetailsUsage.tsx:39-81).
-    public static func limits(instanceId: String?, providers: [ServerProvider], sources: [UsageLimitSourceSnapshot], nowMs: Int64) -> [ThreadDetailsUsageRow] {
-        guard let instanceId else { return [] }
-        let report = UsageLimitsLogic.report(instanceId: instanceId, providers: providers, sources: sources, nowMs: nowMs)
-        // Only this instance's data: another entry may be a different login.
-        guard let limits = report?.accounts.first(where: { $0.instanceId == instanceId })?.limits
-                ?? providers.first(where: { $0.instanceId.rawValue == instanceId })?.usageLimits else { return [] }
-        if let notice = UsageLimitsLogic.notice(limits) {
-            return [ThreadDetailsUsageRow(label: "Limits", fill: nil, tone: nil, value: "Unavailable", tooltip: [notice], opensUsage: true)]
+    /// `PoolRow` (5258 ThreadDetailsUsage.tsx:235-293): a hub pool's room left across its accounts, the next
+    /// reset that restores something, and the hubs it reads.
+    public static func pool(_ w: UsageLimitPoolWindow, nowMs: Int64) -> ThreadDetailsUsageRow {
+        let left = w.remainingPercent
+        let accounts = w.members.count
+        let from = UsageLimitsLogic.poolSources(w)
+        let sources = from.hubs + (from.signedIn ? ["Signed-in accounts"] : [])
+        var tooltip = [accounts > 1 ? "\(w.label): \(left)% left across \(accounts) accounts" : "\(w.label): \(left)% left"]
+        if let pace = w.pace { tooltip.append(paceWord(pace)) }
+        if let next = UsageLimitsLogic.nextPoolReset(w, nowMs: nowMs), let at = next.window.resetsAt.flatMap(T3Timestamp.parseEpochMs) {
+            let duration = UsageLimitsLogic.duration(Double(next.at - nowMs)), time = resetTime(at)
+            tooltip.append(accounts > 1 ? "+\(next.restoresPercent)% in \(duration) · \(time)" : "Resets in \(duration) · \(time)")
         }
-        return limits.windows.map { limit($0, nowMs: nowMs) }
+        if !sources.isEmpty { tooltip.append("From \(sources.joined(separator: ", "))") }
+        return ThreadDetailsUsageRow(label: w.label, fill: Double(left), tone: tone(left), value: "\(left)%", tooltip: tooltip, opensUsage: true)
+    }
+
+    /// `limitTone`.
+    static func tone(_ left: Int) -> Tone? { left <= 10 ? .error : left <= 20 ? .warning : nil }
+
+    static func paceWord(_ pace: UsageLimitPace) -> String {
+        switch pace { case .ahead: "Ahead of pace"; case .on: "On pace"; case .under: "Under pace" }
+    }
+
+    // ponytail: the reset time is a short local time; T3's formatUpcomingTimestamp adds the day when it isn't today
+    static func resetTime(_ ms: Int64) -> String {
+        Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .omitted, time: .shortened)
+    }
+
+    /// `ThreadDetailsUsage` (5258 ThreadDetailsUsage.tsx:58-91): a hub pool's rows or the instance's windows (one
+    /// "Limits · Unavailable" row with the reason), then the instance's HTTP quotas. With quotas, an instance
+    /// whose own limits are unavailable shows only the quotas.
+    public static func limits(instanceId: String?, model: String? = nil, providers: [ServerProvider], sources: [UsageLimitSourceSnapshot],
+                              nowMs: Int64) -> [ThreadDetailsUsageRow] {
+        let resolved = UsageLimitsLogic.threadDetailsLimits(instanceId: instanceId, model: model, providers: providers, sources: sources, nowMs: nowMs)
+        let quotas = UsageLimitsLogic.threadHttpQuotas(instanceId: instanceId, sources: sources)
+        var rows: [ThreadDetailsUsageRow] = []
+        switch resolved {
+        case .pool(let windows): rows = windows.map { pool($0, nowMs: nowMs) }
+        case .instance(let limits):
+            if let notice = UsageLimitsLogic.notice(limits) {
+                if quotas.isEmpty {
+                    rows = [ThreadDetailsUsageRow(label: "Limits", fill: nil, tone: nil, value: "Unavailable", tooltip: [notice], opensUsage: true)]
+                }
+            } else {
+                rows = limits.windows.map { limit($0, nowMs: nowMs) }
+            }
+        case nil: break
+        }
+        return rows + quotas.map { limit($0.window, nowMs: nowMs, accountLabel: $0.accountLabel) }
     }
 }
 

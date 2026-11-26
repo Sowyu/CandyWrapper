@@ -5655,7 +5655,8 @@ extension ComposerController {
     func refreshDetailsUsage() {
         guard let card = panel.lazyDetailsCard.loaded else { return }
         card.context.rows = contextWindow.map { [ThreadDetailsUsageRow.context($0)] } ?? []
-        card.usage.rows = ThreadDetailsUsageRow.limits(instanceId: pickers.current.instanceId?.rawValue, providers: serverConfig.providers,
+        card.usage.rows = ThreadDetailsUsageRow.limits(instanceId: pickers.current.instanceId?.rawValue, model: pickers.current.modelSelection?.model,
+                                                       providers: serverConfig.providers,
                                                        sources: serverConfig.usageLimitSources, nowMs: TimestampFormat.nowMs())
         card.usage.onOpenUsage = { [weak self] in self?.openUsagePage?() }
         card.usageChanged()
