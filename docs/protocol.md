@@ -144,6 +144,8 @@ Route: `GET <wsBase>/ws` (`apps/server/src/ws.ts:3136-3139`). A `wsBase` without
 | `connectionMethod` | no | `direct`, `ssh`, `relay`, `unknown` | `packages/contracts/src/baseSchemas.ts:366` |
 | `clientWebDeployment`, `clientBrowser` | no | only meaningful when `clientSurface=web` | `apps/server/src/ws.ts:620-689` |
 | `clientOsMajorVersion`, `clientDeviceModel` | no | only meaningful when `clientSurface=mobile` | `apps/server/src/ws.ts:620-689` |
+| `frameParts` | no | `1`: frames over 48 KiB arrive in parts that start with U+001E (4928) | `shared/src/socketFrameParts.ts:7-81` |
+| `clientCapabilities` | no | comma-separated wire shapes the client decodes: `settingsSecretReferences` (settings secret fields may hold a reference object), `httpUsageLimitSources` (usage sources of kind `http`). A client that omits one gets the older shape. CandyWrapper sends none yet (`T3Protocol.clientCapabilities`) | 5258 `environment.ts:18-23`, `ws.ts:821-827`, `serverSettings.ts:148-175` |
 
 The client-identity parameters are attribution only. Malformed values are dropped, never fatal (`apps/server/src/ws.ts:620-622`). A native macOS client sends `clientSurface=desktop`, `clientOs=macOS`, `clientDeviceType=desktop`, `connectionMethod=direct|relay|ssh`. The recorder did the same and the server accepted it.
 
@@ -216,7 +218,8 @@ Unary example (`02-turn` t=1614):
 ### 2.5 Ping and Pong
 
 - The client sends `{"_tag":"Ping"}`; the server answers `{"_tag":"Pong"}` (`RpcServer.ts:806-808`). Recorded: `01-basic` t=4288 and t=4289.
-- The official Effect client pings every 5 seconds and treats a missing pong before the next ping as a dead socket (`.repos/effect-smol/packages/effect/src/rpc/RpcClient.ts:1205-1227`). The server itself never pings and sets no idle timeout: a socket held idle for 75 s with no pings still answered `server.probe` (verified 2026-10-09). CandyWrapper therefore sends no periodic pings, which keeps idle wakeups at zero. It probes with `server.probe` on network path changes, system wake and app activation, and pings only on relay routes while the app is active. A probe unanswered after 500 ms also reads the descriptor on a fresh connection, and a socket that stayed silent while the host answered is replaced (T3's silent socket check, `client-runtime/src/connection/supervisor.ts:745-790`).
+- From Nightly 5258 the server also writes `{"_tag":"Pong"}` every 20 s on every `/ws` socket, whether or not the client pinged, so reverse proxies that drop a socket after 60 s without upstream bytes keep it (`apps/server/src/socketHeartbeat.ts:7-10`, `ws.ts:3952`, T3 ad446450e1). Recorded: `27-nightly-5258` t=20099 with no ping sent. Pings carry no id, so a client cannot tell a heartbeat from the answer to its ping: CandyWrapper's watchdog sends two pings and takes ordering from the second Pong (`RPCConnection.round`), and counts any Pong as liveness.
+- The official Effect client pings every 5 seconds and treats a missing pong before the next ping as a dead socket (`.repos/effect-smol/packages/effect/src/rpc/RpcClient.ts:1205-1227`). Before 5258 the server itself never pinged or wrote unasked and set no idle timeout: a socket held idle for 75 s with no pings still answered `server.probe` (verified 2026-10-09). CandyWrapper therefore sends no periodic pings, which keeps idle wakeups at zero on servers before 5258 and at one socket read per 20 s on 5258. It probes with `server.probe` on network path changes, system wake and app activation, and pings only on relay routes while the app is active. A probe unanswered after 500 ms also reads the descriptor on a fresh connection, and a socket that stayed silent while the host answered is replaced (T3's silent socket check, `client-runtime/src/connection/supervisor.ts:745-790`).
 
 ### 2.6 Exit and Cause encoding
 
@@ -1687,7 +1690,7 @@ Verified 2026-10-10 against the sandbox (WP7.6b, `T3Protocol/Domain/Preview.swif
 
 ### 9.9 Scheduled tasks
 
-Scheduled tasks send prompts into threads without a user present (trigger types and schedule syntax: **UNVERIFIED**). Webhook entry is the unauthenticated `POST|PUT|PATCH|GET /api/hooks/:hookId/:token` route (202 `{deliveryId}`; the token in the path, and an optional body signature, is the credential; `apps/server/src/scheduledTasks/ScheduledTaskService.ts:58`). Messages sent by a task carry `scheduledTaskId` (`message.dispatch`, section 7.3). Scope `orchestration:operate`. Field-level shapes: **UNVERIFIED** (not summarised).
+Scheduled tasks send prompts into threads without a user present (trigger types and schedule syntax: **UNVERIFIED**). Webhook entry is the unauthenticated `POST|PUT|PATCH|GET /api/hooks/:hookId/:token` route (202 `{deliveryId}`; the token in the path, and an optional body signature, is the credential; `apps/server/src/scheduledTasks/ScheduledTaskService.ts:58`). Messages sent by a task carry `scheduledTaskId` (`message.dispatch`, section 7.3). Scope `orchestration:operate`. In `scheduledTasks.upsert`, an absent or null `threadId` keeps the task's stored thread from Nightly 5258 on; send `unbindThread: true` with `threadId: null` to clear it, as the web form does when the editor opened with a thread (`scheduledTask.ts:291-294`, `ScheduledTaskService.ts:1497`, `ScheduledTasksSettings.tsx:1680`). A 4928 server ignores the key and clears on null. Field-level shapes: **UNVERIFIED** (not summarised).
 
 | Method | Kind | Payload | Success | Errors (besides `EnvironmentAuthorizationError`) | Scope | `rpc.ts` |
 |---|---|---|---|---|---|---|
@@ -1701,6 +1704,8 @@ Scheduled tasks send prompts into threads without a user present (trigger types 
 | `scheduledTasks.listWebhookDeliveries` | unary | `ScheduledTaskListWebhookDeliveriesInput` | `ScheduledTaskListWebhookDeliveriesResult` | `ScheduledTaskError`, ... | `orchestration:operate` | 1762 |
 | `scheduledTasks.getWebhookDelivery` | unary | `ScheduledTaskGetWebhookDeliveryInput` | `ScheduledTaskGetWebhookDeliveryResult` | `ScheduledTaskError`, ... | `orchestration:operate` | 1771 |
 | `secrets.answerRequest` | unary | `SecretRequestAnswerInput` | `void` | `SecretRequestError`, ... | `orchestration:operate` | 1757 |
+
+`secrets.answerRequest` answers `{threadId, turnItemId, answer}` with `answer` one of `{type: "save", secret}`, `{type: "decline"}`, `{type: "reference", reference}` (servers with `secretRequestReferences`) or, from 5258, `{type: "save", values: {name: value}}`. A `secret_request` item with `fields` (up to 8 of `{name, label, placeholder?, secret?}`, where `secret: false` shows the typed text) must be answered with `values` keyed by name, or the server refuses with `SecretRequestError` reason `fields_mismatch` (`orchestrationV2.ts:1841-1856`, `secretRequest.ts:22-35`). An item without `fields` keeps the `secret` answer.
 
 ### 9.10 Usage, diagnostics and host
 
@@ -2073,3 +2078,28 @@ CandyWrapper reads these from a 4928 server and still works against 3824, where 
 - Use T3 Code in another app (#33196): `POST /api/auth/pairing-token` takes `access` (an `AuthMcpClientAccess` level) and mints a code that approves one app sign-in at that level, behind capability `mcpApprovalCodes`; `mcpHostedApproval` means the sign-in page asks for the level instead (`auth.ts:270-334`, `:515-530`, `environment.ts:190-193`). `POST /api/connect/reachability` runs the tunnel check now and answers `EnvironmentConnectReachability` (`environmentHttp.ts:1010-1015`). The link state adds `linkRevoked` and `tunnelHostname`; the MCP URL is `https://<tunnelHostname>/mcp` (`cloud/t3ConnectState.ts:38-59`).
 - Text generators (#33147): server setting `textGenerators: {id: {kind: openaiCompatible|anthropic, label?, baseUrl, apiKey, enabled}}`, merged per entry with `null` removing one; `apiKey` is a secret setting the server stores and sends back redacted, and sending the marker back keeps it (`settings.ts`, `apps/server/src/settingsSecrets.ts`). `server.listTextGeneratorModels {id, config?, refresh?, test?, model?}` answers `{models: [{id, name}], testedModel?}` or `TextGeneratorError {detail}` (`rpc.ts`). A 3824 server sends no `textGenerators`, so CandyWrapper hides the section there.
 - `TerminalSessionStatus`, `GitStackedAction`, `RelayClientInstallStage`, `PreviewEvent.Kind`, `PeerLinkSummary.Status` and `EnvMode` are `OpenStringEnum`s now, so a value a later server adds decodes instead of failing the message.
+
+## Nightly 5258 changes (2026-11-25)
+
+CandyWrapper reads these from a 5258 server and still works against 4928, where each field and method is absent. The audit is `docs/research/nightly-diff-5258-wire.md`, and `fixtures/transcripts/27-nightly-5258.jsonl` is a recorded 5258 session. `ORCHESTRATION_PROTOCOL_VERSION` stays 2.
+
+- Heartbeat: the server writes `{"_tag":"Pong"}` every 20 s on every socket (section 2.5). It is not an answer to a ping.
+- `scheduledTasks.upsert` keeps the stored thread on a null `threadId`; clear it with `unbindThread: true` (section 9.9).
+- `lineage.workflowStep: true` marks a workflow agent step, and `isListedThreadLineage` hides it like a subagent or side chat (`orchestrationV2.ts:189-207`). The thread and its shell carry `workflowRun: {environmentId, runId, workflow, step}` (`:165-174`, `:521`, `:2436`).
+- `secret_request.fields` asks for several named values, answered with `values` (section 9.9).
+- Run and session fields: `RunAttempt.startedModes {runtimeMode, interactionMode}` (`:902`), `ProviderSession.startupPhase` (`plugins`, `mcp`, `hooks`, `skills`, `resume`, `connecting` or a newer string) with `startupPhaseThreadId` for a session shared by threads (`:1127-1130`), `ProviderTurn.promptDropped: true` (`:1378`), `capabilities.turns.supportsNativeResume` (`:331`), `capabilities.tools.supportsBackgroundWait` (`:362`), `Run.manualContinuationOfRunId` (`:840`), `Run.outputSchema` and `output {value, submittedAt}` written by the event `run.output-submitted` (`:813`, `:858`, `:2255`). T3 hides Resume when the run's session reports `supportsNativeResume: false` and no message is left unsent (`client-runtime state/threadExecution.ts:425-460`); CandyWrapper ports it as `RunStartup.resumeUnavailable`.
+- Turn item fields: `assistant_message.delivery: "async"` (`:1940`), `system_notice.mcpSignIn {server}` (`:2051`), `error.failure.verificationUrl` (`:1750`), `approval_request.pushHooks` (`:2021`). The new item type `feedback_request {preview, conversationTrace?, feedbackStatus}` (`:1902`) stays unknown to CandyWrapper until a card draws it; the agent's `t3_feedback` call does not wait for it.
+- `vcs.refreshStatus` answers `refsDigest` beside the status (`git.ts:274-279`). A client keeps its cached branch list while the digest is unchanged.
+- `Project.trackedFolders [{path, name, discovered?}]` (absent means a single-folder project), `project.update` takes `trackFolders` and `untrackFolders`, checkpoint scopes carry `label` and `repositoryPath` (kind `manual`), `ThreadTurnDiff.repositories [{name, repositoryPath, relativePath, diff}]` (`checkpointDiff.ts:24-43`), and `AppThread.rollbackUnrestored {requestId, repositories}`.
+- `ServerProvider.modelsRetained` keeps a picker's models after one failed check (`server.ts:282-283`). `server.probe` answers `{serverTime?}`.
+- Capabilities: `previewTunnelSetting`, `linkThreadStream`, `linkClientPairing`, `linkPairingForLink`, `agentFeedback`, `issueTrackerAccounts` (`environment.ts`), and `stackAutoMerge` on pull request providers.
+
+New methods (25), all absent on 4928. CandyWrapper has their names and payload builders in `T3Protocol` and no UI yet.
+
+| Family | Methods | Swift |
+| --- | --- | --- |
+| Workspace folders | `workspace.listFolders {projectId}`, `scanFolders {workspaceRoot}`, `taskFolder {worktreePath}`, `addTaskFolderRepository {threadId, repositoryPath}` (`source-control:write`), `layoutCommands {projectId}`, `approveLayoutCommands {projectId, approvals}` (`terminal:operate`) | `WorkspaceRPC`, `Domain/WorkspaceFolders.swift` |
+| Workflows | `workflows.subscribe {changes?}` (stream of whole lists or `_tag: "changed"` deltas), `counts` (stream), `get {runId}`, `about {subject, issue?, pullRequest?}`, `answer {runId, name, choice, reason?}`, `resume {runId}`, `cancel {runId, reason?}` (`orchestration:operate`), `getDefinition`, `saveDefinition {name, source}`, `deleteDefinition {name}` (`terminal:operate`) | `WorkflowsRPC`, `Domain/Workflows.swift` |
+| Linked threads | `peerLinks.names`, `subscribeThread {environmentId, threadId}` (stream, items as `orchestration.subscribeThread`), `threadHistoryPage {..., cursor}`, `threadItem {..., itemId, revision?}`, `pairClient {environmentId}`, `pairLink {environmentId, access}` | `PeerLinkRPC`, `Domain/PeerLink.swift` |
+| Agent feedback | `agentFeedback.answerRequest {threadId, turnItemId, answer: send\|decline, includeConversation?}` | `AgentFeedbackRPC`, `Domain/AgentFeedback.swift` |
+| MCP sign-in | `provider.mcpSignIn.start {threadId, providerThreadId, server}`, `complete {..., callbackUrl}` (`providers:manage`) | `McpSignInRPC` |
