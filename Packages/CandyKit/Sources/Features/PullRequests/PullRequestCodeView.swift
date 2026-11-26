@@ -434,7 +434,7 @@ public final class PullRequestCodeView: DSView {
             canReact: d.capabilities.reactions == true,
             canEdit: { c in PullRequestWriteLogic.canEditComment(d, author: c.author?.login, kind: "review-comment", hostAnswer: c.canEdit) },
             actions: actions, cwd: d.workspaceRoot, nowMs: nowMs, startsExpanded: t.line != nil ? true : nil,
-            lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
+            lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider), emoji: d.provider == "github")
         card.onResize = { [weak self] in self?.list.reloadAnnotations(); self?.needsLayout = true }
         if let onAddToChat { card.onAddToChat = { onAddToChat($0) } }
         threadCards[t.id] = card

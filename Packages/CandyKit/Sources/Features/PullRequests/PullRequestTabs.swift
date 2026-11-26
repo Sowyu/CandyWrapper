@@ -587,7 +587,7 @@ final class CommentsItem: DSView, StackItem {
                                collapsed: collapsed, open: openIds.contains(c.id), reply: reply,
                                replyCount: replyCount, replies: replies, moreReplies: more,
                                addsToChat: onAddToChat != nil && !reply && PullRequestDetailLogic.chatSubject(c, d),
-                               lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
+                               lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider), emoji: d.provider == "github")
         card.onAddToChat = { [weak self] in self?.onAddToChat?(c.id) }
         // A rebuilt list keeps the cards the reader opened (T3 keys them by detail and comment).
         card.onResize = { [weak self, weak card] in
@@ -803,7 +803,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
     init(_ c: PullRequestComment, nowMs: Int64, cwd: String, canEdit: Bool = false, canReact: Bool = false, editing: Bool = false,
          collapsed: PullRequestDetailLogic.Collapsed? = nil, open: Bool = false, reply: Bool = false,
          replyCount count: Int = 0, replies: PullRequestReplyList? = nil, moreReplies: PullRequestMoreRepliesLine? = nil,
-         addsToChat: Bool = false, chatIconOnly: Bool = false, lineBreaks: Bool = false) {
+         addsToChat: Bool = false, chatIconOnly: Bool = false, lineBreaks: Bool = false, emoji: Bool = false) {
         self.replies = replies
         self.moreReplies = moreReplies
         // An empty verdict hides the body, unless this reader may rewrite it (the pencil lives there).
@@ -859,7 +859,7 @@ final class CommentCard: DSView, StackItem, FocusWithinObserver {
         addSubview(avatar)
         body.cwd = cwd
         // Comments break lines where the host does, as the description does (PullRequestDetailPanel.tsx:302).
-        if hasBody { body.setMarkdown(c.body, preservesLineBreaks: lineBreaks) }
+        if hasBody { body.setMarkdown(emoji ? GitHubEmoji.expandMarkdown(c.body) : c.body, preservesLineBreaks: lineBreaks) }
         addSubview(body)
         if let collapsed {
             headFill.isHidden = true
@@ -1110,7 +1110,7 @@ public final class PullRequestTimelineView: DSView {
             switch row {
             case .comments(let events):
                 let r = ConversationRow(events, nowMs: nowMs, cwd: d.workspaceRoot, addsToChat: onAddToChat != nil, linked: anchor,
-                                        lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
+                                        lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider), emoji: d.provider == "github")
                 r.onAddToChat = { [weak self] id in self?.onAddToChat?(id) }
                 if let anchor, events.contains(where: { PullRequestAnchor.matches(anchor, url: $0.url) }) { linkedRow = r }
                 return r
@@ -1128,7 +1128,7 @@ public final class PullRequestTimelineView: DSView {
                 if let outcome = PullRequestDetailLogic.reviewOutcome(e.reviewState) {
                     let stale = newestCommit.map { e.at < $0 } ?? false
                     return TimelineEventRow(verdict: e, outcome: outcome, stale: stale, nowMs: nowMs, cwd: d.workspaceRoot,
-                                            lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
+                                            lineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider), emoji: d.provider == "github")
                 }
                 return TimelineEventRow(lifecycle: e, nowMs: nowMs, provider: d.provider)
             }
@@ -1254,7 +1254,8 @@ final class TimelineEventRow: DSView, StackItem {
         hover = HoverGroup(self) { [weak self] _ in self?.redisplay(transitioning: .color) }
     }
 
-    init(verdict e: PullRequestDetailLogic.TimelineEvent, outcome: String, stale: Bool, nowMs: Int64, cwd: String, lineBreaks: Bool = false) {
+    init(verdict e: PullRequestDetailLogic.TimelineEvent, outcome: String, stale: Bool, nowMs: Int64, cwd: String, lineBreaks: Bool = false,
+         emoji: Bool = false) {
         marker = TimelineMarker(actor: e.actor, fallback: outcome == "approved" ? .circleCheck : outcome == "changes-requested" ? .circleX : .circleDashed)
         pinTop = true
         super.init(frame: .zero)
@@ -1269,7 +1270,7 @@ final class TimelineEventRow: DSView, StackItem {
         if let text = e.body {
             let m = MarkdownView()
             m.cwd = cwd
-            m.setMarkdown(text, preservesLineBreaks: lineBreaks)
+            m.setMarkdown(emoji ? GitHubEmoji.expandMarkdown(text) : text, preservesLineBreaks: lineBreaks)
             body = m
             addSubview(m)
         }
@@ -1328,7 +1329,8 @@ final class ConversationRow: DSView, StackItem {
         // `transition-transform`, `rotate-180` when open (PullRequestTimelineTab.tsx:336-341).
         chevron.setRotation(open ? 180 : 0) } }
 
-    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String, addsToChat: Bool = false, linked: String? = nil, lineBreaks: Bool = false) {
+    init(_ events: [PullRequestDetailLogic.TimelineEvent], nowMs: Int64, cwd: String, addsToChat: Bool = false, linked: String? = nil, lineBreaks: Bool = false,
+         emoji: Bool = false) {
         var actors: [String: PullRequestActor] = [:]
         var order: [String] = []
         for e in events { if let a = e.actor, actors[a.login] == nil { actors[a.login] = a; order.append(a.login) } }
@@ -1342,7 +1344,7 @@ final class ConversationRow: DSView, StackItem {
         cards = events.map { e in
             let c = CommentCard(PullRequestComment(id: e.id, kind: e.kind == .review ? "review" : "issue-comment", author: e.actor, body: e.body ?? "",
                                                    createdAt: e.at, url: e.url, path: e.path, reviewState: e.reviewState), nowMs: nowMs, cwd: cwd,
-                                addsToChat: addsToChat && PullRequestDetailLogic.visibleBody(e.body ?? "") != nil, chatIconOnly: true, lineBreaks: lineBreaks)
+                                addsToChat: addsToChat && PullRequestDetailLogic.visibleBody(e.body ?? "") != nil, chatIconOnly: true, lineBreaks: lineBreaks, emoji: emoji)
             c.onAddToChat = { [weak self] in self?.onAddToChat?(e.id) }
             c.linked = linked.map { PullRequestAnchor.matches($0, url: e.url) } ?? false
             c.isHidden = true
@@ -1588,7 +1590,9 @@ final class PullRequestDescriptionItem: DSView, StackItem, FocusWithinObserver {
         detail = d
         view.cwd = d.workspaceRoot
         // PullRequestMarkdown.tsx (#26060): GitHub, Forgejo and Azure DevOps keep single line breaks.
-        view.setMarkdown(d.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "_No description provided._" : d.body,
+        // GitHub's `:alias:` emoji render in prose (pullRequestMarkdown.logic.ts, #39315).
+        let body = d.provider == "github" ? GitHubEmoji.expandMarkdown(d.body) : d.body
+        view.setMarkdown(d.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "_No description provided._" : body,
                          preservesLineBreaks: PullRequestDetailLogic.hardLineBreaks(d.provider))
         // Keyed by the pull request, so an editor left open never shows over the next one.
         if editingURL != nil && editingURL != d.url { stopEditing() }

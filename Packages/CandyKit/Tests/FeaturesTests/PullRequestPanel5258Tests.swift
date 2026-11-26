@@ -151,3 +151,14 @@ struct PageClosedTabTests {
         #expect(next?.surface.id == id)
     }
 }
+
+/// 5258 #39315 (pullRequestMarkdown.logic.test.ts): GitHub `:alias:` emoji in prose, code left alone.
+struct GitHubEmojiTests {
+    @Test func expandsProseOnly() {
+        #expect(GitHubEmoji.expand("Ship it :tada:") == "Ship it 🎉")
+        #expect(GitHubEmoji.expand(":tada:tada:") == "🎉tada:")
+        #expect(GitHubEmoji.expand("time 10:30:45 and :not_an_emoji:") == "time 10:30:45 and :not_an_emoji:")
+        #expect(GitHubEmoji.expand(":+1: :-1:") == "👍 👎")
+        #expect(GitHubEmoji.expandMarkdown("Done :rocket: `:rocket:`\n```\n:rocket:\n```\n    :rocket:") == "Done 🚀 `:rocket:`\n```\n:rocket:\n```\n    :rocket:")
+    }
+}
