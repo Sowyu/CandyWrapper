@@ -4622,9 +4622,13 @@ extension ComposerController {
     fileprivate func attachmentsTargetChanged() {
         if panel.stashMenuOpen { setStashMenu(false) }
         let key = draftKey ?? ""
-        var phase: ComposerActivityRowView.Phase?
-        if case .thread = target { phase = .loading }
-        updateSyncPhase(phase, key: key)
+        // Only a new target waits for its store's status. Ending a queued edit reloads the same thread's prompt, and its
+        // store sends no new status, so a reset here left "Loading messages..." up for good.
+        if key != syncStatus.key {
+            var phase: ComposerActivityRowView.Phase?
+            if case .thread = target { phase = .loading }
+            updateSyncPhase(phase, key: key)
+        }
         syncAttachmentViews()
     }
 
