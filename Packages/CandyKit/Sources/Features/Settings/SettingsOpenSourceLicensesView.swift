@@ -74,7 +74,9 @@ final class LicenseHeaderActionView: DSView {
     /// `LicenseCount`: "{count} notices", or "{filtered} of {total}" while a search narrows the list.
     func setCounts(filtered: Int, total: Int) {
         count.text = filtered == total ? "\(total) notices" : "\(filtered) of \(total)"
+        invalidateIntrinsicContentSize()
         needsLayout = true
+        superview?.needsLayout = true
     }
 
     func setSearchOpen(_ on: Bool) {
@@ -85,6 +87,8 @@ final class LicenseHeaderActionView: DSView {
         else if field.input.isFirstResponderInside { window?.makeFirstResponder(nil) }
         invalidateIntrinsicContentSize()
         needsLayout = true
+        // The section places its header action from this view's intrinsic width.
+        superview?.needsLayout = true
     }
 
     /// Closed: `flex items-center gap-1.5`, the count then the button. Open: `gap-2`, the count then the `w-44` field.
