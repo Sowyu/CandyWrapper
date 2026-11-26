@@ -58,6 +58,21 @@ struct FlowerCostTests {
             }
             totals.sort()
             print("flower-cost \(name) total: median \(Int(totals[totals.count / 2])) ms, min \(Int(totals[0])) ms")
+            // The same set as a later launch gets it: read from disk and composed over the field.
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("cw-flower-cost-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: root) }
+            let all = parts.reduce(into: FlowerParts()) { $0.formUnion($1.1) }
+            var disk: [Double] = []
+            for r in 0...reps {
+                let t0 = DispatchTime.now().uptimeNanoseconds
+                var phases = DitherArtView.flowerPhases(key, all, opening: opening, job: FlowerJob(),
+                                                        codes: FlowerCodes(key: key, disk: FlowerDisk(root: root, build: "cost")))
+                while phases.next() != nil {}
+                // The first pass renders and writes.
+                if r > 0 { disk.append(Double(DispatchTime.now().uptimeNanoseconds - t0) / 1e6) }
+            }
+            disk.sort()
+            print("flower-cost \(name) from disk: median \(Int(disk[disk.count / 2])) ms, min \(Int(disk[0])) ms")
             // One tick of the idle turn: the frame composed over the field on the main thread.
             if opening != nil {
                 let codes = FlowerCodes(key: key)

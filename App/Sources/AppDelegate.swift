@@ -53,6 +53,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Shift held at launch skips reopening the last thread, a way past one that hangs.
         LaunchGuard.shared.begin(shiftHeld: NSEvent.modifierFlags.contains(.shift))
         StallMonitor.start()
+        // The Flower's frames stay on disk, so only the first showing at a window size renders them. The executable's
+        // date tells builds apart, test apps too, since frames are only right for the renderer that made them.
+        if !Self.isPreview, let exe = Bundle.main.executableURL,
+           let built = try? exe.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
+            DitherArtView.keepFlowerFrames(
+                under: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent(Bundle.main.bundleIdentifier ?? "CandyWrapper").appendingPathComponent("flower"),
+                build: String(Int(built.timeIntervalSince1970)))
+        }
         if !CommandLine.arguments.contains("--server") { ServerController.prefetchCachedSidebar() }
         // The View menu carries its own Toggle Full Screen (DesktopApplicationMenu.ts:258-268).
         UserDefaults.standard.set(false, forKey: "NSFullScreenMenuItemEverywhere")

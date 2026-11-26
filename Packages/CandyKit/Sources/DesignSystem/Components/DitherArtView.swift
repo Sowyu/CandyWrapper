@@ -1,5 +1,6 @@
 import Accelerate
 import AppKit
+import CryptoKit
 import ImageIO
 import os
 
@@ -680,18 +681,22 @@ final class FlowerJob: @unchecked Sendable {
 final class FlowerCodes: @unchecked Sendable {
     enum Slot: Hashable { case open, bloom, idle, opening(LotusArt.Opening), flight(LotusArt.Opening) }
     let key: FlowerKey
+    /// Where the frames stay across launches, nil in tests and previews.
+    let disk: FlowerDisk?
     private let lock = NSLock()
     private var slots: [Slot: [[UInt8]]] = [:]
     private var renders = 0
-    init(key: FlowerKey) { self.key = key }
+    init(key: FlowerKey, disk: FlowerDisk? = nil) { self.key = key; self.disk = disk }
 
     subscript(slot: Slot) -> [[UInt8]]? { lock.withLock { slots[slot] } }
 
-    /// The slot's frames, rendered by `make` and kept the first time. Only the latest opening's frames stay: the
-    /// composer moved for any other.
+    /// The slot's frames, read from `disk` or rendered by `make`, and kept the first time. Only the latest opening's
+    /// frames stay: the composer moved for any other.
     func frames(_ slot: Slot, make: () -> [[UInt8]]?) -> [[UInt8]]? {
         if let hit = self[slot] { return hit }
-        guard let made = make() else { return nil }
+        let saved = disk?.read(key, slot)
+        guard let made = saved ?? make() else { return nil }
+        if saved == nil { disk?.write(made, key, slot) }
         lock.withLock {
             switch slot {
             case let .opening(o), let .flight(o):
@@ -701,7 +706,7 @@ final class FlowerCodes: @unchecked Sendable {
             default: break
             }
             slots[slot] = made
-            renders += made.count
+            if saved == nil { renders += made.count }
         }
         return made
     }
@@ -711,6 +716,76 @@ final class FlowerCodes: @unchecked Sendable {
     var bytes: Int { lock.withLock { slots.values.reduce(0) { $0 + $1.reduce(0) { $0 + $1.count } } } }
     /// Keeps the open still only, for Animate off and Reduce Motion.
     func dropMotion() { lock.withLock { slots = slots.filter { $0.key == .open } } }
+}
+
+/// The flower's packed frames on disk, a file per `FlowerCodes` slot. A new thread's set takes about 5 s of CPU to
+/// render in Release and about 5 MB to keep, so only the first showing at a window size renders it; later launches
+/// read it back. One directory per build, since frames are only right for the renderer that made them.
+struct FlowerDisk: Sendable {
+    let directory: URL
+    // ponytail: 64 MB of frames, about twelve window sizes, oldest out first; raise it if resizing through more shows renders
+    var budget = 64 << 20
+
+    /// `root/build`, with every other build's frames under `root` removed.
+    init(root: URL, build: String) {
+        directory = root.appendingPathComponent(build, isDirectory: true)
+        let fm = FileManager.default
+        for old in (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] where old.lastPathComponent != build {
+            try? fm.removeItem(at: old)
+        }
+        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    /// The canvas a slot's frames cover, which fixes each frame's length.
+    private func canvas(_ key: FlowerKey, _ slot: FlowerCodes.Slot) -> LotusArt.Placement {
+        switch slot {
+        case .open, .bloom, .idle: key.placement
+        case let .opening(o): o.bloom
+        case let .flight(o): o.canvas
+        }
+    }
+
+    /// Swift prints every stored field of these value types, so two keys that differ anywhere get different names.
+    private func file(_ key: FlowerKey, _ slot: FlowerCodes.Slot) -> URL {
+        let name = SHA256.hash(data: Data("\(key.placement)|\(key.dark)|\(slot)".utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+        return directory.appendingPathComponent(name)
+    }
+
+    /// The slot's frames, or nil when none are kept or the file isn't whole: a count, then that many frames of the
+    /// canvas's packed length.
+    func read(_ key: FlowerKey, _ slot: FlowerCodes.Slot) -> [[UInt8]]? {
+        let url = file(key, slot), p = canvas(key, slot), length = (p.width * p.height + 3) / 4
+        guard length > 0, let data = try? Data(contentsOf: url, options: .mappedIfSafe), data.count >= 4 else { return nil }
+        let count = Int(data.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }.littleEndian)
+        guard count > 0, data.count == 4 + count * length else { return nil }
+        // Read again: the file stays while older ones go.
+        try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+        return (0..<count).map { i in [UInt8](data[(data.startIndex + 4 + i * length)..<(data.startIndex + 4 + (i + 1) * length)]) }
+    }
+
+    func write(_ frames: [[UInt8]], _ key: FlowerKey, _ slot: FlowerCodes.Slot) {
+        let p = canvas(key, slot), length = (p.width * p.height + 3) / 4
+        guard !frames.isEmpty, frames.allSatisfy({ $0.count == length }) else { return }
+        var data = Data(capacity: 4 + frames.count * length)
+        withUnsafeBytes(of: UInt32(frames.count).littleEndian) { data.append(contentsOf: $0) }
+        for frame in frames { data.append(contentsOf: frame) }
+        try? data.write(to: file(key, slot), options: .atomic)
+        trim()
+    }
+
+    /// Removes the files read longest ago until the directory fits `budget`.
+    private func trim() {
+        let fm = FileManager.default, keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
+        let files = ((try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: Array(keys))) ?? []).compactMap { url -> (URL, Int, Date)? in
+            guard let v = try? url.resourceValues(forKeys: keys), let size = v.fileSize, let date = v.contentModificationDate else { return nil }
+            return (url, size, date)
+        }
+        var total = files.reduce(0) { $0 + $1.1 }
+        for (url, size, _) in files.sorted(by: { $0.2 < $1.2 }) where total > budget {
+            try? fm.removeItem(at: url)
+            total -= size
+        }
+    }
 }
 
 final class FlowerStageBox: Equatable {
@@ -964,10 +1039,16 @@ extension DitherArtView {
             flowerCodeSets.insert(hit, at: 0)
             return hit
         }
-        let made = FlowerCodes(key: key)
+        let made = FlowerCodes(key: key, disk: Self.flowerDisk)
         flowerCodeSets = Array(([made] + flowerCodeSets).prefix(2))
         return made
     }
+
+    /// Where rendered frames stay across launches (`FlowerDisk`), nil until the app names a place, so tests render.
+    static var flowerDisk: FlowerDisk?
+
+    /// Keeps rendered flower frames under `root`, apart for each `build`.
+    public static func keepFlowerFrames(under root: URL, build: String) { flowerDisk = FlowerDisk(root: root, build: build) }
 
     /// Renders `parts` of `key` off the main thread, across the cores, each handed over as it lands.
     private func renderFlower(_ key: FlowerKey, _ parts: FlowerParts, opening: LotusArt.Opening? = nil) {
