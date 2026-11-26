@@ -110,7 +110,9 @@ final class ProviderUpdateNoticeView: DSView {
         text.frame = NSRect(x: 12, y: 9, width: bounds.width - 24, height: h)
         if let link, let origin = linkOrigin(textWidth: bounds.width - 24) {
             // `y` is 0 on the text's last line and 16.5 below it.
-            link.frame = NSRect(x: 12 + origin.x, y: 9 + h - 16.5 + origin.y, width: link.fittingSize.width, height: 16.5)
+            // Redesign lines the link's word up with the text, without the button's own padding in front of it.
+            let inset = dither ? link.labelInset : 0
+            link.frame = NSRect(x: 12 + origin.x - inset, y: 9 + h - 16.5 + origin.y, width: link.fittingSize.width, height: 16.5)
         }
     }
 
