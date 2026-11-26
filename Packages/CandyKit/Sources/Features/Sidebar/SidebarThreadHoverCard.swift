@@ -26,6 +26,8 @@ public struct SidebarThreadHoverCardModel: Equatable {
     public var errorIsUsageLimit: Bool?
     /// The footer's pull request rows, on servers with several pull requests per thread.
     public var pullRequests: SidebarPullRequestBadge?
+    /// A composer thread chip for a thread on another machine (ThreadChipHoverCard.tsx:78-88 at 5258).
+    public var unreadable = false
 
     public init(title: String) { self.title = title; environmentMachine = "server" }
 
@@ -41,7 +43,7 @@ public struct SidebarThreadHoverCardModel: Equatable {
         a.title == b.title && a.projectLabel == b.projectLabel && a.projectIcon == b.projectIcon && a.environmentLabel == b.environmentLabel
             && a.environmentMachine == b.environmentMachine && a.branch == b.branch && a.worktree == b.worktree && a.branchMismatch == b.branchMismatch && a.provider?.driver == b.provider?.driver
             && a.provider?.label == b.provider?.label && a.providerAccent == b.providerAccent && a.handedOffFrom == b.handedOffFrom && a.terminalProcessCount == b.terminalProcessCount
-            && a.errorIsUsageLimit == b.errorIsUsageLimit && a.pullRequests == b.pullRequests
+            && a.errorIsUsageLimit == b.errorIsUsageLimit && a.pullRequests == b.pullRequests && a.unreadable == b.unreadable
     }
 }
 
@@ -119,6 +121,17 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
             } else {
                 add(glyph, provider.label)
             }
+        }
+        // `flex min-w-0 items-start gap-2 text-warning`, `CircleAlertIcon mt-0.5 size-3`, after the model.
+        if model.unreadable {
+            let tone = Themed.color(\.warning)
+            add(IconView(name: .circleAlert, size: 12, strokeColor: tone), "", tone: tone)
+            let block = TextBlockView()
+            block.text = "On another machine, so this machine's agent can't read it. Remove it or switch back to send."
+            block.font = DSFont.ui(12)
+            block.lineHeight = 16
+            addSubview(block)
+            rows[rows.count - 1].block = block
         }
         if !model.handedOffFrom.isEmpty {
             add(IconView(name: .arrowRightLeft, size: 12, strokeColor: muted), "Handed off from \(model.handedOffFrom.joined(separator: ", "))")

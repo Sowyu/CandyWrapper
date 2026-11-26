@@ -950,6 +950,13 @@ final class ThreadController {
             if !(shell.pullRequests ?? []).isEmpty { card.pullRequests = SidebarPullRequestBadge(shell) }
             return card
         }
+        // A composer thread chip shows the same card, with the warning when this machine's agent can't read it.
+        ComposerChipLook.threadHoverCard = { record, unreadable in
+            guard let env = record["environmentId"]?.stringValue, let local = record["threadId"]?.stringValue,
+                  var card = MarkdownView.threadHoverCard?("t3-thread://v2/\(env)/\(local)") else { return nil }
+            card.unreadable = unreadable
+            return card
+        }
         panel.model.onOpenScheduledTask = { [weak self] taskId in
             guard let self, let env = self.openThreadId?.environmentId else { return }
             self.automations.openSettings?(env, taskId)
