@@ -70,6 +70,12 @@ enum PeerLinkDialog {
                         commit: @escaping @MainActor (Choice) async throws -> String?) -> ModalHost {
         let (dialog, form, cancel, link) = LinkEnvironmentDialog.make(machines: machines, throughRoutes: throughRoutes, sourceLabel: sourceLabel)
         form.answersRequest = answersRequest
+        // `peerLinks.pairLink` needs access:write and the scopes it hands out (#41742, clientRpcPermissions.ts:130-134,
+        // LinkedEnvironmentsSettings.tsx:332-347). A session not read yet denies it, as T3's `permissionAtom` does.
+        form.mayPairThrough = { route, access in
+            guard let session = environments.authSession(route.viaEnvironmentId) else { return false }
+            return ([AuthScopes.accessWrite] + PeerLinks.scopes(for: access)).allSatisfy(session.grants)
+        }
         form.preset(choice: initialChoice, access: initialAccess, lockMachine: lockMachine, address: address, through: through)
         form.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
         let host = ModalHost.present(dialog, in: window)
