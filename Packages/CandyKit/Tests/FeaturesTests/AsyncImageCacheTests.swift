@@ -249,7 +249,11 @@ extension AsyncImageCacheTests {
     }
 
     @Test func zoomUpgradesPixelsWithoutMovingTheImage() async throws {
+        // 400pt tall: the media box leaves the 52pt titlebar clear, and in the 300pt window the fitted image is
+        // 88pt, which three zoom steps keep under the 768px it first loads at.
         let window = window(), calls = Calls()
+        window.setContentSize(NSSize(width: 400, height: 400))
+        window.contentView?.frame = NSRect(x: 0, y: 0, width: 400, height: 400)
         let preview = ExpandedImagePreviewView(items: [.init(key: UUID().uuidString, name: "image", load: Self.loader(calls))], index: 0)
         preview.present(in: window)
         let image = try #require(preview.subviews.flatMap(\.subviews).compactMap { $0 as? AsyncImageView }.first)
