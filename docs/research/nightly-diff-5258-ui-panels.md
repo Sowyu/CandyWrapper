@@ -412,7 +412,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 26c21a86cf | #42149 | fix(web): ODS previews hide values a merge covers | files | n/a (QuickLook previews) † |
 | 26f4c7550e | #42076 | fix(web): Esc in provider model filter clears it without closing Settings | settings | ported cb5edfe1 |
 | 2713570406 | #38506 | fix(desktop): update checks say why a build with a different saved track offers nothing | shell | n/a (Electron updater) † |
-| 28706aceb6 | #41005 | fix(server): unlinking an environment ends its session on the other machine | connections | ported e81f4f9e: the Forget copy and the "{label} did not answer" warning; the rest is server side |
+| 28706aceb6 | #41005 | fix(server): unlinking an environment ends its session on the other machine | connections | ported dc6bcde3: the Forget copy and the "{label} did not answer" warning; the rest is server side |
 | 28bcb73736 | #40240 | fix(web): floating device preview keeps its stream across thread switches | browser | ported 5c75e9ac |
 | 2a411317d9 | #39105 | fix(web): PDF pages no longer turn black while the panel is resized | files | port (3.5) † |
 | 2c33cbdf02 | #39643 | fix(web): strip terminal colors from saved notebook output | files | n/a (QuickLook previews) † |
@@ -448,7 +448,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | ported 40fa9c76: only the latest check attempt lands, and Test stays enabled for a corrected URL. This is the user's own OpenTelemetry export, not T3 telemetry |
 | 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d476c29f |
 | 4b697be849 | #39331 | fix(web): keep deleted ACP sessions out of pending listings | settings | already: ProviderAcpSessionsView runs one request at a time (`busy`), so no list can be pending while a delete lands |
-| 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | ported 8d59af6e: T3's Third-party notices header with the count and a search button; Esc clears and closes the search |
+| 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | ported 6b7f5c27: T3's Third-party notices header with the count and a search button; Esc clears and closes the search |
 | 4e6b1fa771 | #42585 | fix(web): element context preview no longer ends in a split surrogate | browser | port (6.2) † |
 | 511447a9f2 | #40207 | feat(server): add a TanStack Source forge and issue tracker behind T3CODE_TANSTACK_SOURCE | other | n/a (server only, wire) † |
 | 515cab980a | #42352 | fix(web): script command field shows both hyphens with ligature fonts | settings | ported 352fd2eb: `FieldView.ligatures = false` on the command field |
@@ -526,7 +526,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 90e6e3e69d | #42244 | fix(web): keep emoji intact in manually added folder names | other | n/a (Swift Characters) † |
 | 916fcdc364 | #39312 | fix(web): preserve newer project action drafts when imports fail | settings | ported 33bfbc6a: a form opened during the import keeps its draft, the failure is a thread toast |
 | 91d2d90f46 | #26451 | fix(web): a failed main chunk load reloads once instead of showing the boot error | shell | n/a (web chunk load) † |
-| 93b8dc3465 | #40494 | fix(web): Antigravity settings show only the fields the chosen sign-in method uses | settings | ported 3f61ea5f, 6b7f5c27: visibleWhen for API key and GCP fields, the new method description |
+| 93b8dc3465 | #40494 | fix(web): Antigravity settings show only the fields the chosen sign-in method uses | settings | ported 3f6bdea7, 8d59af6e: visibleWhen for API key and GCP fields, the new method description |
 | 962bda2eb7 | #41489 | test(web): open history documents without reloading the app in iframes | other | n/a (test only) † |
 | 966e422c9f | #39769 | fix(desktop): Cmd+T opens the new-tab menu from a focused browser page | shell | already (a focused streamed page leaves keys to the window dispatcher), diff read 2026-11-25 |
 | 9842ca0c12 | #42120 | fix(web): an image no longer jumps while its pane is resized | files | port (3.5) † |
@@ -559,7 +559,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | aa725f4bd4 | #39616 | fix(web): file find scrolls to matches below wrapped lines | other | n/a (server only, wire) † |
 | aacdaba15c | #42852 | fix(web): panel resize handle no longer covers the chat scrollbar on touch devices | shell | n/a (touch devices) † |
 | ac3af66f21 | #41901 | fix(web): a copied issue or pull request error no longer ends in a broken character | other | n/a (Swift Characters) † |
-| acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | ported 3f6bdea7: both folder rows are inert with "Saved on this device. Select All projects to change it." |
+| acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | ported 3f61ea5f: both folder rows are inert with "Saved on this device. Select All projects to change it." |
 | aced664ed9 | #39024 | fix(client-runtime): prefer newer completed compaction over stale liveUsage | other | n/a (server only, wire) † |
 | ae926f6579 | #41852 | fix(web): Cmd/Ctrl+F opens the browser find bar while a pull request is maximized | shell | port (10.5) † |
 | b042e4ee75 | #42722 | fix(web): hide the right panel add-surface menu when no surfaces are available | shell | already (Device is always available beside a thread, so the + menu is never empty), diff read 2026-11-25 |
@@ -634,7 +634,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f15d908759 | #42027 | fix(web): Esc in voice alias input cancels it without closing Settings | settings | n/a (CW's Voice page is a notice) |
 | f1c13177d8 | #41263 | fix(web): spreadsheet text and fills no longer vanish when their cell scrolls out | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | f1efcfb494 | #42855 | fix(client-runtime): feedback trace shows "1 character", not "1 characters" | other | n/a (server only, wire) † |
-| f30874fef7 | #41756 | fix: remote logins and webhook tokens stay with their own host and reader | connections | ported dc6bcde3: the clone URL loses an HTTP login (Features/Composer); the rest is server side |
+| f30874fef7 | #41756 | fix: remote logins and webhook tokens stay with their own host and reader | connections | ported e81f4f9e: the clone URL loses an HTTP login (Features/Composer); the rest is server side |
 | f46f17e46f | #37358 | fix(web): small buttons leave room between icon and label | settings | ported db3efd0b: micro, xs and compact gap 4 to 6 in the default themes (sm already had it), 86 component references recaptured; Redesign keeps 4 |
 | f60c747568 | #39815 | fix(web): open PDF attachments no longer reload while the agent works | files | port (3.5) † |
 | f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | ported cb5edfe1 |
@@ -740,7 +740,7 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 7.3 was not only server work: CW already had the map's `through-link` offer and `peerLinks.pairLink` in T3Protocol, but no dialog used them. The dialog now does (e94f2201).
 - T3's server refuses any expected-environment link to a loopback address (PeerLinks.ts:464-469), so a through-link between servers on one Mac fails at the last step in both apps. Test it with real addresses.
 - 1.3's custom model, font family and nav search rows needed more than `escapeClears`: Settings' Esc monitor runs before the focused field, so a field that owns Esc now says so through `FieldView.takesEscape`.
-- #41647 needed T3's license header first: the page title is "Third-party notices", the count and a search button sit in the section header, and the search field opens from the button (8d59af6e).
+- #41647 needed T3's license header first: the page title is "Third-party notices", the count and a search button sit in the section header, and the search field opens from the button (6b7f5c27).
 - 1.8's #37358 changes every xs and sm button's icon gap, which is a DesignSystem change, not a settings one. It changes compact, micro and xs; sm already had `gap-1.5` at 4928.
 - The Voice rows (#42129, #42027, #42321, #39884, #41876, #40424) are n/a while CW's Voice page is a notice.
 
