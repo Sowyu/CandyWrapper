@@ -657,8 +657,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return true
         }
-        shortcuts.on(["navigation.back", "navigation.forward"]) { [weak history] call in
+        shortcuts.on(["navigation.back", "navigation.forward"]) { [weak history, weak self] call in
             guard let history else { return false }
+            // Leaving a page unmounts its focused field before it ends editing, so a commit-on-blur
+            // Settings row would drop what was typed: end text editing first, other controls keep
+            // their focus (5258 AppRouteModal.tsx, #42085).
+            if self?.settings?.isOpen == true, let window = NSApp.keyWindow, let text = window.firstResponder as? NSTextView, text.isEditable {
+                window.makeFirstResponder(nil)
+            }
             if call.command == "navigation.back" { history.back() } else { history.forward() }
             return true
         }
