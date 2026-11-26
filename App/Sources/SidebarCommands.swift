@@ -184,8 +184,14 @@ final class SidebarCommands {
             let capability = pinned ? "threadPinReorder" : "threadActiveReorder"
             func writable(_ t: ThreadId) -> Bool { capabilities(t)?.contains(capability) == true }
             guard writable(id) else { return nil }
-            let keys = Dictionary((snapshot?.threads ?? []).compactMap { t in (pinned ? t.pinOrderKey : t.activeOrderKey).map { (t.id, $0) } },
+            var keys = Dictionary((snapshot?.threads ?? []).compactMap { t in (pinned ? t.pinOrderKey : t.activeOrderKey).map { (t.id, $0) } },
                                   uniquingKeysWith: { a, _ in a })
+            // `activeKeysById` (Sidebar.tsx:624-632 at 5258, #41885): every Active row has its sort key, implied when
+            // nobody arranged it, so a row from an offline machine is a bound and never a write.
+            if !pinned {
+                let active = Set(displayed(.active))
+                for t in snapshot?.threads ?? [] where active.contains(t.id) && keys[t.id] == nil { keys[t.id] = SidebarModel.activeThreadSortKey(t) }
+            }
             let assignments = PinOrderKey.assignments(order: order.filter { writable($0) || keys[$0] != nil }, keys: keys, moved: id)
             return assignments.allSatisfy { writable($0.id) } ? assignments : nil
         }

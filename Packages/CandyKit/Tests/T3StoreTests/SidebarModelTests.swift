@@ -290,6 +290,22 @@ private func pill(
         #expect(S.activeThreadAnchorTimestampMs(t) == ms("2026-08-01T00:00:00.000Z"))
     }
 
+    /// threadSort.test.ts at 5258 (#41885): an arranged thread sits between unarranged ones without arranging them.
+    @Test func impliedActiveKeys() throws {
+        let newer = sidebarThread("newer") { $0.createdAt = "2026-03-09T12:00:00.000Z" }
+        let older = sidebarThread("older") { $0.createdAt = "2026-03-09T10:00:00.000Z" }
+        let between = try #require(PinOrderKey.between(S.activeThreadSortKey(newer.shell), S.activeThreadSortKey(older.shell)))
+        #expect(between.hasPrefix("0"))
+        let arranged = sidebarThread("arranged") { $0.createdAt = "2026-03-01T09:00:00.000Z"; $0.activeOrderKey = between }
+        let brandNew = sidebarThread("brand-new") { $0.createdAt = "2026-03-10T09:00:00.000Z" }
+        let saved = sidebarThread("saved") { $0.createdAt = "2026-03-11T09:00:00.000Z"; $0.activeOrderKey = "b" }
+        #expect(S.sortActiveThreadsByOrderKey([saved, older, arranged, newer, brandNew]).map(\.id.rawValue)
+                == ["brand-new", "newer", "arranged", "older", "saved"])
+        // Above the first implied key, and below the last one before a plain key, stay in the tier.
+        #expect(PinOrderKey.between(nil, S.activeThreadSortKey(newer.shell))?.hasPrefix("0") == true)
+        #expect(PinOrderKey.between(S.activeThreadSortKey(older.shell), "b").map { $0.hasPrefix("0") && $0 < "b" } == true)
+    }
+
     @Test func activeOrder() {
         let sorted = S.sortActiveThreadsByOrderKey([
             sidebarThread("arranged-first") { $0.createdAt = "2026-03-09T09:00:00.000Z"; $0.activeOrderKey = "f" },

@@ -1,0 +1,22 @@
+{
+  "capsule.countdown" : {
+    "height" : 32,
+    "width" : 200
+  },
+  "capsule.countdown.narrow" : {
+    "height" : 32,
+    "width" : 120
+  },
+  "capsule.failed" : {
+    "height" : 32,
+    "width" : 150
+  },
+  "capsule.narrow" : {
+    "height" : 32,
+    "width" : 60
+  },
+  "capsule.slow" : {
+    "height" : 32,
+    "width" : 150
+  }
+}

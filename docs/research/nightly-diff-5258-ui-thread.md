@@ -148,6 +148,7 @@ Hovering a thread chip in the composer or a sent message opens the same hover ca
 - The sidebar card itself changes in 3.2.
 - CW: partly. `Features/Sidebar/SidebarThreadHoverCard.swift` is the card. `Features/Markdown/MarkdownContextChips.swift` draws chips with the old tooltip.
 - Commit: bac0508e08 #38895.
+- Ported (port-composer): the composer half in 3c2642b5, the card on hover and the invalid state with the "On another machine" line. Left: a composer chip does not open its thread on click (T3 renders it as a Link), small.
 
 ### 1.15 Side chats and citations (small, default look: no)
 
@@ -239,7 +240,7 @@ Dropped text is parsed like pasted text, so Markdown and newlines match (#31098,
 - A provider that needs an update shows a "Provider settings" link only when the install channel can update in Settings (#39966, ModelPickerContent.tsx:218).
 - CW: `Features/Composer/ComposerEffortGlyph.swift` and `Features/Composer/ComposerMenus.swift`. Typeahead and slug search are unchecked.
 - Commits: 2ced06ef4a #42041, 1acfd37c17 #40798, a891304c84 #30810, 9f9ebf61fb #40136, 39480b5c88 #27333, cf94598281 #39966.
-- Ported (port-composer) in 8e80f42f: #42041, #40798, and in 3318bb01: #30810, #40136, #27333's client half. Left: #39966, because CW's picker has no update-required notice at all (pre-4928 #17307).
+- Ported (port-composer) in 8e80f42f: #42041, #40798, and in 3318bb01: #30810, #40136, #27333's client half. #39966 ported with the notice itself in df3c4e1d. The "Provider settings" link sits on its own line, and docked layouts show no notice.
 
 ### 2.7 The @ menu and the thread link picker (small, default look: no)
 
@@ -318,9 +319,9 @@ Numbered thread jumps and next/previous thread include unsent drafts (#39968): d
 - A worktree thread of a project with tracked folders keeps its branch when git says the folder is no repository (#35925, components/Sidebar.logic.ts).
 - Snooze labels follow the app language (#39494).
 - Commits: bcb9217e8e #26661, 5812320a6a #41258, 42d2387285 #31545, 92199680cc #41365, 78de041d48 #24917, 9331811180 #41885, 60863edc41 #35925, 67f17528f2 #39494.
-- Ported (port-composer) in fa78d3d4: #41365, #31545, #41258, #26661. Correction: #35925's sidebar rule needs nothing, CW never drops a thread's branch on a non-repository status (T3's `withoutRemovedCheckout` is an older gap the other way). #39494 needs nothing, CW is English only. Left: #24917 offline settle and snooze, an outbox of 1,171 lines (large), and #41885 implied sort keys for unarranged threads (medium).
+- Ported (port-composer) in fa78d3d4: #41365, #31545, #41258, #26661. Correction: #35925's sidebar rule needs nothing, CW never drops a thread's branch on a non-repository status (T3's `withoutRemovedCheckout` is an older gap the other way). #39494 needs nothing, CW is English only. Left: #24917 offline settle and snooze, an outbox of 1,171 lines (large). #41885 ported in 0edefb34: CW's sort order already matched, so the change is the drop plan, where every Active row now has a key.
 
-### 3.6 Update capsule in narrow sidebars (small, default look: yes)
+### 3.6 Update capsule in narrow sidebars (medium to large with the capsule itself, default look: yes, redesign)
 
 The sidebar update capsule shrinks to a 32 px round icon in narrow sidebars and grows to its label with a 200 ms width transition. Seven commits tuned it.
 
@@ -328,6 +329,7 @@ The sidebar update capsule shrinks to a 32 px round icon in narrow sidebars and 
 - Update-all rules: a restored failed run can retry (#41964), a skipped server says why: "turned off" or the connection error (components/sidebar/updateEverything.logic.ts:158, #41672), a desktop server it cannot reach says "update T3 Code on that machine" (#33030), and a rollback after an app update is reported (#33002). The provider update pill does not recount dismissed updates (#39636).
 - CW: partly. `Features/Sidebar/SidebarUpdatePill.swift`, `Features/Sidebar/UpdateEverythingLogic.swift` and `App/Sources/UpdateEverything.swift` exist. CW has no capsule width states.
 - Correction (port-composer): CW has no update capsule at all. T3 added it in 3158 (#19837); CW's run shows on the pill with a tooltip, so the width commits have nothing to change until the capsule is ported (medium to large). Ported: #41672 and #33030 in b4ba8432, #39636 in 17cb1d6a. Left with the capsule: #41964, #33002.
+- Ported (port-composer, 2026-11-25): the capsule in b9a35ab6 and d21a52f9, with all seven width commits. CandyWrapper maps T3's "This app" row to its own Sparkle update, and the machine rows to other machines' servers and providers in the pass; its own runtime never joins a pass. The capsule sits in the default footer's flex share and in Redesign's account row. Still left: #41964 and #33002, which need the pass saved across a relaunch with its handed-off servers (`followHandedOffServers`), medium. CW saves only the result toast today.
 - Commits: 40c1e861ee, dea657a0b1, 5aae5578de, 1425613b9d, 4be39cf01a, f0f9de46c6, 98af8803fe (no PR numbers), 66259ff051 #41964, 74c6d21c7a #41672, 8ef195587d #33030, d7ae1e1791 #33002, d5a084c440 #39636.
 
 ### 3.7 Issue and PR badges share one component (small, default look: yes)
@@ -443,21 +445,21 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | e9b227b021 | #42183 | fix(web): typing / or $ in the composer no longer waits for the suggestion menu to render | composer | n/a (React render timing) |
 | ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | ported 8a847157 |
 | 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | n/a here: CW has no Background work dialog (`BackgroundWorkDetails.tsx`); its banner and Redesign's waiting menu link the subagents directly. Port with the dialog |
-| d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | left: CW has no update capsule or persisted run (T3 #19837 at 3158), so no rollback report. Medium with the capsule |
+| d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | left: needs the pass restored after a relaunch with its update ids; the capsule is in b9a35ab6. Medium |
 | 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394, reference recaptured from 5258 in the next commit with the popup's titlebar inset and centering |
 | 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | ported 98004311 |
 | 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | ported d9f298a4 (unit tested and seen on screen from a synthetic test build in dark and Redesign) |
 | 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | ported 75700d91 |
 | 2ced06ef4a | #42041 | fix(web): model picker search finds a model by its ID | composer | ported 8e80f42f |
 | a891304c84 | #30810 | fix(web): keep Codex Ultra off the effort bar scale | composer | ported 3318bb01 |
-| 66259ff051 | #41964 | fix(web): a failed server update restored after the app relaunches can retry | sidebar | left: needs the capsule and a restored run (see 3.6). Medium with the capsule |
+| 66259ff051 | #41964 | fix(web): a failed server update restored after the app relaunches can retry | sidebar | left: needs the pass restored after a relaunch (`followHandedOffServers`); the capsule is in b9a35ab6. Medium |
 | 74c6d21c7a | #41672 | fix(web): the update dialog says why a server was skipped | sidebar | ported b4ba8432 |
 | a6c69be8df | #41927 | fix(web,mobile): a parent parked on subagents no longer reads as Thinking | thread | ported ad384d3e (the server half, #38869, is not a client change) |
 | ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | ported 3a1892b1 and 816b0031 + eec3b345 (the starting row before the server has a run, from the unconfirmed optimistic send and the composer's selected instance; unit tested, not seen on screen) |
 | b3fff82014 | #29282 | fix(web): Settings opened with Cmd+, no longer leaves the model picker open over it | composer | ported e7a7413a |
 | 8032cbb66b | #28919 | fix(web): Cmd+F searches a side chat, and Escape closes it | thread | ported d727b761: Cmd+F already searched a side chat (its ComposerController registers chat.find on the pane's table, run while focus is in the pane); Escape anywhere in the chat or side chat now closes find through `cancelOperation`. Not driven on screen |
 | a4029d4b91 | #41899 | fix(web): an IME Escape no longer dismisses the citation highlight | thread | n/a (AppKit handles IME) |
-| 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | left: implied sort keys (medium), not started this pass |
+| 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | ported 0edefb34 |
 | 3d9a14d4da | #41875 | fix(web): IME keys no longer trigger or close the prompt stash menu | composer | n/a (AppKit handles IME) |
 | 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | n/a (CW has no reference sources, so the card is always typed) |
 | d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | left for the files agent: the change is in the file preview's Open in picker (`fileManagerActionForPath`, FilePreviewPanel.tsx), which is FilesController's. Small |
@@ -529,20 +531,20 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 47525fa3d6 | #40215 | fix(web): switching threads no longer restarts the Changes and git status reads | other | n/a (git reads, other agent) |
 | bb0d718b31 | #40253 | fix(web): typing and pasting no longer write into the read-only composer during dictation | composer | nothing to port: no dictation |
 | b19ca97827 | #40252 | fix(web): inline file and thread chips can be removed during dictation | composer | nothing to port: no dictation |
-| 1425613b9d | - | fix(web): keep restart seconds visible in narrow sidebars | sidebar | left: CW has no update capsule (T3 #19837 at 3158); its run shows on the pill with a tooltip. The capsule with its popover, countdown and widths is medium to large |
-| 4be39cf01a | - | fix(web): keep the update icon in place while the capsule shrinks | sidebar | left: CW has no update capsule (T3 #19837 at 3158); its run shows on the pill with a tooltip. The capsule with its popover, countdown and widths is medium to large |
-| dea657a0b1 | - | fix(web): show the update capsule at default sidebar width with a short grow-in | sidebar | left: CW has no update capsule (T3 #19837 at 3158); its run shows on the pill with a tooltip. The capsule with its popover, countdown and widths is medium to large |
-| 5aae5578de | - | fix(web): show the update capsule label in narrower sidebars | sidebar | left: CW has no update capsule (T3 #19837 at 3158); its run shows on the pill with a tooltip. The capsule with its popover, countdown and widths is medium to large |
+| 1425613b9d | - | fix(web): keep restart seconds visible in narrow sidebars | sidebar | ported b9a35ab6 |
+| 4be39cf01a | - | fix(web): keep the update icon in place while the capsule shrinks | sidebar | ported b9a35ab6 |
+| dea657a0b1 | - | fix(web): show the update capsule at default sidebar width with a short grow-in | sidebar | ported b9a35ab6 (the label and link fade in over 200 ms) |
+| 5aae5578de | - | fix(web): show the update capsule label in narrower sidebars | sidebar | ported b9a35ab6 |
 | 9f9ebf61fb | #40136 | fix(client-runtime): recognize thought_level and role: reasoning in effort summaries | composer | ported 3318bb01 |
 | f4b8be84a0 | #40069 | fix(web): show custom theme backgrounds on the empty New thread screen | thread | already: CW's timeline paints no background of its own, and ThreadPanelView goes clear while a theme image shows (ThreadPanelView.swift:313). Not checked on screen |
 | d9fdd02523 | #40191 | fix(client-runtime): @ menu offers machines the thread's server links to | composer | ported da6ce988 |
-| cf94598281 | #39966 | fix(client-runtime): don't ask for a provider update the install channel lacks | composer | left: CW's model picker has no update-required notice at all (pre-4928 #17307), so no channel rule to add. Small to medium with the notice |
+| cf94598281 | #39966 | fix(client-runtime): don't ask for a provider update the install channel lacks | composer | ported df3c4e1d with the notice (#17307) |
 | 60863edc41 | #35925 | feat(projects): a project covers several repositories | sidebar | nothing to port in the sidebar: CW keeps the branch |
 | cfb720fa8a | #40131 | fix(web): guest share status expires at exact timestamp instead of start of minute | other | n/a (guest share, other agent) |
 | 39480b5c88 | #27333 | fix(opencode): custom models can go back to the default reasoning level | composer | ported 3318bb01 (client half: t3:default names no effort; the rest is the server's) |
 | 73e6472545 | #24583 | fix(client-runtime): recover thread messages after a failed resume | thread | already for the resume (ThreadSession.applyWire drops the cursor on a failed apply, the next subscribe takes a snapshot); the composer sync line's error is left, composer area |
 | aa6fe390db | #40042 | fix(web): dismissing a local thread error no longer suppresses repeat errors | thread | ported fe5d9cd0 |
-| bac0508e08 | #38895 | feat(web): thread chips show the sidebar's thread card on hover | thread | ported 32609bf7 for chips in sent messages; the composer's chips and their "On another machine" line are the composer agent's (Features/Composer) |
+| bac0508e08 | #38895 | feat(web): thread chips show the sidebar's thread card on hover | thread | ported 32609bf7 for sent messages and 3c2642b5 for the composer; left: clicking a composer chip opens nothing, small |
 | e8b28328da | #29681 | feat(web): duplicate browser tabs from the context menu | other | n/a (browser tabs, other agent) |
 | b9879ede83 | #33286 | feat(web): copy a chat table as HTML | thread | ported dd1cfae1 (unaligned columns say left: Foundation reports no "none" alignment) |
 | 26d81d88c1 | #40076 | fix(web): timeline row actions stay put on hover, and notices expand only when cut off | thread | ported 239ed38d (the row's chevron and click follow the cut-off check; not seen on screen) |
@@ -571,15 +573,15 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 22936ae669 | #39552 | fix(web): ignore superseded microphone refreshes in voice setup | composer | n/a (web mic setup) |
 | 29b42d409c | #39351 | fix(web): show status for grouped sidebar issues | sidebar | ported 1512d514 (every linked issue read, `aggregateState`) |
 | 3a60d0996a | #38869 | fix(server): background subagents can delegate after their parent's turn ends | thread | ported 5aa812be (the client half: a subagent card after the turn's reply adds no turn time; the server half needs no client change) |
-| bb1a66a3a4 | #38323 | feat(web): reference a side chat from its main thread with Add to chat and @ | thread | n/a here: the @ menu and Add to chat are the composer's (composerThreadItems.ts), composer agent |
+| bb1a66a3a4 | #38323 | feat(web): reference a side chat from its main thread with Add to chat and @ | thread | left: the @ menu and Add to chat do not offer a side chat from its main thread yet (composerThreadItems.ts, SideChatPane.tsx), small to medium |
 | 5872b0a488 | #37419 | fix(web): a later thread error with the same text shows its banner again | thread | ported fe5d9cd0 (source is the shell's latest run and its end time, not the failure item; ponytail marker) |
 | dcf158c591 | #39415 | feat(server): setting and managed policy to turn off the preview tunnel | other | n/a (preview tunnel, wire A10) |
 | 420d1b5900 | #39393 | feat(desktop): forward another environment's ports to this machine | palette | n/a (desktop IPC, wire A19) |
 | 296f9131f7 | #39340 | fix(web): Cmd+W closes the browser tab when the page has focus | other | n/a (browser tabs, other agent) |
 | b111b6310a | #39232 | fix(web): collapse extra linked issues in thread details | thread | ported d414425c (compact issue rows with state, key, tracker and comments; the first row, the rest behind Show N more) |
-| 98af8803fe | - | refactor(web): share restart countdown seconds in update capsule | sidebar | n/a (refactor) |
-| f0f9de46c6 | - | fix(web): localize compact restart countdown | sidebar | left: CW has no update capsule (T3 #19837 at 3158); its run shows on the pill with a tooltip. The capsule with its popover, countdown and widths is medium to large |
-| 40c1e861ee | - | fix(web): keep sidebar update control readable when narrow | sidebar | left: CW has no update capsule (T3 #19837 at 3158); its run shows on the pill with a tooltip. The capsule with its popover, countdown and widths is medium to large |
+| 98af8803fe | - | refactor(web): share restart countdown seconds in update capsule | sidebar | ported b9a35ab6 |
+| f0f9de46c6 | - | fix(web): localize compact restart countdown | sidebar | ported b9a35ab6 (English only) |
+| 40c1e861ee | - | fix(web): keep sidebar update control readable when narrow | sidebar | ported b9a35ab6 |
 | 3b199e77fb | #39308 | fix: index displayed file line ranges in thread search | thread | ported dd1cfae1 (CW had no range label at all: chips now show `L42–64`; image destinations as file chips are not indexed) |
 | c5badf4e40 | #39305 | fix(web): scope Git controls to the active checkout | other | n/a (git controls, other agent) |
 | 73caab68e3 | #38912 | fix(client): commands run as Effects on the caller's fiber, so interrupting a caller stops them | other | n/a (client effects refactor) |

@@ -106,4 +106,42 @@ extension UpdateEverythingLogicTests {
         #expect(L.describe(localVersion: "2", servers: [], target: "x", providerMachines: []).rows.first?.environmentId == nil)
         #expect(L.describe(localVersion: nil, servers: [Self.machine("desktop", "1", .desktopManaged)], target: "2", providerMachines: []).version == nil)
     }
+
+    /// The capsule's words and actions (5258 updateEverything.logic.ts:603-678, SidebarUpdateCapsule.tsx:62-78).
+    @Test func capsuleView() {
+        let a = L.RunMachine(environmentId: "a", label: "alvin", updatesProviders: false, updatesServer: true, startedAt: 0)
+        let b = L.RunMachine(environmentId: "b", label: "bea", updatesProviders: true, updatesServer: false, startedAt: 0)
+        var run = L.Run(localVersion: nil, phase: .servers, machines: [a, b])
+        #expect(L.describeCapsule(run, statuses: [.downloading, .done], local: nil, now: 60).label == "1 of 2 updated")
+        let slow = L.describeCapsule(run, statuses: [.downloading, .done], local: nil, now: 3 * 60 + 5)
+        #expect(slow.tone == .slow && slow.label == "alvin" && slow.slow?.status == "downloading" && slow.slow?.elapsed == "3m")
+        // A waiting machine never counts as slow.
+        #expect(L.describeCapsule(run, statuses: [.waiting, .done], local: nil, now: 3600).tone == .default)
+        let failed = L.describeCapsule(run, statuses: [.failed, .done], local: nil, now: 0)
+        #expect(failed.tone == .failed && failed.label == "alvin failed" && failed.action == .retry)
+        #expect(L.describeCapsule(run, statuses: [.failed, .failed], local: nil, now: 0).label == "2 failed")
+        // A provider-only machine has no server to retry.
+        #expect(L.describeCapsule(run, statuses: [.done, .failed], local: nil, now: 0).action == .dismiss)
+        #expect(L.describeCapsule(run, statuses: [.done, .done], local: .downloading(percent: 41.7), now: 0).label == "Downloading 41%")
+        run.phase = .countdown; run.restartAt = 10; run.localVersion = "2"
+        #expect(L.describeCapsule(run, statuses: [.done, .done], local: .waiting, now: 5.2) == L.CapsuleView(tone: .default, label: "Restart in 5s", action: .later))
+        #expect(L.localStatus(run, local: .waiting, now: 5.2) == "restarts in 5s")
+        #expect(L.tickInterval(run, statuses: [.done, .done]) == 1)
+        run.phase = .installing
+        #expect(L.describeCapsule(run, statuses: [.done, .done], local: nil, now: 0).label == "Restarting…")
+        run.phase = .servers
+        #expect(L.localStatus(run, local: .waiting, now: 0) == "restarts after the servers")
+        #expect(L.tickInterval(run, statuses: [.waiting, .done]) == nil && L.tickInterval(run, statuses: [.restarting]) == 30)
+        #expect(L.elapsed(30) == "<1m" && L.elapsed(61 * 60) == "1h 1m")
+    }
+
+    @Test func capsuleCloseAndWidth() {
+        let done = L.RunMachine(environmentId: "a", label: "a", updatesProviders: false, updatesServer: false, failed: false)
+        #expect(L.closeFinished(L.Run(localVersion: nil, phase: .servers, machines: [done])) == nil)
+        var failed = done; failed.failed = true
+        #expect(L.closeFinished(L.Run(localVersion: nil, phase: .servers, machines: [failed])) != nil)
+        #expect(L.closeFinished(L.Run(localVersion: "2", phase: .servers, machines: [done])) != nil)
+        #expect(!L.capsuleExpands(available: 79, counting: false) && L.capsuleExpands(available: 80, counting: false))
+        #expect(!L.capsuleExpands(available: 191, counting: true) && L.capsuleExpands(available: 192, counting: true))
+    }
 }

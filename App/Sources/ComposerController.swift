@@ -4298,6 +4298,10 @@ extension ComposerController {
                   let shell = threads.first(where: { $0.id.rawValue == EnvironmentScope.key(record["environmentId"]?.stringValue ?? env, local) }),
                   let project = projects.first(where: { $0.id == shell.projectId }) else { return nil }
             return ProjectIconSource(project)
+        }, threadUnreadable: { [composerLinkedNames] record in
+            // composerContextPresentation.tsx:492-505 at 5258: neither this machine nor one it links to.
+            guard !env.isEmpty, let owner = record["environmentId"]?.stringValue else { return false }
+            return owner != env && composerLinkedNames[owner] == nil
         }, environment: { id in (environments.label(id), environments.machine(id)) }, model: { [serverConfig] instance, slug in
             // `modelMentionPresentationAtom`: the model's display name and its instance's driver.
             guard let provider = serverConfig.providers.first(where: { $0.instanceId.rawValue == instance }),
