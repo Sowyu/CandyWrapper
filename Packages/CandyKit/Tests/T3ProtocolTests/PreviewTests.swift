@@ -24,6 +24,12 @@ struct PreviewTests {
         #expect(up["text"] == nil)
         #expect(object(PreviewStream.Input.reload(ignoreCache: false).encoded) == ["type": .string("reload")])
         #expect(object(PreviewStream.Input.history(delta: -1).encoded)["delta"] == .number(-1))
+        // serverBrowserStream.ts at 5258 (#31561): a select menu, its withdrawal and the answer.
+        #expect(object(PreviewStream.Input.selectMenu(id: "s1", index: 2).encoded) == ["type": .string("selectMenu"), "id": .string("s1"), "index": .number(2)])
+        #expect(PreviewStream.Message.decode(#"{"type":"selectMenu","id":"s1","options":[{"label":"A","disabled":false},{"label":"B","disabled":true}],"selectedIndex":0,"x":1,"y":2,"width":30,"height":20}"#)
+            == .selectMenu(.init(id: "s1", options: [.init(label: "A", disabled: false), .init(label: "B", disabled: true)], selectedIndex: 0, x: 1, y: 2, width: 30, height: 20)))
+        #expect(PreviewStream.Message.decode(#"{"type":"selectMenu","id":"s1","options":[{"label":"A"}],"selectedIndex":0,"x":1,"y":2,"width":30,"height":20}"#) == nil)
+        #expect(PreviewStream.Message.decode(#"{"type":"selectMenuClosed","id":"s1"}"#) == .selectMenuClosed(id: "s1"))
         #expect(object(PreviewStream.Input.dialog(accept: true, promptText: "x").encoded)["promptText"] == .string("x"))
         #expect(object(PreviewStream.Input.takeControl.encoded) == ["type": .string("takeControl")])
     }

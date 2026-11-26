@@ -27,6 +27,9 @@ public final class ServerBrowserView: DSView {
     public var viewport: CGSize?
     /// The page picker the server asked about (`fileChooser`), nil once answered or replaced.
     public var fileChooser: (multiple: Bool, accept: String)? { didSet { rebuildOverlays() } }
+    /// The page's native select the server offered, nil once answered or withdrawn (`selectMenu`, #31561).
+    public var selectMenu: PreviewStream.SelectMenu? { didSet { if selectMenu != oldValue { syncSelectMenu() } } }
+    private var selectPopup: MenuPopupView?
     public var hostSetup: PreviewStream.HostSetup? { didSet { rebuildOverlays() } }
     public var accessDenied = false { didSet { if accessDenied != oldValue { rebuildOverlays() } } }
     /// The page under an empty or unreachable state: the bar stays, the frame and input go.
@@ -90,6 +93,7 @@ public final class ServerBrowserView: DSView {
         viewport = nil
         control = nil
         fileChooser = nil
+        selectMenu = nil
         cursorHidden = true
         cursor.isHidden = true
         reportedSize = nil
@@ -120,6 +124,7 @@ public final class ServerBrowserView: DSView {
             controlButton.isHidden = true
         }
         if control?.controller != .you {
+            selectMenu = nil
             clearInput()
             if window?.firstResponder === self { window?.makeFirstResponder(nil) }
         } else {
@@ -131,6 +136,37 @@ public final class ServerBrowserView: DSView {
     }
 
     private var hasControl: Bool { control?.controller == .you }
+
+    /// `ServerBrowserSurface.tsx` at 5258: only the controller sees the menu, a radio list of the options anchored
+    /// on the select's box (`selectMenuAnchor`), and a pick answers with the option's index.
+    private func syncSelectMenu() {
+        let old = selectPopup
+        selectPopup = nil
+        old?.hostPopup?.onClose = nil
+        if let open = old?.hostPopup { popupHost?.close(open, returnFocus: false) }
+        guard let menu = selectMenu, hasControl, let viewport, let image = frameView.pixelSize, viewport.width > 0, viewport.height > 0 else { return }
+        let fit = BrowserPointerMap.fittedRect(box: frameView.bounds.size, image: image)
+        let sx = fit.width / viewport.width, sy = fit.height / viewport.height
+        let anchor = CGRect(x: frameView.frame.minX + fit.minX + menu.x * sx, y: frameView.frame.minY + fit.minY + menu.y * sy,
+                            width: menu.width * sx, height: menu.height * sy)
+        let items = menu.options.enumerated().map { i, option -> MenuItem in
+            var item = MenuItem.radio(option.label, checked: i == menu.selectedIndex)
+            item.isDisabled = option.disabled
+            item.closesOnClick = true
+            // The menu closes after the pick, and its close clears `selectMenu`.
+            item.action = { [weak self] in self?.onInput?(.selectMenu(id: menu.id, index: i)) }
+            return item
+        }
+        let popup = MenuPopupView.show(items, from: self, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 0),
+                                       anchorRect: anchor)
+        popup?.setAccessibilityLabel("Page select options")
+        popup?.hostPopup?.onClose = { [weak self] in
+            guard let self, self.selectPopup === popup else { return }
+            self.selectPopup = nil
+            self.selectMenu = nil
+        }
+        selectPopup = popup
+    }
 
     private func clearInput() {
         pendingMove = nil

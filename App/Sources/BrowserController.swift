@@ -465,6 +465,8 @@ final class BrowserController {
             guard !connected else { return }
             viewer.control = nil
             viewer.fileChooser = nil
+            // A menu's answer only reaches the server session that offered it.
+            viewer.selectMenu = nil
             if !mini, self?.panelControl == true { self?.panelControl = false; self?.render() }
         }
         events.onUnauthorized = { [weak self] in
@@ -531,6 +533,10 @@ final class BrowserController {
             viewer.fileChooser = (multiple, accept)
         case .fileChooserClosed(let id):
             if stream?.chooser == id { stream?.chooser = nil; viewer.fileChooser = nil }
+        case .selectMenu(let menu):
+            viewer.selectMenu = menu
+        case .selectMenuClosed(let id):
+            if viewer.selectMenu?.id == id { viewer.selectMenu = nil }
         case .popup(let tabId):
             // `showPreviewPopup`: a floating opener floats the popup, else the panel switches to it.
             whenKnown(tabId) { [weak self] in
