@@ -304,6 +304,9 @@ public final class EnvironmentsMapCanvasView: DSView {
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        // `overflow-clip` (:1010). AppKit stopped clipping a view's drawing to its bounds in macOS 14, so a panned scene
+        // drew over the page heading.
+        clipsToBounds = true
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Map of your machines")
@@ -593,15 +596,13 @@ public final class EnvironmentsMapCanvasView: DSView {
         return over
     }
 
+    /// Plain scrolling stays the page's; Ctrl or ⌘ with the wheel zooms the map (:706-716). A pinch arrives as `magnify`.
     public override func scrollWheel(with event: NSEvent) {
-        if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
-            zoom(exp(Double(event.scrollingDeltaY) * (event.hasPreciseScrollingDeltas ? 0.01 : 0.1)),
-                 at: convert(event.locationInWindow, from: nil))
-            return
+        guard event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) else {
+            return super.scrollWheel(with: event)
         }
-        endGlide()
-        let v = view
-        state.held = FleetViewTransform(x: v.x + Double(event.scrollingDeltaX), y: v.y + Double(event.scrollingDeltaY), scale: v.scale)
+        zoom(exp(Double(event.scrollingDeltaY) * (event.hasPreciseScrollingDeltas ? 0.01 : 0.1)),
+             at: convert(event.locationInWindow, from: nil))
     }
 
     public override func magnify(with event: NSEvent) {

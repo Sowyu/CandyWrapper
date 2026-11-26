@@ -154,6 +154,9 @@ extension SettingsController {
         default: view = extraPage(section)
         }
         if page.page !== view { page.page = view; page.scrollToTop() }
+        // The link lists load only while Environments shows; a refresh before the click skipped them, and
+        // nothing refreshes again on a quiet server, so the page sat on "Loading linked environments…".
+        if section == .connections { loadPeerLinks() }
         refreshPages()
         extraPages[section]?.didShow()
         updateLinkPoll()

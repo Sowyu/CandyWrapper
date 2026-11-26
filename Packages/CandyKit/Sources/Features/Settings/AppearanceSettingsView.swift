@@ -440,6 +440,16 @@ public final class AppearanceSettingsView: SettingsPageBase {
                 self.context.writeClient?([family: .string(name)])
             }
         }
+        // Esc discards a typed family and stays in Settings; with nothing to discard it closes Settings (#42361,
+        // FontFamilySettingsRow at 5258).
+        input.takesEscape = { [weak self, weak input, weak picker] in
+            guard let self, let input else { return false }
+            let saved = self.client.string(family)
+            guard input.text != saved else { return false }
+            picker?.setValue(saved)
+            input.isInvalid = false
+            return true
+        }
         select.onChange = { [weak self] i in self?.context.writeClient?([size: .number(Double(sizes[i]))]) }
         binder.add { [weak self, weak input, weak select, weak picker] in
             guard let self else { return }

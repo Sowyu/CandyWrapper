@@ -292,7 +292,8 @@ public final class SettingsSidebarView: DSView {
 
     /// The search consumes its first Escape before the route modal dismisses (SettingsSidebarNav.tsx:227-233).
     func consumeSearchEscape() -> Bool {
-        guard isSearching, let editor = search.field.currentEditor(), window?.firstResponder === editor else { return false }
+        // Any typed text, spaces too, clears before Esc closes Settings (#42093, SettingsSidebarNav.tsx at 5258).
+        guard !search.text.isEmpty, let editor = search.field.currentEditor(), window?.firstResponder === editor else { return false }
         return searchCommand(#selector(NSResponder.cancelOperation(_:)))
     }
 
@@ -339,7 +340,7 @@ public final class SettingsSidebarView: DSView {
     private func searchCommand(_ selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.cancelOperation(_:)):
-            guard isSearching else { return false }
+            guard !search.text.isEmpty else { return false }
             search.text = ""
             activeResult = 0
             runSearch()

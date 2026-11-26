@@ -41,6 +41,51 @@ struct LinkedEnvironmentsTests {
         #expect(!form.ready)
     }
 
+    /// #40036: a machine known only through a host's full-access link that answers is offered, and linking it needs no
+    /// address or code; minting with this app's own session comes first (LinkedEnvironmentsSettings.tsx:264-347 at 5258).
+    @Test func aMachineReachedThroughAFullAccessLinkNeedsNoCode() throws {
+        let T = EnvironmentsMapLogicTests.self
+        let now = try #require(ISO8601DateFormatter().date(from: "2026-11-20T00:00:00Z"))
+        let routes = LinkThroughRoute.routes(source: "a", hosts: [
+            (environmentId: "a", label: "Atlas", links: [T.link("x", access: "full-access")]),
+            (environmentId: "v", label: "Vault", links: [T.link("a", access: "full-access"), T.link("c", access: "full-access"),
+                                                         T.link("d", access: "auto"), T.link("e", access: "full-access", status: .unreachable),
+                                                         T.link("b", access: "full-access")]),
+            (environmentId: "w", label: "Work", links: [T.link("c", access: "full-access")]),
+        ], now: now)
+        #expect(routes.map(\.environmentId) == ["c", "b"])
+        #expect(routes[0].viaEnvironmentId == "v" && routes[0].viaLabel == "Vault")
+
+        let form = LinkEnvironmentFormView(machines: [Self.box], throughRoutes: routes)
+        #expect(form.machines.map(\.environmentId) == ["b", "c"])
+        #expect(form.title(source: "Atlas") == "Link Atlas to another machine")
+        form.preset(choice: "c", access: nil, lockMachine: false)
+        #expect(form.through?.environmentId == "c")
+        #expect(form.ready)
+        #expect(form.title(source: "Atlas") == "Link Atlas to c")
+        form.preset(choice: "b", access: nil, lockMachine: false)
+        #expect(form.mints && form.through == nil)
+        form.mintFailed = ["b"]
+        #expect(form.through?.environmentId == "b")
+        form.throughFailed = ["b"]
+        #expect(form.through == nil && !form.ready)
+    }
+
+    /// The map's drop on a machine known only through a link opens the dialog on that machine's address; typing another
+    /// address drops the route (:306-311 at 5258).
+    @Test func aPrefilledRouteHoldsOnlyForItsAddress() {
+        let route = LinkThroughRoute(viaEnvironmentId: "v", viaLabel: "Vault", environmentId: "c", label: "Cedar", urls: [])
+        let form = LinkEnvironmentFormView(machines: [Self.box])
+        form.preset(choice: nil, access: nil, lockMachine: false, address: "http://cedar:3773", through: route)
+        #expect(form.through == route)
+        #expect(form.ready)
+        #expect(form.title(source: "Atlas") == "Link Atlas to Cedar")
+        form.addressInput.text = "http://other:3773"
+        form.addressInput.onChange?(form.addressInput.text)
+        #expect(form.through == nil)
+        #expect(!form.ready)
+    }
+
     @Test func aMachineWithoutAnAddressAsksForOne() {
         let form = LinkEnvironmentFormView(machines: [Self.box, Self.ssh])
         form.preset(choice: "s", access: nil, lockMachine: true)
