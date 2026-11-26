@@ -177,8 +177,25 @@ public struct TurnItem: Codable, Hashable, Sendable, Identifiable {
     public var noticeLevel: String? { type == .systemNotice ? string("level") : nil }
     /// `secret_request.url`: where the user can get the secret (:1673).
     public var secretRequestURL: String? { type == .secretRequest ? string("url") : nil }
+    /// `secret_request.fields`: the named inputs of a multi-value card (5258 orchestrationV2.ts:1841-1856). Nil on a
+    /// single-secret card and on every 4928 server.
+    public var secretRequestFields: [SecretRequestField]? {
+        type == .secretRequest ? try? self["fields"]?.decode(as: [SecretRequestField].self) : nil
+    }
     /// `command_execution.completionWake`: the provider wakes the agent when the command finishes (:1802).
     public var completionWake: String? { string("completionWake") }
+
+    /// `OrchestrationV2SecretRequestField` (5258 orchestrationV2.ts:1841-1846). `secret: false` shows what the user
+    /// types, such as an email.
+    public struct SecretRequestField: Decodable, Hashable, Sendable {
+        public var name: String
+        public var label: String
+        public var placeholder: String?
+        public var secret: Bool?
+        public init(name: String, label: String, placeholder: String? = nil, secret: Bool? = nil) {
+            self.name = name; self.label = label; self.placeholder = placeholder; self.secret = secret
+        }
+    }
 
     /// `OrchestrationV2ModelSwitch`.
     public struct ModelSwitch: Decodable, Hashable, Sendable {

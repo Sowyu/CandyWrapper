@@ -7,11 +7,45 @@ import T3Store
 /// a masked field with "Save securely", any error, the privacy note and Decline; otherwise one work log line,
 /// "{label} · {outcome}" with a lock, check or minus. The typed value lives only in the field and the request,
 /// and the field clears when the row is recycled or the answer is sent. 8pt under it (`pb-2`).
+/// A 5258 card with `fields` shows one labelled input per field, masked unless `secret: false`, and moves Save
+/// next to Decline (SecretRequestCard.tsx:233-300, 305-380).
 final class SecretRequestRowView: TimelineRowView {
+    /// One input of the card. Text sits only in the AppKit field.
+    @MainActor private final class Entry {
+        let input: SecretRequests.Input
+        let label: LabelView
+        let view: NSView
+        private let secure: SecureInputView?
+        private let plain: InputView?
+        init(_ input: SecretRequests.Input) {
+            self.input = input
+            label = LabelView(input.label, font: TL.font(12, .medium))
+            label.lineHeight = 16
+            if input.secret {
+                let f = SecureInputView(placeholder: input.placeholder); secure = f; plain = nil; view = f
+            } else {
+                let f = InputView(placeholder: input.placeholder); plain = f; secure = nil; view = f
+            }
+        }
+        var text: String {
+            get { secure?.text ?? plain?.text ?? "" }
+            set { secure?.text = newValue; plain?.text = newValue }
+        }
+        var isEnabled: Bool {
+            get { secure?.isEnabled ?? plain?.isEnabled ?? false }
+            set { secure?.isEnabled = newValue; plain?.isEnabled = newValue }
+        }
+        func wire(change: @escaping @MainActor () -> Void, submit: @escaping @MainActor () -> Void) {
+            secure?.onChange = { _ in change() }; secure?.onSubmit = submit
+            plain?.onChange = { _ in change() }; plain?.onSubmit = submit
+        }
+    }
+
     private let card = FillView()
     private let title = LabelView("", font: TL.font(14, .medium))
     private let reason = TextBlockView("", font: TL.font(14), lineHeight: 20, color: TL.c(\.mutedForeground))
-    private let field = SecureInputView(placeholder: SecretRequests.defaultPlaceholder)
+    private var entries: [Entry] = []
+    private var multiple = false
     private let save = ButtonView("Save securely", variant: .default, size: .default)
     private let errorLabel = TextBlockView("", font: TL.font(12), lineHeight: 16, color: TL.c(\.destructive))
     private let shield = IconView(name: .shieldCheck, size: 14)
@@ -35,10 +69,8 @@ final class SecretRequestRowView: TimelineRowView {
         title.lineHeight = 20
         privacy.lineHeight = 16
         lineLabel.lineHeight = 24
-        for v in [title, reason, field, save, errorLabel, shield, privacy, decline, lineIcon, lineLabel] as [NSView] { addSubview(v) }
+        for v in [title, reason, save, errorLabel, shield, privacy, decline, lineIcon, lineLabel] as [NSView] { addSubview(v) }
         errorLabel.isHidden = true
-        field.onChange = { [weak self] _ in self?.updateEnabled() }
-        field.onSubmit = { [weak self] in self?.send(save: true) }
         save.action = { [weak self] in self?.send(save: true) }
         decline.action = { [weak self] in self?.send(save: false) }
         restyle()
@@ -57,15 +89,18 @@ final class SecretRequestRowView: TimelineRowView {
         let why = (p.item.string("reason") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         reason.text = why
         reason.isHidden = why.isEmpty
-        field.placeholder = p.item.string("placeholder") ?? SecretRequests.defaultPlaceholder
-        privacy.text = SecretRequests.privacyNote(delivery: p.item.string("delivery"))
-        if changedRequest { field.text = "" }
-        // The field clears once the answer is accepted; the card turns into its answered line after.
-        if wasSubmitting, !item.ui.secretSubmitting, item.ui.secretError == nil { field.text = "" }
+        let fields = p.item.secretRequestFields
+        multiple = fields != nil
+        let inputs = SecretRequests.inputs(label: label, placeholder: p.item.string("placeholder"), fields: fields)
+        if changedRequest || inputs != entries.map(\.input) { rebuildEntries(inputs) }
+        privacy.text = SecretRequests.privacyNote(delivery: p.item.string("delivery"), multiple: multiple)
+        // The fields clear once the answer is accepted; the card turns into its answered line after.
+        if wasSubmitting, !item.ui.secretSubmitting, item.ui.secretError == nil { clearEntries() }
         submitting = item.ui.secretSubmitting
         error = item.ui.secretError
         let pending = display == .pending
-        for v in [card, title, field, save, shield, privacy, decline] as [NSView] { v.isHidden = !pending }
+        for v in [card, title, save, shield, privacy, decline] as [NSView] { v.isHidden = !pending }
+        for e in entries { e.view.isHidden = !pending; e.label.isHidden = !pending || !multiple }
         if !pending { reason.isHidden = true; errorLabel.isHidden = true }
         lineIcon.isHidden = pending
         lineLabel.isHidden = pending
@@ -89,26 +124,49 @@ final class SecretRequestRowView: TimelineRowView {
     /// Never carries a typed value into another request.
     override func prepareForReuse() {
         super.prepareForReuse()
-        field.text = ""
+        clearEntries()
         request = nil
     }
 
+    private func rebuildEntries(_ inputs: [SecretRequests.Input]) {
+        for e in entries { e.text = ""; e.view.removeFromSuperview(); e.label.removeFromSuperview() }
+        entries = inputs.map(Entry.init)
+        for e in entries {
+            e.wire(change: { [weak self] in self?.updateEnabled() }, submit: { [weak self] in self?.send(save: true) })
+            addSubview(e.label)
+            addSubview(e.view)
+            e.label.color = TL.c(\.mutedForeground)
+        }
+        updateEnabled()
+    }
+
+    private func clearEntries() { for e in entries { e.text = "" } }
+
+    private var typedValues: [String: String] { Dictionary(entries.map { ($0.input.key, $0.text) }, uniquingKeysWith: { a, _ in a }) }
+
+    private func answer(_ isSave: Bool) -> JSONValue? {
+        guard let request else { return nil }
+        return SecretRequests.answerInput(threadId: request.threadId, itemId: request.id, fields: request.secretRequestFields,
+                                          isSave ? .values(typedValues) : .decline)
+    }
+
     private func updateEnabled() {
-        save.isEnabled = !submitting && !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        save.isEnabled = !submitting && answer(true) != nil
         decline.isEnabled = !submitting
-        field.isEnabled = !submitting
+        for e in entries { e.isEnabled = !submitting }
     }
 
     private func send(save isSave: Bool) {
-        guard !submitting, let request,
-              let input = SecretRequests.answerInput(threadId: request.threadId, itemId: request.id, isSave ? .save(field.text) : .decline)
-        else { return }
+        guard !submitting, let input = answer(isSave) else { return }
         context.model?.answerSecretRequest(rowId, input)
     }
 
-    /// A click anywhere on the card targets its field, so a paste that follows lands here.
+    /// A click anywhere on the card targets its first empty field, so a paste that follows lands there
+    /// (SecretRequestCard.tsx:192-203).
     override func mouseDown(with event: NSEvent) {
-        if display == .pending { window?.makeFirstResponder(field) } else { super.mouseDown(with: event) }
+        guard display == .pending, !entries.isEmpty else { return super.mouseDown(with: event) }
+        let empty = entries.first { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? entries[0]
+        window?.makeFirstResponder(empty.view)
     }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
@@ -121,6 +179,12 @@ final class SecretRequestRowView: TimelineRowView {
         privacy.color = TL.c(\.mutedForeground)
         lineIcon.strokeColor = TL.c(\.iconMuted)
         lineLabel.color = TL.c(\.secondaryLabel)
+        for e in entries { e.label.color = TL.c(\.mutedForeground) }
+    }
+
+    /// `gap-2.5` between inputs, each with its `text-xs` label and `gap-1` above it when the card has fields.
+    private var inputsHeight: CGFloat {
+        multiple ? CGFloat(entries.count) * (16 + 4 + 32) + CGFloat(max(0, entries.count - 1)) * 10 : 32
     }
 
     private func reasonHeight(_ inner: CGFloat) -> CGFloat { reason.isHidden ? 0 : 4 + reason.height(forWidth: inner) }
@@ -129,7 +193,7 @@ final class SecretRequestRowView: TimelineRowView {
     override func height(forWidth width: CGFloat) -> CGFloat {
         guard display == .pending else { return 2 + 24 + 2 + 8 }
         let inner = max(0, width - 2 - 32)
-        return 1 + 16 + 20 + reasonHeight(inner) + 12 + 32 + errorHeight(inner) + 12 + 24 + 16 + 1 + 8
+        return 1 + 16 + 20 + reasonHeight(inner) + 12 + inputsHeight + errorHeight(inner) + 12 + (multiple ? 32 : 24) + 16 + 1 + 8
     }
 
     override func layout() {
@@ -153,9 +217,18 @@ final class SecretRequestRowView: TimelineRowView {
         }
         y += 12
         let sw = save.intrinsicContentSize.width
-        field.frame = NSRect(x: x, y: y, width: max(0, inner - 8 - sw), height: 32)
-        save.frame = NSRect(x: x + inner - sw, y: y, width: sw, height: 32)
-        y += 32
+        if multiple {
+            for (i, e) in entries.enumerated() {
+                if i > 0 { y += 10 }
+                e.label.frame = NSRect(x: x, y: y, width: inner, height: 16)
+                e.view.frame = NSRect(x: x, y: y + 20, width: inner, height: 32)
+                y += 52
+            }
+        } else if let e = entries.first {
+            e.view.frame = NSRect(x: x, y: y, width: max(0, inner - 8 - sw), height: 32)
+            save.frame = NSRect(x: x + inner - sw, y: y, width: sw, height: 32)
+            y += 32
+        }
         if error != nil {
             let h = errorLabel.height(forWidth: inner)
             errorLabel.frame = NSRect(x: x, y: y + 12, width: inner, height: h)
@@ -163,8 +236,12 @@ final class SecretRequestRowView: TimelineRowView {
         }
         y += 12
         let dw = decline.intrinsicContentSize.width
-        decline.frame = NSRect(x: x + inner - dw, y: y, width: dw, height: 24)
-        shield.frame = NSRect(x: x, y: y + 5, width: 14, height: 14)
-        privacy.frame = NSRect(x: x + 14 + 6, y: y + 4, width: max(0, inner - 20 - dw - 8), height: 16)
+        // With fields, Save sits after Decline (`gap-2`) and the footer row is the button's 32pt.
+        let footer: CGFloat = multiple ? 32 : 24
+        let trailing = multiple ? sw + 8 : 0
+        if multiple { save.frame = NSRect(x: x + inner - sw, y: y, width: sw, height: 32) }
+        decline.frame = NSRect(x: x + inner - trailing - dw, y: y + (footer - 24) / 2, width: dw, height: 24)
+        shield.frame = NSRect(x: x, y: y + (footer - 14) / 2, width: 14, height: 14)
+        privacy.frame = NSRect(x: x + 14 + 6, y: y + (footer - 16) / 2, width: max(0, inner - 20 - trailing - dw - 8), height: 16)
     }
 }
