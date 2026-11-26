@@ -700,7 +700,7 @@ final class NewKeybindingRowView: DSView, SettingsGroupRow {
     /// Each command's shortcuts for the picker rows (KeybindingsSettings.tsx:1259-1268).
     private func commandShortcuts() -> [String: [String]] {
         let rows = allRows()
-        let labels = KeybindingsLogic.previewLabels(rows)
+        let labels = KeybindingsLogic.previewLabels(rows, sendShortcut: ClientSettingsStore.shared.current.string("sendShortcut"))
         var out: [String: [String]] = [:]
         for row in rows { out[row.command, default: []] += labels[row.id] ?? [] }
         return out

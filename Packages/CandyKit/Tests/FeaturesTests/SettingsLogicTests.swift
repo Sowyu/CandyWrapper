@@ -119,6 +119,12 @@ struct SettingsLogicTests {
         #expect(labels[sidebar.id] == nil)
         #expect(labels[chat.id] == [chat.binding.shortcut.label])
         #expect(KeybindingsLogic.coreWhenVariables.contains("composerEmpty"))
+        // 5258 #28612: with multiline send, a plain Mod+Enter alternate send also shows as Mod+Shift+Enter.
+        let alternate = try #require(rows.first { $0.command == "composer.sendAlternate" && $0.key == "mod+enter" })
+        let shifted = Keymap.shortcut(alternate.binding, KeybindingContext(["composerRequiresModifier": true])).label
+        #expect(KeybindingsLogic.previewLabels(rows, sendShortcut: "enter")[alternate.id] == [alternate.binding.shortcut.label])
+        #expect(KeybindingsLogic.previewLabels(rows, sendShortcut: "mod-enter")[alternate.id] == [shifted])
+        #expect(KeybindingsLogic.previewLabels(rows, sendShortcut: "mod-enter-multiline")[alternate.id] == [alternate.binding.shortcut.label, shifted])
     }
 
     /// 5258 #41630: an edited row's default is the one the command no longer has.

@@ -240,18 +240,25 @@ public enum KeybindingsLogic {
         return commands.sorted { compareCommands($0, $1, key: commandLabel) < 0 }
     }
 
-    /// `previewLabels` (KeybindingsSettings.logic.ts:310-326, T3 5258): each row's shortcut unless a later
-    /// binding of the same keys under the same or no condition shadows it. Turned-off rows show none.
-    public static func previewLabels(_ rows: [KeybindingRow]) -> [String: [String]] {
+    /// `previewLabels` (KeybindingsSettings.logic.ts:307-326, T3 5258): each row's shortcut unless a later
+    /// binding of the same keys under the same or no condition shadows it. Turned-off rows show none. With the
+    /// multiline send mode a send shortcut can be pressed either way, so a row may list two.
+    public static func previewLabels(_ rows: [KeybindingRow], sendShortcut: String = "enter") -> [String: [String]] {
         var out: [String: [String]] = [:]
-        var later = Set<String>()
+        let modes = sendShortcut == "mod-enter-multiline" ? [false, true] : [sendShortcut == "mod-enter"]
         // Rows are sorted for display; shadowing follows the config order, the index ending each row id.
         let order = { (r: KeybindingRow) in Int(r.id.split(separator: "\u{0}", omittingEmptySubsequences: false).last ?? "") ?? 0 }
-        for row in rows.sorted(by: { order($0) < order($1) }).reversed() where row.when != "false" {
-            let key = row.binding.shortcut.label
-            let condition = "\(key):\(row.when == "true" ? "" : row.when)"
-            if !later.contains("\(key):"), !later.contains(condition) { out[row.id, default: []].append(key) }
-            later.insert(condition)
+        let ordered = rows.sorted(by: { order($0) < order($1) }).reversed()
+        for requiresModifier in modes {
+            var later = Set<String>()
+            for row in ordered where row.when != "false" {
+                let key = Keymap.shortcut(row.binding, KeybindingContext(["composerRequiresModifier": requiresModifier])).label
+                let condition = "\(key):\(row.when == "true" ? "" : row.when)"
+                if !later.contains("\(key):"), !later.contains(condition), out[row.id]?.contains(key) != true {
+                    out[row.id, default: []].append(key)
+                }
+                later.insert(condition)
+            }
         }
         return out
     }

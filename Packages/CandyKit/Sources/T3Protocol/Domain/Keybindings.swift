@@ -288,7 +288,7 @@ public struct Keymap: Sendable, Equatable {
     /// `shortcutForContext` (web keybindings.ts:108-124): with a send that needs a modifier, a plain
     /// Mod+Enter `composer.sendAlternate` would clash with send, so it reads as Mod+Shift+Enter. Saved
     /// and remapped rules stay as they are.
-    static func shortcut(_ rule: ResolvedKeybindingRule, _ context: KeybindingContext) -> KeybindingShortcut {
+    public static func shortcut(_ rule: ResolvedKeybindingRule, _ context: KeybindingContext) -> KeybindingShortcut {
         var s = rule.shortcut
         if context["composerRequiresModifier"], rule.command == "composer.sendAlternate" || rule.command == "composer.sendBackground", s.key == "enter", s.modKey,
            !s.metaKey, !s.ctrlKey, !s.altKey, !s.shiftKey {
