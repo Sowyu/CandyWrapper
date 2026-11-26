@@ -385,7 +385,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 83a7c75b88 | #42889 | fix(web,mobile): adding a project from a draft's picker no longer leaves the draft behind | palette | port (4.2) |
 | e045a127e7 | #42882 | fix(web): web search result links follow Open links in | thread | ported 3f79fad2 |
 | 8783b9d2ea | #42880 | fix(web): Restart agent session toast says the conversation is kept | palette | ported 2995f10a |
-| 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | port (1.10) |
+| 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | already: `layoutMinimap` takes the gutter from `laneFrame.x`, the measured lane offset |
 | 19a6e5b57b | #42856 | fix(web): clicking outside a citation comment keeps its dictation | thread | n/a here: same composer citation editor |
 | 3a63e0ca37 | #42771 | fix(web): expanding linked issues no longer hides thread details sections | thread | left: with b111b6310a |
 | f99eceb76d | #42755 | fix(web): reasoning previews no longer cut emojis in half | thread | already: Swift slices previews by character, so no surrogate pair splits |
@@ -413,7 +413,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 571ed76fc3 | #42275 | fix(web): sidebar issue and pull request badges share one component | sidebar | port (3.7) |
 | 921349decf | #42295 | fix(web): Mod+S stashes a side chat's prompt | composer | port (2.8) |
 | 51a721da44 | #42279 | fix(web): a held Esc in file or content search stops on the Command Palette | palette | port (4.4) |
-| 41675b3e4d | #42286 | fix(web): floating preview no longer covers the last timeline rows on a narrow chat | thread | port (1.10) |
+| 41675b3e4d | #42286 | fix(web): floating preview no longer covers the last timeline rows on a narrow chat | thread | n/a until CW has T3's floating preview frame over the chat (`chatCanvasLayout` `overlapsChat`); CW's lane has no such overlay |
 | ff7d03ddfd | #42265 | fix(client-runtime): omit failed image reads from viewed-image previews | thread | ported 255b7394 |
 | e9b227b021 | #42183 | fix(web): typing / or $ in the composer no longer waits for the suggestion menu to render | composer | n/a (React render timing) |
 | ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | port (4.4) |
@@ -465,7 +465,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 10765a4e47 | #41262 | fix(web): a refused desktop install shows as failed instead of downloaded | sidebar | n/a (desktop updater, Electron) |
 | 5812320a6a | #41258 | fix(web): quick clicks on different sidebar threads open each one | sidebar | port (3.5) |
 | 611410683b | #41242 | feat(cursor): show which step Cursor is in while a turn starts | thread | ported 3a1892b1 |
-| e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | port (1.10) |
+| e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | ported 7a68cd54 (the text line, not a contenteditable caret: CW's timeline has none) |
 | 69c1d53826 | #38884 | feat: workflows on web and mobile | thread | port (1.18) |
 | 7103527dcc | #41073 | fix(web): PR description file links resolve in the PR's repository from a No-project thread | thread | left: CW renders PR bodies in the pull request views (other agent), which pass no checkout cwd yet. Small |
 | 0938476b95 | #41060 | fix(web): Thinking row no longer shows below a streaming reply | thread | ported ad384d3e |
