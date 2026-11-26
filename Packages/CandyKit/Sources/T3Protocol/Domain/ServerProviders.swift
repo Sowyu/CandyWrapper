@@ -258,6 +258,9 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     /// `subProviders` (4928, contracts server.ts): the backends `models` run on, in order, matched by
     /// `ServerProviderModel.subProvider`. Pickers group models under them.
     public var subProviders: [SubProvider]?
+    /// `updateRequiredModels` (contracts server.ts:103-108, 285): models the CLI needs a newer version for, kept apart
+    /// from `models` so the picker only names them in its notice.
+    public var updateRequiredModels: [UpdateRequiredModel]?
     /// Set for the one failed check that follows a ready one: pickers keep offering `models` (5258 server.ts:282-283,
     /// T3 commit 1a42ba1b5f).
     public var modelsRetained: Bool?
@@ -292,6 +295,11 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         public init(name: String, unavailableReason: String? = nil) { self.name = name; self.unavailableReason = unavailableReason }
     }
 
+    public struct UpdateRequiredModel: Decodable, Hashable, Sendable {
+        public var slug: String, name: String, minVersion: String
+        public init(slug: String, name: String, minVersion: String) { self.slug = slug; self.name = name; self.minVersion = minVersion }
+    }
+
     public struct UpdateState: Hashable, Sendable {
         /// `queued`, `running`, `succeeded`, `failed` or `unchanged`.
         public var status: String
@@ -312,7 +320,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case instanceId, driver, displayName, accentColor, badgeLabel, continuation, showInteractionModeToggle
         case supportsConversationRollback, reportsContextWindow, supportedRuntimeModes, requiresNewThreadForModelChange, enabled, installed
-        case status, message, availability, unavailableReason, models, subProviders, modelsRetained, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
+        case status, message, availability, unavailableReason, models, subProviders, updateRequiredModels, modelsRetained, slashCommands, skills, workspaceSnapshots, version, auth, checkedAt, usageLimits
         case updateState, versionAdvisory, compatibilityAdvisory, setup, nativeSessions, configurableProviders, runtimePaths
     }
     private enum ContinuationKeys: String, CodingKey { case groupKey }
@@ -342,6 +350,7 @@ public struct ServerProvider: Decodable, Hashable, Sendable {
         unavailableReason = try? c.decodeIfPresent(String.self, forKey: .unavailableReason)
         models = try c.decodeIfPresent([ServerProviderModel].self, forKey: .models) ?? []
         subProviders = try? c.decodeIfPresent([SubProvider].self, forKey: .subProviders)
+        updateRequiredModels = try? c.decodeIfPresent([UpdateRequiredModel].self, forKey: .updateRequiredModels)
         modelsRetained = try? c.decodeIfPresent(Bool.self, forKey: .modelsRetained)
         // Lenient: a malformed entry drops the list, never the provider.
         slashCommands = (try? c.decodeIfPresent([ServerProviderSlashCommand].self, forKey: .slashCommands)) ?? []
