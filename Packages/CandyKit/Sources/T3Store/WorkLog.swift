@@ -703,6 +703,9 @@ public enum WorkLog {
         }
         if let presentation = toolPresentation(entry) { return presentation.displayName }
         if let command = entry.command, !command.jsTrimmed.isEmpty { return commandDisplayText(command) }
+        if let label = commandlessCommandLabel(entry, status: liveActivityToolStatus(entry.toolLifecycleStatus, presentTense: false)) {
+            return label
+        }
         let action = toolGroupAction(entry)
         if action == .codeSearch || action == .search {
             let search = entry.itemType == .fileSearch ? entry.label : formatSearchToolLabel(entry.toolData?.objectValue != nil ? entry.toolData : nil)
@@ -764,6 +767,27 @@ public enum WorkLog {
                 .map { $0.split(separator: "/").last.map(String.init) ?? $0 }
             return "\(verb) \(program ?? "command")"
         }
-        return displayLabel(entry, workspaceRoot: workspaceRoot)
+        return commandlessCommandLabel(entry, status: status) ?? displayLabel(entry, workspaceRoot: workspaceRoot)
+    }
+
+    /// `genericCommandStatusLabel` (work-log/presentation.ts:258-272 at 5258).
+    static func genericCommandStatusLabel(_ status: ToolLifecycleStatus) -> String {
+        switch status {
+        case .inProgress: "Running command"
+        case .failed: "Failed command"
+        case .declined: "Declined command"
+        case .stopped: "Stopped command"
+        default: "Ran command"
+        }
+    }
+
+    /// `commandlessCommandLabel` (presentation.ts:274-292 at 5258, #39837): an ACP command with no command text and only
+    /// a generic title reads by its status, so the live row says "Running command", not "Running Ran command".
+    static func commandlessCommandLabel(_ entry: WorkLogEntry, status: ToolLifecycleStatus) -> String? {
+        guard entry.itemType == .commandExecution, entry.command?.jsTrimmed.nonEmpty == nil else { return nil }
+        // The provider's own title, before a client substitutes its fallback.
+        let title = (entry.structuredPayload.map { $0.title } ?? (entry.toolTitle?.nonEmpty ?? entry.label))?.jsTrimmed
+        guard let title, !title.isEmpty else { return genericCommandStatusLabel(status) }
+        return ["Ran command", "Run command", "Command"].contains(normalizeCompactToolLabel(title)) ? genericCommandStatusLabel(status) : nil
     }
 }

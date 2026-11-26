@@ -1109,7 +1109,9 @@ public enum TimelineRows {
         if compacting, let i = rows.firstIndex(where: { $0.id == workingRowId }) {
             rows[i].kind = .working(compacting: "Compacting…")
         }
-        if input.isWorking, input.latestRun?.turnEnded != true, !head, !hasActiveCompaction, !compactionOnlyRunFinished,
+        // `replyIsStreaming` (MessagesTimeline.logic.ts:2386-2390 at 5258, #41060): no Thinking under a reply that streams.
+        let replyIsStreaming: Bool = if case .message(let m, _)? = entries.last?.kind { m.role == .assistant && m.streaming } else { false }
+        if input.isWorking, input.latestRun?.turnEnded != true, !head, !replyIsStreaming, !hasActiveCompaction, !compactionOnlyRunFinished,
            latestToolFailed || (!hasActivityRow && approvals.isEmpty) {
             // A failed latest tool hands the row back to thinking; its group stays reachable.
             if latestToolFailed, let anchor = activeAnchor {
@@ -1128,6 +1130,8 @@ public enum TimelineRows {
                 var waitingOn = 0
                 if let run = unsettled {
                     for entry in entries.reversed() {
+                        // The run's own finished reply is the parent parking on its children (5258 a6c69be8df, #41927).
+                        if case .message(let m, _) = entry.kind, m.role == .assistant, !m.streaming, m.runId == run { continue }
                         guard case .event(let row) = entry.kind, row.item.type == .subagent, row.item.runId == run else { break }
                         if isWorkActive(row.item.status) { waitingOn += 1 }
                     }

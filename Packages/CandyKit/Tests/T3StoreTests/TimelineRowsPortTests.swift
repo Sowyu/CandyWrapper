@@ -700,7 +700,14 @@ struct ToolCallVisibilityTests {
             rows.lazy.compactMap { if case .thinking(_, _, _, let label, _) = $0.kind { label } else { nil } }.first
         }
         #expect(label(TimelineRows.derive(input)) == .some("Waiting on 2 subagents"))
+        // 5258 #41927: the run's own finished reply after them is the parent parking, so it still waits.
         input.entries.append(message("b", role: .assistant, run: "r1", at: at))
+        #expect(label(TimelineRows.derive(input)) == .some("Waiting on 2 subagents"))
+        // #41060: while that reply streams, no Thinking row shows under it.
+        input.entries[input.entries.count - 1] = message("b", role: .assistant, run: "r1", at: at, streaming: true)
+        #expect(label(TimelineRows.derive(input)) == nil)
+        // Work after the children is the parent's own again.
+        input.entries[input.entries.count - 1] = message("b", role: .user, at: at)
         #expect(label(TimelineRows.derive(input)) != .some("Waiting on 2 subagents"))
     }
 

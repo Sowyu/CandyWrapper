@@ -71,6 +71,16 @@ private func dynamicTool(_ name: String, input: String) -> TurnItem {
     }
 
     // LT:99-352
+    /// MessagesTimeline.active-tools.test.ts at 5258 (#39837): a commandless ACP command reads by its status.
+    @Test func commandlessCommandReadsByItsStatus() {
+        let running = entry(label: "Ran command") { $0.itemType = .commandExecution; $0.toolTitle = "Ran command"; $0.toolLifecycleStatus = .inProgress }
+        #expect(WorkLog.liveLabel(running, workspaceRoot: nil, active: true) == "Running command")
+        #expect(WorkLog.displayLabel({ var e = running; e.toolLifecycleStatus = .failed; return e }(), workspaceRoot: nil) == "Failed command")
+        // A provider title of its own stays.
+        let titled = entry(label: "Install deps") { $0.itemType = .commandExecution; $0.toolTitle = "Install deps"; $0.toolLifecycleStatus = .completed }
+        #expect(WorkLog.displayLabel(titled, workspaceRoot: nil) == "Install deps")
+    }
+
     @Test func workEntryLabels() {
         let thought = entry(tone: .thinking) {
             $0.itemType = .reasoning
