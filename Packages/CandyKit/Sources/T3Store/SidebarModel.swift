@@ -677,20 +677,30 @@ public enum SidebarModel {
         max(thread.createdAt.epochMs ?? 0, thread.unsettledAt?.epochMs ?? 0)
     }
 
-    /// Port of `sortActiveThreadsByOrderKey` (threadSort.ts:342-371): keyless threads first,
-    /// newest anchor first; then keyed threads by key. Activity does not reorder.
+    static let impliedKeyWidth = 10
+    static let impliedKeyMaxMs: Int64 = { var v: Int64 = 1; for _ in 0..<impliedKeyWidth { v *= 26 }; return v - 1 }()
+
+    /// `activeThreadSortKey` (threadSort.ts:266-283 at 5258, #41885): a thread nobody arranged takes an implied key
+    /// from its anchor time, newest first, in a tier ahead of every arranged key. A move then writes only the moved
+    /// thread, even beside threads whose server is offline.
+    public static func activeThreadSortKey(_ thread: ThreadShell) -> String {
+        if let key = thread.activeOrderKey { return key }
+        var value = impliedKeyMaxMs - min(max(activeThreadAnchorTimestampMs(thread), 0), impliedKeyMaxMs)
+        var digits = ""
+        for _ in 0..<impliedKeyWidth {
+            digits.insert(Character(UnicodeScalar(UInt8(97 + value % 26))), at: digits.startIndex)
+            value /= 26
+        }
+        // A trailing "a" leaves no room to place a thread directly above this one.
+        return PinOrderKey.leadingTier + digits + "n"
+    }
+
+    /// Port of `sortActiveThreadsByOrderKey` (threadSort.ts:285-301 at 5258): by `activeThreadSortKey`, so keyless
+    /// threads come first, newest anchor first, then keyed threads by key. Activity does not reorder.
     public static func sortActiveThreadsByOrderKey(_ threads: [SidebarThread]) -> [SidebarThread] {
         guard threads.count > 1 else { return threads }
-        return sortedByKey(threads, key: { (order: $0.shell.activeOrderKey, anchor: activeThreadAnchorTimestampMs($0.shell), id: $0.id.rawValue) }) { l, r in
-            switch (l.order, r.order) {
-            case (nil, _?): return true
-            case (_?, nil): return false
-            case (let lk?, let rk?) where lk != rk: return lk < rk
-            case (nil, nil):
-                if l.anchor != r.anchor { return l.anchor > r.anchor }
-            default: break
-            }
-            return localeCompare(l.id, r.id) < 0
+        return sortedByKey(threads, key: { (order: activeThreadSortKey($0.shell), id: $0.id.rawValue) }) { l, r in
+            l.order != r.order ? l.order < r.order : localeCompare(l.id, r.id) < 0
         }
     }
 
