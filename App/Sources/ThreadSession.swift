@@ -1323,9 +1323,22 @@ final class ThreadController {
 
     /// The sidebar's new-thread button: the draft page for the open thread's project.
     // ponytail: no projects means no draft; T3 shows "Add a project to start" there
+    /// A draft with content moves to a project Add project just added, in place of a new draft (#42889).
+    func moveDraft(_ draftId: String, toAdded project: ProjectShell) -> Bool {
+        let previous = session
+        guard composer.moveDraft(draftId, toAdded: project) else { return false }
+        leftThread(previous)
+        return true
+    }
+
     func newThread(in project: ProjectShell? = nil) {
         let previous = session
         guard composer.newThread(in: project) else { return }
+        leftThread(previous)
+    }
+
+    /// The composer now shows a draft: the thread that was open lets go of its panes.
+    private func leftThread(_ previous: ThreadSession?) {
         previous?.end()
         session = nil
         setCost(nil)

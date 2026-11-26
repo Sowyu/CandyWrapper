@@ -547,7 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The no-projects hero (NoProjectsHero.tsx).
         threads.offersScratch = { [weak palette, weak environments] in palette?.scratchEnvironmentId(environments?.primaryId) != nil }
         threads.noProjectsHero.addProject.action = { [weak commands] in commands?.addProject() }
-        threads.composer.onAddProject = { [weak commands] in commands?.addProject() }
+        threads.composer.onAddProject = { [weak commands] draftId in commands?.addProject(fromDraft: draftId) }
         // Settings > Projects' empty state: the palette's add-project flow lives in the main window, over Settings.
         settings.pageContext.addProject = { [weak settings, weak commands] in settings?.close(); commands?.addProject() }
         threads.composer.scratchEnvironment = { [weak palette] in palette?.scratchTargetEnvironmentId }

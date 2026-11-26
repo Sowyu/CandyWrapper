@@ -1172,12 +1172,22 @@ final class SidebarCommands {
     /// Add project opens the command palette's add-project flow (`openCommandPalette({open: "add-project"})`).
     var openAddProject: () -> Void = {}
 
-    func addProject() { openAddProject() }
+    func addProject() { addProject(fromDraft: nil) }
+
+    /// The draft whose project picker opened Add project; every other entry clears it, so a cancelled pick never
+    /// moves the draft later (`openIntent.draftId`, CommandPalette.tsx at 5258, #42889).
+    private var addProjectDraftId: String?
+    func addProject(fromDraft draftId: String?) {
+        addProjectDraftId = draftId
+        openAddProject()
+    }
 
     /// `handleAddProjectForEnvironment`: an existing project opens its latest unsettled thread or a
     /// draft; a new one is created with `project.create`, then a draft opens in it.
     func addProject(path: String, environmentId env: String) {
         let projects = (snapshot?.projects ?? []).filter { $0.id.environmentId == env }
+        let draftId = addProjectDraftId
+        addProjectDraftId = nil
         if let existing = ProjectCommands.existing(projects, workspaceRoot: path) {
             // Adding an archived project's folder again brings the project back (CommandPalette.tsx:2003-2010 at 4928).
             if existing.archivedAt != nil {
@@ -1189,6 +1199,7 @@ final class SidebarCommands {
                     }
                 }
             }
+            if let draftId, threads.moveDraft(draftId, toAdded: existing) { return }
             let latest = (snapshot?.threads ?? []).filter { $0.projectId == existing.id }
                 .max { SidebarModel.getThreadSortTimestamp($0, .updatedAt) < SidebarModel.getThreadSortTimestamp($1, .updatedAt) }
             if let latest, latest.settledOverride != .settled { threads.open(latest.id) } else { threads.newThread(in: existing) }
@@ -1198,8 +1209,9 @@ final class SidebarCommands {
         Task {
             do {
                 let result = try await environments.request(env, "projects.mutate", ProjectCommands.create(projectId: projectId, workspaceRoot: path))
-                let created = try result.decode(as: ProjectShell.self)
-                threads.newThread(in: EnvironmentScope.scope(created, env))
+                let created = EnvironmentScope.scope(try result.decode(as: ProjectShell.self), env)
+                if let draftId, threads.moveDraft(draftId, toAdded: created) { return }
+                threads.newThread(in: created)
             } catch {
                 fail("Failed to add project", error)
             }

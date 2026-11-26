@@ -105,7 +105,8 @@ final class ComposerController {
     /// Opens a new thread in the open thread's project, leaving the thread (`handleNewThreadInActiveProject`).
     var onNewThread: (() -> Void)?
     /// The draft picker's "Add project" row.
-    var onAddProject: (() -> Void)?
+    /// Add project, with the draft whose project picker asked for it (`OpenAddProject.draftId` at 5258, #42889).
+    var onAddProject: ((String?) -> Void)?
     /// Dither's project popover: "No project" starts a draft in this machine's scratch project, nil hides the row.
     var scratchEnvironment: (() -> String?)?
     var onStartWithoutProject: ((String) -> Void)?
@@ -1477,7 +1478,7 @@ final class ComposerController {
                                         canPin: { actions?.canPinProject($0) ?? false },
                                         onTogglePin: { actions?.setProjectPinned($0, $1) }) { [weak self] key in
             guard let self else { return }
-            guard let key else { self.onAddProject?(); return }
+            guard let key else { self.onAddProject?(current.draftId); return }
             guard key != active?.key, let group = groups.first(where: { $0.key == key }) else { return }
             self.openPickedGroup(group, key: key, currentEnvironment: currentId.environmentId)
         }
@@ -1502,7 +1503,7 @@ final class ComposerController {
                 self.openPickedGroup(group, key: key, currentEnvironment: currentId.environmentId)
             case .noProject:
                 if !scratch, let scratchEnv { self.onStartWithoutProject?(scratchEnv) }
-            case .newProject: self.onAddProject?()
+            case .newProject: self.onAddProject?(current.draftId)
             case .manageProjects: self.onManageProjects?()
             }
         }
@@ -1530,6 +1531,24 @@ final class ComposerController {
                   let group = SidebarModel.buildProjectGroups([project]).first else { return }
             self.openPickedGroup(group, key: group.key, currentEnvironment: env)
         }
+    }
+
+    /// `moveDraftToAddedProject` (CommandPalette.tsx at 5258, #42889, lib/moveDraftToProject.ts): after Add project from
+    /// a draft's picker, a draft the user wrote in moves to the added project. False for an empty or gone draft, which
+    /// leaves the caller to open the project's own draft.
+    // ponytail: a just-created project may not be in the shell yet, so the draft keys by its project id until it is;
+    // T3 waits up to 3 s for the project record
+    func moveDraft(_ draftId: String, toAdded project: ProjectShell) -> Bool {
+        flushPrompt()
+        guard let draft = sessions.values.first(where: { $0.draftId == draftId }),
+              hasUserContent(draft, prompt: prompts[draftId] ?? "") else { return false }
+        let key = group(of: project.id)?.key ?? project.id.rawValue
+        let r = DraftProjectMove.move(draft, to: project.id, key: key, in: sessions) {
+            self.hasUserContent($0, prompt: self.prompts[$0.draftId] ?? "")
+        }
+        sessions = r.sessions
+        showDraft(project, stored: r.moved)
+        return true
     }
 
     private func hasUserContent(_ session: DraftSession, prompt: String) -> Bool {
