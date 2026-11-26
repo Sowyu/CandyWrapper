@@ -259,4 +259,14 @@ struct SidebarSearchTests {
         row.discardButton.performAction()
         #expect(opened == "d1" && discarded == "d1")
     }
+
+    /// SidebarThreadHeader.tsx:55-57, :102-117 and Sidebar.tsx:3079-3084, :3322-3328 at 5258.
+    @Test func newButtonTooltipNamesShiftClickWhileNewOpensThePicker() {
+        let picker = SidebarContentView.newThreadTooltip(pickableGroups: 3, allGroups: 3, newLabel: "\u{2318}N", newLocalLabel: "\u{2325}\u{2318}N")
+        #expect(picker.text == "New thread (\u{2318}N)" && picker.detail == "New thread in current project: Shift+click (\u{2325}\u{2318}N)")
+        let unbound = SidebarContentView.newThreadTooltip(pickableGroups: 3, allGroups: 3, newLabel: nil, newLocalLabel: nil)
+        #expect(unbound.text == "New thread" && unbound.detail == "New thread in current project: Shift+click")
+        let one = SidebarContentView.newThreadTooltip(pickableGroups: 1, allGroups: 2, newLabel: nil, newLocalLabel: "\u{2325}\u{2318}N")
+        #expect(one.text == "New thread (\u{2325}\u{2318}N)" && one.detail == nil)
+    }
 }
