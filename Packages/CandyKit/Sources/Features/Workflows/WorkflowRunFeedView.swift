@@ -15,12 +15,12 @@ final class WorkflowRunFeedView: DSView {
     var canOperate = true
     var ownSessionId: String?
 
-    private let partOf = ButtonView("", variant: .link, size: .xs)
+    private let partOf = WorkflowTextButton("")
     private let title = TextBlockView()
     private let state = WorkflowStateWordView()
     private let stop = ButtonView("Stop", icon: .square, variant: .ghostDestructive, size: .xs)
     private let chip = WorkflowChipView()
-    private let meta = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    private let meta = WorkflowWordsRow()
     private let status = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let notHere = TextBlockView()
     private var stepViews: [WorkflowStepRowView] = []
@@ -35,11 +35,11 @@ final class WorkflowRunFeedView: DSView {
         super.init(frame: frameRect)
         title.font = DSFont.ui(16, weight: .semibold)
         title.lineHeight = 24
-        meta.lineHeight = 16
         status.lineHeight = 16
         notHere.font = DSFont.ui(14)
         notHere.lineHeight = 20
         notHere.color = Themed.color(\.mutedForeground)
+        partOf.underlined = true
         stop.setAccessibilityLabel("Cancel run")
         stop.setTooltip("Cancel run")
         partOf.action = { [weak self] in self?.onSelect?(self?.parentId) }
@@ -70,7 +70,7 @@ final class WorkflowRunFeedView: DSView {
         stop.isHidden = run.endedAt != nil
         stop.isEnabled = canOperate
         chip.name = run.workflow
-        meta.text = ([run.workflow] + WorkflowsPageLogic.metaLine(run, nowMs: nowMs)).joined(separator: " · ")
+        meta.parts = ([run.workflow] + WorkflowsPageLogic.metaLine(run, nowMs: nowMs)).flatMap { [$0, "·"] }.dropLast().map { $0 }
         status.isHidden = detail != nil && error == nil
         status.text = error ?? "Loading steps…"
         status.color = error == nil ? Themed.color(\.mutedForeground) : Themed.color(\.destructive)
@@ -123,7 +123,7 @@ final class WorkflowRunFeedView: DSView {
         guard node != nil else { return 0 }
         // `header space-y-1`.
         if !partOf.isHidden {
-            set(partOf, NSRect(x: 0, y: y, width: min(w, partOf.fittingSize.width), height: 16))
+            set(partOf, NSRect(x: 0, y: y, width: min(w, partOf.preferredWidth), height: 16))
             y += 20
         }
         let sw = state.width
@@ -296,7 +296,7 @@ final class WorkflowQuestionCardView: DSView {
     private let body = TextBlockView()
     private var links: [ButtonView] = []
     private var choices: [(button: ButtonView, note: TextBlockView?)] = []
-    private let addReason = ButtonView("Add a reason", variant: .link, size: .xs)
+    private let addReason = WorkflowTextButton("Add a reason")
     private let reasonField = InputView(placeholder: "Why, in a sentence. It goes with whichever answer you pick.", size: .sm)
     private let needsReason = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
     private let failure = LabelView("", font: DSFont.ui(12), color: Themed.color(\.destructive))
@@ -364,7 +364,7 @@ final class WorkflowQuestionCardView: DSView {
         sync()
     }
 
-    private func choose(_ choice: WorkflowQuestionChoice) {
+    func choose(_ choice: WorkflowQuestionChoice) {
         guard !busy else { return }
         let given = reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if choice.requireReason && given.isEmpty {
@@ -406,8 +406,9 @@ final class WorkflowQuestionCardView: DSView {
 
     private func place(width: CGFloat, apply: Bool) -> CGFloat {
         func set(_ v: NSView, _ r: NSRect) { if apply { v.frame = r } }
-        let x: CGFloat = 12, w = max(0, width - 24)
-        var y: CGFloat = 10
+        // `border px-3 py-2.5`: the content starts inside the 1pt border.
+        let x: CGFloat = 13, w = max(0, width - 26)
+        var y: CGFloat = 11
         let nw = ceil(needs.textWidth) + 1
         set(needs, NSRect(x: x, y: y, width: nw, height: 16))
         set(asked, NSRect(x: x + nw + 8, y: y, width: max(0, w - nw - 8), height: 16))
@@ -445,7 +446,7 @@ final class WorkflowQuestionCardView: DSView {
         if !choices.isEmpty { y = flow(choices.map { ($0.button, $0.note) }, top: y + 10) }
         if !addReason.isHidden {
             y += 8
-            set(addReason, NSRect(x: x, y: y, width: addReason.fittingSize.width, height: 16))
+            set(addReason, NSRect(x: x, y: y, width: addReason.preferredWidth, height: 16))
             y += 16
         }
         if !reasonField.isHidden {
@@ -463,7 +464,7 @@ final class WorkflowQuestionCardView: DSView {
             set(failure, NSRect(x: x, y: y, width: w, height: 16))
             y += 16
         }
-        return y + 10
+        return y + 11
     }
 
     override var wantsUpdateLayer: Bool { false }

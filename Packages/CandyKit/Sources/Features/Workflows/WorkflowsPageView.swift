@@ -34,6 +34,11 @@ public final class WorkflowsPageView: DSView {
     /// Answers a question; the completion gets an error message on failure.
     public var onAnswer: ((_ runId: String, _ name: String, _ choice: String, _ reason: String?, _ done: @escaping @MainActor (String?) -> Void) -> Void)?
     public var onCancelRun: ((String) -> Void)?
+    /// Opens the definition files (WorkflowsPage.tsx:243-248); the button shows only while it is set and the page
+    /// has an environment.
+    public var onOpenDefinitions: (() -> Void)? { didSet { needsLayout = true } }
+    /// `<Button size="sm" variant="outline"><FileCode2Icon />Definitions</Button>`.
+    private let definitions = ButtonView("Definitions", icon: .fileCode2, variant: .outline, size: .sm)
 
     public let header = SettingsHeaderView()
     public let toasts = ToastViewport()
@@ -43,7 +48,7 @@ public final class WorkflowsPageView: DSView {
     public var onShownRunChange: ((String?) -> Void)?
     public private(set) var shownRunId: String?
     private let listColumn = DSView()
-    private let tabs = ToggleGroupView(variant: .default, items: WorkflowListTab.allCases.map { ($0.label, nil) }, selected: 0)
+    private let tabs = ToggleGroupView(variant: .segmented, items: WorkflowListTab.allCases.map { ($0.label, nil) }, selected: 0)
     private let workflowSelect = SelectView(options: [], size: .sm)
     private let kindSelect = SelectView(options: [], size: .sm)
     private let kindsLine = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
@@ -60,8 +65,8 @@ public final class WorkflowsPageView: DSView {
     private let loadingLabel = LabelView("Loading workflow runs…", font: DSFont.ui(14), color: Themed.color(\.mutedForeground))
 
     // The page's picks (WorkflowRunsView.tsx:107-112).
-    private var pickedTab: WorkflowListTab?
-    private var workflow = ""
+    var pickedTab: WorkflowListTab?
+    var workflow = ""
     private var showSkipped = false
     private var listing: WorkflowsListing?
     /// `t3code:workflows:question-kind` (WorkflowRunsView.tsx:47), `*` for all kinds.
@@ -77,6 +82,8 @@ public final class WorkflowsPageView: DSView {
         super.init(frame: frameRect)
         header.plainTitle = "Workflows"
         tabs.setAccessibilityLabel("Which runs")
+        // `<ToggleGroup className="w-full *:flex-1">`, segmented by default (ui/toggle-group.tsx:16).
+        tabs.fillsWidth = true
         workflowSelect.setAccessibilityLabel("Workflow")
         kindSelect.setAccessibilityLabel("Kind of question")
         nothing.alignment = .center
@@ -86,6 +93,8 @@ public final class WorkflowsPageView: DSView {
         feedDocument.addSubview(feed)
         loadingLabel.lineHeight = 20
         for v in [listColumn, feedScroll, loadingLabel, header, toasts] as [NSView] { addSubview(v) }
+        header.addSubview(definitions)
+        definitions.action = { [weak self] in self?.onOpenDefinitions?() }
         toasts.layer?.zPosition = 3
         tabs.onChange = { [weak self] i in
             // Clicking the pressed tab un-presses it; the list keeps its tab, as a Base UI group with one value does.
@@ -115,7 +124,7 @@ public final class WorkflowsPageView: DSView {
 
     private var snapshot: WorkflowRunsSnapshot? { if case .runs(let s) = content { return s }; return nil }
 
-    private func rebuild() {
+    func rebuild() {
         empty?.removeFromSuperview()
         empty = nil
         loadingLabel.isHidden = content != .loading
@@ -143,13 +152,16 @@ public final class WorkflowsPageView: DSView {
         listing = l
         tabs.selectedIndex = WorkflowListTab.allCases.firstIndex(of: l.tab)
         workflowSelect.isHidden = l.workflows.count < 2
+        // The trigger reads "All {count} workflows" over an "All workflows" item (WorkflowRunsView.tsx:316-326).
         workflowSelect.options = ["All workflows"] + l.workflows.map(\.name)
-        workflowSelect.placeholder = "All \(l.workflows.count) workflows"
-        workflowSelect.selectedIndex = l.section.flatMap { sec in l.workflows.firstIndex { $0.name == sec.name }.map { $0 + 1 } }
+        workflowSelect.valueLabels = ["All \(l.workflows.count) workflows"] + l.workflows.map(\.name)
+        workflowSelect.selectedIndex = l.section.flatMap { sec in l.workflows.firstIndex { $0.name == sec.name }.map { $0 + 1 } } ?? 0
         kindSelect.isHidden = l.kinds.isEmpty
+        // Items name the kind with its count at the end; the trigger reads "{kind} {count}" (:340-370).
         kindSelect.options = ["All kinds"] + l.kinds.map(WorkflowsPageLogic.kindLabel)
-        kindSelect.selectedIndex = l.kind == WorkflowRuns.everyKind ? 0 : l.kinds.firstIndex { $0.kind == l.kind }.map { $0 + 1 }
-        if let k = l.kinds.first(where: { $0.kind == l.kind }) { kindSelect.placeholder = "\(WorkflowsPageLogic.kindLabel(k)) \(k.count)" }
+        kindSelect.optionTrailingDetails = [nil] + l.kinds.map { "\($0.count)" }
+        kindSelect.valueLabels = ["All kinds"] + l.kinds.map { "\(WorkflowsPageLogic.kindLabel($0)) \($0.count)" }
+        kindSelect.selectedIndex = l.kind == WorkflowRuns.everyKind ? 0 : l.kinds.firstIndex { $0.kind == l.kind }.map { $0 + 1 } ?? 0
         kindsLine.isHidden = l.kinds.isEmpty || l.kind != WorkflowRuns.everyKind
         kindsLine.text = WorkflowsPageLogic.kindsLine(l.kinds)
         triggerLine.isHidden = l.section == nil
@@ -231,16 +243,19 @@ public final class WorkflowsPageView: DSView {
         super.layout()
         let w = bounds.width, h = bounds.height
         header.frame = NSRect(x: 0, y: 0, width: w, height: 52)
+        definitions.isHidden = onOpenDefinitions == nil || content == .noEnvironment || content == .off
+        let dw = definitions.fittingSize.width
+        definitions.frame = NSRect(x: w - 20 - dw, y: (52 - 28) / 2, width: dw, height: 28)
         toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
-        // `border-b` under the header.
-        let body = NSRect(x: 0, y: 53, width: w, height: max(0, h - 53))
+        // The header's `border-b` is its own last row (WorkspacePageHeader, border-box).
+        let body = NSRect(x: 0, y: 52, width: w, height: max(0, h - 52))
         loadingLabel.frame = NSRect(x: 24, y: body.minY + 24, width: max(0, w - 48), height: 20)
         if let empty {
             let size = empty.fittingSize
             empty.frame = NSRect(x: body.midX - min(size.width, w) / 2, y: body.midY - size.height / 2, width: min(size.width, w), height: size.height)
         }
         // `md:w-72 md:border-e` (WorkflowRunsView.tsx:296-302).
-        let listW: CGFloat = 288
+        let listW: CGFloat = 287
         listColumn.frame = NSRect(x: 0, y: body.minY, width: listW, height: body.height)
         feedScroll.frame = NSRect(x: listW + 1, y: body.minY, width: max(0, w - listW - 1), height: body.height)
         layoutList()
@@ -254,8 +269,8 @@ public final class WorkflowsPageView: DSView {
         // Redesign draws no rule under a page's header (as on Pull Requests) and parts the columns with its rim.
         let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         (redesign ? RedesignTokens.Card.border : Themed.color(\.border)).setFill()
-        if !redesign { NSRect(x: 0, y: 52, width: bounds.width, height: 1).fill() }
-        if !listColumn.isHidden { NSRect(x: 288, y: 53, width: 1, height: bounds.height - 53).fill() }
+        if !redesign { NSRect(x: 0, y: 51, width: bounds.width, height: 1).fill() }
+        if !listColumn.isHidden { NSRect(x: 287, y: 52, width: 1, height: bounds.height - 52).fill() }
     }
     public override var isFlipped: Bool { true }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
@@ -264,12 +279,14 @@ public final class WorkflowsPageView: DSView {
         let w = listColumn.bounds.width
         // `space-y-2 p-2 pb-1`.
         var y: CGFloat = 8
-        tabs.frame = NSRect(x: 8, y: y, width: w - 16, height: 32)
-        y += 32
+        let th = tabs.intrinsicContentSize.height
+        tabs.frame = NSRect(x: 8, y: y, width: w - 16, height: th)
+        y += th
         for v in [workflowSelect, kindSelect] where !v.isHidden {
             y += 8
-            v.frame = NSRect(x: 8, y: y, width: w - 16, height: 32)
-            y += 32
+            let sh = v.intrinsicContentSize.height
+            v.frame = NSRect(x: 8, y: y, width: w - 16, height: sh)
+            y += sh
         }
         for l in [kindsLine, triggerLine] where !l.isHidden {
             y += 8
@@ -334,9 +351,21 @@ final class WorkflowChipView: DSView {
     override func draw(_ dirtyRect: NSRect) {
         let tone = Self.tones[WorkflowRuns.chip(name).tone]
         let dark = effectiveAppearance.isDark
-        Themed.base("\(tone)-500").withAlphaComponent(0.15).setFill()
+        Self.palette("\(tone)-500").withAlphaComponent(0.15).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: DesignGeometry.radius(4, in: self), yRadius: DesignGeometry.radius(4, in: self)).fill()
-        label.color = Themed.base("\(tone)-\(dark ? 300 : 700)")
+        label.color = Self.palette("\(tone)-\(dark ? 300 : 700)")
+    }
+
+    /// The tokens come from 4928's stylesheet, which used none of these four; their values are 5258 main.css's
+    /// `--color-*` oklch in Display P3.
+    // ponytail: four hand-converted colours, drop them when scripts/extract-tokens runs on 5258.
+    static let missing: [String: (Double, Double, Double)] = [
+        "sky-700": (0.1303, 0.4046, 0.6408), "violet-700": (0.4016, 0.0842, 0.8712),
+        "rose-300": (0.9602, 0.6477, 0.6837), "rose-700": (0.7118, 0.0771, 0.2268),
+    ]
+    static func palette(_ name: String) -> NSColor {
+        if let c = missing[name], Tokens.baseColors[name] == nil { return NSColor(displayP3Red: c.0, green: c.1, blue: c.2, alpha: 1) }
+        return Themed.base(name)
     }
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
@@ -350,6 +379,8 @@ final class WorkflowStateWordView: DSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         label.lineHeight = 16
+        // Its right edge is the row's, whatever rounding the width took.
+        label.alignment = .right
         addSubview(label)
     }
 
@@ -421,6 +452,7 @@ final class WorkflowRunRowView: DSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for l in [workflowLabel, now, time] { l.lineHeight = 16 }
+        time.alignment = .right
         title.lineHeight = 20
         for v in [chip, workflowLabel, state, title, now, time] as [NSView] { addSubview(v) }
         setAccessibilityElement(true)
