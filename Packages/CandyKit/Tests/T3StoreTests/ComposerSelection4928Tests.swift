@@ -6,6 +6,17 @@ import T3Protocol
 /// Selection rows from Nightly 4928: #23957 (modelSelection.test.ts "composer fallback to another instance of the
 /// same driver") and #36621 (composerDraftStore.test.ts, base traits belong to the base model).
 @MainActor struct ComposerSelection4928Tests {
+    /// #42041 (modelSearch.test.ts at 5258): a model is found by its full or bare ID when its name reads differently.
+    @Test func modelSearchFindsTheId() throws {
+        let provider = try Self.provider("opencode", driver: "opencode", models: [(slug: "opencode-go/deepseek-v4.1-flash", aliases: [])])
+        var models = try #require(provider.models)
+        models[0].name = "DeepSeek V4.1 Flash 1017"
+        let entry = try #require(ProviderCatalog([provider]).entries.first)
+        for query in ["opencode-go/deepseek-v4.1-flash", "deepseek-v4.1-flash"] {
+            #expect(ModelPickerSearch.score(models[0], entry: entry, query: query, isFavorite: false) != nil, "\(query)")
+        }
+    }
+
     /// #41814: a queued edit's key holds the run's model as an explicit pick, and reading it back gives the same selection.
     @Test func explicitSelectionRoundTrips() {
         let store = ComposerSelectionStore(defaults: nil)

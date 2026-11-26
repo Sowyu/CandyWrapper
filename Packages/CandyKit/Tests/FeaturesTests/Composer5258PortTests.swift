@@ -49,4 +49,15 @@ struct Composer5258PortTests {
         #expect(state.trigger == nil)
     }
 
+    /// 2.6, #40798: a typed letter finds the next effort row by its label and wraps.
+    @MainActor @Test func effortTypeaheadWraps() {
+        let labels = ["Low", "Medium", "High", "Max", "Fast mode"]
+        let enabled = [0, 1, 2, 3, 4]
+        #expect(ComposerEffortColumnView.typeahead("m", labels: labels, enabled: enabled, focus: nil) == 1)
+        #expect(ComposerEffortColumnView.typeahead("m", labels: labels, enabled: enabled, focus: 1) == 3)
+        #expect(ComposerEffortColumnView.typeahead("M", labels: labels, enabled: enabled, focus: 3) == 1)
+        #expect(ComposerEffortColumnView.typeahead("h", labels: labels, enabled: [0, 1, 3], focus: 0) == nil)
+        #expect(ComposerEffortColumnView.typeahead(" ", labels: labels, enabled: enabled, focus: 0) == nil)
+    }
+
 }

@@ -162,6 +162,12 @@ final class ComposerEffortRowView: ControlView {
         case menu(label: String, value: String)
         case toggle(label: String, on: Bool)
     }
+    /// The label a typed letter finds (`data-effort-level`).
+    var typeaheadLabel: String {
+        switch kind {
+        case .level(let label, _, _), .menu(let label, _), .toggle(let label, _): label
+        }
+    }
     let kind: Kind
     var focused = false { didSet { if focused != oldValue { needsDisplay = true } } }
     var capy = false
@@ -509,11 +515,26 @@ final class ComposerEffortColumnView: DSView {
         case .right:
             if let focus = focusIndex, case .menu = rows[focus].kind { activate(focus) }
             return true
-        case .character, .tab:
+        case .character(let typed):
+            // A typed letter moves to the next row whose label starts with it, wrapping (`moveBetweenRows`,
+            // ComposerModelEffort.tsx:246-273 at 5258, #40798).
+            guard let next = Self.typeahead(typed, labels: rows.map(\.typeaheadLabel), enabled: enabled, focus: focusIndex) else { return true }
+            focusIndex = next
+            scrollToFocus()
+            return true
+        case .tab:
             return true
         default:
             return false
         }
+    }
+
+    /// The enabled row after `focus`, wrapping round to it, whose label starts with `typed`, ignoring case.
+    static func typeahead(_ typed: String, labels: [String], enabled: [Int], focus: Int?) -> Int? {
+        let key = typed.lowercased()
+        guard !key.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        let pos = focus.flatMap { enabled.firstIndex(of: $0) } ?? -1
+        return (0..<enabled.count).map { enabled[(pos + 1 + $0) % enabled.count] }.first { labels[$0].lowercased().hasPrefix(key) }
     }
 
     // MARK: Layout

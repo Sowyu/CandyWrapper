@@ -171,6 +171,8 @@ public enum ModelPickerSearch {
         if [m.name, m.shortName ?? ""].contains(where: { normalize($0).split(whereSeparator: \.isWhitespace).joined(separator: " ") == exactQuery }) { return -1000 }
         let fields = [normalize(m.name)] + [m.shortName, m.subProvider].compactMap { $0.map(normalize) }
             + [normalize(e.driver), normalize(e.displayName), searchText(m, e)]
+            // The ID finds a model whose name reads differently (modelSearch.ts:24 at 5258, #42041).
+            + (m.slug.isEmpty ? [] : [normalize(m.slug)])
         var score = 0
         for token in tokens {
             var best: Int?
