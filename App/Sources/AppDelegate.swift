@@ -372,6 +372,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         threads.panel.model.openFile = { [weak threads, weak openIn] meta, editor in
             threads?.openCitedFile(meta) { meta in if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta) } }
         }
+        // A pull request's Markdown beside a thread opens its file links in the Files panel (#41073).
+        threads.panel.lazyPullRequestView.configure { [weak threads, weak openIn] view in
+            view.onOpenFile = { meta, editor, cwd in if editor { openIn?.openFile(meta) } else { threads?.files.openLink(meta, renderedIn: cwd) } }
+        }
         if let shortcuts, !Self.isPreview {
             let captures = SnapShotController(window: window, composer: threads.composer, shortcuts: shortcuts)
             snapShots = captures

@@ -10,6 +10,8 @@ import DesignSystem
 struct PullRequestSummaryMemoryTests {
     @Test func eachPullRequestKeepsItsOrderAndScroll() throws {
         PullRequestSummaryView.memory = [:]
+        // The memory is per process; other suites render the same fixture.
+        defer { PullRequestSummaryView.memory = [:] }
         var a = try PullRequestFixtures.detail()
         a.body = (0..<80).map { "Paragraph \($0)" }.joined(separator: "\n\n")
         var b = a
@@ -105,5 +107,26 @@ struct PullRequestHeadPinTests {
         panel.layoutSubtreeIfNeeded()
         #expect(panel.shownHeadSha == "bbbbbbb2222")
         #expect(panel.headerHeight == plain)
+    }
+}
+
+/// 5258 #41073: a file link in a pull request's Markdown opens through the pull request view,
+/// with the folder the Markdown resolved against.
+@MainActor
+struct PullRequestMarkdownFileLinkTests {
+    @Test func markdownInsideThePanelOpensThroughIt() {
+        let panel = PullRequestDetailView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+        let markdown = MarkdownView()
+        markdown.cwd = "/checkout"
+        let holder = NSView()
+        holder.addSubview(markdown)
+        panel.addSubview(holder)
+        #expect(markdown.fileOpener == nil)
+        var opened: (String, Bool, String?)?
+        panel.onOpenFile = { meta, editor, cwd in opened = (meta.filePath, editor, cwd) }
+        markdown.fileOpener?(FileLinkMeta(filePath: "/checkout/a.ts", targetPath: "/checkout/a.ts", workspaceRelativePath: "a.ts",
+                                           basename: "a.ts", line: nil, column: nil), false)
+        #expect(opened?.0 == "/checkout/a.ts")
+        #expect(opened?.2 == "/checkout")
     }
 }

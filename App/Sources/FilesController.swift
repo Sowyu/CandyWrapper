@@ -257,6 +257,16 @@ final class FilesController {
         openFile(path, line: meta.line)
     }
 
+    /// A link from Markdown that resolved its paths against `cwd`: when that is another checkout than
+    /// the panel's, a relative path opens under that checkout (5258 ChatMarkdown.tsx `panelRoot`, #41073).
+    func openLink(_ meta: FileLinkMeta, renderedIn cwd: String?) {
+        if let cwd, let relative = meta.workspaceRelativePath, let ws = workspace, ws.cwd != cwd {
+            openFile(FileLinks.resolveAgainst(relative, cwd: cwd), line: meta.line)
+            return
+        }
+        openLink(meta)
+    }
+
     /// The file a chat link cites when the agent named it by basename, relative to a package or from another project
     /// (ChatMarkdown.tsx's lookup with client-runtime workspaceBasenameLookup.ts at 4928, #33943, #35036). Nil keeps
     /// the link as written. A path with a folder opens as written whenever it exists; a failed or unserved

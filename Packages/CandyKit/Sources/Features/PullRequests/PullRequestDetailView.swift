@@ -208,6 +208,9 @@ public final class PullRequestDetailView: DSView {
     private let loadNewCommits = ButtonView("Load new commits", variant: .outline, size: .xs)
     /// "Load new commits": the caller asks the host for a fresh read, then calls `acceptHead`.
     public var onLoadNewCommits: ((String) -> Void)?
+    /// A file link in the pull request's Markdown: (link, in the editor, the folder it resolved against).
+    /// Nil leaves the links to the editor and the chip menu.
+    public var onOpenFile: ((FileLinkMeta, Bool, String?) -> Void)?
     /// `isInvalidating` while that host read runs.
     public var loadingNewCommits = false { didSet { loadNewCommits.isEnabled = !loadingNewCommits } }
     /// The pin moves to `sha` once the host read that reloads the diff has been asked for.
@@ -1516,4 +1519,12 @@ extension PullRequestDetailView {
         }
         return next == .code ? PullRequestAnchor.linkCommit(url) : nil
     }
+}
+
+/// File links in the pull request's Markdown open through the thread (#41073): T3 resolves a
+/// relative link against the checkout the body was rendered for, which can be another folder
+/// than the thread's (5258 ChatMarkdown.tsx, `panelRoot`).
+extension PullRequestDetailView: MarkdownFileLinkHost {
+    public var opensMarkdownFiles: Bool { onOpenFile != nil }
+    public func openMarkdownFile(_ meta: FileLinkMeta, inEditor: Bool, cwd: String?) { onOpenFile?(meta, inEditor, cwd) }
 }
