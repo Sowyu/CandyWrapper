@@ -467,14 +467,14 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 611410683b | #41242 | feat(cursor): show which step Cursor is in while a turn starts | thread | ported 3a1892b1 |
 | e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | port (1.10) |
 | 69c1d53826 | #38884 | feat: workflows on web and mobile | thread | port (1.18) |
-| 7103527dcc | #41073 | fix(web): PR description file links resolve in the PR's repository from a No-project thread | thread | port (1.12) |
+| 7103527dcc | #41073 | fix(web): PR description file links resolve in the PR's repository from a No-project thread | thread | left: CW renders PR bodies in the pull request views (other agent), which pass no checkout cwd yet. Small |
 | 0938476b95 | #41060 | fix(web): Thinking row no longer shows below a streaming reply | thread | ported ad384d3e |
 | a3323d4a43 | #41070 | perf(web): new thread opens its draft without waiting on t3.json | composer | n/a (React load order) |
 | fe9c98c98f | #35871 | feat: agents can report T3 Code problems when you turn feedback on | thread | ported 47f71d35 (not seen on screen: needs a turn that asks for feedback with feedback on) |
 | dbb5bdb582 | #33057 | feat(web): sidebar folder button picks or adds a project | sidebar | port (3.3) |
 | 67f17528f2 | #39494 | fix(web): snooze labels follow the app language | sidebar | port (3.5) |
 | c7df7004af | #41021 | fix(web): a photo picked on a phone attaches even when the composer collapses | composer | n/a (phone photo picker) |
-| 55880c41b4 | #40986 | fix(client-runtime): count ambiguous projects in chat file links | thread | port (1.12) |
+| 55880c41b4 | #40986 | fix(client-runtime): count ambiguous projects in chat file links | thread | ported dd1cfae1 |
 | 87554a7b86 | #40945 | fix(web): editing a queued message keeps its attachment chips resolved | composer | port (2.3) |
 | 7ddc81d639 | #40905 | fix(web): tool calls stay grouped after a usage-limit pause again | thread | ported 00aa8a70 |
 | 9de4ec1bfa | #40924 | fix(web,mobile): @-file mentions show by name in message previews, not as raw links | composer | port (2.3) |
@@ -519,7 +519,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | aa6fe390db | #40042 | fix(web): dismissing a local thread error no longer suppresses repeat errors | thread | ported fe5d9cd0 |
 | bac0508e08 | #38895 | feat(web): thread chips show the sidebar's thread card on hover | thread | ported 32609bf7 for chips in sent messages; the composer's chips and their "On another machine" line are the composer agent's (Features/Composer) |
 | e8b28328da | #29681 | feat(web): duplicate browser tabs from the context menu | other | n/a (browser tabs, other agent) |
-| b9879ede83 | #33286 | feat(web): copy a chat table as HTML | thread | port (1.12) |
+| b9879ede83 | #33286 | feat(web): copy a chat table as HTML | thread | ported dd1cfae1 (unaligned columns say left: Foundation reports no "none" alignment) |
 | 26d81d88c1 | #40076 | fix(web): timeline row actions stay put on hover, and notices expand only when cut off | thread | left: notices expand only when cut off. Small |
 | e28b2819ee | #39610 | fix(shared): compose NFD file names in link chips and the @ menu | composer | port (2.7) |
 | 9ab7da2a3e | #34646 | fix(web): screen readers can read expanded tool output | thread | n/a (web screen reader markup) |
@@ -555,15 +555,15 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 98af8803fe | - | refactor(web): share restart countdown seconds in update capsule | sidebar | n/a (refactor) |
 | f0f9de46c6 | - | fix(web): localize compact restart countdown | sidebar | port (3.6) |
 | 40c1e861ee | - | fix(web): keep sidebar update control readable when narrow | sidebar | port (3.6) |
-| 3b199e77fb | #39308 | fix: index displayed file line ranges in thread search | thread | port (1.12) |
+| 3b199e77fb | #39308 | fix: index displayed file line ranges in thread search | thread | ported dd1cfae1 (CW had no range label at all: chips now show `L42–64`; image destinations as file chips are not indexed) |
 | c5badf4e40 | #39305 | fix(web): scope Git controls to the active checkout | other | n/a (git controls, other agent) |
 | 73caab68e3 | #38912 | fix(client): commands run as Effects on the caller's fiber, so interrupting a caller stops them | other | n/a (client effects refactor) |
-| 5bc2d512e4 | #39295 | fix(web): scroll wide tables to the selected Find match | thread | port (1.12) |
+| 5bc2d512e4 | #39295 | fix(web): scroll wide tables to the selected Find match | thread | already: wide tables share the code blocks' `.scroll` item, so `activeFindRect` scrolls them (test added in dd1cfae1) |
 | 42d2387285 | #31545 | fix(web): right-clicking a sidebar search result now opens its thread actions | sidebar | port (3.5) |
 | a1e7ac2b24 | #39133 | fix(web): the Compact chip no longer shows after /clear | composer | port (2.5) |
-| ff9efe89f6 | #39150 | fix(web): copying items within one list keeps their list markers | thread | port (1.12) |
-| b6afe8109c | #39146 | fix(web): home paths like ~/.claude/CLAUDE.md no longer show under the workspace folder | thread | port (1.12) |
-| d067a04175 | #39130 | fix(web): a slow chat file link no longer replaces a file opened from the picker | thread | port (1.12) |
+| ff9efe89f6 | #39150 | fix(web): copying items within one list keeps their list markers | thread | ported dd1cfae1 (markers only: CW's selection copy is still plain text, not T3's Markdown serializer) |
+| b6afe8109c | #39146 | fix(web): home paths like ~/.claude/CLAUDE.md no longer show under the workspace folder | thread | ported dd1cfae1 |
+| d067a04175 | #39130 | fix(web): a slow chat file link no longer replaces a file opened from the picker | thread | ported dd1cfae1 |
 | 470ca63499 | #38224 | fix(web): restore the composer caret after dictation | composer | port (2.5) |
 | 2c7bfcec84 | #38225 | fix(desktop): restore clicks across the floating dictation controls | composer | n/a (Electron drag region) |
 | c9359f6535 | #38984 | fix(mobile): project picker starts a chat in an open copy, not an archived one | palette | port (4.5) |
