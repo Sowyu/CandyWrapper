@@ -33,6 +33,9 @@ public final class DitherPillSurface: DSView {
     /// The panel's own ground instead of the raised surface, for a large surface whose cards must stand a step
     /// above it (Settings).
     public var ground = false { didSet { if ground != oldValue { needsDisplay = true } } }
+    /// A pill in the tab band: with Redesign's inset panel on it sits in the card's top row and draws no surface, so
+    /// its controls read as part of the row.
+    public var flatInInsetRow = false { didSet { if flatInInsetRow != oldValue { needsDisplay = true } } }
     private let shade = DSView()
     /// What shows through the fill over the Flower background.
     private let backing = FlowerGlassView()
@@ -57,7 +60,10 @@ public final class DitherPillSurface: DSView {
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         face.layer?.backgroundColor = ground ? Themed.color(\.background).cgColor(in: self) : DitherPill.fill(in: self)
-        backing.isHidden = ground
+        let flat = flatInInsetRow && ThemeRuntime.insetPanel(dark: effectiveAppearance.isDark)
+        face.isHidden = flat
+        shade.isHidden = flat
+        backing.isHidden = ground || flat
         face.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
         CATransaction.commit()
         needsLayout = true

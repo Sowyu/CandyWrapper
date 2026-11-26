@@ -158,6 +158,47 @@ struct RedesignBaselineTests {
             oneLine.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
             try capture("sidebar-one-line", oneLine, NSSize(width: 280, height: 900))
             try capture("sidebar-one-line-narrow", oneLine, NSSize(width: 200, height: 900))
+            // The inset panel (Settings > Redesign > Inset panel). Every other image records it off, the input's default:
+            // here the window as the app lays it out, the sidebar beside one rounded card under its own top row.
+            input.insetPanel = true
+            ThemeRuntime.apply(input)
+            func insetWindow(_ panel: ThreadPanelView) -> SidebarLayoutView {
+                let defaults = UserDefaults(suiteName: "redesign-baseline-inset")!
+                defaults.removePersistentDomain(forName: "redesign-baseline-inset")
+                let list = SidebarContentView()
+                list.windowedMac = false; list.stage = .nightly
+                list.now = { SidebarPreview.referenceNow }
+                list.accountRow.set(name: "mrm", image: nil, initials: nil)
+                list.state = SidebarListState(activeThreadId: SidebarPreview.referenceActiveThread)
+                list.setSnapshot(SidebarPreview.referenceSnapshot(), animated: false)
+                let layout = SidebarLayoutView(sidebarContent: list, mainContent: panel, defaults: defaults, viewport: 1200)
+                // Tabs off, the app's default (Settings > Labs).
+                layout.tabStrip.showsTabs = false
+                layout.tabStrip.trailingAccessory = panel.header.pill
+                layout.tabStrip.leadingAccessory = panel.titlePill
+                return layout
+            }
+            let insetSize = NSSize(width: 1200, height: 780)
+            let insetDraft = ComposerFidelityTests.panel(width: 1200, dark: dark)
+            insetDraft.setDraft(projectTitle: "demo-repo")
+            insetDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
+            try capture("inset-new-thread", insetWindow(insetDraft), insetSize)
+            let insetThread = ComposerFidelityTests.panel(width: 1200, dark: dark)
+            insetThread.referenceViewportWidth = 1200
+            insetThread.timeline.context.now = { Self.now }
+            insetThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            insetThread.header.setThreadVisible(true)
+            let insetHost = insetWindow(insetThread)
+            try capture("inset-thread", insetHost, insetSize)
+            insetThread.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
+            try capture("inset-thread-right-panel", insetHost, insetSize)
+            insetThread.mutatePanel { $0.isOpen = false; return [] }
+            insetThread.terminalDrawer.show(panes, direction: .horizontal, activeId: "term-2",
+                                            list: TerminalListModel.make(terminals, label: { TerminalLabels.label($0) }, closeShortcut: nil))
+            insetThread.setTerminal(open: true, height: 260)
+            try capture("inset-thread-terminal-drawer", insetHost, insetSize)
+            input.insetPanel = false
+            ThemeRuntime.apply(input)
             // A failed update pass: the capsule takes its own line in the account card and the name keeps its row.
             let footer = SidebarContentView()
             footer.windowedMac = false; footer.stage = .nightly
@@ -356,7 +397,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 148)
+        #expect(count == 156)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

@@ -1997,8 +1997,9 @@ public final class ThreadPanelView: DSView {
     private func layoutThreadTitle(chat: CGFloat, above: CGFloat) {
         ditherTopFade = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isDraft && !isEmbedded && chat > 0
             && readingLane.width > 0
-        headerShade.isHidden = !ditherTopFade
-        if ditherTopFade {
+        // The inset card clips the rows at its top row's hairline, so there is no top edge to fade.
+        headerShade.isHidden = !ditherTopFade || ThemeRuntime.insetPanel(dark: effectiveAppearance.isDark)
+        if !headerShade.isHidden {
             headerShade.frame = NSRect(x: 0, y: -above, width: chat, height: DitherChrome.band)
         }
         threadTitle.set(project: header.projectTitle, title: header.threadTitle)
@@ -2012,6 +2013,13 @@ public final class ThreadPanelView: DSView {
         threadTitle.frame = NSRect(x: x, y: (-above + DitherChrome.band / 2 - DitherThreadTitleView.height / 2).rounded(),
                                    width: threadTitle.fittingWidth(max: max(0, end - DitherTabStripView.leadingGap - x)),
                                    height: DitherThreadTitleView.height)
+    }
+
+    /// Hands the thread card's frame to the window's layout, which draws the card around it (`SidebarLayoutView`).
+    private func reportInsetCard(_ rect: NSRect?) {
+        var view = superview
+        while let v = view, !(v is SidebarLayoutView) { view = v.superview }
+        (view as? SidebarLayoutView)?.setInsetCard(rect, from: self)
     }
 
     /// The breadcrumb pill, for the tab strip to hold at its left end.
@@ -2419,6 +2427,9 @@ public final class ThreadPanelView: DSView {
         // window's top (the user, 2026-11-21: "do the curve out at the corners and also extend it upwards"). Its tabs
         // and the band's header pill share its top row (`CardTopRow`), with no empty strip under the pill.
         let card = ditherHeader && !isEmbedded
+        // The inset panel: this view is the thread card's body, already `Space.s` in from the window, under the card's
+        // top row (`above` is the row and the margin over it). The right panel and the drawer keep their own cards.
+        let inset = card && ThemeRuntime.insetPanel(dark: effectiveAppearance.isDark)
         let margin = card ? RedesignTokens.Space.s : 0
         let panelTop: CGFloat = card ? margin - above : 0
         rightPanel.isCard = card
@@ -2444,14 +2455,16 @@ public final class ThreadPanelView: DSView {
         let shownDrawer = !terminalSlide.isRunning ? (drawer > 0 ? drawer + gap : 0)
             : (((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) + gap) * terminalSlide.value * scale).rounded() / scale
         let chatHeight = bounds.height - shownDrawer
-        let drawerX = gap, drawerWidth = max(0, min(chat, bounds.width - gap) - gap)
+        // Inset, the page already keeps the margin to the window's bottom and the sidebar, so the gap goes above the card.
+        let drawerX = inset ? 0 : gap, drawerWidth = inset ? chat : max(0, min(chat, bounds.width - gap) - gap)
+        let drawerTop = inset ? chatHeight + gap : chatHeight
         if let terminalDrawer = drawer > 0 ? self.terminalDrawer : lazyTerminalDrawer.loaded {
             terminalDrawer.isHidden = drawer == 0
             terminalDrawer.isCard = drawerCard
             // Mid-slide the drawer keeps its height and hangs below the window's edge, so its terminal keeps its grid.
-            terminalDrawer.frame = NSRect(x: drawerX, y: chatHeight, width: drawerWidth, height: drawer)
+            terminalDrawer.frame = NSRect(x: drawerX, y: drawerTop, width: drawerWidth, height: drawer)
         }
-        terminalGhost?.frame.origin.y = chatHeight
+        terminalGhost?.frame.origin.y = drawerTop
         if terminalResize.superview == nil, drawerCard, drawer > 0 {
             terminalResize.vertical = true
             addSubview(terminalResize)
@@ -2459,23 +2472,31 @@ public final class ThreadPanelView: DSView {
             terminalResize.onDragEnd = { [weak self] in self?.dragTerminal(by: 0, ended: true) }
         }
         terminalResize.isHidden = !drawerCard || drawer == 0 || lazyTerminalDrawer.loaded?.isHidden != false
-        terminalResize.frame = NSRect(x: drawerX, y: chatHeight - gap, width: drawerWidth, height: gap)
+        terminalResize.frame = NSRect(x: drawerX, y: drawerTop - gap, width: drawerWidth, height: gap)
         // The rows run on under the header and fade out toward the top (`fade`).
         // In an open Redesign thread the first row starts below the header band, measured from the timeline's top,
-        // the window's.
+        // the window's. Inset, the rows stop at the top row's hairline, this view's top, with no mask: the scroll
+        // view clips them.
         let column = ditherHeader && !isDraft && !isEmbedded
-        timeline.topClearance = column ? max(chatTop + above, DitherChrome.band) + RedesignTokens.Space.l : chatTop + above
-        timeline.frame = NSRect(x: 0, y: -above, width: chat, height: max(0, chatHeight + above))
+        let timelineTop = inset ? 0 : -above
+        timeline.topClearance = inset ? (column ? RedesignTokens.Space.l : 0)
+            : column ? max(chatTop + above, DitherChrome.band) + RedesignTokens.Space.l : chatTop + above
+        timeline.frame = NSRect(x: 0, y: timelineTop, width: chat, height: max(0, chatHeight - timelineTop))
         syncLoadingSkeleton()
         if !loadingSkeleton.isHidden {
             let lane = min(chat - 2 * RedesignTokens.Space.xl, 720)
-            loadingSkeleton.frame = NSRect(x: ((chat - lane) / 2).rounded(), y: -above + timeline.topClearance,
+            loadingSkeleton.frame = NSRect(x: ((chat - lane) / 2).rounded(), y: timelineTop + timeline.topClearance,
                                            width: max(0, lane), height: min(320, max(0, chatHeight - timeline.topClearance)))
         }
+        // The thread card, top row included, for the window to frame; nothing while the right panel fills the page.
+        if inset { reportInsetCard(NSRect(x: 0, y: -CardTopRow.rowHeight, width: chat, height: chat > 0 ? chatHeight + CardTopRow.rowHeight : 0)) }
+        else if card { reportInsetCard(nil) }
         // Mid-slide the panel keeps its width and runs past the window's right edge.
-        let panelX = sheet ? bounds.width - panelWidth : chat + margin
-        let panelRight = sheet ? margin : 2 * margin
-        rightPanel.frame = NSRect(x: panelX, y: panelTop, width: max(0, panelWidth - panelRight), height: max(0, bounds.height - panelTop - margin))
+        // Inset, the page's own edges are already the margin from the window, and a maximized panel takes the whole page.
+        let panelX = sheet ? bounds.width - panelWidth : inset && rightPanelMaximized ? 0 : chat + margin
+        let panelRight = inset ? (sheet || rightPanelMaximized ? 0 : margin) : sheet ? margin : 2 * margin
+        rightPanel.frame = NSRect(x: panelX, y: panelTop, width: max(0, panelWidth - panelRight),
+                                  height: max(0, bounds.height - panelTop - (inset ? 0 : margin)))
         panelGhost?.frame.origin.x = sheet ? chat : chat + margin
         if rightPanelSheetOpen != sheetWasOpen {
             sheetWasOpen = rightPanelSheetOpen
@@ -2521,13 +2542,14 @@ public final class ThreadPanelView: DSView {
             if let cardRow, pillShown, strip.window != nil, strip.window === window {
                 let open: CGFloat = panelSlide.isRunning && !sheet ? CGFloat(panelSlide.value) : rightPanelOpen ? 1 : 0
                 let size = header.pill.intrinsicContentSize
-                let rest = CGPoint(x: strip.bounds.width - DitherTabStripView.accessoryRight, y: ((strip.bounds.height - size.height) / 2).rounded())
+                let rest = strip.accessoryRest(size)
                 // The resting card's top right corner: the window's right edge less the margin, wherever the slide is.
-                let corner = strip.convert(NSPoint(x: bounds.width - margin, y: panelTop), from: self)
-                let target = CGPoint(x: corner.x - (rightPanel.frame.width - cardRow.pill.maxX), y: corner.y + cardRow.pill.minY)
+                let corner = strip.convert(NSPoint(x: bounds.width - (inset ? 0 : margin), y: panelTop), from: self)
+                let target = CGPoint(x: corner.x - (rightPanel.frame.width - cardRow.pill.minX), y: corner.y + cardRow.pill.minY)
                 shift = CGSize(width: ((rest.x - target.x) * open).rounded(), height: ((target.y - rest.y) * open).rounded())
             }
             strip.accessoryShift = shift
+            strip.sheetStart = inset && sheet && rightPanelOpen ? strip.convert(NSPoint(x: rightPanel.frame.minX, y: 0), from: self).x : nil
             if strip.passThrough == nil { strip.passThrough = { [weak self] point in self?.cardRowHit(point) } }
         }
         // `left-0 w-1`: the handle starts at the panel's edge, off the chat's scrollbar (RightPanelResizeHandle.tsx:22 at 4928, #35043).

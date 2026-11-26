@@ -157,6 +157,10 @@ public final class DitherArtView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// Redesign's inset panel: the art is the thread card's ground, top row included, from the sidebar's margin to the
+    /// right panel's. `SidebarLayoutView` sets it and the frame.
+    public var isInsetCard = false { didSet { if isInsetCard != oldValue { updateScrim() } } }
+
     public override var wantsUpdateLayer: Bool { true }
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
     public override func isAccessibilityElement() -> Bool { false }
@@ -479,7 +483,12 @@ public final class DitherArtView: NSView {
             scrim.colors = nil
         }
         // Blur runs under the band too, so the band shows the picture and needs no blend; Flower's dots run to the top.
-        blend.isHidden = ThemeRuntime.ditherBlur || ThemeRuntime.ditherFlower
+        // The inset card's top is its own row, under the window's margin, not the band.
+        blend.isHidden = ThemeRuntime.ditherBlur || ThemeRuntime.ditherFlower || isInsetCard
+        // The inset card's ground, clipped to its corners, and the ground before the first render lands.
+        layer?.cornerRadius = isInsetCard ? RedesignTokens.Radius.panel : 0
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = isInsetCard ? background.cgColor : nil
         let band = DitherChrome.bandColor(in: self)
         // Bottom (no band) to top (all band).
         let ts = (0...10).reversed().map { Double($0) / 10 }
