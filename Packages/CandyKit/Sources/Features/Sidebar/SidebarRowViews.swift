@@ -595,7 +595,7 @@ final class CapyHoverGroup {
     }
 }
 
-/// The card row (Sidebar.tsx:1955-2217): `li py-0.5`, a `rounded-md` surface 78px tall,
+/// The card row (Sidebar.tsx:1955-2217): `li py-0.5`, a `rounded-md` surface 78px tall (60px without a meta line),
 /// content `px-2.5 py-2`: project line (h-5), title (`mt-1`), branch line (`mt-0.5`).
 final class SidebarCardRowView: SidebarRowBase {
     private var glimmer: SidebarTitleGlimmer?
@@ -881,7 +881,9 @@ final class SidebarCardRowView: SidebarRowBase {
         let capy = capyRow
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.frame = capy ? CGRect(x: 0, y: 1, width: w, height: bounds.height - 2) : CGRect(x: 0, y: 2, width: w, height: 78)
+        // `li py-0.5` around the surface: 78pt with a meta line, 60pt without one, where T3's content goes
+        // `h-auto` (SidebarThreadRow.tsx:1548-1550, 1580-1581 at 5258).
+        surface.frame = capy ? CGRect(x: 0, y: 1, width: w, height: bounds.height - 2) : CGRect(x: 0, y: 2, width: w, height: bounds.height - 4)
         CATransaction.commit()
         let left: CGFloat = capy ? 8 : 10, right = w - (capy ? 8 : 10), top: CGFloat = capy ? 5 : 10
         // Line 1: favicon, project, pin, status slot.

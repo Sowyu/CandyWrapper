@@ -101,6 +101,28 @@ struct SidebarActionWiringTests {
         #expect(row.hitTest(NSPoint(x: 64, y: 65)) === row)
     }
 
+    /// A card without a meta line is 64pt tall, and its highlight once kept the 78pt of a full card, so the
+    /// selected row covered the first line of the row below.
+    @Test func cardSurfaceStaysInsideItsRow() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        ThemeRuntime.apply(.init())
+        let items = SidebarListBuilder.items(snapshot: SidebarPreview.richSnapshot(), state: SidebarListState(), nowMs: 0)
+        var model = try #require(items.compactMap { if case .row(let row) = $0, row.variant == .card { row } else { nil } }.first)
+        for meta in [true, false] {
+            model.branch = meta ? "main" : nil
+            model.scratchMachineLabel = nil; model.pullRequestBadge = nil; model.issueBadge = nil
+            model.terminalProcessCount = 0; model.timeInMeta = false
+            #expect(model.hasMetaLine == meta)
+            let height = SidebarItem.row(model).height
+            #expect(height == (meta ? 82 : 64))
+            let row = SidebarCardRowView(frame: NSRect(x: 0, y: 0, width: 240, height: height))
+            row.configure(.row(model))
+            row.layoutSubtreeIfNeeded()
+            #expect(row.surfaceFrame == CGRect(x: 0, y: 2, width: 240, height: height - 4))
+        }
+    }
+
     @Test func undoNoticeAndUtilityFooter() {
         let content = SidebarContentView()
         let window = host(content)
