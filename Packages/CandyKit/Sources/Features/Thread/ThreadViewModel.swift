@@ -529,6 +529,11 @@ public final class ThreadViewModel {
     public var optimisticMessages: [ChatMessage] = [] {
         didSet { if optimisticMessages != oldValue { derive() } }
     }
+    /// The composer's selected provider instance: a send the server has no run for yet shows it starting
+    /// (`providerStartingRun`, 5258 ChatView.tsx:1605-1616). A default instance's id is its driver.
+    public var startingInstanceId: String? {
+        didSet { if startingInstanceId != oldValue, !optimisticMessages.isEmpty { derive() } }
+    }
 
     /// Asks the pipeline for rows of the current state. Long threads run it off the main thread,
     /// one request at a time: what arrives meanwhile waits, and only the newest state runs next.
@@ -542,7 +547,7 @@ public final class ThreadViewModel {
         let request = TimelinePipeline.Request(
             projection: projection, projectionChanged: projectionDirty, expandedRunIds: expandedRunIds,
             expandedAttemptIds: expandedAttemptIds, expandedWorkGroupIds: expandedWorkGroupIds, pending: pending,
-            toolCallVisibility: ClientSettingsStore.shared.current.string("toolCallVisibility"))
+            toolCallVisibility: ClientSettingsStore.shared.current.string("toolCallVisibility"), startingInstanceId: startingInstanceId)
         projectionDirty = false
         let pipeline = self.pipeline
         guard (projection?.visibleTurnItems.count ?? 0) >= backgroundRowsThreshold else {

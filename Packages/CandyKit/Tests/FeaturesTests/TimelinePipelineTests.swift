@@ -82,6 +82,23 @@ struct TimelinePipelineTests {
         #expect(model.items.filter { $0.row.message?.id == id }.count == 1)
     }
 
+    /// 5258 ChatView.tsx:1605-1616 (ff6b10e0a0 #41928): a send the server has no run for yet shows the selected provider
+    /// starting, and the row goes with the optimistic message.
+    @Test func aSendBeforeItsRunShowsTheProviderStarting() throws {
+        let projection = try #require(try steps("02-turn.jsonl").last)
+        let model = ThreadViewModel()
+        model.setProjection(projection)
+        model.startingInstanceId = "codex"
+        model.optimisticMessages = [ChatMessage(id: MessageId("local-1"), role: .user, text: "hi", createdAt: "2026-01-01T00:00:00.000Z")]
+        let starting = model.items.compactMap { item -> (String?, String?)? in
+            if case .thinking(_, _, _, let label, let driver) = item.row.kind { return (label, driver) }
+            return nil
+        }
+        #expect(starting.count == 1 && starting.first?.0 == "Starting Codex" && starting.first?.1 == "codex")
+        model.optimisticMessages = []
+        #expect(!model.items.contains { if case .thinking = $0.row.kind { true } else { false } })
+    }
+
     /// A late result for the thread the view left is dropped.
     @Test func switchingThreadsDropsTheOldThreadsRows() async throws {
         let all = try ThreadPreview.projections()
