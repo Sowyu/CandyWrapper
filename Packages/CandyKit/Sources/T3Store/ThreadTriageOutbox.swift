@@ -138,3 +138,26 @@ public struct ThreadTriageOutbox: Sendable, Equatable {
         if let data = try? JSONEncoder().encode(entries) { defaults.set(data, forKey: Self.defaultsKey) }
     }
 }
+
+/// T3's shell status "live" (client-runtime state/shell.ts:279-405 at 5258): each new subscription starts out
+/// synchronizing, and becomes live with its first shell change or snapshot, or, when it asked for a completion marker,
+/// with `synchronized`. The outbox reads it to decide whether an undo also goes to the server.
+public struct ShellLiveness: Sendable {
+    private var subscribed: Int?
+    private var live: Int?
+    public init() {}
+
+    /// The shell subscribed again on connection `generation`.
+    public mutating func subscribed(_ generation: Int) { subscribed = generation }
+
+    public mutating func received(_ item: ShellStreamItem, waitsForCompletion: Bool) {
+        switch item {
+        case .synchronized: live = subscribed
+        case .unknown: break
+        default: if !waitsForCompletion { live = subscribed }
+        }
+    }
+
+    /// Live on the connection the socket has now.
+    public func isLive(connectedGeneration: Int?) -> Bool { live != nil && live == subscribed && live == connectedGeneration }
+}

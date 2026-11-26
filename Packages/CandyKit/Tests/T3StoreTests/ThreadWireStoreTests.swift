@@ -38,7 +38,7 @@ private func omittedMessage(ordinal: Int = 1) -> JSONValue {
 @Suite struct ThreadWireStoreTests {
     @Test func requestResolutionWaitsForSynchronizationAndIgnoresReplacedSubscriptions() async throws {
         let recorder = RequestResolutionRecorder()
-        let store = ThreadStore(threadId: "t", onChange: {}, onRequestsResolved: { recorder.append($0) })
+        let store = ThreadStore(threadId: "t", onChange: {}, onRequestsResolved: { pending, _ in recorder.append(pending) })
         let old = UUID(), current = UUID()
         _ = await store.subscribeInput(subscription: old)
         let projection = try bodyProjection()

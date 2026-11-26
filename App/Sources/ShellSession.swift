@@ -13,6 +13,10 @@ final class ShellSession {
     private var lifecycleSubscription: Task<Void, Never>?
     private(set) var welcome: JSONValue?
     var lifecycleObservers: [UUID: (JSONValue) -> Void] = [:]
+    /// The last lifecycle `ready`: the host replays it on subscribe, with the launcher's outcome of its last update.
+    private(set) var lastReady: ServerLifecycleReady?
+    /// Whether the shell caught up on the current connection (T3's shell status "live").
+    private(set) var liveness = ShellLiveness()
     let environmentId: String
     let supervisor: ConnectionSupervisor
     let configFeed: ServerConfigFeed
@@ -129,6 +133,7 @@ final class ShellSession {
             await MainActor.run {
                 guard let self else { return }
                 if json["type"]?.stringValue == "welcome" { self.welcome = json["payload"] }
+                if let ready = ServerLifecycleReady(json) { self.lastReady = ready }
                 for observer in self.lifecycleObservers.values { observer(json) }
             }
         }
@@ -197,6 +202,7 @@ final class ShellSession {
     /// A disk shell is paint-only. Warm in-memory shells resume when omissions match, retaining
     /// CandyWrapper's delta reconnect; policy changes and cold caches get authoritative HTTP.
     private func prepareShell(_ generation: Int) async {
+        liveness.subscribed(generation)
         guard preparedGeneration != generation, !stopped, !Task.isCancelled else { return }
         preparingGeneration = generation
         knownProjectIdentities = nil
@@ -275,6 +281,7 @@ final class ShellSession {
             item = .snapshot(snapshot, resolvedRepositoryIdentityRoots: nil)
         }
         await store.apply([item])
+        liveness.received(item, waitsForCompletion: completionMarker)
         if case .synchronized = item, resumingConnection {
             resumingConnection = false
             await store.resumed()

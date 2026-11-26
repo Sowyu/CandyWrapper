@@ -574,11 +574,13 @@ public struct ThreadRequestResolutionTracker: Sendable {
     }
 
     public static func resolvedDraftKeys(_ keys: [String], threadId: ThreadId, pending: Set<String>) -> [String] {
+        keys.filter { key in requestId(ofDraftKey: key, threadId: threadId).map { !pending.contains($0) } ?? false }
+    }
+
+    /// The request a question draft key belongs to, nil for a key of another thread.
+    public static func requestId(ofDraftKey key: String, threadId: ThreadId) -> String? {
         let prefix = threadId.rawValue + "\u{0}"
-        return keys.filter { key in
-            guard key.hasPrefix(prefix) else { return false }
-            let request = key.dropFirst(prefix.count).split(separator: "\u{0}", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
-            return request.map { !pending.contains($0) } ?? false
-        }
+        guard key.hasPrefix(prefix) else { return nil }
+        return key.dropFirst(prefix.count).split(separator: "\u{0}", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
     }
 }

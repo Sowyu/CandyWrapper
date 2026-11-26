@@ -28,6 +28,21 @@ public enum ComposerAttachmentRules {
 
     /// `PROVIDER_SEND_TURN_MAX_ATTACHMENTS`.
     public static let maxAttachments = 100
+
+    /// `returnUnsentAnswersToThreadDraft` (questionAttachments.ts:186-215 at 5258, #39569): the files and screenshots of a
+    /// question that closed unanswered join the thread's draft, which holds `draftCount` attachments, up to
+    /// `maxAttachments` (`addImages`/`addFiles`); the rest are released. Each file lands in exactly one of the two lists.
+    /// One still uploading starts its upload again from the draft, so the question's own upload is cancelled.
+    public static func returningQuestionFiles(_ files: [ComposerAttachment], draftCount: Int)
+        -> (kept: [ComposerAttachment], released: [ComposerAttachment]) {
+        var kept: [ComposerAttachment] = [], released: [ComposerAttachment] = []
+        for var file in files {
+            guard draftCount + kept.count < maxAttachments else { released.append(file); continue }
+            if file.status != .ready || file.attachmentId == nil { file.status = .uploading(0); file.attachmentId = nil }
+            kept.append(file)
+        }
+        return (kept, released)
+    }
     /// `PROVIDER_SEND_TURN_MAX_IMAGE_BYTES`: 10 MiB; larger images are re-encoded to fit.
     public static let maxImageBytes = 10 * 1024 * 1024
     /// `PROVIDER_SEND_TURN_MAX_TOTAL_IMAGE_BYTES`.
