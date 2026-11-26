@@ -324,6 +324,7 @@ final class UserMessageRowView: TimelineRowView {
                                                              environmentId: model?.environmentId,
                                                              environment: { model?.linkedEnvironment?($0) },
                                                              text: text, providers: model?.providers ?? [],
+                                                             linkedLabel: { model?.linkedEnvironmentLabel?($0) },
                                                              thread: { model?.linkedThread?(ThreadId($0)) })
         if let load = model?.attachmentImage {
             markdown.contextImageLoader = { id, side in await load(id, side, true) }
@@ -414,6 +415,8 @@ final class UserMessageRowView: TimelineRowView {
             model.openFile?(FileLinkMeta(filePath: path, targetPath: path, workspaceRelativePath: path, basename: base, line: nil, column: nil), false)
         case .openThread(let id):
             model.onOpenThread?(ThreadId(id))
+        case .openLinkedThread(let target):
+            model.onOpenLinkedThread?(target)
         case .expandImage(let id):
             guard let loader = model.attachmentImage else { return }
             let images = m.attachments.filter { $0["type"]?.stringValue == "image" && !($0["name"]?.stringValue ?? "").hasPrefix("preview-annotation-") }
@@ -845,8 +848,15 @@ final class AssistantMessageRowView: TimelineRowView {
         // `renderInsights` (TimelineAssistantRows.tsx:68 at 4928): Claude's `★ Insight` blocks draw as a callout.
         let document = isEmpty ? MarkdownDocument(blocks: []) : context.document(item.id, MarkdownDocument.rewritingInsights(m.text), lineBreaks: TL.preservesAssistantLineBreaks(m.text), streaming: m.streaming,
                                                                                                          background: true)
-        markdown.contextChips = MarkdownContextChips.links(in: document, environmentId: model?.environmentId, thread: { model?.linkedThread?(ThreadId($0)) })
-        markdown.onContextChip = { action, _ in if case .openThread(let id) = action { model?.onOpenThread?(ThreadId(id)) } }
+        markdown.contextChips = MarkdownContextChips.links(in: document, environmentId: model?.environmentId,
+                                                           linkedLabel: { model?.linkedEnvironmentLabel?($0) }, thread: { model?.linkedThread?(ThreadId($0)) })
+        markdown.onContextChip = { action, _ in
+            switch action {
+            case .openThread(let id): model?.onOpenThread?(ThreadId(id))
+            case .openLinkedThread(let target): model?.onOpenLinkedThread?(target)
+            default: break
+            }
+        }
         markdown.onCiteSelection = m.streaming ? nil : { [weak model = context.model] selection, anchor in
             model?.onCiteSelection?(m.id.rawValue, selection, anchor)
         }

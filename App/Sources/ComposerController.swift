@@ -1843,6 +1843,7 @@ final class ComposerController {
         syncSendBlock()
         syncAttachmentViews()
         composer.editingQueued = queuedEdit != nil
+        panel.model.startingInstanceId = pickers.current.modelSelection?.instanceId.rawValue
         panel.model.optimisticMessages = optimistic
         panel.queue.state = target == nil || panel.isDraft ? ComposerLogic.QueueState()
             : ComposerLogic.QueueState(projection: projection, optimistic: optimistic,

@@ -21,6 +21,8 @@ final class TimelinePipeline: @unchecked Sendable {
         var pending: [ChatMessage]
         /// The "Tool calls in chat" setting (`toolCallVisibility`, 4928 #30000).
         var toolCallVisibility = "showAll"
+        /// The composer's selected provider instance, for the starting row of a send the server has no run for yet.
+        var startingInstanceId: String?
     }
 
     struct Result: Sendable {
@@ -69,6 +71,14 @@ final class TimelinePipeline: @unchecked Sendable {
             if let last = request.pending.last, ComposerCompaction.isCompactCommand(last.text, attachments: last.attachments.count) {
                 source?.isWorking = true
                 source?.isCompacting = true
+            } else if let last = request.pending.last, let input = source, !input.isWorking,
+                      !(input.latestRun.map { [.preparing, .queued, .starting, .running, .waiting].contains($0.status) } ?? false) {
+                // `providerStartingRun` (5258 ChatView.tsx:1605-1616, ff6b10e0a0 #41928): until the server has a run, a send
+                // shows the provider it is starting instead of nothing. An unconfirmed optimistic message is T3's
+                // `isSendBusy`; it leaves when the stream carries the message or the send fails, so the row cannot outlive it.
+                source?.isWorking = true
+                source?.activeTurnStartedAt = last.createdAt
+                source?.providerStarting = request.startingInstanceId.map { RunStartup.ProviderStarting(driver: $0) }
             }
         }
         var changed = changedSinceShown

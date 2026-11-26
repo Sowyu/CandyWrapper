@@ -425,7 +425,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 51a8d20271 | #42543 | fix(web): project action keybinding field records shortcuts instead of running them | composer | port (2.8) |
 | b6869fad67 | #30664 | feat(terminal): Add keybindings for cycling through terminals | other | n/a (terminal, other agent) |
 | ea63274413 | #42489 | chore(deps): bump vite-plus to 1.8.0 | other | n/a (dependency bump) |
-| 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | port (1.18) |
+| 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | left: CW's MCP app host was not checked against the bridge hand-over. Medium |
 | c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | n/a (web canvas worker; CW prepares images with ImageIO off the main thread) |
 | 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | left: offline outbox (large) |
 | dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | ported d11002d4 (not seen on screen: the sandbox turn used Bash grep) |
@@ -443,34 +443,34 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | port (3.6) |
 | 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394, reference recaptured from 5258 in the next commit with the popup's titlebar inset and centering |
 | 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | ported 98004311 |
-| 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | port (1.1) |
+| 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | left: the "Thread unavailable" page needs a route for a thread on an unknown environment; CW keeps the unresolved chip. Small to medium |
 | 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | ported 75700d91 |
 | 2ced06ef4a | #42041 | fix(web): model picker search finds a model by its ID | composer | ported 8e80f42f |
 | a891304c84 | #30810 | fix(web): keep Codex Ultra off the effort bar scale | composer | port (2.6) |
 | 66259ff051 | #41964 | fix(web): a failed server update restored after the app relaunches can retry | sidebar | port (3.6) |
 | 74c6d21c7a | #41672 | fix(web): the update dialog says why a server was skipped | sidebar | port (3.6) |
 | a6c69be8df | #41927 | fix(web,mobile): a parent parked on subagents no longer reads as Thinking | thread | ported ad384d3e (the server half, #38869, is not a client change) |
-| ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | ported 3a1892b1. Left: the starting row before the server has a run needs a local send-busy state in the timeline, which CW does not keep. Medium |
+| ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | ported 3a1892b1 and 816b0031 + eec3b345 (the starting row before the server has a run, from the unconfirmed optimistic send and the composer's selected instance; unit tested, not seen on screen) |
 | b3fff82014 | #29282 | fix(web): Settings opened with Cmd+, no longer leaves the model picker open over it | composer | ported e7a7413a |
-| 8032cbb66b | #28919 | fix(web): Cmd+F searches a side chat, and Escape closes it | thread | left: the side chat pane has no find bar and Escape does not close it. Medium |
+| 8032cbb66b | #28919 | fix(web): Cmd+F searches a side chat, and Escape closes it | thread | left, unverified: the side chat pane embeds a full ThreadPanelView whose own ComposerController registers chat.find on the pane's shortcuts, so Cmd+F may already work there; Escape anywhere in the pane closing find is not built. Small to check, small to port |
 | a4029d4b91 | #41899 | fix(web): an IME Escape no longer dismisses the citation highlight | thread | n/a (AppKit handles IME) |
 | 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | left: implied sort keys (medium) |
 | 3d9a14d4da | #41875 | fix(web): IME keys no longer trigger or close the prompt stash menu | composer | n/a (AppKit handles IME) |
 | 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | n/a (CW has no reference sources, so the card is always typed) |
 | d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | port (1.18) |
-| 14ea095b0a | #41663 | feat(web): add an HTML preview width setting separate from chat width | thread | left: needs the `htmlPreviewWidth` setting row (settings agent) before the lane can widen; default `chat` matches CW now. Medium |
+| 14ea095b0a | #41663 | feat(web): add an HTML preview width setting separate from chat width | thread | ported bc4d8e34 (wide 72rem and full, centered on the lane and clear of the details card; unit tested, not seen on screen: no HTML preview in the sandboxes) |
 | 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | already: a `.thread` change sets `followsEnd` before the anchor is taken, so the restore and every later footer change land at the end (test `aSwitchedThreadOpensAtItsEndWithoutLandingShort`) |
 | 4162207ddd | #29771 | fix(web): file menu opens remote files over SSH instead of on the server | thread | n/a (web icons, wire A18) |
 | 8ef195587d | #33030 | fix(web): tell update-all users where to update desktop servers it can't reach | sidebar | port (3.6) |
 | d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | ported 8337eb04 |
 | d572ce9afe | #41814 | fix(chat): preserve model choices when editing queued messages | composer | ported 31975590 |
-| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | port (1.1) |
+| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | left: Lineage elapsed time for subagents on linked machines. Small |
 | c5918e5d24 | #41803 | fix(web): align composer banner details with status text | composer | already: CW's details button shares the 24pt row with the text, so it is centered |
 | eecb58c6d6 | #41769 | fix: approvals and hosted pairing show what is being approved | composer | ported 956f0e5a for the approval half; `draftSupportedRuntimeModes` is the composer's (2.x), hosted pairing the other note's |
-| 46f360d8dd | #41722 | fix(client): a link to a newly linked machine's thread opens without a reload | thread | port (1.1) |
+| 46f360d8dd | #41722 | fix(client): a link to a newly linked machine's thread opens without a reload | thread | ported 7c048ec6: a link naming a machine the cached peerLinks.names lack reads the names once more (`refreshNamesLacking`) |
 | 78cffe29ec | #41761 | fix: a merge or review stays on the commit you opened the pull request on | other | n/a (pull requests, other agent) |
 | 5e62206e7d | #41757 | fix(desktop): preview pages run in their own JavaScript world and popups open web links only | thread | n/a (Electron only) |
-| d4d08aed56 | #41745 | fix: XML assets open sandboxed and MCP apps bind to their document | thread | port (1.18) |
+| d4d08aed56 | #41745 | fix: XML assets open sandboxed and MCP apps bind to their document | thread | left with 2940ff33ad. Medium |
 | 1c6d41a9ba | #41317 | feat(web,mobile): remove the changed-files card under assistant turns | thread | ported 31bbc675 |
 | cdb0e238ed | #41674 | fix(web): keyboard-opened context menus start on their first action | other | n/a (AppKit native menus) |
 | b5e1f91cba | #27167 | fix(web): color sidebar PR text to match status icons | sidebar | port (3.7) |
@@ -505,7 +505,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 501e39d54a | #40841 | fix(web): clicking the Tab hint inserts short prompt suggestions again | composer | ported 0a35f251 |
 | bcb9217e8e | #26661 | fix(web): settling a thread no longer jolts the sidebar list | sidebar | ported fa78d3d4 |
 | d834a4e117 | #40763 | fix(web): preserve reply-only edits when a queued message leaves the queue | composer | nothing to port: the reply stays in the edit text |
-| d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | port (1.1) |
+| d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | left: Lineage show-more keeps the last row and focus. Small |
 | 671e05bc8c | #40768 | fix(issues): an Activity cross-reference opens the issue or pull request it came from | other | n/a (issues, other agent) |
 | 1acfd37c17 | #40798 | fix(web): restore effort picker keyboard typeahead | composer | ported 8e80f42f |
 | c3a330d834 | #40767 | fix(web): show Queue for running sessions that cannot steer | composer | ported 357ba3b8 |
@@ -557,9 +557,9 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 3027c2c840 | #40011 | fix(voice): start dictation capture sooner on iOS and desktop | composer | n/a (web audio capture) |
 | 6908754f0b | #37122 | fix(web): caret navigation no longer opens composer suggestions | composer | ported e7a7413a |
 | 8d37736cdd | #39889 | fix(web,mobile): usage-limit recovery banner updates copy after reset passes | thread | ported fe5d9cd0 |
-| 7c6e889ddb | #39515 | feat: subagents, side chats and linked threads open the same way | thread | port (1.1) |
-| d7f6b3efca | #39439 | feat: connect to a linked environment from its read-only thread | thread | port (1.1) |
-| 1cb3a8c753 | #39406 | feat: read a linked environment's threads from the client | thread | port (1.1) |
+| 7c6e889ddb | #39515 | feat: subagents, side chats and linked threads open the same way | thread | ported 7c048ec6 for linked threads opening as a panel tab; subagents and side chats keep their own paths. Left: the shared open intent (alternate click to the main screen), small |
+| d7f6b3efca | #39439 | feat: connect to a linked environment from its read-only thread | thread | left: "Connect to interact" (pairClient, reaches, pair, the connect notices) is not built; the bar has no action. Medium to large |
+| 1cb3a8c753 | #39406 | feat: read a linked environment's threads from the client | thread | ported 7c048ec6 (read-only panel tab: peerLinks.subscribeThread while it shows, threadHistoryPage paging, threadItem rows, ReadOnlyComposerBar, failure copy and the 15 s retry; seen on screen against two linked 5258 sandboxes). Left: the main-screen page for `sideThreadOpenTarget` main (LinkedThreadPage.tsx), medium |
 | 9294a9801e | #39837 | fix(acp,web): stop showing "Running Ran" for commandless ACP tool calls | thread | ported ad384d3e |
 | 0bc9b57b93 | #31257 | feat: secret cards get a show/hide toggle and multi-value fields | thread | ported f15f9c8d (multi-value fields were already in from the wire port) |
 | d5a084c440 | #39636 | fix(web): the provider update pill no longer recounts dismissed updates | sidebar | port (3.6) |
