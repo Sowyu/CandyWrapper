@@ -153,13 +153,21 @@ public enum KeybindingsLogic {
     }
 
     /// `defaultBindingForBinding`: same keys and when, else same when, else any default of the command.
-    static func defaultBinding(_ b: ResolvedKeybindingRule) -> (rule: ResolvedKeybindingRule, key: String, when: String)? {
+    static func defaultBinding(_ b: ResolvedKeybindingRule, in keybindings: [ResolvedKeybindingRule] = []) -> (rule: ResolvedKeybindingRule, key: String, when: String)? {
         let key = input(b.shortcut), when = expression(b.whenAst)
+        // An edited row does not record which default it replaced; a default the command still has, or that is
+        // unassigned, cannot be it (`defaultBindingForBinding`, KeybindingsSettings.logic.ts:174-212, T3 5258, #41630).
+        func isBound(_ d: (rule: ResolvedKeybindingRule, key: String, when: String)) -> Bool {
+            keybindings.contains { $0.command == d.rule.command && input($0.shortcut) == d.key && [d.when, "false"].contains(expression($0.whenAst)) }
+        }
+        func findDefault(_ matches: ((rule: ResolvedKeybindingRule, key: String, when: String)) -> Bool) -> (rule: ResolvedKeybindingRule, key: String, when: String)? {
+            defaultRows.first { matches($0) && !isBound($0) } ?? defaultRows.first(where: matches)
+        }
         return defaultRows.first { $0.rule.command == b.command && $0.key == key && $0.when == when }
             // An unassigned default keeps its keys under `when: "false"` (logic.ts:167-173).
             ?? (when == "false" ? defaultRows.first { $0.rule.command == b.command && $0.key == key } : nil)
-            ?? defaultRows.first { $0.rule.command == b.command && $0.when == when }
-            ?? defaultRows.first { $0.rule.command == b.command }
+            ?? findDefault { $0.rule.command == b.command && $0.when == when }
+            ?? findDefault { $0.rule.command == b.command }
     }
 
     static func conflictsWithWhen(_ l: String, _ r: String) -> Bool {
@@ -178,7 +186,7 @@ public enum KeybindingsLogic {
     public static func rows(_ keybindings: [ResolvedKeybindingRule], query: String = "") -> [KeybindingRow] {
         var rows = keybindings.enumerated().map { index, b -> KeybindingRow in
             let key = input(b.shortcut), when = expression(b.whenAst)
-            let d = defaultBinding(b)
+            let d = defaultBinding(b, in: keybindings)
             return KeybindingRow(id: "\(b.command)\u{0}\(key)\u{0}\(when)\u{0}\(index)", command: b.command, key: key, when: when,
                                  source: source(b), defaultKey: d?.key, defaultWhen: d?.when ?? "", binding: b, conflicts: [])
         }
@@ -254,7 +262,7 @@ public enum KeybindingsLogic {
         return q.isEmpty || "\(command) \(commandLabel(command))".lowercased().contains(q)
     }
 
-    static let coreWhenVariables = ["terminalFocus", "terminalOpen", "isWeb", "isDesktop", "true", "false"]
+    static let coreWhenVariables = ["terminalFocus", "terminalOpen", "previewOpen", "composerEmpty", "isWeb", "isDesktop", "true", "false"]
 
     static func identifiers(_ node: KeybindingWhenNode?, into set: inout [String]) {
         guard let node else { return }
@@ -332,17 +340,24 @@ public enum KeybindingsLogic {
         "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";", "\"": "'", "<": ",", ">": ".", "?": "/",
     ]
 
-    /// `KeybindingPill` part labels on macOS.
+    /// `KeybindingPill` part labels on macOS: the modifiers, then the key (KeybindingsSettings.tsx:105-135,
+    /// T3 5258). A literal "+" key shows as a plus keycap, not empty pills (#40808).
     public static func pillParts(_ value: String) -> [String] {
-        value.split(separator: "+", omittingEmptySubsequences: false).map { part in
+        let plusKey = value == "+" || value.hasSuffix("++")
+        let rest = plusKey ? String(value.dropLast(value == "+" ? 1 : 2)) : value
+        var parts = rest.isEmpty ? [] : rest.split(separator: "+", omittingEmptySubsequences: false).map(String.init)
+        if plusKey { parts.append("+") }
+        guard let key = parts.popLast() else { return [] }
+        let mods = parts.map { part in
             switch part {
             case "mod": "⌘"
             case "shift": "⇧"
             case "alt": "⌥"
             case "ctrl": "⌃"
-            default: part.count == 1 ? part.uppercased() : String(part)
+            default: part
             }
         }
+        return mods + [key.count == 1 ? key.uppercased() : key]
     }
 
     /// `KeybindingConflictWarning`'s text.

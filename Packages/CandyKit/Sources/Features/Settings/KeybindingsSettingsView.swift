@@ -256,9 +256,15 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder, RouteMo
     /// KeybindingsSettings.tsx (#27151): Esc while recording cancels the recording, Settings stays.
     func takeRouteModalEscape() -> Bool {
         guard isCapturing else { return false }
+        // Esc with a modifier is a shortcut to record, not a cancel (`isBareEscape`, KeybindingsSettings.tsx:759-764, 5258 #42187).
+        if let event = NSApp.currentEvent, event.type == .keyDown, !Self.isBareEscape(event) { keyDown(with: event); return true }
         onCancel?()
         window?.makeFirstResponder(superview)
         return true
+    }
+
+    static func isBareEscape(_ event: NSEvent) -> Bool {
+        event.keyCode == 53 && event.modifierFlags.intersection([.shift, .option, .control, .command]).isEmpty
     }
 
     private let decoration = BoxDecorationLayer()
@@ -309,7 +315,7 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder, RouteMo
 
     override func keyDown(with event: NSEvent) {
         guard isCapturing else { return super.keyDown(with: event) }
-        if event.keyCode == 53 {
+        if event.keyCode == 53, Self.isBareEscape(event) {
             onCancel?()
             window?.makeFirstResponder(superview)
             return

@@ -118,6 +118,23 @@ struct SettingsLogicTests {
         // The later binding of the same keys with no condition hides the earlier one's chip.
         #expect(labels[sidebar.id] == nil)
         #expect(labels[chat.id] == [chat.binding.shortcut.label])
+        #expect(KeybindingsLogic.coreWhenVariables.contains("composerEmpty"))
+    }
+
+    /// 5258 #41630: an edited row's default is the one the command no longer has.
+    @Test func resetRestoresTheReplacedDefault() throws {
+        let defaults = Keymap.default.rules
+        let byCommand = Dictionary(grouping: defaults, by: \.command)
+        let pair = try #require(byCommand.values.first { rules in
+            rules.count >= 2 && Set(rules.map { KeybindingsLogic.expression($0.whenAst) }).count == 1
+        })
+        let replaced = pair[1]
+        let when = KeybindingsLogic.expression(replaced.whenAst)
+        var rules = defaults.filter { $0 != replaced }
+        let edited = try #require(ResolvedKeybindingRule(key: "mod+alt+shift+f12", command: replaced.command, when: when.isEmpty ? nil : when))
+        rules.append(edited)
+        let row = try #require(KeybindingsLogic.rows(rules).first { $0.command == replaced.command && $0.key == "mod+alt+shift+f12" })
+        #expect(row.defaultKey == KeybindingsLogic.input(replaced.shortcut))
     }
 
     /// 4928 unassigns a default by saving its keys under `when: "false"` (KeybindingsSettings.logic.ts, #28687).
@@ -177,7 +194,7 @@ struct SettingsLogicTests {
         #expect(KeybindingsLogic.parseWhen("") == .ok(nil))
         #expect(KeybindingsLogic.parseWhen("a &&") == .invalid("Use variables with !, &&, ||, and parentheses."))
         #expect(KeybindingsLogic.unknownVariables(KeybindingWhenNode.parse("terminalFocus && nope")) == ["nope"])
-        #expect(KeybindingsLogic.whenVariableOptions.prefix(4) == ["terminalFocus", "terminalOpen", "isWeb", "isDesktop"])
+        #expect(KeybindingsLogic.whenVariableOptions.prefix(6) == ["terminalFocus", "terminalOpen", "previewOpen", "composerEmpty", "isWeb", "isDesktop"])
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "k", physicalKey: "k", meta: true, shift: true)) == "mod+shift+k")
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "escape")) == "esc")
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "{", physicalKey: "[", meta: true, shift: true)) == "mod+shift+[")
@@ -188,6 +205,9 @@ struct SettingsLogicTests {
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "-", physicalKey: "/", meta: true)) == "mod+-")
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "5", physicalKey: "1", alt: true)) == "alt+1")
         #expect(KeybindingsLogic.pillParts("mod+shift+k") == ["⌘", "⇧", "K"])
+        // 5258 #40808: a literal "+" key is one plus keycap.
+        #expect(KeybindingsLogic.pillParts("mod+shift++") == ["⌘", "⇧", "+"])
+        #expect(KeybindingsLogic.pillParts("+") == ["+"])
     }
 
     // MARK: Settings decode and encode
