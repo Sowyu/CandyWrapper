@@ -21,11 +21,16 @@ public enum UpdateEverythingLogic {
         public var ownServer: Bool
         /// `threadRestartContinuation` and the server's "Continue threads after restarts".
         public var continuesThreads: Bool
+        /// The saved connection is switched off in Settings, so it never connects (#41672).
+        public var turnedOff = false
+        /// Why the connection is down, when it says (`connectionErrorText`, #41672).
+        public var connectionError: String?
         public init(environmentId: String, label: String, serverVersion: String?, connected: Bool, canMaintain: Bool, updating: Bool,
-                    capabilities: ServerUpdateCapabilities, ownServer: Bool = false, continuesThreads: Bool = false) {
+                    capabilities: ServerUpdateCapabilities, ownServer: Bool = false, continuesThreads: Bool = false,
+                    turnedOff: Bool = false, connectionError: String? = nil) {
             self.environmentId = environmentId; self.label = label; self.serverVersion = serverVersion; self.connected = connected
             self.canMaintain = canMaintain; self.updating = updating; self.capabilities = capabilities; self.ownServer = ownServer
-            self.continuesThreads = continuesThreads
+            self.continuesThreads = continuesThreads; self.turnedOff = turnedOff; self.connectionError = connectionError
         }
     }
 
@@ -46,12 +51,16 @@ public enum UpdateEverythingLogic {
         for m in machines {
             if let v = m.serverVersion, !ServerVersionSkewLogic.serverIsBehind(v, client: target) { continue }
             let skip = { (reason: String) in skipped.append(Skipped(environmentId: m.environmentId, label: m.label, reason: reason)) }
-            guard m.serverVersion != nil, m.connected else { skip("not connected"); continue }
+            // `unavailableReason` (updateEverything.logic.ts:152-173 at 5258, #41672).
+            if m.turnedOff { skip("turned off"); continue }
+            guard m.connected else { skip(m.connectionError ?? "not connected"); continue }
+            guard m.serverVersion != nil else { skip("still loading"); continue }
             guard m.canMaintain else { skip("no permission"); continue }
             guard !m.updating else { skip("already updating"); continue }
             if m.ownServer { targets.append(m); continue }
             guard let path = m.capabilities.selfUpdate else { skip("needs a manual update"); continue }
-            if path == .desktopManaged, !m.capabilities.desktopAppUpdate { skip("needs a newer desktop app"); continue }
+            // A desktop server without the desktop control cannot be updated from here (#33030, updateEverything.logic.ts:54-56).
+            if path == .desktopManaged, !m.capabilities.desktopAppUpdate { skip("update T3 Code on that machine"); continue }
             // A desktop app installs its own track's newest release. Nightly builds run ahead of Stable, so a Nightly
             // host behind a Stable target has something newer; a Stable one may not (updateEverything.logic.ts, #37490).
             if let v = m.serverVersion, channel(v) != channel(target), path != .desktopManaged || channel(v) == "stable" {
@@ -131,34 +140,59 @@ public enum UpdateEverythingLogic {
             providerCount: providerCount, rows: rows)
     }
 
-    /// `UpdateRunMachineStatus` and its tooltip words.
-    public enum MachineStatus: String, Sendable { case providers = "updating providers", waiting, downloading, restarting, done, failed }
+    /// `UpdateRunMachineStatus` and its words (`RUN_STATUS_LABELS`, updateEverything.logic.ts:681-688 at 5258).
+    public enum MachineStatus: String, Sendable {
+        case providers = "updating providers", waiting, downloading, restarting, done, failed
+        /// `isActive` (updateEverything.logic.ts:601).
+        public var isActive: Bool { self != .done && self != .failed }
+    }
 
-    /// One machine in a running pass.
+    /// `UpdateRunMachine` (updateEverything.logic.ts:501-511). CandyWrapper restores no handed-off server after a
+    /// relaunch, so `server !== null` is `updatesServer`: it clears once the server updated, like T3's `server: null`.
     public struct RunMachine: Equatable, Sendable {
         public var environmentId: String, label: String
         public var updatesProviders: Bool, updatesServer: Bool
-        /// Set when every update for the machine has finished: true when one failed.
+        /// Seconds since 1970 when this machine's current step began; a server's restarts when the providers finish.
+        public var startedAt: Double
+        /// `result`: set when every update for the machine has finished, true when one failed.
         public var failed: Bool?
-        public init(environmentId: String, label: String, updatesProviders: Bool, updatesServer: Bool, failed: Bool? = nil) {
+        public var failure: String?
+        /// A provider failure kept across a server retry, so the row stays failed after the server updates.
+        public var providerFailure: String?
+        public init(environmentId: String, label: String, updatesProviders: Bool, updatesServer: Bool, startedAt: Double = 0,
+                    failed: Bool? = nil, failure: String? = nil, providerFailure: String? = nil) {
             self.environmentId = environmentId; self.label = label
-            self.updatesProviders = updatesProviders; self.updatesServer = updatesServer; self.failed = failed
+            self.updatesProviders = updatesProviders; self.updatesServer = updatesServer; self.startedAt = startedAt
+            self.failed = failed; self.failure = failure; self.providerFailure = providerFailure
         }
     }
 
-    /// `UpdateEverythingRun`.
+    /// `UpdateEverythingRun` (updateEverything.logic.ts:513-520).
     public struct Run: Equatable, Sendable {
-        public enum Phase: Sendable { case providers, servers, installing }
+        public enum Phase: Sendable { case providers, servers, countdown, installing }
         /// The version this app installs last, nil when it doesn't.
         public var localVersion: String?
         public var phase: Phase
+        /// Seconds since 1970 when the countdown restarts the app.
+        public var restartAt: Double?
         public var machines: [RunMachine]
-        public init(localVersion: String?, phase: Phase, machines: [RunMachine]) {
-            self.localVersion = localVersion; self.phase = phase; self.machines = machines
+        public init(localVersion: String?, phase: Phase, restartAt: Double? = nil, machines: [RunMachine]) {
+            self.localVersion = localVersion; self.phase = phase; self.restartAt = restartAt; self.machines = machines
+        }
+
+        /// `restartSecondsLeft` (SidebarUpdateCapsule.tsx:56-60).
+        public func restartSeconds(now: Double) -> Int? {
+            guard phase == .countdown, let restartAt else { return nil }
+            return max(0, Int((restartAt - now).rounded(.up)))
         }
     }
 
-    /// `resolveUpdateRunMachineStatus`.
+    /// `UPDATE_RESTART_DELAY_MS` (useUpdateEverything.ts:38).
+    public static let restartDelay: Double = 5
+    /// `UPDATE_SLOW_AFTER_MS` (updateEverything.logic.ts:572).
+    public static let slowAfter: Double = 3 * 60
+
+    /// `resolveUpdateRunMachineStatus` (updateEverything.logic.ts:522-534).
     public static func status(_ m: RunMachine, phase: Run.Phase, server: ServerUpdateState) -> MachineStatus {
         if let failed = m.failed { return failed ? .failed : .done }
         if phase == .providers, m.updatesProviders { return .providers }
@@ -166,10 +200,78 @@ public enum UpdateEverythingLogic {
         return .waiting
     }
 
-    /// `describeUpdateRun`: "Updating…", this app, then "alvin: restarting".
-    public static func runTooltip(_ machines: [(label: String, status: MachineStatus)], local: String?) -> String {
-        (["Updating…"] + (local.map { ["This app: \($0)"] } ?? []) + machines.map { "\($0.label): \($0.status.rawValue)" }).joined(separator: "\n")
+    /// `closeFinishedUpdateRun` (updateEverything.logic.ts:564-570): a pass with nothing left to show closes.
+    public static func closeFinished(_ run: Run) -> Run? {
+        run.phase == .servers && run.localVersion == nil && run.machines.allSatisfy { $0.failed == false } ? nil : run
     }
+
+    /// `formatUpdateElapsed` (updateEverything.logic.ts:574-581).
+    public static func elapsed(_ seconds: Double) -> String {
+        let minutes = Int((seconds / 60).rounded(.down))
+        if minutes < 1 { return "<1m" }
+        if minutes < 60 { return "\(minutes)m" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+
+    /// `UpdateRunLocalState`: this app's own download while it installs last.
+    public enum LocalState: Equatable, Sendable { case downloading(percent: Double?), waiting }
+
+    /// `UpdateCapsuleView` (updateEverything.logic.ts:594-599).
+    public struct CapsuleView: Equatable, Sendable {
+        public enum Tone: Sendable { case `default`, slow, failed }
+        public enum Action: String, Sendable { case later = "Later", retry = "Retry", dismiss = "Dismiss" }
+        public var tone: Tone
+        public var label: String
+        /// The slowest machine's status and time, in `text-warning` after the label.
+        public var slow: (status: String, elapsed: String)?
+        public var action: Action?
+        public static func == (a: CapsuleView, b: CapsuleView) -> Bool {
+            a.tone == b.tone && a.label == b.label && a.slow?.status == b.slow?.status && a.slow?.elapsed == b.slow?.elapsed && a.action == b.action
+        }
+    }
+
+    /// `describeUpdateCapsule` (updateEverything.logic.ts:603-678). CandyWrapper has no restored rows, so a failed
+    /// machine can retry when its server still waits to update.
+    public static func describeCapsule(_ run: Run, statuses: [MachineStatus], local: LocalState?, now: Double) -> CapsuleView {
+        if let seconds = run.restartSeconds(now: now) { return CapsuleView(tone: .default, label: "Restart in \(seconds)s", action: .later) }
+        if run.phase == .installing { return CapsuleView(tone: .default, label: "Restarting…", action: nil) }
+        let rows = Array(zip(run.machines, statuses))
+        if let slowest = rows.filter({ $0.1.isActive && $0.1 != .waiting }).min(by: { $0.0.startedAt < $1.0.startedAt }),
+           now - slowest.0.startedAt >= slowAfter {
+            return CapsuleView(tone: .slow, label: slowest.0.label, slow: (slowest.1.rawValue, elapsed(now - slowest.0.startedAt)), action: nil)
+        }
+        let done = statuses.filter { $0 == .done }.count
+        let updated = CapsuleView(tone: .default, label: "\(done) of \(statuses.count) updated", action: nil)
+        if statuses.contains(where: \.isActive) { return updated }
+        if case .downloading(let percent) = local {
+            return CapsuleView(tone: .default, label: percent.map { "Downloading \(Int($0.rounded(.down)))%" } ?? "Downloading", action: nil)
+        }
+        let failed = rows.filter { $0.1 == .failed }
+        if !failed.isEmpty {
+            return CapsuleView(tone: .failed, label: failed.count == 1 ? "\(failed[0].0.label) failed" : "\(failed.count) failed",
+                               action: failed.contains { $0.0.updatesServer } ? .retry : .dismiss)
+        }
+        return updated
+    }
+
+    /// `localStatusLabel` (SidebarUpdateCapsule.tsx:62-78): this app's line in the capsule's popover.
+    public static func localStatus(_ run: Run, local: LocalState?, now: Double) -> String {
+        if let seconds = run.restartSeconds(now: now) { return "restarts in \(seconds)s" }
+        if run.phase == .installing { return "restarting" }
+        if case .downloading(let percent) = local { return percent.map { "downloading \(Int($0.rounded(.down)))%" } ?? "downloading" }
+        return "restarts after the servers"
+    }
+
+    /// How often the capsule needs a new `now` (`useNow`, SidebarUpdateCapsule.tsx:97-100): every second in the
+    /// countdown, every 30 seconds while a machine still works for its elapsed time, else never.
+    public static func tickInterval(_ run: Run, statuses: [MachineStatus]) -> Double? {
+        if run.phase == .countdown { return 1 }
+        return statuses.contains { $0.isActive && $0 != .waiting } ? 30 : nil
+    }
+
+    /// The width the capsule takes in a row `available` wide (SidebarUpdateCapsule.tsx:126-131): 32 until the
+    /// `@container/sidebar-update` reaches 5rem, or 12rem while the countdown shows, then all of it.
+    public static func capsuleExpands(available: Double, counting: Bool) -> Bool { available >= (counting ? 192 : 80) }
 
     /// `UpdateEverythingResult`.
     public struct Result: Codable, Equatable, Sendable {

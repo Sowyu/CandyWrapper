@@ -277,6 +277,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return await settings.saveActions(writes)
         }
         threads.composer.openProviderSetup = { [weak settings] in settings?.open(.providers) }
+        threads.openEnvironments = { [weak settings] in settings?.open(.connections) }
+        threads.addEnvironment = { [weak settings] host in settings?.openPairingLink(host: host ?? "", code: "") }
         threads.automations.openSettings = { [weak settings] env, taskId in settings?.openScheduledTasks(environmentId: env, taskId: taskId) }
         environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings
@@ -297,6 +299,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings?.peerLinksChanged(env)
             threads?.composer.peerLinksChanged(env)
         }
+        let configChange = threads.composer.onConfigChange
+        threads.composer.onConfigChange = { [weak commands] env in configChange?(env); commands?.workflowsConfigChanged() }
         commands.openSettingsItem = { [weak settings] item in
             settings?.open()
             settings?.jump(to: item)
@@ -498,7 +502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                   threads: ThreadController, commands: SidebarCommands, settings: SettingsController) {
         threads.permissionNotice.openConnections = { [weak settings] in settings?.open(.access) }
         // ponytail: opens Access on its current machine; T3 also passes `machine`, add it when Access takes a machine.
-        threads.connectDeviceNotice.openAccess = { [weak settings] _ in settings?.open(.access) }
+        threads.connectDeviceNotice.openAccess = { [weak settings] env in settings?.openAccess(for: env) }
         threads.git.openSourceControlSettings = { [weak settings] in settings?.open(); settings?.show(.sourceControl) }
         let shortcuts = Shortcuts(window: window)
         threads.panel.model.onFrameShortcut = { [weak shortcuts] stroke in shortcuts?.run(stroke) }
@@ -600,6 +604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .pullRequests: return .pullRequests
                 case .issues: return .issues
                 case .usage: return .usage
+                case .workflows: return .workflows
                 }
             }
             switch threads?.composer.target {
@@ -659,6 +664,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 settings.close(); commands.openUtilityPage(.issues)
             case .usage:
                 settings.close(); commands.openUtilityPage(.usage)
+            case .workflows:
+                guard commands.workflowsReachable else { return false }
+                settings.close(); commands.openUtilityPage(.workflows)
             }
             return true
         }
@@ -750,6 +758,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         let title = i + 1 < args.count && !args[i + 1].hasPrefix("--") ? args[i + 1] : ThreadPreview.markdownThread
         #if DEBUG
+        // Isolated test builds draw the linked thread states with no linked server: `unavailable`, or `linked-page`
+        // with a connect notice (`linked-page:manual`, `linked-page:unreachable`, `linked-page:connecting`).
+        if isTestBuild, title == "unavailable" { return ThreadUnavailableStateView() }
+        if isTestBuild, title.hasPrefix("linked-page"), let projection = try? ThreadPreview.projection(titled: ThreadPreview.markdownThread) {
+            let page = LinkedThreadPageView()
+            page.title = projection.thread.title
+            page.pane.chat.setProjection(projection, projectTitle: "", workspaceRoot: nil)
+            page.pane.bar.status = LinkedThreads.status(label: "Studio", via: "Laptop", working: true)
+            page.pane.bar.action = ButtonView("Connect to interact", icon: .plug, variant: .outline, size: .sm)
+            let phase: LinkedThreadConnect.Phase = switch title.split(separator: ":").last {
+            case "manual": .manual(label: "Studio", host: nil)
+            case "unreachable": .unreachable(label: "Studio")
+            case "connecting": .connecting
+            default: .idle
+            }
+            page.pane.showConnectNotice(LinkedThreadConnect.notice(phase, label: "Studio"))
+            return page
+        }
         // Isolated test builds can replay a sandbox projection and its local image files.
         if isTestBuild, title.hasPrefix("/"), title.hasSuffix(".json"),
            let data = try? Data(contentsOf: URL(fileURLWithPath: title)),

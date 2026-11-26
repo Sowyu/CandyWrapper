@@ -36,6 +36,29 @@ struct ComposerMenusTests {
         #expect(ComposerContext.threadsOutsideEnvironment(foreignText, records: ["thread_remote": thread], environmentId: "here") == [thread])
     }
 
+    /// composerThreadItems.test.ts at 5258 (#40191): machines the composer's environment links to join the paired ones.
+    @Test func machineMentionsOfferLinkedMachinesThatAreNotPaired() {
+        let linked: [ComposerMenus.EnvironmentCandidate] = [.init(id: "env-here", label: "Laptop"), .init(id: "env-build", label: "buildbox")]
+        let items = ComposerMenus.environmentItems(query: "build", environments: [], linked: linked, excluding: "env-here")
+        #expect(items.map(\.id) == ["environment:env-build"])
+        #expect(items.first?.kind == .environment(id: "env-build", label: "buildbox", machine: "server"))
+        let paired: [ComposerMenus.EnvironmentCandidate] = [.init(id: "env-vps", label: "Hetzner VPS", machine: "cloud")]
+        let vps = ComposerMenus.environmentItems(query: "vps", environments: paired, linked: [.init(id: "env-vps", label: "Hetzner VPS")], excluding: "env-here")
+        #expect(vps.count == 1 && vps.first?.kind == .environment(id: "env-vps", label: "Hetzner VPS", machine: "cloud"))
+    }
+
+    /// #39610: NFD file names show composed in the @ menu, mention chips and title seeds.
+    @Test func nfdFileNamesCompose() {
+        let nfd = "/repo/\u{1109}\u{1175}\u{110B}\u{1161}\u{11AB}"
+        let item = ComposerMenus.pathItems([(path: nfd + "/a.txt", isDirectory: false), (path: nfd, isDirectory: true)])
+        #expect(item[0].description.unicodeScalars.elementsEqual("/repo/\u{C2DC}\u{C548}".unicodeScalars))
+        #expect(item[1].label.unicodeScalars.elementsEqual("\u{C2DC}\u{C548}".unicodeScalars))
+        let chip = ComposerChipLook.basic(ComposerInlineToken(kind: .mention(path: nfd), source: "@" + nfd, range: NSRange(location: 0, length: 1)))
+        #expect(chip.label.unicodeScalars.elementsEqual("\u{C2DC}\u{C548}".unicodeScalars))
+        #expect(ComposerLogic.threadTitleSeed("Read @\u{1109}\u{1175}\u{110B}\u{1161}\u{11AB}/a.txt", attachments: []).unicodeScalars
+            .elementsEqual("Read @\u{C2DC}\u{C548}/a.txt".unicodeScalars))
+    }
+
     @Test func sentIdentityChipsResolveTheRecordedMachine() throws {
         let thread = ComposerContext.threadRecord(threadId: "same-id", title: "Remote title", environmentId: "there")
         let machine = ComposerContext.environmentRecord(environmentId: "there", label: "Old name")

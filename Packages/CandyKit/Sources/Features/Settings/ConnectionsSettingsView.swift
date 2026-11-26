@@ -107,6 +107,13 @@ public struct ConnectionsPageModel: Equatable {
     }
 
     public var thisMachine: Machine?
+    /// The Access page's environment picker (5258 ConnectionsSettings.tsx:201-247), with two or more candidates.
+    public struct AccessPicker: Equatable {
+        public var candidates: [AccessEnvironment.Candidate]
+        public var selected: String
+        public init(candidates: [AccessEnvironment.Candidate], selected: String) { self.candidates = candidates; self.selected = selected }
+    }
+    public var accessPicker: AccessPicker?
     /// "Authorized clients", shown with `access:read` or `access:write` on this machine.
     public var access: Access?
     /// "T3 Connect devices", under Authorized clients on a 4928 server that has a request or a trusted device.
@@ -121,6 +128,8 @@ public struct ConnectionsPageModel: Equatable {
     public var linkedEnvironments: [LinkedEnvironments] = []
     /// `ServerUpdatesAction` ("Update all") in the Environments header: some machine can take a remote update.
     public var canUpdateAll = false
+    /// The Environments map (5258 EnvironmentsMap.tsx). Nil keeps the list only.
+    public var map: EnvironmentsMapModel?
 
     /// A saved machine's update control.
     public enum UpdateAction: Equatable {
@@ -142,6 +151,14 @@ public struct ConnectionsPageModel: Equatable {
 @MainActor
 public struct ConnectionsActions {
     public var addEnvironment: () -> Void = {}
+    /// The map's link handle: pressed (target nil) or dropped on a machine. Node ids, `env:<environmentId>`.
+    public var mapLink: (_ sourceId: String, _ targetId: String?, _ ticked: [String]) -> Void = { _, _, _ in }
+    /// The map's "Link several…": the source environment, when one is chosen, and the ticked environments.
+    public var linkSeveral: (_ sourceEnvironmentId: String?, _ environmentIds: [String]) -> Void = { _, _ in }
+    /// `requestOneLink`: one link from a node to a node, whatever is ticked (the details' "Link back…").
+    public var mapLinkOne: (_ sourceId: String, _ targetId: String) -> Void = { _, _ in }
+    /// "Add environment" from a machine known only through a link, its address filled in (`initialHost`).
+    public var addEnvironmentAt: (String?) -> Void = { _ in }
     public var addRoute: (String) -> Void = { _ in }
     /// The diagnosis's "Retry now" (`environmentCatalog.retryNow`).
     public var retryNow: (String) -> Void = { _ in }
@@ -169,6 +186,8 @@ public struct ConnectionsActions {
     public var retryCloud: () -> Void = {}
     /// A "This machine" switch changed: (row id, on).
     public var setHostSwitch: (String, Bool) -> Void = { _, _ in }
+    /// The Access page's environment picker chose an environment.
+    public var pickAccessEnvironment: (String) -> Void = { _ in }
     /// The Icon submenu picked a kind: (environment id, kind).
     public var setIcon: (String, String) -> Void = { _, _ in }
     /// A route was dragged to a new place: (environment id, routes preferred first).
@@ -206,6 +225,11 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     /// ConnectionsSettings.tsx:155,1468-1476 (3814). Nil keeps the combined preview used by older captures.
     public var showsAccess: Bool? { didSet { relayout() } }
     private let thisAppSection = SettingsSectionView(title: "This app", rows: [])
+    private lazy var accessPicker: AccessEnvironmentPickerView = {
+        let picker = AccessEnvironmentPickerView()
+        picker.onPick = { [weak self] id in self?.actions.pickAccessEnvironment(id) }
+        return picker
+    }()
     private let localSettingRow = SettingsRowView(title: "Local environment")
     private(set) var machineSection: SettingsSectionView?
     private var hostRows: [String: SettingsRowView] = [:]
@@ -239,10 +263,39 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     }()
     private var linkedSections: [String: (section: SettingsSectionView, link: ButtonView, rows: [String: LinkedEnvironmentRowView], note: SettingsRowView)] = [:]
     /// The primary environment's id, for the Icon submenu of This machine.
+    /// The environment the machine section shows: the primary, or the Access page's picked environment.
     public var primaryId: String?
     private var openPermissions: Set<String> = []
     private var openDiagnoses: Set<String> = []
     private let environmentsSection: SettingsSectionView
+    /// `ToggleGroup aria-label="Show environments as"` (ConnectionsSettings.tsx:1839-1852): map by default, not stored.
+    let viewSwitch = ToggleGroupView(variant: .default, items: [("Map", nil), ("List", nil)], selected: 0)
+    public private(set) lazy var mapView: EnvironmentsMapView = {
+        let map = EnvironmentsMapView()
+        map.onLink = { [weak self] source, target, ticked in self?.actions.mapLink(source, target, ticked) }
+        map.onLinkOne = { [weak self] source, target in self?.actions.mapLinkOne(source, target) }
+        map.onLinkSeveral = { [weak self] source, ids in self?.actions.linkSeveral(source, ids) }
+        map.onHeightChange = { [weak self] in self?.environmentsSection.needsLayout = true; self?.relayout() }
+        map.details.onHeightChange = { [weak self] in self?.environmentsSection.needsLayout = true; self?.relayout() }
+        var details = EnvironmentsMapDetailsActions()
+        // `renderSavedEnvironment` (ConnectionsSettings.tsx:1880-1894): the list's row, its routes open.
+        details.savedRow = { [weak self] id in
+            guard let self, let row = self.rows[id] else { return nil }
+            if !self.openRoutes.contains(id) { self.openRoutes.insert(id); row.routesOpen = true }
+            return row
+        }
+        details.connectRow = { [weak self] id in self?.cloudRows[id] }
+        details.linkFrom = { [weak map] id in map?.requestLink(id, nil) }
+        details.linkBack = { [weak self] source, target in self?.actions.mapLinkOne(source, target) }
+        details.forget = { [weak self] host, peer in self?.actions.forgetLink(host, peer) }
+        details.reconnect = { [weak self] id in self?.actions.retryNow(id) }
+        details.addEnvironment = { [weak self] host in self?.actions.addEnvironmentAt(host) }
+        details.retryConnect = { [weak self] in self?.actions.retryCloud() }
+        map.details.actions = details
+        return map
+    }()
+    /// The list was picked over the map.
+    var showsList = false
     private let addButton = ButtonView("Add environment", icon: .plus, variant: .ghostMuted, size: .xs)
     /// `ServerUpdatesAction variant="ghost-muted"`, before "Add environment" (`flex items-center gap-1`).
     let updateAllButton = ButtonView("Update all", variant: .ghostMuted, size: .xs)
@@ -270,12 +323,24 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         updateAllButton.isHidden = true
         headerButtons.buttons = [updateAllButton, addButton]
         environmentsSection.headerAction = headerButtons
+        viewSwitch.setAccessibilityLabel("Show environments as")
+        viewSwitch.onChange = { [weak self] index in
+            guard let self, let index else { return }
+            self.showsList = index == 1
+            self.set(self.model)
+        }
         addSubview(environmentsSection)
         set(model)
     }
 
     public func set(_ model: ConnectionsPageModel) {
         self.model = model
+        if let picker = model.accessPicker {
+            accessPicker.configure(picker)
+            if accessPicker.superview == nil { addSubview(accessPicker) }
+        } else if accessPicker.superview != nil {
+            accessPicker.removeFromSuperview()
+        }
         // This machine.
         if let m = model.thisMachine {
             let section = machineSection ?? SettingsSectionView(title: m.label, rows: [])
@@ -378,6 +443,13 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
                 empty = (message, view)
             }
             groupRows.append(empty!.view)
+        }
+        // The map stands for the whole list where there is room (`useMediaQuery("md")`, 768 wide).
+        environmentsSection.titleAction = roomForMap ? viewSwitch : nil
+        if let map = model.map, roomForMap, !showsList {
+            mapView.wide = (window?.frame.width ?? 1024) >= 1024
+            mapView.set(map)
+            groupRows = [mapView, mapView.details]
         }
         environmentsSection.group.rows = groupRows
         applyLinkedEnvironments(model.linkedEnvironments)
@@ -590,6 +662,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     private var visibleSections: [NSView & SettingsGroupRow] {
         var parts: [NSView & SettingsGroupRow] = []
         if showsAccess != false {
+            if showsAccess == true, accessPicker.superview != nil { parts.append(accessPicker) }
             if let machineSection { parts.append(machineSection) }
             if accessSection.superview != nil { parts.append(accessSection) }
             if connectDevicesSection.superview != nil { parts.append(connectDevicesSection) }
@@ -602,6 +675,9 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         }
         return parts
     }
+
+    /// T3 asks the window for md (768); the settings column here is narrower than the window by the nav.
+    var roomForMap: Bool { model.map != nil && (window?.frame.width ?? 1024) >= 768 }
 
     public func searchAnchor(_ id: String) -> NSView? {
         switch id {
@@ -622,7 +698,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     public override func layout() {
         super.layout()
         let shown = visibleSections
-        let all: [NSView] = [thisAppSection, environmentsSection, accessSection, connectDevicesSection, loadBalancingSection]
+        let all: [NSView] = [thisAppSection, environmentsSection, accessSection, connectDevicesSection, loadBalancingSection, accessPicker]
             + (machineSection.map { [$0] } ?? []) + linkedSections.values.map(\.section)
         for part in all { part.isHidden = !shown.contains(where: { $0 === part }) }
         var y: CGFloat = 0

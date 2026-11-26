@@ -769,8 +769,31 @@ final class CpuBarsView: DSView, SettingsGroupRow {
         self.buckets = buckets.map { ($0["avgCpuPercent"]?.doubleValue ?? 0, $0["maxCpuPercent"]?.doubleValue ?? 0) }
         super.init(frame: .zero)
         layer?.addSublayer(border)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.group)
     }
     func height(forWidth width: CGFloat) -> CGFloat { 1 + 12 + 112 + 12 }
+
+    /// Each bar reads its values to VoiceOver (#41948, DiagnosticsSettings.tsx `sr-only` at 5258).
+    static func barLabel(avg: Double, max: Double) -> String {
+        "Average CPU \(String(format: "%.1f", avg))%, peak CPU \(String(format: "%.1f", max))%"
+    }
+
+    override func accessibilityChildren() -> [Any]? {
+        buckets.enumerated().map { i, b in
+            let e = NSAccessibilityElement()
+            e.setAccessibilityRole(.staticText)
+            e.setAccessibilityLabel(Self.barLabel(avg: b.avg, max: b.max))
+            e.setAccessibilityParent(self)
+            let inner = bounds.insetBy(dx: 28, dy: 21)
+            let w = buckets.isEmpty ? 0 : (inner.width - CGFloat(buckets.count - 1) * 4) / CGFloat(buckets.count)
+            if let window {
+                let local = NSRect(x: inner.minX + CGFloat(i) * (w + 4), y: inner.minY, width: w, height: inner.height)
+                e.setAccessibilityFrame(window.convertToScreen(convert(local, to: nil)))
+            }
+            return e
+        }
+    }
     override var wantsUpdateLayer: Bool { false }
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }

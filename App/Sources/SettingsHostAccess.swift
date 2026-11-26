@@ -32,6 +32,7 @@ extension SettingsController {
     func startHostAccess() {
         hosts = [:]
         hostLoads = []
+        accessShown = false
         linkState = nil
         linkError = nil
         accessLoaded = false
@@ -79,7 +80,8 @@ extension SettingsController {
     /// connects while the page is open gets its permissions.
     func loadHosts() {
         guard isOpen else { return }
-        let ids = ([environments.primaryId].compactMap { $0 } + environments.saved.map(\.environmentId))
+        // Development `--server` pairs have no saved record.
+        let ids = ([environments.primaryId].compactMap { $0 } + environments.environmentIds + environments.saved.map(\.environmentId))
         for id in ids where hosts[id] == nil && !hostLoads.contains(id) && environments.state(id)?.status == .connected {
             guard let shell = environments.session(id) else { continue }
             hostLoads.insert(id)
@@ -93,10 +95,8 @@ extension SettingsController {
                 hostLoads.remove(id)
                 guard isOpen else { return }
                 hosts[id] = info
-                if id == environments.primaryId {
-                    if let machine = info.descriptor?.platform?.machine { environments.setDetectedMachine(id, machine) }
-                    hostReady()
-                }
+                if id == environments.primaryId, let machine = info.descriptor?.platform?.machine { environments.setDetectedMachine(id, machine) }
+                if id == accessId { hostReady() }
                 loadPeerLinks()
                 refreshPage()
             }
@@ -106,14 +106,14 @@ extension SettingsController {
     /// The primary's session is known: read the link state and subscribe to access changes as its
     /// permissions allow.
     private func hostReady() {
-        guard let id = environments.primaryId, let session = hosts[id]?.session else { return }
+        guard let id = accessId, let session = hosts[id]?.session else { return }
         if session.grants(AuthScopes.relayRead), t3.loaded { loadLinkState() }
         if session.grants(AuthScopes.accessRead), accessTask == nil, let shell = environments.session(id) {
             let env = id
             accessTask = shell.supervisor.subscribe("subscribeAuthAccess", payload: { .object([:]) }, handler: { [weak self] event in
                 guard case .value(let json) = event else { return }
                 await MainActor.run {
-                    guard let self, self.environments.primaryId == env else { return }
+                    guard let self, self.accessId == env else { return }
                     do {
                         try self.access.apply(json)
                         self.accessLoaded = true
@@ -128,15 +128,16 @@ extension SettingsController {
     }
 
     func loadLinkState() {
-        guard let id = environments.primaryId, let shell = environments.session(id), !linkLoading else { return }
+        guard let id = accessId, let shell = environments.session(id), !linkLoading else { return }
         linkLoading = true
         let http = shell.http, token = shell.token
         Task {
-            do {
-                linkState = try await http.cloudLinkState(token: token)
-                linkError = nil
-            } catch {
-                linkError = Self.message(error, fallback: "Could not read T3 Connect link state.")
+            let result = await Result { try await http.cloudLinkState(token: token) }
+            // The picker may have moved to another environment while this was in flight.
+            guard accessId == id else { return }
+            switch result {
+            case .success(let state): linkState = state; linkError = nil
+            case .failure(let error): linkError = Self.message(error, fallback: "Could not read T3 Connect link state.")
             }
             linkLoading = false
             updateLinkPoll()
@@ -176,6 +177,74 @@ extension SettingsController {
         }
     }
 
+    // MARK: Access environment
+
+    /// `useAccessEnvironment`'s candidates: the primary, the requested environment and every switched-on saved one.
+    var accessCandidates: [AccessEnvironment.Candidate] {
+        let scope = pageContext.scope
+        // A development `--server` pair has no saved record and is always on.
+        let ids = ([environments.primaryId].compactMap { $0 } + environments.environmentIds + environments.saved.map(\.environmentId)).filter { id in
+            id == environments.primaryId || id == accessSelection || (environments.saved.first { $0.environmentId == id }?.enabled ?? true)
+        }
+        return ids.reduce(into: []) { list, id in
+            guard !list.contains(where: { $0.id == id }) else { return }
+            let entry = scope.environments.first { $0.id == id }
+            let label = entry.map(scope.environmentLabel) ?? (id == environments.primaryId ? primaryDescriptor?.label : nil) ?? environments.label(id) ?? id
+            list.append(.init(id: id, label: label, machine: environments.machine(id) ?? hosts[id]?.descriptor?.platform?.machine ?? "server",
+                              connected: environments.state(id)?.status == .connected))
+        }
+    }
+
+    /// The environment Sharing & access shows (`resolveAccessEnvironmentId`).
+    var accessId: String? { AccessEnvironment.resolve(primary: environments.primaryId, candidates: accessCandidates, selected: accessSelection) }
+
+    /// The picker chose an environment. T3 remounts the page on a new key, so nothing carries over: the access
+    /// stream, created credentials, pending revokes and the T3 Connect link state start again for the new one.
+    func pickAccessEnvironment(_ id: String) {
+        let before = accessId
+        accessSelection = id
+        guard accessId != before else { return }
+        resetAccessEnvironment()
+    }
+
+    /// The toast's Review, or any link to Access for an environment (`/settings/access?machine=`).
+    func openAccess(for environmentId: String?) {
+        if isOpen, section == .access {
+            pickAccessEnvironment(environmentId ?? environments.primaryId ?? "")
+        } else {
+            pendingAccessMachine = environmentId
+            open(.access)
+        }
+    }
+
+    /// Access came on screen: it opens on the link's environment, or the primary.
+    func accessDidShow() {
+        accessSelection = pendingAccessMachine
+        pendingAccessMachine = nil
+        resetAccessEnvironment()
+    }
+
+    private func resetAccessEnvironment() {
+        accessTask?.cancel()
+        accessTask = nil
+        access = AuthAccessSnapshot()
+        accessLoaded = false
+        accessError = nil
+        linkState = nil
+        linkError = nil
+        linkLoading = false
+        credentials = [:]
+        accessSettingsSaved = [:]
+        revokingLink = nil
+        revokingClient = nil
+        revokingOthers = false
+        connectDeviceBusy = nil
+        updateAccessTicker()
+        updateLinkPoll()
+        if let id = accessId, hosts[id] != nil { hostReady() } else { loadHosts() }
+        refreshPage()
+    }
+
     // MARK: Model
 
     private func session(_ id: String) -> AuthSessionState? { hosts[id]?.session }
@@ -195,12 +264,14 @@ extension SettingsController {
         rows.append(.init(id: "local-environment", title: "Local environment",
                           detail: "Run agents on this computer. Turn off to use T3 Code only with remote environments.",
                           control: .toggle(.init(isOn: true, isEnabled: false, tooltip: Self.bridgeTooltip, label: "Local environment"))))
-        if canMaintain {
+        // `canManageLocalBackend` (5258 ConnectionsSettings.tsx:438, :1342-1398): the version and network rows belong to
+        // the backend this app runs; another environment shows its T3 Connect and preview tunnel rows only.
+        if canMaintain, id == environments.primaryId {
             rows.append(versionRow(id, line: line, known: version != nil, label: d?.label ?? environments.label(id)))
             rows.append(networkAccessRow(id))
             rows.append(tailscaleRow())
-            if canReadRelay || canManageRelay { rows += cloudRows(canReadRelay: canReadRelay, canManageRelay: canManageRelay) }
         }
+        if canReadRelay || canManageRelay { rows += cloudRows(canReadRelay: canReadRelay, canManageRelay: canManageRelay) }
         if let row = previewTunnelRow(id, descriptor: d) { rows.append(row) }
         return ConnectionsPageModel.Machine(label: d?.label ?? environments.label(id) ?? "This machine",
                                             machine: environments.machine(id) ?? d?.platform?.machine ?? "desktop",
@@ -313,7 +384,7 @@ extension SettingsController {
                                                      label: "Hold webhook requests while this environment is offline"))))
             // `Require approval for new devices` (4928 SavedEnvironmentRows.tsx:824-848), on servers that have it.
             if let required = connectApprovalRequired {
-                let canManage = grants(environments.primaryId, AuthScopes.accessWrite)
+                let canManage = grants(accessId, AuthScopes.accessWrite)
                 rows.append(.init(id: "connect-device-approval", title: "Require approval for new devices",
                                   detail: "Devices that sign in to your T3 Connect account wait until someone already connected here approves them.",
                                   control: .toggle(.init(isOn: required, isEnabled: canManage && !linkBusy,
@@ -348,7 +419,7 @@ extension SettingsController {
 
     /// "Authorized clients", with `access:read` or `access:write` on this machine.
     func accessModel() -> ConnectionsPageModel.Access? {
-        guard let id = environments.primaryId else { return nil }
+        guard let id = accessId else { return nil }
         let canRead = grants(id, AuthScopes.accessRead), canWrite = grants(id, AuthScopes.accessWrite)
         guard canRead || canWrite else { return nil }
         let now = Date()
@@ -420,7 +491,7 @@ extension SettingsController {
 
     /// `reconcileCloudState` when only preferences change: the server stores them and tells the relay.
     private func updateCloudPreferences(_ request: CloudPreferencesRequest, done: @escaping () -> Void) {
-        guard let id = environments.primaryId, let shell = environments.session(id), grants(id, AuthScopes.relayWrite), !linkBusy else { return }
+        guard let id = accessId, let shell = environments.session(id), grants(id, AuthScopes.relayWrite), !linkBusy else { return }
         linkBusy = true
         linkError = nil
         refreshPage()
@@ -469,7 +540,7 @@ extension SettingsController {
 
     /// `Create link`: the dialog with T3's presets, limited to what this session may delegate.
     func presentCreateLink() {
-        guard let window, modal == nil, let id = environments.primaryId, let shell = environments.session(id) else { return }
+        guard let window, modal == nil, let id = accessId, let shell = environments.session(id) else { return }
         let delegatable = session(id)?.grantedScopes ?? []
         let (dialog, form, cancel, create) = CreatePairingLinkDialog.make(delegatable: delegatable)
         form.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
@@ -499,7 +570,7 @@ extension SettingsController {
     }
 
     func revokePairingLink(_ linkId: String) {
-        guard let id = environments.primaryId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
+        guard let id = accessId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
         revokingLink = linkId
         accessError = nil
         refreshPage()
@@ -516,7 +587,7 @@ extension SettingsController {
     }
 
     func revokeClient(_ sessionId: String) {
-        guard let id = environments.primaryId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
+        guard let id = accessId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
         revokingClient = sessionId
         accessError = nil
         refreshPage()
@@ -533,7 +604,7 @@ extension SettingsController {
     }
 
     func revokeOtherClients() {
-        guard let id = environments.primaryId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
+        guard let id = accessId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
         revokingOthers = true
         accessError = nil
         refreshPage()
@@ -557,14 +628,14 @@ extension SettingsController {
 
     /// The primary server's `requireConnectDeviceApproval`, nil on servers before 4928 (settings.ts:1393-1396).
     var connectApprovalRequired: Bool? {
-        guard let id = environments.primaryId else { return nil }
+        guard let id = accessId else { return nil }
         guard let sent = composer?.config(id)?.settings.raw["requireConnectDeviceApproval"]?.boolValue else { return nil }
         return accessSettingsSaved["requireConnectDeviceApproval"] ?? sent
     }
 
     /// `ConnectDeviceApprovalSettings`' rows, with `access:read`, once the snapshot has `connectDevices`.
     func connectDevicesModel() -> ConnectionsPageModel.ConnectDevices? {
-        guard let id = environments.primaryId, grants(id, AuthScopes.accessRead), let devices = access.connectDevices else { return nil }
+        guard let id = accessId, grants(id, AuthScopes.accessRead), let devices = access.connectDevices else { return nil }
         let now = Date()
         var rows: [ConnectionsPageModel.ConnectDevices.Row] = access.connectDeviceRequests.compactMap { link in
             guard let request = link.connectDeviceRequest, (link.expiresAt.date ?? now) >= now else { return nil }
@@ -586,7 +657,7 @@ extension SettingsController {
     /// `useUpdateEnvironmentSettings` for an access key on the primary server: shows the new value at once
     /// and drops it again if the save fails.
     private func setAccessSetting(_ key: String, _ on: Bool, done: @escaping (Bool) -> Void) {
-        guard let id = environments.primaryId else { return done(false) }
+        guard let id = accessId else { return done(false) }
         accessSettingsSaved[key] = on
         refreshPage()
         Task {
@@ -603,7 +674,7 @@ extension SettingsController {
     }
 
     private func runConnectDevice(_ key: String, failure: String, _ call: @escaping (EnvironmentHTTP, String) async throws -> Void) {
-        guard let id = environments.primaryId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
+        guard let id = accessId, let shell = environments.session(id), grants(id, AuthScopes.accessWrite) else { return }
         connectDeviceBusy = key
         refreshPage()
         let http = shell.http, token = shell.token
@@ -656,7 +727,7 @@ extension SettingsController {
     /// `requestConnectRevoke` (ConnectionsSettings.tsx:777-784): with approval off a revoked device signs
     /// straight back in, so `RevokeConnectDeviceDialog` offers to turn it on first. Otherwise it revokes now.
     func requestConnectRevoke(_ title: String, revoke: @escaping () -> Void) {
-        guard connectApprovalRequired == false, grants(environments.primaryId, AuthScopes.accessWrite),
+        guard connectApprovalRequired == false, grants(accessId, AuthScopes.accessWrite),
               let window, modal == nil else { return revoke() }
         let dialog = DialogView(kind: .alertDialog, title: title,
                                 message: "Approval for new devices is off, so a revoked device signed in to your T3 Connect account can connect again on its own.")

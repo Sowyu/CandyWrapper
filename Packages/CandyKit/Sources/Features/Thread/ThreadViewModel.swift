@@ -13,6 +13,8 @@ struct TimelineRowUI: Hashable {
     var messageExpanded = false
     /// A folded message's sender thread title, or its automation's task title (TimelineUserMessageRow.tsx:142-152, 298-302).
     var foldTitle: String?
+    /// Bumped when what a message's thread links resolve to changes (`linkedThreadsChanged`), so its chips draw again.
+    var linksRevision = 0
     /// A long plan shows in full.
     var planExpanded = false
     /// Fetched output of this row's open entries whose output the stream left out.
@@ -141,6 +143,11 @@ public final class ThreadViewModel {
     /// thread chips and `t3-thread://` links show its title and project icon (ThreadContextChip.tsx:17-19).
     public var linkedEnvironment: (@MainActor (String) -> MarkdownContextChips.LinkedEnvironment?)?
     public var linkedThread: (@MainActor (ThreadId) -> MarkdownContextChips.LinkedThread?)?
+    /// The name of a machine the open thread's environment links to, by environment id (`peerLinks.names`), nil when
+    /// it links to none by that id. Thread links there open read only (5258 MarkdownThreadLink.tsx:46-58).
+    public var linkedEnvironmentLabel: (@MainActor (String) -> String?)?
+    /// Opens a linked machine's thread read only (`openLinkedThreadRead`, 5258 lib/sideChatPane.ts:93-113).
+    public var onOpenLinkedThread: (@MainActor (LinkedThreadSurfaceTarget) -> Void)?
     /// Folded agent rows' sender titles for one `apply` pass, since `linkedThread` searches every shell.
     private var foldTitles: [String: String?] = [:]
     /// "Open automation": Settings > Scheduled Tasks with that task's editor.
@@ -522,6 +529,11 @@ public final class ThreadViewModel {
     public var optimisticMessages: [ChatMessage] = [] {
         didSet { if optimisticMessages != oldValue { derive() } }
     }
+    /// The composer's selected provider instance: a send the server has no run for yet shows it starting
+    /// (`providerStartingRun`, 5258 ChatView.tsx:1605-1616). A default instance's id is its driver.
+    public var startingInstanceId: String? {
+        didSet { if startingInstanceId != oldValue, !optimisticMessages.isEmpty { derive() } }
+    }
 
     /// Asks the pipeline for rows of the current state. Long threads run it off the main thread,
     /// one request at a time: what arrives meanwhile waits, and only the newest state runs next.
@@ -535,7 +547,7 @@ public final class ThreadViewModel {
         let request = TimelinePipeline.Request(
             projection: projection, projectionChanged: projectionDirty, expandedRunIds: expandedRunIds,
             expandedAttemptIds: expandedAttemptIds, expandedWorkGroupIds: expandedWorkGroupIds, pending: pending,
-            toolCallVisibility: ClientSettingsStore.shared.current.string("toolCallVisibility"))
+            toolCallVisibility: ClientSettingsStore.shared.current.string("toolCallVisibility"), startingInstanceId: startingInstanceId)
         projectionDirty = false
         let pipeline = self.pipeline
         guard (projection?.visibleTurnItems.count ?? 0) >= backgroundRowsThreshold else {
@@ -565,7 +577,12 @@ public final class ThreadViewModel {
 
     /// The UI state changed but the rows did not.
     /// The answer to `linkedThread` changed, such as a thread link's metadata arriving: rows draw their chips again.
-    public func linkedThreadsChanged() { refreshItems() }
+    public func linkedThreadsChanged() {
+        // A row whose item is unchanged is not configured again, so the revision makes every message row differ.
+        linksRevision += 1
+        refreshItems()
+    }
+    private var linksRevision = 0
 
     private func refreshItems() {
         // The shown rows are the last thread's until the new ones derive; those pick up this state then (audit TH-2).
@@ -621,6 +638,7 @@ public final class ThreadViewModel {
         case .workLive(_, _, _, _, _, let thought?) where expandedEntries.contains(thought.id):
             ui.expandedEntries = [thought.id]
         case .message(let m, _, _, _, _):
+            ui.linksRevision = linksRevision
             ui.messageExpanded = !expandedMessages.isEmpty && expandedMessages.contains(m.id.rawValue)
             if m.role == .user, m.createdBy == "agent" || m.scheduledTaskId != nil || m.text.hasPrefix("[Triggered by schedule task: ") {
                 let p = UserMessagePresentation.resolve(m)

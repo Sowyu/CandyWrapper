@@ -171,6 +171,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
 
     private func reload() {
         syncSharing()
+        syncNotices()
         let highlightedKey = highlightedRow.flatMap { sections.rows.indices.contains($0) ? Self.rowKey(sections.rows[$0]) : nil }
         let visible = catalog.entries.filter(\.isVisibleInPicker)
         if railButtons.map(\.entryId) != visible.map(\.id) {
@@ -485,7 +486,46 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     var showsSharing: Bool {
         selectedKeys == nil && catalog.entry(active).map { UsageLimitsLogic.usesChatGptSharing($0.provider) } == true
     }
-    private var footerHeight: CGFloat { showsSharing ? ChatGptSharingControlView.height : 0 }
+    private var footerHeight: CGFloat { (showsSharing ? ChatGptSharingControlView.height : 0) + noticesHeight }
+    private var noticeViews: [ProviderUpdateNoticeView] = []
+    /// Notices span the list column, right of the rail. Docked layouts size from their dock and show none.
+    private var noticeWidth: CGFloat { Self.width(capy) - (sections.showsRail ? railW : 0) }
+    private var noticesHeight: CGFloat { noticeViews.reduce(0) { $0 + $1.height(forWidth: noticeWidth) } }
+
+    /// `updateRequiredNotices` (ModelPickerContent.tsx:827-843 at 5258): the shown instance's notice, or every
+    /// instance's while searching. #39966: no Settings link when the install's channel can't reach the version.
+    private func syncNotices() {
+        noticeViews.forEach { $0.removeFromSuperview() }
+        noticeViews = []
+        guard !docked else { return }
+        let searching = !query.trimmingCharacters(in: .whitespaces).isEmpty
+        let shown = catalog.entries.filter { e in
+            guard e.isVisibleInPicker else { return false }
+            if searching { return true }
+            if case .instance(let id) = rail { return id == e.id }
+            return false
+        }
+        for e in shown {
+            guard let notice = ProviderUpdateRequired.notice(e.provider, query: query) else { continue }
+            let id = e.id
+            let open: (@MainActor @Sendable () -> Void)? = ProviderUpdateRequired.channelLags(e.provider, query: query) || onManage == nil
+                ? nil : { @MainActor [weak self] in _ = self?.onManage?(id) }
+            let view = ProviderUpdateNoticeView(notice, onSettings: open)
+            addSubview(view)
+            noticeViews.append(view)
+        }
+    }
+
+    private func layoutNotices() {
+        var y = bodyHeight
+        let x = bounds.width - noticeWidth
+        for v in noticeViews {
+            let h = v.height(forWidth: noticeWidth)
+            v.frame = NSRect(x: x, y: y, width: noticeWidth, height: h)
+            y += h
+        }
+        sharing?.frame.origin.y = y
+    }
     private var bodyHeight: CGFloat { bounds.height - footerHeight }
     private var sharing: ChatGptSharingControlView?
 
@@ -510,6 +550,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
 
     override func layout() {
         super.layout()
+        defer { layoutNotices() }
         listCard.isHidden = !detailed
         if stacked { layoutStacked(); return }
         if detailed { layoutDetailed(); return }

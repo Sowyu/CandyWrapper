@@ -540,6 +540,12 @@ final class PaletteCommands {
                                         title: "Open issues", icon: .circleDot,
                                         action: .run({ [weak self] in self?.openUtility(.issues) }, keepOpen: false)))
         }
+        // `action:workflows` (5258 CommandPalette.tsx:1787-1797), once a connected server has workflows on.
+        if commands.workflowsReachable {
+            actions.append(PaletteEntry(value: "action:workflows", searchTerms: ["workflows", "workflow", "runs", "automation", "definitions", "schedule"],
+                                        title: "Open workflows", icon: .workflow,
+                                        action: .run({ [weak self] in self?.openUtility(.workflows) }, keepOpen: false)))
+        }
         actions.append(PaletteEntry(value: "action:usage", searchTerms: ["usage", "use", "tokens", "cost", "spend", "limits", "stats", "analytics"],
                                     title: "Open usage", icon: .chartNoAxesColumn, shortcutCommand: "usage.open",
                                     action: .run({ [weak self] in self?.openUtility(.usage) }, keepOpen: false)))

@@ -28,6 +28,9 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
     case attachment(SentAttachmentSurface)
     /// `side-chat:<threadId>`: a side chat of this thread (4928 rightPanelStore.ts:99), the local thread id.
     case sideChat(ThreadId)
+    /// `linked-thread:<via>:<environment>:<thread>`: a linked environment's thread, read only through the
+    /// environment that links to it (5258 linkedThreadSurface.ts:5-23).
+    case linkedThread(LinkedThreadSurfaceTarget)
 
     public var id: String {
         switch self {
@@ -43,10 +46,11 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .terminal(let t): "terminal:" + t.resourceId
         case .attachment(let a): "attachment:" + a.id
         case .sideChat(let t): "side-chat:" + t.rawValue
+        case .linkedThread(let t): t.surfaceId
         }
     }
 
-    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, issue, browser, terminal, device, sideChat }
+    public enum Kind: String, Sendable { case diff, files, file, pullRequest, pullRequests, issue, browser, terminal, device, sideChat, linkedThread }
     public var kind: Kind {
         switch self {
         case .device, .deviceTarget: .device
@@ -59,6 +63,7 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .browser: .browser
         case .terminal: .terminal
         case .sideChat: .sideChat
+        case .linkedThread: .linkedThread
         }
     }
 
@@ -83,6 +88,8 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         case .attachment(let a): return a.name
         // The tab shows the side chat's own title once its shell is known (RightPanelTabs.tsx:615-616, :968).
         case .sideChat: return "Side chat"
+        // RightPanelTabs.tsx:629-633: the thread's own title once known, else where it is.
+        case .linkedThread(let t): return t.tabTitle
         }
     }
 
@@ -117,9 +124,46 @@ public enum RightPanelSurface: Codable, Sendable, Equatable {
         if case .sideChat(let t) = self { return t }
         return nil
     }
+    public var linkedThread: LinkedThreadSurfaceTarget? {
+        if case .linkedThread(let t) = self { return t }
+        return nil
+    }
     public var terminal: TerminalPanelSurface? {
         if case .terminal(let t) = self { return t }
         return nil
+    }
+}
+
+/// A linked environment's thread (`LinkedThreadTarget`, 5258 client-runtime linkedThread.ts:30-40): read through
+/// `viaEnvironmentId`, the environment this app is connected to, from `environmentId`, where the thread lives.
+public struct LinkedThreadSurfaceTarget: Codable, Sendable, Hashable {
+    public var viaEnvironmentId: String
+    public var environmentId: String
+    /// The thread's id on `environmentId`.
+    public var threadId: String
+    /// The linked environment's name, until the first page names the thread.
+    public var label: String
+    public var title: String?
+
+    public init(viaEnvironmentId: String, environmentId: String, threadId: String, label: String, title: String? = nil) {
+        self.viaEnvironmentId = viaEnvironmentId; self.environmentId = environmentId; self.threadId = threadId
+        self.label = label; self.title = title?.isEmpty == true ? nil : title
+    }
+
+    /// linkedThreadSurface.ts:10-12: one tab per thread and the environment it is read through.
+    public var surfaceId: String {
+        func enc(_ s: String) -> String {
+            var allowed = CharacterSet.alphanumerics
+            allowed.insert(charactersIn: "-_.!~*'()")
+            return s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
+        }
+        return "linked-thread:\(enc(viaEnvironmentId)):\(enc(environmentId)):\(enc(threadId))"
+    }
+
+    /// `linkedThreadTitle` (linkedThreadSurface.ts:50-55).
+    public var tabTitle: String {
+        let own = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return own.isEmpty ? "Thread on \(label)" : own
     }
 }
 
@@ -255,6 +299,27 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         upsert(.sideChat(threadId))
     }
 
+    /// `openLinkedThread` (5258 rightPanelStore.ts:883-898): the tab added at the end and shown. A later click
+    /// may know the title or label an earlier one did not.
+    public mutating func openLinkedThread(_ target: LinkedThreadSurfaceTarget) {
+        upsert(.linkedThread(target))
+        if let index = surfaces.firstIndex(where: { $0.id == target.surfaceId }), let kept = surfaces[index].linkedThread {
+            var merged = target
+            merged.title = target.title ?? kept.title
+            surfaces[index] = .linkedThread(merged)
+        }
+    }
+
+    /// `setLinkedThreadTitle` (rightPanelStore.ts:899-913). True when the title changed.
+    @discardableResult
+    public mutating func setLinkedThreadTitle(_ surfaceId: String, title: String) -> Bool {
+        guard let index = surfaces.firstIndex(where: { $0.id == surfaceId }), var target = surfaces[index].linkedThread,
+              target.title != title else { return false }
+        target.title = title
+        surfaces[index] = .linkedThread(target)
+        return true
+    }
+
     public mutating func openDevice(_ target: DevicePanelSurface) {
         let surface = RightPanelSurface.deviceTarget(target)
         let existing = surfaces.first { $0.id == surface.id }
@@ -278,7 +343,7 @@ public struct RightPanelState: Codable, Sendable, Equatable {
         case .files: upsert(.files)
         case .pullRequests: upsert(.pullRequests)
         case .browser: upsert(surfaces.first { $0.kind == .browser } ?? .browser(tabId: nil))
-        case .file, .pullRequest, .issue, .terminal, .sideChat: break
+        case .file, .pullRequest, .issue, .terminal, .sideChat, .linkedThread: break
         }
     }
 
@@ -530,6 +595,7 @@ public struct ClosedPanelTabs: Codable, Sendable, Equatable {
         case .attachment(let a): state.openAttachment(a)
         case .terminal: break
         case .sideChat: state.upsert(surface)
+        case .linkedThread(let t): state.openLinkedThread(t)
         }
     }
 

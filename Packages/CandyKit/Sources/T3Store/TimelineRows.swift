@@ -674,7 +674,13 @@ public enum TimelineRows {
             guard !hidden.isEmpty, hidesNonCompaction(group.entries[...]), let first = group.entries.first, let last = group.entries.last else { continue }
 
             let isLatest = latestRun?.runId == runId
-            let lastEntryEnd = last.message?.updatedAt ?? last.createdAt
+            // A subagent card after the terminal message was spawned by background work once the turn settled, so it adds
+            // no turn time (MessagesTimeline.logic.ts:1230-1244 at 5258, #38869).
+            let lateSubagentIds = Set(group.entries.enumerated().compactMap { index, entry in
+                index > terminalIndex && entry.work?.itemType == .subagent ? entry.id : nil
+            })
+            let lastTurnEntry = group.entries.last { !lateSubagentIds.contains($0.id) } ?? last
+            let lastEntryEnd = lastTurnEntry.message?.updatedAt ?? lastTurnEntry.createdAt
             let elapsed: Double? = if isLatest, let started = latestRun?.startedAt, let completed = latestRun?.completedAt {
                 elapsedMs(started, completed)
             } else {
@@ -698,7 +704,8 @@ public enum TimelineRows {
                 let end = index + 1 < group.steerSegments.count ? group.steerSegments[index + 1].startIndex : group.entries.count
                 let entries = group.entries[split.startIndex..<end]
                 guard let anchor = entries.first, hidesNonCompaction(entries) else { continue }
-                let segmentEnd = entries.map { $0.message?.updatedAt ?? $0.createdAt }.reduce(nil, maxTimestamp) ?? split.steer.createdAt
+                let segmentEnd = entries.filter { !lateSubagentIds.contains($0.id) }.map { $0.message?.updatedAt ?? $0.createdAt }
+                    .reduce(nil, maxTimestamp) ?? split.steer.createdAt
                 let ms = elapsedMs(split.steer.createdAt, segmentEnd)
                 let members = segment(entries)
                 folds[anchor.id] = TurnFold(

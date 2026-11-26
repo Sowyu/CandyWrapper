@@ -246,6 +246,9 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "defaultModelSelection": SettingSpec(.any, .null),
         "fallbackModelSelection": SettingSpec(.any, .null),  // 4928 settings.ts, #26164
         "promptSuggestionsEnabled": SettingSpec(.bool, .bool(false)),  // 4928 settings.ts, #28047
+        // 5258 settings.ts:1390-1394, :1535-1539: Labs > Workflows and its skipped-runs history (e414cfd4be, c6162da7ec).
+        "workflowsEnabled": SettingSpec(.bool, .bool(false)),
+        "workflowSkippedRunsKept": SettingSpec(.int(0...10_000), .number(500)),
         // 5258 contracts settings.ts:1172, :1431-1433: `{mode: "off" | "on-request" | "auto"}`, default off.
         "agentFeedback": SettingSpec(.any, .object(["mode": .string("off")])),
         "textGenerationModelSelection": SettingSpec(.any, .object([

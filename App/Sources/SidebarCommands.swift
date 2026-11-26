@@ -40,6 +40,23 @@ final class SidebarCommands {
         c.container.onClosed = { [weak self] removed in self?.threads.files.rememberPageTabs(removed, page: FilesController.issuesPageKey) }
         return c
     }()
+    /// The Workflows page, made on first open; its subscription lives only while it shows.
+    private lazy var workflowsPage: WorkflowsPageController = {
+        let c = WorkflowsPageController(environments: environments, config: { [weak self] in self?.threads.composer.config($0) })
+        c.page.onEscape = { [weak self] in self?.goBack() }
+        c.openSettingsLabs = { [weak self] in self?.openSettingsItem?(SettingsSearch.items.first { $0.id == "workflows-beta" }!) }
+        c.openThread = { [weak self] env, threadId in
+            self?.closeUtilityPage()
+            self?.threads.open(ThreadId(threadId).scoped(to: env))
+        }
+        return c
+    }()
+    /// `useWorkflowEnvironmentIds().length > 0` (CommandPalette.tsx:527): a connected server has workflows on.
+    var workflowsReachable: Bool {
+        environments.environmentIds.contains { environments.session($0) != nil && threads.composer.config($0)?.settings.raw["workflowsEnabled"]?.boolValue == true }
+    }
+    /// A server's config changed; the page follows its Labs switch.
+    func workflowsConfigChanged() { if utilityKind == .workflows { workflowsPage.configChanged() } }
     /// `useIssuesSupported`: some connected server has the `issues` capability.
     var issuesSupported: Bool {
         let caps = threads.pullRequests.capabilities
@@ -171,8 +188,14 @@ final class SidebarCommands {
             let capability = pinned ? "threadPinReorder" : "threadActiveReorder"
             func writable(_ t: ThreadId) -> Bool { capabilities(t)?.contains(capability) == true }
             guard writable(id) else { return nil }
-            let keys = Dictionary((snapshot?.threads ?? []).compactMap { t in (pinned ? t.pinOrderKey : t.activeOrderKey).map { (t.id, $0) } },
+            var keys = Dictionary((snapshot?.threads ?? []).compactMap { t in (pinned ? t.pinOrderKey : t.activeOrderKey).map { (t.id, $0) } },
                                   uniquingKeysWith: { a, _ in a })
+            // `activeKeysById` (Sidebar.tsx:624-632 at 5258, #41885): every Active row has its sort key, implied when
+            // nobody arranged it, so a row from an offline machine is a bound and never a write.
+            if !pinned {
+                let active = Set(displayed(.active))
+                for t in snapshot?.threads ?? [] where active.contains(t.id) && keys[t.id] == nil { keys[t.id] = SidebarModel.activeThreadSortKey(t) }
+            }
             let assignments = PinOrderKey.assignments(order: order.filter { writable($0) || keys[$0] != nil }, keys: keys, moved: id)
             return assignments.allSatisfy { writable($0.id) } ? assignments : nil
         }
@@ -1262,7 +1285,7 @@ final class SidebarCommands {
 
     // MARK: Pull Requests and Usage
 
-    enum UtilityPage { case pullRequests, issues, usage }
+    enum UtilityPage { case pullRequests, issues, usage, workflows }
 
     /// The sidebar offers Issues once a connected server can list them (SidebarChrome.tsx:296).
     func syncIssuesEntry() { sidebar?.showsIssues = issuesSupported }
@@ -1300,9 +1323,10 @@ final class SidebarCommands {
             return
         }
         if let usageModal { recordUsageModalClose = false; usageModal.close(animated: false) }
-        let view: NSView = page == .issues ? issuesPage.container : pullRequestsPage.container
+        let view: NSView = page == .issues ? issuesPage.container : page == .workflows ? workflowsPage.page : pullRequestsPage.container
         if utilityKind == .pullRequests && page != .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .issues && page != .issues { issuesPage.didHide() }
+        if utilityKind == .workflows && page != .workflows { workflowsPage.didHide() }
         utilityPage?.removeFromSuperview()
         threads.panel.removeFromSuperview()
         layout.mainContent = view
@@ -1318,6 +1342,10 @@ final class SidebarCommands {
             issuesPage.didShow()
             window?.makeFirstResponder(issuesPage.container)
         }
+        if page == .workflows {
+            workflowsPage.didShow()
+            window?.makeFirstResponder(workflowsPage.page)
+        }
         onRouteChange?()
     }
 
@@ -1328,6 +1356,7 @@ final class SidebarCommands {
         guard let layout, let page = utilityPage else { return }
         if utilityKind == .pullRequests { pullRequestsPage.didHide() }
         if utilityKind == .issues { issuesPage.didHide() }
+        if utilityKind == .workflows { workflowsPage.didHide() }
         page.removeFromSuperview()
         utilityPage = nil
         utilityKind = nil

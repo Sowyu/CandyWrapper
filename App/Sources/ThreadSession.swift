@@ -1,4 +1,5 @@
 import AppKit
+import os
 import DesignSystem
 import Features
 import T3Client
@@ -30,6 +31,19 @@ final class ThreadSession {
     /// The store's sync status after each render (the composer's "Loading messages..." row).
     var onStatus: ((ThreadSyncStatus) -> Void)?
 
+    /// A linked environment's thread, read through `via`, the environment whose shell this session attaches to
+    /// (5258 client-runtime state/peerLinks.ts:75-101): `peerLinks.subscribeThread`, `threadHistoryPage` and
+    /// `threadItem` stand in for the thread's own calls, and nothing that would act on the thread is wired.
+    struct LinkedSource: Equatable {
+        let via: String
+        /// The linked environment the thread lives in.
+        let environmentId: String
+    }
+    private let linked: LinkedSource?
+    /// A linked read failed (the error) or a value arrived again (nil), for the pane's notice.
+    var onLinkedFailure: ((RPCClientError?) -> Void)?
+    private var linkedRetry: Task<Void, Never>?
+
     private let relay: ShellSession.ChangeRelay
     /// Streaming deltas reach the panel at most 30 times a second, also on 120 Hz screens: 60 a second
     /// cost 30% of a core against 26.5% at 30 on a heavy thread, with text still appearing as it
@@ -57,8 +71,10 @@ final class ThreadSession {
     /// The last update rendered, kept for `Retained.shown`.
     private var shown: ThreadUpdate?
 
-    init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?, retained: Retained? = nil, cache: ThreadCache? = nil) {
+    init(threadId: ThreadId, panel: ThreadPanelView, sidebar: SidebarContentView?, retained: Retained? = nil, cache: ThreadCache? = nil,
+         linked: LinkedSource? = nil) {
         self.threadId = threadId
+        self.linked = linked
         environmentId = threadId.environmentId ?? ""
         self.panel = panel
         self.sidebar = sidebar
@@ -97,6 +113,7 @@ final class ThreadSession {
     func attach(_ shell: ShellSession) {
         // Already streaming on this session: the supervisor resubscribes across reconnects itself.
         if shell === self.shell, subscription != nil { return }
+        if let linked { return attachLinked(shell, linked) }
         subscription?.cancel()
         historyLoad?.cancel()
         historyLoad = nil
@@ -145,6 +162,92 @@ final class ThreadSession {
         })
     }
 
+    /// `followLinkedThread` (5258 linkedThread.ts:283-453): every subscription starts from the linked environment's
+    /// snapshot, since `PeerLinkThreadInput` takes no resume cursor. An unreachable environment is asked again after
+    /// 15 s with what was read kept; any other failure ends the stream until Try again.
+    /// A resubscribe's snapshot holds only the latest turns, so the rows read before it come back by paging to the oldest
+    /// one again (`restoreThrough`, linkedThread.ts:318-367), the way T3 recovers a newer snapshot's window.
+    private func attachLinked(_ shell: ShellSession, _ linked: LinkedSource) {
+        subscription?.cancel()
+        historyLoad?.cancel()
+        historyLoad = nil
+        linkedRetry?.cancel()
+        linkedRetry = nil
+        self.shell = shell
+        let supervisor = shell.supervisor
+        if active {
+            panel?.model.turnItemLoader = Self.linkedTurnItemLoader(supervisor, linked: linked)
+        }
+        let store = self.store
+        let wireSubscription = UUID()
+        let input = PeerLinkRPC.threadInput(environmentId: linked.environmentId, threadId: threadId.localId)
+        // Set while a failure shows, so only the first value after it hops to the main actor to clear it.
+        let failed = OSAllocatedUnfairLock(initialState: false)
+        // The oldest row shown when this (re)subscribe started, until its snapshot lands.
+        let restoreThrough = OSAllocatedUnfairLock<TurnItemId?>(initialState: nil)
+        subscription = supervisor.subscribe(PeerLinkRPC.subscribeThread, payload: {
+            let oldest = await store.oldestShownItemId()
+            restoreThrough.withLock { $0 = oldest }
+            // Claims the store for this stream; the linked read itself takes no cursor.
+            _ = await store.subscribeInput(subscription: wireSubscription)
+            return input
+        }, handler: { [weak self] event in
+            switch event {
+            case .value(let json):
+                try await ThreadSession.applyWire(json, to: store, subscription: wireSubscription)
+                if Self.carriesSnapshot(json), let anchor = restoreThrough.withLock({ let a = $0; $0 = nil; return a }),
+                   await !store.shows(anchor) {
+                    await self?.restoreLinkedHistory(through: anchor)
+                }
+                if failed.withLock({ let was = $0; $0 = false; return was }) { await self?.linkedRead(nil) }
+            case .interrupted(let error):
+                failed.withLock { $0 = true }
+                await self?.linkedRead(error)
+            case .subscribed: break
+            }
+        })
+    }
+
+    /// Reports a linked read's outcome. A failure other than a transport loss stops the stream: unreachable asks
+    /// again after `LinkedThreads.retrySeconds`, anything else waits for `retryLinked`.
+    private func linkedRead(_ error: RPCClientError?) {
+        guard active else { return }
+        onLinkedFailure?(error)
+        guard let error, !error.isTransport else { return }
+        subscription?.cancel()
+        subscription = nil
+        guard LinkedThreads.isUnreachable(error.typedError) else { return }
+        linkedRetry = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(LinkedThreads.retrySeconds))
+            guard !Task.isCancelled else { return }
+            self?.retryLinked()
+        }
+    }
+
+    /// Try again (LinkedThreadPane.tsx:156-162): subscribes again now.
+    func retryLinked() {
+        guard active, let shell, linked != nil else { return }
+        subscription?.cancel()
+        subscription = nil
+        attach(shell)
+    }
+
+    /// `linkedThreadItemSource` (5258 state/linkedThreadView.ts:278-286): an expanded row reads its item in full through
+    /// the linking environment.
+    nonisolated static func linkedTurnItemLoader(_ supervisor: ConnectionSupervisor, linked: LinkedSource) -> ThreadViewModel.TurnItemLoader {
+        { input, wireType in
+            do {
+                let json = try await supervisor.request(PeerLinkRPC.threadItem,
+                                                        payload: PeerLinkRPC.itemInput(environmentId: linked.environmentId, threadId: input.threadId,
+                                                                                       itemId: input.itemId))
+                let result = try json.decode(as: GetTurnItemResult.self)
+                return TurnItemDetail.resolve(result, wireType: wireType)
+            } catch let error as RPCClientError {
+                throw DiffLoadError(error)
+            }
+        }
+    }
+
     /// The shell went away without a successor yet. The panel keeps the last state.
     func detach() {
         if let familyLease { shell?.releaseFamily(familyLease); self.familyLease = nil }
@@ -152,6 +255,8 @@ final class ThreadSession {
         subscription = nil
         historyLoad?.cancel()
         historyLoad = nil
+        linkedRetry?.cancel()
+        linkedRetry = nil
         shell = nil
     }
 
@@ -238,6 +343,7 @@ final class ThreadSession {
 
     private func loadEarlier(throughEntryId: String? = nil) {
         guard historyLoad == nil, let shell else { return }
+        if let linked { return loadEarlierLinked(shell, linked, throughEntryId: throughEntryId) }
         var http = shell.http
         // T3's history request timeout (RT/threadHistoryHttp.ts).
         http.timeout = 6
@@ -281,8 +387,79 @@ final class ThreadSession {
     /// Loads deferred work groups as an opened fold asks (`loadEarlier` with `workAnchorId`, threads.ts:727-860 at 4928,
     /// #26240): `view: "work"` pages from each anchor's cursor until the group is complete, each merged at its anchor.
     /// The anchors load side by side, like T3's `Promise.all` (MessagesTimeline.tsx:1815-1825). False when any failed.
+    /// `loadEarlier` of a linked thread (linkedThread.ts:298-304, 381-443): `peerLinks.threadHistoryPage` from the
+    /// snapshot's or the last page's cursor, paging on as a thread's own load does until a turn starts.
+    private func loadEarlierLinked(_ shell: ShellSession, _ linked: LinkedSource, throughEntryId: String?) {
+        let store = self.store, supervisor = shell.supervisor, local = threadId.localId
+        historyLoad = Task { [weak self] in
+            guard var request = await store.beginLoadEarlier(throughEntryId: throughEntryId) else {
+                if self?.store === store { self?.historyLoad = nil }; return
+            }
+            do {
+                while true {
+                    try Task.checkCancellation()
+                    let json = try await supervisor.request(PeerLinkRPC.threadHistoryPage,
+                                                            payload: PeerLinkRPC.historyInput(environmentId: linked.environmentId, threadId: local, cursor: request.cursor))
+                    let page = try json.decode(as: ThreadHistoryPage.self)
+                    try Task.checkCancellation()
+                    guard let next = await store.applyHistoryPage(page, requestCursor: request.cursor, throughEntryId: request.throughEntryId)
+                    else { break }
+                    request.cursor = next
+                }
+                self?.historyLoad = nil
+            } catch {
+                if Task.isCancelled {
+                    await store.cancelHistoryLoad(requestCursor: request.cursor)
+                    return
+                }
+                self?.historyLoad = nil
+                // LinkedThreadPane.tsx:174.
+                await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns. Try again.")
+            }
+        }
+    }
+
+    /// Whether a stream value, one item or a chunk of them, holds a snapshot.
+    nonisolated static func carriesSnapshot(_ json: JSONValue) -> Bool {
+        if case .array(let items) = json { return items.contains { $0["kind"]?.stringValue == "snapshot" } }
+        return json["kind"]?.stringValue == "snapshot"
+    }
+
+    /// Pages a linked thread back until `anchor` shows again, or its history runs out.
+    private func restoreLinkedHistory(through anchor: TurnItemId) {
+        guard historyLoad == nil, let shell, let linked else { return }
+        let store = self.store, supervisor = shell.supervisor, local = threadId.localId
+        historyLoad = Task { [weak self] in
+            var pages = 0
+            // ponytail: stops after 50 pages; a longer read before the reconnect comes back from Load earlier
+            while pages < 50, await !store.shows(anchor), var request = await store.beginLoadEarlier() {
+                do {
+                    while pages < 50 {
+                        pages += 1
+                        try Task.checkCancellation()
+                        let json = try await supervisor.request(PeerLinkRPC.threadHistoryPage,
+                                                                payload: PeerLinkRPC.historyInput(environmentId: linked.environmentId, threadId: local, cursor: request.cursor))
+                        let page = try json.decode(as: ThreadHistoryPage.self)
+                        try Task.checkCancellation()
+                        guard let next = await store.applyHistoryPage(page, requestCursor: request.cursor) else { break }
+                        request.cursor = next
+                    }
+                } catch {
+                    if Task.isCancelled {
+                        await store.cancelHistoryLoad(requestCursor: request.cursor)
+                        return
+                    }
+                    await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns. Try again.")
+                    break
+                }
+            }
+            self?.historyLoad = nil
+        }
+    }
+
     private func loadDeferredWork(_ anchors: [String]) async -> Bool {
-        guard let shell else { return false }
+        // ponytail: `PeerLinkThreadHistoryInput` has no `view`, so a linked thread's folded work stays folded; read it whole if T3 adds the field
+        guard let shell, linked == nil else { return false }
         var http = shell.http
         http.timeout = 6
         return await Self.loadDeferredWork(anchors, store: store, http: http, token: shell.token)
@@ -486,6 +663,12 @@ final class ThreadController {
     private var checkoutStatus: SidebarCheckoutStatus!
     private(set) var lineage: ThreadLineageController!
     private(set) var sideChats: SideChatController!
+    private(set) var linkedThreads: LinkedThreadController!
+    /// `peerLinks.names` per environment, as the open thread's links read them (5258 state/peerLinks.ts:48-52).
+    private var linkNames: [String: (at: Date, labels: [String: String])] = [:]
+    private var readingLinkNames: Set<String> = []
+    /// Machines a link named that the names lacked, each asked about once (`refreshNamesLacking`, peerLinks.ts:103-121).
+    private var askedLinkNames: Set<String> = []
     private var issueStates: SidebarIssueStates?
     /// Signed inline URLs of HTML renders and MCP Apps, by attachment id.
     private var webAssets: [String: (url: URL, expires: Date)] = [:]
@@ -574,7 +757,7 @@ final class ThreadController {
         clones = ProjectCloneController(panel: panel, environments: environments, composer: composer)
         addToMachine = AddProjectToMachineController(panel: panel, sidebar: sidebar, environments: environments, composer: composer, clones: clones)
         composer.onTargetChange = { [weak self] in
-            self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
+            self?.hideNoActiveThread(); self?.linkedThreads?.closePage(); self?.syncUnavailable(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
             self?.sideChats?.sync()
             self?.onRouteChange?()
         }
@@ -628,6 +811,9 @@ final class ThreadController {
         lineage = ThreadLineageController(panel: panel)
         sideChats = SideChatController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         sideChats.parentId = { [weak self] in self?.openThreadId }
+        linkedThreads = LinkedThreadController(panel: panel, environments: environments)
+        linkedThreads.openConnected = { [weak self] id in self?.open(id) }
+        linkedThreads.addWithCode = { [weak self] host in self?.addEnvironment?(host) }
         gallery = ThreadImageGalleryController(pill: panel.header.pill)
         gallery.onOpen = { [weak self] in self?.readSubagentCosts() }
         gallery.onOpenInThread = { [weak self] image in
@@ -769,6 +955,9 @@ final class ThreadController {
             guard let self, let label = environments.label(id) else { return nil }
             return .init(label: label, machine: environments.machine(id) ?? "server")
         }
+        // MarkdownThreadLink.tsx:46-58 at 5258: a link to a machine the thread's environment links to reads through it.
+        panel.model.linkedEnvironmentLabel = { [weak self] env in self?.linkedLabel(env) }
+        panel.model.onOpenLinkedThread = { [weak self] target in self?.openLinkedThread(target) }
         panel.model.linkedThread = { [weak self, weak sidebar] local in
             guard let self, let env = self.openThreadId?.environmentId, let snapshot = sidebar?.snapshot else { return nil }
             guard let link = ThreadLink(href: local.rawValue) ?? ThreadLink(href: "t3-thread://v1/\(local.rawValue)") else { return nil }
@@ -805,6 +994,13 @@ final class ThreadController {
                 }
             }
             if !(shell.pullRequests ?? []).isEmpty { card.pullRequests = SidebarPullRequestBadge(shell) }
+            return card
+        }
+        // A composer thread chip shows the same card, with the warning when this machine's agent can't read it.
+        ComposerChipLook.threadHoverCard = { record, unreadable in
+            guard let env = record["environmentId"]?.stringValue, let local = record["threadId"]?.stringValue,
+                  var card = MarkdownView.threadHoverCard?("t3-thread://v2/\(env)/\(local)") else { return nil }
+            card.unreadable = unreadable
             return card
         }
         panel.model.onOpenScheduledTask = { [weak self] taskId in
@@ -1185,7 +1381,7 @@ final class ThreadController {
         environments.onSessionChange = { [weak self] env in self?.sessionChanged(env) }
         environments.onShell = { [weak self] snapshot in self?.shellChanged(snapshot) }
         environments.onRemove = { [weak self] env in self?.environmentRemoved(env) }
-        environments.observe { [weak self] in self?.updateEnvironmentBanner() }
+        environments.observe { [weak self] in self?.updateEnvironmentBanner(); self?.syncUnavailable() }
         serverUpdates.observe { [weak self] in self?.updateEnvironmentBanner() }
         serverUpdates.continueThreads = { [weak composer] env in composer?.config(env)?.settings.raw["continueThreadsAfterServerUpdate"]?.boolValue == true }
         panel.onServerUpdateAction = { [weak self] index in self?.serverUpdateAction(index) }
@@ -1290,6 +1486,7 @@ final class ThreadController {
         git.sessionChanged(environmentId)
         browser.sessionChanged(environmentId)
         devices.sync()
+        linkedThreads.sync()
         guard let session, session.environmentId == environmentId else { return }
         if let shell = environments.session(environmentId) { session.attach(shell) } else { session.detach() }
     }
@@ -1319,6 +1516,7 @@ final class ThreadController {
         OpenTiming.begin(id.rawValue)
         ImageTiming.mark("open", id.rawValue)
         hideNoActiveThread()
+        linkedThreads?.closePage()
         let previousEnvironment = panel.isDraft ? nil : session?.environmentId
         session?.end()
         setCost(nil)
@@ -1373,6 +1571,7 @@ final class ThreadController {
         terminal.show(id)
         scripts.show(id)
         updateEnvironmentBanner()
+        syncUnavailable()
         if openDiff {
             openDiff = false
             panel.opensChangedTurnOnLoad = true
@@ -1905,6 +2104,64 @@ final class ThreadController {
         view.autoresizingMask = [.width, .height]
         return view
     }()
+    /// `openLinkedThreadRead` (5258 lib/sideChatPane.ts:93-113): a linked thread opens as a right panel tab, or on the
+    /// main screen for the "Main view" setting, a Cmd-click or a middle click.
+    private func openLinkedThread(_ target: LinkedThreadSurfaceTarget) {
+        let event = NSApp.currentEvent
+        let intent = SideThreadOpen.intent(command: event?.modifierFlags.contains(.command) == true,
+                                           middleButton: event?.type == .otherMouseUp && event?.buttonNumber == 2)
+        let place = SideThreadOpen.resolve(preference: ClientSettingsStore.shared.current.string("sideThreadOpenTarget"), intent: intent,
+                                           panelAvailable: openThreadId != nil)
+        if place == .panel {
+            panel.mutatePanel { $0.openLinkedThread(target); return [] }
+            return
+        }
+        // LinkedThreadPage.tsx:28-39: once this client is connected to the thread's own environment, it opens there.
+        if environments.session(target.environmentId) != nil, environments.hasShell(target.environmentId) {
+            open(ThreadId(target.threadId).scoped(to: target.environmentId))
+            return
+        }
+        // The `/linked/...` route leaves the thread: no thread is active, and the page is all that streams.
+        session?.end()
+        session = nil
+        setCost(nil)
+        lineage.update(threadId: nil, projection: nil)
+        terminal.show(nil)
+        scripts.show(nil)
+        files.show(nil)
+        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        sidebar?.state.activeThreadId = nil
+        onOpenThreadChange?()
+        linkedThreads.showPage(target, over: panel)
+    }
+
+    /// `UnreachableEnvironmentState` over the thread panel (5258 ThreadRouteView.tsx:219-220, 250-268).
+    private(set) lazy var threadUnavailable: ThreadUnavailableStateView = {
+        let view = ThreadUnavailableStateView()
+        view.autoresizingMask = [.width, .height]
+        view.onOpenEnvironments = { [weak self] in self?.openEnvironments?() }
+        return view
+    }()
+    /// Settings > Connections with the add dialog, its address filled in when one is known (Enter code).
+    var addEnvironment: ((String?) -> Void)?
+    /// Settings > Connections, where T3's Open Environments goes (`/settings/connections`).
+    var openEnvironments: (() -> Void)?
+    /// Shows the unavailable page while the open thread's environment has no enabled entry, and takes it down when one
+    /// comes back (`environmentUnreachableAtom` is reactive in T3); the session attaches when that environment connects.
+    private func syncUnavailable() {
+        let id = panel.isDraft ? nil : session?.threadId
+        let unreachable = ThreadEnvironmentReach.unreachable(environmentId: id?.environmentId, catalogReady: environments.catalogReady,
+                                                             primaryId: environments.primaryId,
+                                                             enabledIds: Set(environments.saved.filter(\.enabled).map(\.environmentId)))
+        if unreachable {
+            guard threadUnavailable.superview !== panel else { return }
+            threadUnavailable.frame = panel.bounds
+            panel.addSubview(threadUnavailable)
+        } else if threadUnavailable.superview != nil {
+            threadUnavailable.removeFromSuperview()
+        }
+    }
+
     /// The open thread once a shell listed it, so a thread launched a moment ago is not taken for a deleted one.
     private var seenOpenThread: ThreadId?
 
@@ -2069,7 +2326,32 @@ extension ThreadController {
     /// `MarkdownThreadLink` (4928 chat/MarkdownThreadLink.tsx:20-71): a link to a thread this client hasn't loaded
     /// asks its server for the title and project with `orchestration.getThreadLinkMetadata`, once per thread, where
     /// the server sets `threadLinkMetadata`. Until the answer lands the chip shows the link's own text.
-    func linkMetadataThread(_ link: ThreadLink, env: String, projects: [ProjectShell]) -> MarkdownContextChips.LinkedThread? {
+        /// The name the open thread's environment knows `env` by, when it links to it. Reads `peerLinks.names` once it is
+    /// 10 s old, and once more when a link names a machine the names lack; a server without `linkThreadStream` has none.
+    private func linkedLabel(_ env: String) -> String? {
+        guard let via = openThreadId?.environmentId, env != via,
+              composer.config(via)?.capabilities.contains(PeerLinkRPC.threadStreamCapability) == true else { return nil }
+        let names = linkNames[via]
+        let label = names?.labels[env]
+        let stale = names.map { Date().timeIntervalSince($0.at) > 10 } ?? true
+        let lacking = names != nil && label == nil && askedLinkNames.insert(via + "\u{0}" + env).inserted
+        if stale || lacking, !readingLinkNames.contains(via) {
+            readingLinkNames.insert(via)
+            Task { [weak self] in
+                guard let self else { return }
+                let json = try? await self.environments.request(via, PeerLinkRPC.names, .object([:]))
+                self.readingLinkNames.remove(via)
+                let links = (try? json?["links"]?.decode(as: [PeerLinkName].self)) ?? []
+                let labels = Dictionary(links.map { ($0.environmentId, $0.label) }, uniquingKeysWith: { a, _ in a })
+                let changed = self.linkNames[via]?.labels != labels
+                self.linkNames[via] = (Date(), labels)
+                if changed { self.panel.model.linkedThreadsChanged() }
+            }
+        }
+        return label
+    }
+
+func linkMetadataThread(_ link: ThreadLink, env: String, projects: [ProjectShell]) -> MarkdownContextChips.LinkedThread? {
         let owner = link.environmentId ?? env
         let ids = [link.threadId, link.percentDecoded?.threadId].compactMap { $0 }
         for id in ids {
@@ -2096,9 +2378,9 @@ extension ThreadController {
     }
 }
 
-/// The sidebar issue badge's live state (`useLinkedIssueDetail`, SidebarThreadRow.tsx:1137-1142 at 4928): `issues.detail`
-/// for each thread with one linked issue, where the server reads issues. Read again on a shell change five minutes on.
-// ponytail: reads every single-issue row, not only rows on screen as T3's lease does; lease visible rows if lists grow
+/// The sidebar issue badge's live state (`useSidebarLinkedIssueState`, state/issues.ts at 5258, #39351): `issues.detail`
+/// for each issue a thread links, where the server reads issues. Read again on a shell change five minutes on.
+// ponytail: reads every linked issue of every row, not only rows on screen as T3's lease does; lease visible rows if lists grow
 @MainActor
 final class SidebarIssueStates {
     private weak var sidebar: SidebarContentView?
@@ -2116,20 +2398,23 @@ final class SidebarIssueStates {
     func sync(_ snapshot: ShellSnapshot) {
         let now = Date()
         for thread in snapshot.threads {
-            guard let issues = thread.issues?.values, issues.count == 1, let env = thread.id.environmentId,
+            guard let issues = thread.issues?.values, !issues.isEmpty, let env = thread.id.environmentId,
                   environments.session(env) != nil, capabilities.has(env, "issues") else { continue }
-            let link = issues[0]
-            let key = SidebarIssueBadge.stateKey(environmentId: env, link)
-            guard !inFlight.contains(key), readAt[key].map({ now.timeIntervalSince($0) > 300 }) ?? true else { continue }
-            inFlight.insert(key)
-            let ref = IssueRef(projectId: link.projectId.rawValue, tracker: link.tracker, host: link.host, scope: link.scope, key: link.key)
-            Task { [weak self, environments] in
-                let detail = try? await environments.request(env, "issues.detail", .object(ref.json)).decode(as: IssueDetail.self)
-                guard let self else { return }
-                inFlight.remove(key)
-                readAt[key] = Date()
-                if let state = detail?.state, sidebar?.state.issueStates[key] != state { sidebar?.state.issueStates[key] = state }
-            }
+            for link in issues { read(link, env: env, now: now) }
+        }
+    }
+
+    private func read(_ link: ThreadIssueLink, env: String, now: Date) {
+        let key = SidebarIssueBadge.stateKey(environmentId: env, link)
+        guard !inFlight.contains(key), readAt[key].map({ now.timeIntervalSince($0) > 300 }) ?? true else { return }
+        inFlight.insert(key)
+        let ref = IssueRef(projectId: link.projectId.rawValue, tracker: link.tracker, host: link.host, scope: link.scope, key: link.key)
+        Task { [weak self, environments] in
+            let detail = try? await environments.request(env, "issues.detail", .object(ref.json)).decode(as: IssueDetail.self)
+            guard let self else { return }
+            inFlight.remove(key)
+            readAt[key] = Date()
+            if let state = detail?.state, sidebar?.state.issueStates[key] != state { sidebar?.state.issueStates[key] = state }
         }
     }
 }

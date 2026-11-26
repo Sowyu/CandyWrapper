@@ -6,9 +6,10 @@ import T3Store
 /// The right panel's surface for a side chat tab. The app puts the open side chat's pane in it while the
 /// tab shows and takes it out when the tab hides, so a hidden side chat holds nothing.
 public final class SideChatHostView: DSView {
-    public private(set) var pane: SideChatPaneView?
+    /// A side chat's pane, or a linked thread's read-only pane (`LinkedThreadPaneView`).
+    public private(set) var pane: NSView?
 
-    public func show(_ pane: SideChatPaneView?) {
+    public func show(_ pane: NSView?) {
         guard pane !== self.pane else { return }
         self.pane?.removeFromSuperview()
         self.pane = pane

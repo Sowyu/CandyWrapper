@@ -108,7 +108,9 @@ extension SettingsController {
             self.refreshPages()
         }
         clientObserver = ClientSettingsStore.shared.observe { [weak self] _ in self?.refreshPages() }
-        composer?.onConfigChange = { [weak self] _ in self?.refreshPages() }
+        // Chained: the Workflows page also follows config changes.
+        let configChange = composer?.onConfigChange
+        composer?.onConfigChange = { [weak self] env in configChange?(env); self?.refreshPages() }
         themeObserver = NotificationCenter.default.addObserver(forName: ThemeLibrary.didChange, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.themeChanged() }
         }
@@ -132,6 +134,11 @@ extension SettingsController {
         guard section.isAvailable else { return }
         // A deep link while Settings is closed (the sidebar's Automations) opens it on that page.
         guard isOpen else { self.section = section; open(); return }
+        // AppRouteModal.tsx:39-54 (#42085): a page change, such as Navigation: Back, ends editing in a text field
+        // first, so a row that commits on blur keeps what was typed. Other controls keep their focus.
+        if section != self.section, let editor = window?.firstResponder as? NSTextView, editor.isDescendant(of: page) {
+            window?.makeFirstResponder(nil)
+        }
 
         ditherSection = nil
         page.ditherHeading = nil
@@ -152,6 +159,11 @@ extension SettingsController {
         default: view = extraPage(section)
         }
         if page.page !== view { page.page = view; page.scrollToTop() }
+        if section == .access, !accessShown { accessDidShow() }
+        accessShown = section == .access
+        // The link lists load only while Environments shows; a refresh before the click skipped them, and
+        // nothing refreshes again on a quiet server, so the page sat on "Loading linked environments…".
+        if section == .connections { loadPeerLinks() }
         refreshPages()
         extraPages[section]?.didShow()
         updateLinkPoll()

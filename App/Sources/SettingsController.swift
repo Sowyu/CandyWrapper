@@ -78,6 +78,12 @@ final class SettingsController {
     var linkBusy = false
     var linkError: String?
     var access = AuthAccessSnapshot()
+    /// The Access page's picked environment (`selectedEnvironmentId`); nil follows the primary.
+    var accessSelection: String?
+    /// The environment the next visit to Access opens on, like T3's `?machine=` link.
+    var pendingAccessMachine: String?
+    /// Access is the page on screen; leaving it and coming back starts from the link again.
+    var accessShown = false
     var accessLoaded = false
     var accessError: String?
     var accessTask: Task<Void, Never>?
@@ -102,6 +108,8 @@ final class SettingsController {
     var mcpWizard: McpWizardState?
     /// "host/peer" keys whose Forget is in flight.
     var forgettingLinks: Set<String> = []
+    /// Refreshes an open "Link several" dialog when a links list lands.
+    var linkSeveralSync: (@MainActor () -> Void)?
     /// The open Add Environment form, for errors and the Adding state.
     private weak var form: AddEnvironmentFormView?
 
@@ -129,6 +137,10 @@ final class SettingsController {
         connections.onHeightChange = { [weak self] in self?.page.needsLayout = true }
         var actions = ConnectionsActions()
         actions.addEnvironment = { [weak self] in self?.presentAdd(routeTarget: nil) }
+        actions.mapLink = { [weak self] source, target, ticked in self?.mapLink(source, target, ticked: ticked) }
+        actions.linkSeveral = { [weak self] source, ids in self?.presentLinkSeveral(source, ids) }
+        actions.mapLinkOne = { [weak self] source, target in self?.mapLinkOne(source, target) }
+        actions.addEnvironmentAt = { [weak self] host in self?.presentAdd(routeTarget: nil, initialHost: host) }
         actions.addRoute = { [weak self] id in self?.presentAdd(routeTarget: id) }
         actions.retryNow = { [weak self] id in self?.environments.reconnect(id) }
         actions.setEnabled = { [weak self] id, on in self?.setEnabled(id, on) }
@@ -146,6 +158,7 @@ final class SettingsController {
         actions.addCloud = { [weak t3] id in t3?.add(id) }
         actions.retryCloud = { [weak t3] in t3?.refreshMachines() }
         actions.setHostSwitch = { [weak self] id, on in self?.setHostSwitch(id, on) }
+        actions.pickAccessEnvironment = { [weak self] id in self?.pickAccessEnvironment(id) }
         actions.setIcon = { [weak self] id, kind in self?.setIcon(id, kind) }
         actions.reorderRoutes = { [weak self] id, routes in self?.reorderRoutes(id, routes) }
         actions.createPairingLink = { [weak self] in self?.presentCreateLink() }
@@ -272,7 +285,7 @@ final class SettingsController {
 
     /// The 1 s tick: rebuilds only the access section and updates the page only when it changed.
     func refreshAccess() {
-        guard isOpen, environments.primaryId != nil else { return }
+        guard isOpen, accessId != nil else { return }
         let access = accessModel()
         guard access != connections.model.access else { return }
         var model = connections.model
@@ -289,7 +302,7 @@ final class SettingsController {
         nav.avatar.initials = t3.profile?.initials ?? t3.signedIn?.identifier?.first.map { String($0).uppercased() } ?? ""
         loadHosts()
         loadPeerLinks()
-        connections.primaryId = environments.primaryId
+        connections.primaryId = accessId
         connections.set(model())
         refreshPages()
         page.pageChanged()
@@ -300,11 +313,13 @@ final class SettingsController {
 
     private func model() -> ConnectionsPageModel {
         var m = ConnectionsPageModel()
-        if let id = environments.primaryId {
-            let d = primaryDescriptor?.environmentId == id ? primaryDescriptor : nil
+        if let id = accessId {
+            let d = primaryDescriptor?.environmentId == id ? primaryDescriptor : hosts[id]?.descriptor
             m.thisMachine = machineModel(id, descriptor: d)
             m.access = accessModel()
             m.connectDevices = connectDevicesModel()
+            let candidates = accessCandidates
+            if candidates.count > 1 { m.accessPicker = .init(candidates: candidates, selected: id) }
         }
         m.environments = environments.saved.map { r in
             let state = environments.state(r.environmentId)
@@ -370,6 +385,7 @@ final class SettingsController {
         m.cloud = t3.cloudModel(primaryId: environments.primaryId)
         m.loadBalancing = loadBalancingModel(primaryLabel: m.thisMachine?.label)
         m.linkedEnvironments = linkedEnvironmentsModel()
+        m.map = environmentsMapModel()
         return m
     }
 
@@ -448,10 +464,11 @@ final class SettingsController {
         toasts?.show(ToastView(title: title, message: message, kind: kind))
     }
 
-    func presentAdd(routeTarget: String?) {
+    func presentAdd(routeTarget: String?, initialHost: String? = nil) {
         guard let window, modal == nil else { return }
         let targetLabel = routeTarget.flatMap { environments.label($0) }
         let (dialog, form) = AddEnvironmentDialog.make(routeTarget: targetLabel)
+        if let initialHost { form.host.text = initialHost }
         form.splitPairingURL = { Pairing.splitPairingURL($0) }
         form.onSubmit = { [weak self, weak form] host, code in
             guard let self, let form else { return }

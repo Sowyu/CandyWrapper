@@ -66,6 +66,9 @@ final class RightPanelView: DSView {
     /// The side chat the panel shows now, nil when none does; called when it changes.
     public var onSideChatShown: ((ThreadId?) -> Void)?
     private var shownSideChat: ThreadId?
+    /// The linked thread tab showing in `sideChatHost`, read only (5258 LinkedThreadPane.tsx).
+    public var onLinkedThreadShown: ((LinkedThreadSurfaceTarget?) -> Void)?
+    private var shownLinkedThread: String?
     /// `sideChatsOffered` and why one can't start now (ChatView.tsx:2847-2885): the + menu's Side chat row.
     public var sideChatOffered = false { didSet { syncLauncherSideChat() } }
     public var sideChatDisabledReason: String? { didSet { syncLauncherSideChat() } }
@@ -179,8 +182,12 @@ final class RightPanelView: DSView {
         if active?.kind == .terminal { if terminal.superview !== self { addSubview(terminal) } } else { terminal.removeFromSuperview() }
         if active?.kind == .device { if device.superview !== self { addSubview(device) } } else { device.removeFromSuperview(); device.viewer.clear() }
         let sideChat = state.isOpen ? active?.sideChatThreadId : nil
-        if sideChat != nil { if sideChatHost.superview !== self { addSubview(sideChatHost, positioned: .below, relativeTo: strip) } } else { sideChatHost.removeFromSuperview() }
+        let linked = state.isOpen ? active?.linkedThread : nil
+        if sideChat != nil || linked != nil { if sideChatHost.superview !== self { addSubview(sideChatHost, positioned: .below, relativeTo: strip) } } else { sideChatHost.removeFromSuperview() }
+        // The old pane goes before the new one comes, so a switch between the two kinds never holds both.
+        if linked?.surfaceId != shownLinkedThread, linked == nil { shownLinkedThread = nil; onLinkedThreadShown?(nil) }
         if sideChat != shownSideChat { shownSideChat = sideChat; onSideChatShown?(sideChat) }
+        if linked?.surfaceId != shownLinkedThread { shownLinkedThread = linked?.surfaceId; onLinkedThreadShown?(linked) }
         needsLayout = true
     }
 
@@ -228,6 +235,8 @@ final class RightPanelView: DSView {
         case .browser: IconView(name: .globe2, size: 12, strokeColor: Themed.color(\.foreground))
         case .terminal: IconView(name: .terminalSquare, size: 12, strokeColor: Themed.color(\.foreground))
         case .sideChat: IconView(name: .messagesSquare, size: 12, strokeColor: Themed.color(\.foreground))
+        // RightPanelTabs.tsx:726-727 at 5258.
+        case .linkedThread: IconView(name: .messagesSquare, size: 12, strokeColor: Themed.color(\.foreground))
         }
     }
 

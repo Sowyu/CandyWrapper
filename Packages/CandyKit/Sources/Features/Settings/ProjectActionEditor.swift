@@ -105,6 +105,7 @@ final class ProjectActionForm: DSView {
         super.init(frame: NSRect(x: 0, y: 0, width: 400, height: 10))
         name.text = initial.name
         command.text = initial.command
+        command.ligatures = false // `data-script-command-input` (#42352, projectScriptEditor.tsx:522, index.css:1746)
         previewUrl.text = initial.previewUrl ?? ""
         keybinding.value = initial.keybinding ?? ""
         keybinding.emptyText = "Press shortcut"

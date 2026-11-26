@@ -267,6 +267,17 @@ final class McpAppRowView: TimelineRowView {
             self.note.text = "The \(self.entry?.app.server ?? "") app left its page and was stopped"
             self.note.isHidden = false
         }
+        // McpAppFrame.tsx:453-463 at 5258 (#42504): only a server that binds the app to its document gets a bridge.
+        frameView.onBridgeMissing = { [weak self] in
+            guard let self else { return }
+            self.bridge?.dispose()
+            self.bridge = nil
+            self.navigatedAway = true
+            self.expand.isHidden = true
+            self.frameView.release()
+            self.note.text = "The \(self.entry?.app.server ?? "") app needs a newer T3 Code server on this environment. Update the server to use it."
+            self.note.isHidden = false
+        }
         frameView.onEvicted = { [weak self] in
             _ = self?.setDisplayMode("inline")
             self?.bridge?.dispose(); self?.bridge = nil
@@ -400,7 +411,7 @@ final class McpAppRowView: TimelineRowView {
         self.bridge = bridge
         let dark = effectiveAppearance.isDark
         frameView.activate(.init(src: McpAppHostBridge.withColorScheme(url, dark: dark), title: "\(e.app.server) app",
-                                 allow: e.app.allowAttribute, dark: dark))
+                                 allow: e.app.allowAttribute, dark: dark, documentBound: true))
         // The tool's definition (for `toolInfo` at initialize) and the stored call (arguments and result).
         Task { [weak self] in
             var info = target; info["name"] = .string(e.app.tool)

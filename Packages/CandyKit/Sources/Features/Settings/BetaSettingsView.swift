@@ -29,6 +29,7 @@ public final class BetaSettingsView: SettingsPageBase {
     ]
     private var unsubscribe: [() -> Void] = []
 
+    static let deviceReadOnlyReason = "Saved on this device. Select All projects to change it."
     static let guestDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Sharing & access. Turning it off stops every guest link."
     static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While off, nothing new starts over a link; running tasks finish."
     static let guestSignedOutDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Sign in to T3 Connect to use guest links."
@@ -43,9 +44,12 @@ public final class BetaSettingsView: SettingsPageBase {
         let multiline = clientSwitch("boring-sidebar-multiline",
             "In the boring sidebar, show folder threads on two lines: the title, then the branch, pull request, and agent.",
             key: "boringSidebarMultilineRows", label: "Two-line folder rows", title: "Two-line folder rows")
-        binder.add { [weak self, weak multiline] in
-            guard let self, let multiline else { return }
+        binder.add { [weak self, weak folders, weak multiline] in
+            guard let self, let folders, let multiline else { return }
             multiline.isHidden = !self.context.client.bool("boringSidebarEnabled")
+            // `devicePreference` (#42884, LabsSettingsPanel.tsx:64, :93, settingsLayout.tsx:384, :476-477).
+            let inert = self.context.scope.isProjectScope ? Self.deviceReadOnlyReason : nil
+            for r in [folders, multiline] where r.inertReason != inert { r.inertReason = inert }
         }
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"
@@ -84,9 +88,10 @@ public final class BetaSettingsView: SettingsPageBase {
             guard let self, let suggestions else { return }
             suggestions.isHidden = !self.context.scope.allStore("promptSuggestionsEnabled")
         }
+        let (workflows, skippedRuns) = workflowRows()
         let feedback = agentFeedbackRow()
         // #33131 removed the Legacy features section: plan mode and the context window indicator.
-        items = [section("beta", "Beta", [folders, multiline, guest, linked, suggestions, feedback]), candySection()]
+        items = [section("beta", "Beta", [folders, multiline, guest, linked, workflows, skippedRuns, suggestions, feedback]), candySection()]
         binder.refresh()
     }
 
@@ -116,6 +121,43 @@ public final class BetaSettingsView: SettingsPageBase {
                 : modes.first { $0.value == mode }?.detail ?? modes[0].detail
         }
         return row
+    }
+
+    static let workflowsDetail = "Run multi-step workflows from files in the workflows folder of this server's T3 home. Open them from the command palette. While off, nothing in that folder runs; runs wait until it is on again."
+
+    /// `WorkflowsRow` and `WorkflowSkippedRunsRow` (5258 LabsSettingsPanel.tsx:212-290, e414cfd4be #38882, c6162da7ec
+    /// #42353). Servers before 5258 don't store the switch, so it waits for one that does; the number shows only
+    /// while workflows are on.
+    private func workflowRows() -> (SettingsRowView, SettingsRowView) {
+        let workflows = serverSwitch("workflows-beta", Self.workflowsDetail, key: "workflowsEnabled", reset: nil, label: "Workflows")
+        // A plain `w-24` field: T3's `NumberField` here has no steppers, and commits on Enter or blur.
+        let field = InputView(placeholder: "", text: "", size: .sm)
+        field.frame.size = NSSize(width: 96, height: 28)
+        field.setAccessibilityLabel("Skipped runs kept")
+        let kept = row("workflow-skipped-runs",
+                       detail: "How many skipped runs each workflow keeps in its history. Older skipped runs are deleted; runs that did something are always kept.",
+                       control: field)
+        _ = bindServerRow(kept, keys: ["workflowSkippedRunsKept"], reset: "skipped runs kept")
+        field.onCommit = { [weak self, weak field] text in
+            guard let self else { return }
+            let mixed = self.context.scope.isMixed(["workflowSkippedRunsKept"])
+            if let n = Int(text.trimmingCharacters(in: .whitespaces)) {
+                let value = min(max(n, 0), 10_000)
+                if mixed || self.server["workflowSkippedRunsKept"].intValue != value {
+                    self.context.patchServer(["workflowSkippedRunsKept": .number(Double(value))])
+                }
+            }
+            field?.text = mixed ? "" : self.server["workflowSkippedRunsKept"].intValue.map(String.init) ?? "500"
+        }
+        binder.add { [weak self, weak workflows, weak kept, weak field] in
+            guard let self, let workflows, let kept, let field else { return }
+            workflows.isHidden = !self.context.scope.allStore("workflowsEnabled")
+            kept.isHidden = workflows.isHidden || !self.server.bool("workflowsEnabled")
+            let mixed = self.context.scope.isMixed(["workflowSkippedRunsKept"])
+            field.placeholder = mixed ? "Mixed" : ""
+            if !field.state.focused { field.text = mixed ? "" : self.server["workflowSkippedRunsKept"].intValue.map(String.init) ?? "500" }
+        }
+        return (workflows, kept)
     }
 
     private func candySection() -> SettingsSectionView {

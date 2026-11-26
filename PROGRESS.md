@@ -505,6 +505,7 @@ The code marks known shortcuts with `// ponytail:`, each naming when to fix it (
 
 Leave these alone during side-by-side checks.
 
+- The Welcome page's last line and Settings > About's privacy row say CandyWrapper sends no usage data and starts its servers with T3's telemetry off. T3's own lines say T3 Code collects anonymous usage data, which is false here since 2026-11-25 (docs/decisions.md).
 - Redesign's Agent images card and its full gallery (⇧⌘I, ⌥⌘I) are CandyWrapper's own. T3 has no image gallery, and the default themes and Glass show neither.
 - Hovering an image in a thread shows no path or URL tooltip, at the user's request (2026-11-21): the viewed-images row, open tool rows, images in replies and the Redesign gallery. T3 shows the file path or URL in a code tooltip (MediaActions.tsx:248-276 at 4928). Right-click still copies and reveals the file, and each image keeps its accessibility label.
 - The sidebar title is the candy glyph and "Wrapper", and clicking it goes home.

@@ -1,0 +1,20 @@
+#!/bin/zsh
+# Runs T3's own environmentsMap.logic.ts under Node and writes the layouts EnvironmentsMapLogicTests
+# compares the Swift port with. Usage: scripts/gen-environments-map-golden [t3 source root]
+set -euo pipefail
+repo=${0:A:h:h}
+src=${1:-/tmp/t3code-5258}
+logic=$src/apps/web/src/components/settings/environmentsMap.logic.ts
+work=$(mktemp -d)
+trap 'rm -rf $work' EXIT
+cp $repo/fixtures/environments-map/gen.ts $repo/fixtures/environments-map/stubs.ts $work/
+{
+  print 'import { linkBackOffer, peerLinkHealth, AuthMcpClientAccess } from "./stubs.ts";'
+  print 'type EnvironmentId = string; type EnvironmentMachineKind = string; type PeerLinkSummary = any; type PeerLinkHealth = any;'
+  print 'type ConnectionRouteKind = string; type EnvironmentConnectionPhase = string;'
+  print 'declare namespace DateTime { type Utc = any }'
+  # Drop T3's import block; the stubs above stand in for it.
+  awk '/^export const FLEET_CLIENT_NODE_ID/{on=1} on' $logic
+} > $work/logic.ts
+node $work/gen.ts > $repo/fixtures/environments-map/5258-layouts.json
+print "wrote fixtures/environments-map/5258-layouts.json"

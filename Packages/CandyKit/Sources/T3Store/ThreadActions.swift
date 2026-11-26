@@ -300,9 +300,13 @@ public struct OptimisticThreadOverlay: Sendable {
 /// Fractional keys for the pinned block (client-runtime state/threadSort.ts:185-231).
 public enum PinOrderKey {
     static let digits = Array("abcdefghijklmnopqrstuvwxyz")
+    /// `LEADING_ORDER_TIER` (packages/shared/src/pinOrderKey.ts:8 at 5258, #41885): a tier that sorts before every
+    /// plain key, which the Active section's implied keys use.
+    public static let leadingTier = "0"
 
     static func isValid(_ key: String) -> Bool {
-        !key.isEmpty && key.allSatisfy { digits.contains($0) } && key.last != digits[0]
+        let key = key.hasPrefix(leadingTier) ? String(key.dropFirst(leadingTier.count)) : key
+        return !key.isEmpty && key.allSatisfy { digits.contains($0) } && key.last != digits[0]
     }
 
     static func midpoint(_ a: [Character], _ b: [Character]) -> [Character] {
@@ -326,6 +330,10 @@ public enum PinOrderKey {
         if !a.isEmpty && !isValid(a) { return nil }
         if !b.isEmpty && !isValid(b) { return nil }
         if !b.isEmpty && a >= b { return nil }
+        // pinOrderKey.ts:49-52: a key above an implied key stays in its tier.
+        let tier = leadingTier
+        if b.hasPrefix(tier) { return tier + String(midpoint(Array(a.dropFirst(tier.count)), Array(b.dropFirst(tier.count)))) }
+        if a.hasPrefix(tier) { return tier + String(midpoint(Array(a.dropFirst(tier.count)), [])) }
         return String(midpoint(Array(a), Array(b)))
     }
 

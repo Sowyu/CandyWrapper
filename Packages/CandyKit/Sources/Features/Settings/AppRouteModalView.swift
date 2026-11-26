@@ -113,6 +113,9 @@ public final class AppRouteModalView: DSView {
         var up = window.firstResponder as? NSView
         while let v = up, !(v is FieldView) { up = v.superview }
         if let field = up as? FieldView, field.clearOnEscape() { return true }
+        // A field that owns Esc, such as a draft it discards (the custom model add row, #41686; a typed font family,
+        // #42361), takes it before Settings closes.
+        if let field = up as? FieldView, field.takesEscape?() == true { return true }
         while let v = view {
             if let handler = v as? RouteModalEscapeHandler, handler.takeRouteModalEscape() { return true }
             view = v.superview

@@ -2,24 +2,32 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
-/// The linked issue badge beside a row's pull request (T3 4928 SidebarThreadRow.tsx:1135-1201, #38282): an
-/// `InlineButton tone="muted"` with a `size-3` circle-dot glyph and the issue's key, or the count of several.
+/// The linked issue badge beside a row's pull request (T3 5258 SidebarThreadRow.tsx:1167-1211): a `ThreadLinkBadge`
+/// with the state's glyph and the issue's key without its "#", or the count of several, both in the state's tone.
 public struct SidebarIssueBadge: Equatable, Sendable {
     public var text: String
     public var label: String
-    /// A single issue's live state from `issues.detail`, which tints and names the glyph (SidebarThreadRow.tsx:1137-1171).
+    /// The linked issues' live state from `issues.detail`, which tints and names the glyph (`useSidebarLinkedIssueState`).
     public var state: IssueState?
 
     public init?(_ issues: [ThreadIssueLink], state: IssueState? = nil) {
         guard let first = issues.first else { return nil }
+        self.state = state
         if issues.count == 1 {
-            text = first.displayKey
-            self.state = state
+            text = first.displayKey.hasPrefix("#") ? String(first.displayKey.dropFirst()) : first.displayKey
             label = state.map { "Issue \(first.displayKey): \(first.title), \($0.name)" } ?? "Issue \(first.displayKey): \(first.title)"
         } else {
             text = "\(issues.count)"
             label = "\(issues.count) linked issues"
         }
+    }
+
+    /// `useSidebarLinkedIssueState` (state/issues.ts at 5258, #39351): an open issue wins; with any state unread, none;
+    /// else the first closed for another reason than completed, else the first.
+    public static func aggregateState(_ states: [IssueState?]) -> IssueState? {
+        if let open = states.first(where: { $0?.category == "open" }) { return open }
+        if states.isEmpty || states.contains(where: { $0 == nil }) { return nil }
+        return states.first { $0?.closeReason.map { $0 != "completed" } ?? false } ?? states[0]
     }
 
     /// The key `SidebarState.issueStates` holds a single issue's state under.
@@ -29,6 +37,8 @@ public struct SidebarIssueBadge: Equatable, Sendable {
 }
 
 // ponytail: no hover rows of the issues; add them with the thread details' issue rows (#38160, Features/Thread)
+/// `ThreadLinkBadge` (ThreadStatusIndicators.tsx:509-543 at 5258) in an `InlineButton`: glyph and text share the tone,
+/// `gap-0.5`, the text at most `max-w-16`, underlined on hover.
 final class SidebarIssueBadgeView: ControlView {
     private var icon = IconView(name: .circleDot, size: 12)
     private let label = LabelView("", font: DSFont.ui(12))
@@ -79,10 +89,10 @@ final class SidebarIssueBadgeView: ControlView {
     override func updateLayer() { restyle() }
 
     private func restyle() {
-        // `tone="muted"`: the glyph is muted and turns foreground on hover; the key stays `text-secondary-label`.
-        // A known state wears its tone instead (`issueStatus?.toneClassName`).
-        icon.strokeColor = badge?.state.map(IssueListLogic.color) ?? Themed.color(state.hovered ? \.foreground : \.mutedForeground, sidebar: true)
-        label.color = Themed.color(\.secondaryLabel, sidebar: true)
+        // The tone colors glyph and text: the state's, else `text-muted-foreground` (#42275).
+        let tone = badge?.state.map(IssueListLogic.color) ?? Themed.color(\.mutedForeground, sidebar: true)
+        icon.strokeColor = tone
+        label.color = tone
         label.isUnderlined = state.hovered
     }
 

@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import T3Store
 @testable import Features
 
 /// `t3-thread://` links in chat Markdown draw as thread chips (MarkdownThreadLink.tsx, 15dc7b0130).
@@ -25,6 +26,22 @@ struct MarkdownThreadLinkTests {
         #expect(resolved?.threads.keys.sorted() == ["a b", "t1"])
         let chips = MarkdownLayout(document: MarkdownDocument(parsing: titled), width: 680, contexts: resolved).contextChips
         #expect(chips.map(\.look.label) == ["Fix login", "Spaced id"] && chips.allSatisfy { $0.tooltip == "Open thread" })
+    }
+
+    /// 5258 MarkdownThreadLink.tsx:84-127 (#39406): a thread on a machine the message's environment links to reads
+    /// through that link, with "Thread on {label}" until the link's text names it.
+    @Test func linkedMachineThreadsOpenReadOnly() {
+        let source = "[Fix build](t3-thread://v2/env-b/t9) and <t3-thread://v2/env-b/t8> and [z](t3-thread://v2/env-c/t7)"
+        let document = MarkdownDocument(parsing: source)
+        let contexts = MarkdownContextChips.links(in: document, environmentId: "env-a", linkedLabel: { $0 == "env-b" ? "Studio" : nil }, thread: { _ in nil })
+        #expect(contexts?.linkedLabels == ["env-b": "Studio"])
+        let chips = MarkdownLayout(document: document, width: 680, contexts: contexts).contextChips
+        #expect(chips.map(\.look.label) == ["Fix build", "Thread on Studio", "z"])
+        #expect(chips[0].tooltip == "Read the thread on Studio")
+        #expect(chips[0].action == .openLinkedThread(.init(viaEnvironmentId: "env-a", environmentId: "env-b", threadId: "t9", label: "Studio", title: "Fix build")))
+        #expect(chips[1].action == .openLinkedThread(.init(viaEnvironmentId: "env-a", environmentId: "env-b", threadId: "t8", label: "Studio")))
+        // A machine the environment does not link to stays unavailable.
+        #expect(chips[2].action == .none)
     }
 
     @Test func repeatedLinksResolveEachIdOnceIncludingMisses() {

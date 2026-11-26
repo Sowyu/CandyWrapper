@@ -249,6 +249,8 @@ final class ThemeEditorPanelView: DSView, RouteModalEscapeHandler {
         let rect = NSRect(x: floor(p.x), y: floor(p.y), width: 1, height: 1)
         guard let rep = content.bitmapImageRepForCachingDisplay(in: rect) else { return true }
         content.cacheDisplay(in: rect, to: rep)
+        // A focused color field commits its draft before the pick can switch modes and remove it (ThemeEditorPanel.tsx:697-699).
+        if let field = window?.firstResponder as? NSView, field.isDescendant(of: self) { window?.makeFirstResponder(nil) }
         if let color = rep.colorAt(x: 0, y: 0) { controller.inspect(color: color) }
         return true
     }
@@ -544,9 +546,14 @@ final class ThemeColorFieldView: DSView {
     var isSelected = false { didSet { if isSelected != oldValue { needsDisplay = true } } }
     private let title = ThemeFieldLabelButton()
     private let swatch = ThemeSwatchButton()
-    private let input = InputView(placeholder: "", size: .compact, font: .mono)
+    let input = InputView(placeholder: "", size: .compact, font: .mono)
     private var picker: OpenPopup?
     private var pickerPanel: ThemeColorPickerPanelView?
+    private var wasFocused = false
+
+    static func isShortHex(_ value: String) -> Bool {
+        value.trimmingCharacters(in: .whitespaces).range(of: "^#[0-9a-fA-F]{3,4}$", options: .regularExpression) != nil
+    }
 
     init(role: ThemeColorRole, label: String) {
         self.role = role
@@ -558,8 +565,22 @@ final class ThemeColorFieldView: DSView {
         swatch.setAccessibilityLabel("Choose \(label) color")
         TooltipController.attach(to: swatch, text: "Choose \(label) color", placement: PopupPlacement(side: .top))
         input.setAccessibilityLabel("\(label) hex value")
-        input.onChange = { [weak self] t in guard let self, self.input.state.focused else { return }; self.onChange?(self.role, t) }
-        input.onStateChange = { [weak self] s in guard let self, s.focused else { return }; self.onSelect?(self.role) }
+        // #29550 (ThemeColorPicker.tsx:356-423): while focused the field shows the typed text, and a shorthand hex,
+        // usually a longer one mid-deletion, commits only on blur.
+        input.onChange = { [weak self] t in
+            guard let self, self.input.state.focused else { return }
+            self.input.isInvalid = !ThemePalette.isThemeColor(t)
+            if !Self.isShortHex(t) { self.onChange?(self.role, t) }
+        }
+        input.onStateChange = { [weak self] s in
+            guard let self else { return }
+            if s.focused, !self.wasFocused { self.onSelect?(self.role) }
+            if !s.focused, self.wasFocused {
+                if Self.isShortHex(self.input.text) { self.onChange?(self.role, self.input.text) }
+                self.show()
+            }
+            self.wasFocused = s.focused
+        }
         addSubview(title)
         addSubview(swatch)
         addSubview(input)
@@ -582,7 +603,7 @@ final class ThemeColorFieldView: DSView {
     private func show() {
         let valid = ThemePalette.isThemeColor(value)
         swatch.color = valid ? ThemeCSSColor.nsColor(value) ?? .black : .black
-        input.isInvalid = !valid
+        input.isInvalid = !ThemePalette.isThemeColor(input.state.focused ? input.text : value)
         // An oklch value shows as hex in the field (`editorValue`).
         let shown = value.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("oklch(") ? (ThemePalette.hex(value) ?? value) : value
         if !input.state.focused, input.text != shown { input.text = shown }

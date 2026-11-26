@@ -60,6 +60,8 @@ public class FieldView: DSView {
     /// A search or filter field: Esc clears its text first, and only the next Esc reaches the dialog or page around it
     /// (5258 #41856, #42224 and the other 1.3 fixes).
     public var escapeClears = false
+    /// Settings asks this before Esc closes it: true when the field used the Esc, such as to discard a draft.
+    public final var takesEscape: (@MainActor () -> Bool)?
     /// `escapeClears` with text to clear: clears it, as typed input so `onChange` runs. True when it cleared.
     public func clearOnEscape() -> Bool {
         guard escapeClears, !editor.string.isEmpty, !editor.hasMarkedText() else { return false }
@@ -100,6 +102,8 @@ public class FieldView: DSView {
     /// Font, CSS line-height and text color the editor uses.
     var font: NSFont = DSFont.ui(14) { didSet { applyTypingStyle() } }
     var lineHeight: CGFloat = 20 { didSet { applyTypingStyle() } }
+    /// False is CSS `font-variant-ligatures: none`: a ligature font draws `--` and `...` as typed.
+    public var ligatures = true { didSet { applyTypingStyle() } }
 
     init(multiline: Bool) {
         editor = FieldEditor(multiline: multiline)
@@ -128,17 +132,28 @@ public class FieldView: DSView {
 
     // MARK: Text style
 
+    /// Ligature fonts such as Fira Code join `--` through contextual alternates, which `.ligature: 0` leaves on.
+    static func withoutContextualForms(_ font: NSFont) -> NSFont {
+        let off: [[NSFontDescriptor.FeatureKey: Int]] = [
+            [.typeIdentifier: kContextualAlternatesType, .selectorIdentifier: kContextualAlternatesOffSelector],
+            [.typeIdentifier: kLigaturesType, .selectorIdentifier: kCommonLigaturesOffSelector],
+        ]
+        let descriptor = font.fontDescriptor.addingAttributes([.featureSettings: off])
+        return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
+    }
+
     func applyTypingStyle() {
         let metrics = FieldEditor.lineMetrics(font: font, lineHeight: lineHeight)
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineSpacing = metrics.lineSpacing
         // ponytail: never wraps a single-line field; long values scroll inside the clip view
         paragraph.lineBreakMode = editor.isMultiline ? .byWordWrapping : .byClipping
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: ligatures ? font : Self.withoutContextualForms(font),
             .foregroundColor: Themed.color(\.contrastForeground),
             .paragraphStyle: paragraph,
         ]
+        if !ligatures { attributes[.ligature] = 0 }
         editor.typingAttributes = attributes
         editor.textContainerInset = NSSize(width: 0, height: metrics.top)
         if let storage = editor.textStorage, storage.length > 0 {

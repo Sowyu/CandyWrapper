@@ -418,21 +418,27 @@ public enum ComposerMenus {
         }
     }
 
-    /// T3 3814, client-runtime/src/composerThreadItems.ts:93-123. A bare @ stays a file picker.
-    public static func environmentItems(query: String, environments: [EnvironmentCandidate], excluding: String) -> [ComposerMenuItem] {
+    /// `matchComposerEnvironmentItems` (client-runtime/src/composerThreadItems.ts:104-140 at 5258): the client's paired
+    /// machines, then those the composer's environment links to that are not paired (#40191). A bare @ stays a file
+    /// picker.
+    public static func environmentItems(query: String, environments: [EnvironmentCandidate], linked: [EnvironmentCandidate] = [],
+                                        excluding: String) -> [ComposerMenuItem] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !query.isEmpty else { return [] }
-        return environments.filter { $0.id != excluding && $0.label.lowercased().contains(query) }.map {
+        let paired = Set(environments.map(\.id))
+        let all = environments + linked.filter { !paired.contains($0.id) }.map { EnvironmentCandidate(id: $0.id, label: $0.label) }
+        return all.filter { $0.id != excluding && $0.label.lowercased().contains(query) }.map {
             .init(id: "environment:\($0.id)", kind: .environment(id: $0.id, label: $0.label, machine: $0.machine), label: $0.label, description: "Machine")
         }
     }
 
-    /// Workspace entries from `projects.searchEntries`: the basename and the parent folder.
+    /// Workspace entries from `projects.searchEntries`: the basename and the parent folder, composed to NFC, since
+    /// macOS file names can be NFD (#39610, useComposerMenuItems.ts at 5258).
     public static func pathItems(_ entries: [(path: String, isDirectory: Bool)]) -> [ComposerMenuItem] {
         entries.map { e in
-            let ns = e.path as NSString
+            let ns = e.path.precomposedStringWithCanonicalMapping as NSString
             let slash = ns.range(of: "/", options: .backwards).location
-            let base = slash == NSNotFound ? e.path : ns.substring(from: slash + 1)
+            let base = slash == NSNotFound ? ns as String : ns.substring(from: slash + 1)
             return ComposerMenuItem(id: "path:\(e.isDirectory ? "directory" : "file"):\(e.path)", kind: .path(path: e.path, isDirectory: e.isDirectory),
                                     label: base, description: slash == NSNotFound ? "" : ns.substring(to: slash))
         }

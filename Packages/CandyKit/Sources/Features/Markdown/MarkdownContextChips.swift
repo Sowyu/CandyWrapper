@@ -18,6 +18,9 @@ public struct MarkdownContextChips: Equatable {
         public init(label: String, machine: String = "server") { self.label = label; self.machine = machine }
     }
     public var environments: [String: LinkedEnvironment] = [:]
+    /// Machines the message's environment links to, by environment id: their names (`peerLinks.names`), for thread
+    /// links this app reads only through that link (5258 MarkdownThreadLink.tsx:46-58).
+    public var linkedLabels: [String: String] = [:]
     /// `ModelMentionChip` (4928 chat/ModelMentionChip.tsx:85-124): the `model:<instance>/<slug>` references the
     /// server lists, by source. An unknown one stays text.
     public struct LinkedModel: Equatable, Sendable {
@@ -43,8 +46,9 @@ public struct MarkdownContextChips: Equatable {
     /// by local id, nil once a thread is gone. `document` adds the threads its `t3-thread://` links name.
     public static func message(context: JSONValue?, attachments: [JSONValue], document: MarkdownDocument = MarkdownDocument(blocks: []),
                                environmentId: String? = nil, environment: (String) -> LinkedEnvironment? = { _ in nil },
-                               text: String = "", providers: [ServerProvider] = [], thread: (String) -> LinkedThread?) -> MarkdownContextChips {
-        var out = links(in: document, environmentId: environmentId, thread: thread) ?? MarkdownContextChips()
+                               text: String = "", providers: [ServerProvider] = [], linkedLabel: (String) -> String? = { _ in nil },
+                               thread: (String) -> LinkedThread?) -> MarkdownContextChips {
+        var out = links(in: document, environmentId: environmentId, linkedLabel: linkedLabel, thread: thread) ?? MarkdownContextChips()
         out.environmentId = environmentId
         out.models = models(in: text, providers: providers)
         if case .array(let records)? = context?["records"] {
@@ -148,7 +152,8 @@ public struct MarkdownContextChips: Equatable {
     /// The threads a reply's `t3-thread://v1/<id>` links name, written and percent-decoded, or nil when it has
     /// none (`hasThreadLinks`, threadLinks.ts:60-62), so plain replies carry no chips. It reads the parsed links,
     /// as T3 dispatches on the parsed href (ChatMarkdown.tsx:1067), so titled and reference-style links resolve too.
-    public static func links(in document: MarkdownDocument, environmentId: String? = nil, thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
+    public static func links(in document: MarkdownDocument, environmentId: String? = nil, linkedLabel: (String) -> String? = { _ in nil },
+                             thread: (String) -> LinkedThread?) -> MarkdownContextChips? {
         var out: MarkdownContextChips?
         // Remember misses too: repeated links to an unavailable or encoded id need one lookup.
         // This stays local to the pass, so a later shell update can resolve a missing thread.
@@ -157,8 +162,14 @@ public struct MarkdownContextChips: Equatable {
             for run in runs {
                 guard let url = run.link, let written = threadLinkId(url.absoluteString) else { continue }
                 if out == nil { out = MarkdownContextChips() }
+                var known = false
                 for id in [written, percentDecoded(written)].compactMap({ $0 }) where visited.insert(id).inserted {
-                    if let live = thread(id) { out?.threads[id] = live }
+                    if let live = thread(id) { out?.threads[id] = live; known = true }
+                }
+                // A thread on another machine this app has no shell for may read through the message's environment.
+                if !known, let env = ThreadLink(href: written)?.environmentId, env != environmentId, out?.linkedLabels[env] == nil,
+                   let label = linkedLabel(env) {
+                    out?.linkedLabels[env] = label
                 }
             }
         }
@@ -187,6 +198,15 @@ public struct MarkdownContextChips: Equatable {
         let link = ThreadLink(href: written)
         let neutral = link?.environmentId != nil && link?.environmentId != environmentId ? "Thread on another machine" : "Thread no longer available"
         let title = label.isEmpty || label.hasPrefix("t3-thread://") ? neutral : label
+        if threads[id] == nil, let link, let env = link.environmentId, env != environmentId, let via = environmentId, let machine = linkedLabels[env] {
+            // MarkdownThreadLink.tsx:84-127: the link's text, else "Thread on {label}", read through the link.
+            let known = label.isEmpty || label.hasPrefix("t3-thread://") ? nil : label
+            let shown = known ?? "Thread on \(machine)"
+            let target = LinkedThreadSurfaceTarget(viaEnvironmentId: via, environmentId: env,
+                                                   threadId: link.threadId, label: machine, title: known)
+            return MarkdownContextChip(look: ComposerChipLook(kind: .thread, label: shown), action: .openLinkedThread(target),
+                                       tooltip: "Read the thread on \(machine)", accessibility: "Thread, \(shown)")
+        }
         guard threads[id] != nil else {
             return MarkdownContextChip(look: ComposerChipLook(kind: .unresolved, label: title), action: .none,
                                        tooltip: neutral, accessibility: "Unavailable thread, \(title)")
@@ -355,6 +375,8 @@ public struct MarkdownContextChip {
         case openFile(String)
         /// A thread by local id.
         case openThread(String)
+        /// A linked machine's thread, read only in a tab of the open thread's panel.
+        case openLinkedThread(LinkedThreadSurfaceTarget)
         /// An image attachment in the media viewer.
         case expandImage(String)
         /// A file attachment by id.

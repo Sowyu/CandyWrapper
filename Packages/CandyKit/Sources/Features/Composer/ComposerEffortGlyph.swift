@@ -3,8 +3,9 @@ import DesignSystem
 import T3Protocol
 import T3Store
 
-/// EffortGlyph.tsx:12-43 (4928). Named levels stay words in either display mode: workflow levels, Max, and
-/// Default, which leaves the level to the agent and so no longer draws as the lowest bar (#38684).
+/// EffortGlyph.tsx:12-43 (4928). Named levels stay words in either display mode: workflow levels, Max, Codex's
+/// Ultra above the bar scale (#30810, EffortGlyph.tsx:14-15 at 5258), and Default, which leaves the level to the
+/// agent and so no longer draws as the lowest bar (#38684).
 struct ComposerEffort: Equatable {
     var count: Int
     var filled: Int
@@ -12,7 +13,7 @@ struct ComposerEffort: Equatable {
     var special: Bool
 
     static func resolve(_ descriptor: ProviderOptionDescriptor, current: String?) -> Self? {
-        let special = Set((descriptor.promptInjectedValues ?? []) + ["ultracode", "max", "default"])
+        let special = Set((descriptor.promptInjectedValues ?? []) + ["ultracode", "max", "default", "ultra"])
         let levels = descriptor.options.filter { !special.contains($0.id) }
         // More than 7 bars no longer fit the glyph's height in whole pixels.
         guard levels.count >= 2, levels.count <= 7, let current else { return nil }

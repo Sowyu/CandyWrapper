@@ -37,9 +37,21 @@ struct UpdateEverythingLogicTests {
         ], target: "0.0.50")
         #expect(targets.map(\.label) == ["service", "other-desktop", "own"])
         #expect(skipped.map { [$0.label, $0.reason] } == [
-            ["nightly-service", "on the nightly channel"], ["offline", "not connected"], ["never-connected", "not connected"],
+            ["nightly-service", "on the nightly channel"], ["offline", "not connected"], ["never-connected", "still loading"],
             ["no-scope", "no permission"], ["busy", "already updating"], ["manual", "needs a manual update"],
         ])
+    }
+
+    /// updateEverything.logic.ts:152-173 at 5258 (#41672) and :54-56 (#33030).
+    @Test func skipsSayWhy() {
+        var off = Self.machine("off", "0.0.40", .bootService, connected: false)
+        off.turnedOff = true
+        var down = Self.machine("down", "0.0.40", .bootService, connected: false)
+        down.connectionError = "Connection refused"
+        var desk = Self.machine("desk", "0.0.40", .desktopManaged)
+        desk.capabilities.desktopAppUpdate = false
+        let (_, skipped) = L.serverTargets([off, down, desk], target: "0.0.50")
+        #expect(skipped.map(\.reason) == ["turned off", "Connection refused", "update T3 Code on that machine"])
     }
 
     @Test func describesThePass() {
@@ -93,5 +105,43 @@ extension UpdateEverythingLogicTests {
         #expect(d.updatingRows.count == 4 && d.providerCount == 4 && d.version == "1.1.0")
         #expect(L.describe(localVersion: "2", servers: [], target: "x", providerMachines: []).rows.first?.environmentId == nil)
         #expect(L.describe(localVersion: nil, servers: [Self.machine("desktop", "1", .desktopManaged)], target: "2", providerMachines: []).version == nil)
+    }
+
+    /// The capsule's words and actions (5258 updateEverything.logic.ts:603-678, SidebarUpdateCapsule.tsx:62-78).
+    @Test func capsuleView() {
+        let a = L.RunMachine(environmentId: "a", label: "alvin", updatesProviders: false, updatesServer: true, startedAt: 0)
+        let b = L.RunMachine(environmentId: "b", label: "bea", updatesProviders: true, updatesServer: false, startedAt: 0)
+        var run = L.Run(localVersion: nil, phase: .servers, machines: [a, b])
+        #expect(L.describeCapsule(run, statuses: [.downloading, .done], local: nil, now: 60).label == "1 of 2 updated")
+        let slow = L.describeCapsule(run, statuses: [.downloading, .done], local: nil, now: 3 * 60 + 5)
+        #expect(slow.tone == .slow && slow.label == "alvin" && slow.slow?.status == "downloading" && slow.slow?.elapsed == "3m")
+        // A waiting machine never counts as slow.
+        #expect(L.describeCapsule(run, statuses: [.waiting, .done], local: nil, now: 3600).tone == .default)
+        let failed = L.describeCapsule(run, statuses: [.failed, .done], local: nil, now: 0)
+        #expect(failed.tone == .failed && failed.label == "alvin failed" && failed.action == .retry)
+        #expect(L.describeCapsule(run, statuses: [.failed, .failed], local: nil, now: 0).label == "2 failed")
+        // A provider-only machine has no server to retry.
+        #expect(L.describeCapsule(run, statuses: [.done, .failed], local: nil, now: 0).action == .dismiss)
+        #expect(L.describeCapsule(run, statuses: [.done, .done], local: .downloading(percent: 41.7), now: 0).label == "Downloading 41%")
+        run.phase = .countdown; run.restartAt = 10; run.localVersion = "2"
+        #expect(L.describeCapsule(run, statuses: [.done, .done], local: .waiting, now: 5.2) == L.CapsuleView(tone: .default, label: "Restart in 5s", action: .later))
+        #expect(L.localStatus(run, local: .waiting, now: 5.2) == "restarts in 5s")
+        #expect(L.tickInterval(run, statuses: [.done, .done]) == 1)
+        run.phase = .installing
+        #expect(L.describeCapsule(run, statuses: [.done, .done], local: nil, now: 0).label == "Restarting…")
+        run.phase = .servers
+        #expect(L.localStatus(run, local: .waiting, now: 0) == "restarts after the servers")
+        #expect(L.tickInterval(run, statuses: [.waiting, .done]) == nil && L.tickInterval(run, statuses: [.restarting]) == 30)
+        #expect(L.elapsed(30) == "<1m" && L.elapsed(61 * 60) == "1h 1m")
+    }
+
+    @Test func capsuleCloseAndWidth() {
+        let done = L.RunMachine(environmentId: "a", label: "a", updatesProviders: false, updatesServer: false, failed: false)
+        #expect(L.closeFinished(L.Run(localVersion: nil, phase: .servers, machines: [done])) == nil)
+        var failed = done; failed.failed = true
+        #expect(L.closeFinished(L.Run(localVersion: nil, phase: .servers, machines: [failed])) != nil)
+        #expect(L.closeFinished(L.Run(localVersion: "2", phase: .servers, machines: [done])) != nil)
+        #expect(!L.capsuleExpands(available: 79, counting: false) && L.capsuleExpands(available: 80, counting: false))
+        #expect(!L.capsuleExpands(available: 191, counting: true) && L.capsuleExpands(available: 192, counting: true))
     }
 }

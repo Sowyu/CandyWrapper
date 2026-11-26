@@ -147,7 +147,9 @@ public enum ComposerLogic {
     /// is "Attached image" or "Attached images", a file-only one "File: <name>".
     public static func threadTitleSeed(_ prompt: String, attachments: [(isImage: Bool, name: String)]) -> String {
         func normalize(_ s: String) -> String {
+            // Mentioned macOS paths can be NFD; titles show them composed (#39610, threadTitle.ts:17-19 at 5258).
             ComposerInlineTokens.citationsToPlainText(s).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                .precomposedStringWithCanonicalMapping
         }
         let ns = NSMutableString(string: prompt)
         var imageIds = Set<String>()

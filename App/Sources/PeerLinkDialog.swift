@@ -62,24 +62,47 @@ enum PeerLinkDialog {
     /// or throws; a failure keeps the dialog open.
     @discardableResult
     static func present(in window: NSWindow, environments: Environments, machines: [LinkableMachine],
+                        throughRoutes: [LinkThroughRoute] = [], sourceLabel: String? = nil, through: LinkThroughRoute? = nil,
                         initialChoice: String? = nil, initialAccess: String? = nil, lockMachine: Bool = false, address: String? = nil,
                         answersRequest: Bool = false, successToast: Bool = true,
                         toast: @escaping @MainActor (String, String?, ToastQueue.Kind) -> Void,
                         failureMessage: @escaping @MainActor (Error) -> String,
                         commit: @escaping @MainActor (Choice) async throws -> String?) -> ModalHost {
-        let (dialog, form, cancel, link) = LinkEnvironmentDialog.make(machines: machines)
+        let (dialog, form, cancel, link) = LinkEnvironmentDialog.make(machines: machines, throughRoutes: throughRoutes, sourceLabel: sourceLabel)
         form.answersRequest = answersRequest
-        form.preset(choice: initialChoice, access: initialAccess, lockMachine: lockMachine, address: address)
+        // `peerLinks.pairLink` needs access:write and the scopes it hands out (#41742, clientRpcPermissions.ts:130-134,
+        // LinkedEnvironmentsSettings.tsx:332-347). A session not read yet denies it, as T3's `permissionAtom` does.
+        form.mayPairThrough = { route, access in
+            guard let session = environments.authSession(route.viaEnvironmentId) else { return false }
+            return ([AuthScopes.accessWrite] + PeerLinks.scopes(for: access)).allSatisfy(session.grants)
+        }
+        form.preset(choice: initialChoice, access: initialAccess, lockMachine: lockMachine, address: address, through: through)
         form.onHeightChange = { [weak dialog] in dialog?.superview?.needsLayout = true }
         let host = ModalHost.present(dialog, in: window)
         cancel.action = { [weak host, weak form] in if form?.isBusy != true { host?.close() } }
         let submit: @MainActor () -> Void = { [weak form, weak host] in
-            guard let form, !form.isBusy, form.ready, let url = form.urls.first, !url.isEmpty else { return }
+            guard let form, !form.isBusy, form.ready else { return }
+            let through = form.through
+            guard through != nil || form.urls.first?.isEmpty == false else { return }
             form.isBusy = true
-            let machine = form.machine, access = form.access, typed = form.pairingCode, urls = form.urls
-            let existing = form.usesExisting, mints = form.mints && !existing
+            var machine = form.machine, urls = form.urls
+            let access = form.access, typed = form.pairingCode
+            let existing = form.usesExisting, mints = form.mints && !existing && through == nil
             Task {
                 var code = typed
+                if let through {
+                    guard let paired = await pairThrough(environments, through, access: access) else {
+                        form.isBusy = false
+                        form.throughFailed.insert(through.environmentId)
+                        toast("\(through.viaLabel) could not get a pairing code from \(through.label)",
+                              "Enter its address and a pairing code from it instead.", .error)
+                        return
+                    }
+                    urls = paired.urls
+                    code = paired.credential ?? ""
+                    machine = LinkableMachine(environmentId: paired.environmentId, label: paired.label, connected: false, linked: false,
+                                              urls: paired.urls, canMint: false)
+                }
                 if mints, let machine {
                     guard let minted = await mintPairingCode(environments, on: machine.environmentId, access: access, toast: toast) else {
                         form.isBusy = false
@@ -106,10 +129,20 @@ enum PeerLinkDialog {
         return host
     }
 
+    /// `peerLinks.pairLink` on the environment holding the full-access link: the linked machine mints a code for a link at
+    /// `access` and answers with where it listens (LinkedEnvironmentsSettings.tsx:368-395 at 5258). Nil when it gives none.
+    static func pairThrough(_ environments: Environments, _ through: LinkThroughRoute, access: String) async -> PeerLinkClientPairingResult? {
+        guard let reply = try? await environments.request(through.viaEnvironmentId, PeerLinkRPC.pairLink,
+                                                          PeerLinkRPC.pairLinkInput(environmentId: through.environmentId, access: access)),
+              let result = try? reply.decode(as: PeerLinkClientPairingResult.self),
+              result.type == "credential", result.credential?.isEmpty == false, !result.urls.isEmpty else { return nil }
+        return result
+    }
+
     /// A one-use code minted on `environmentId` with this app's session there (state/peerPairingCode.ts at 3814), carrying
     /// exactly the scopes an agent sign-in with `access` needs. Nil after a toast when it can't.
-    private static func mintPairingCode(_ environments: Environments, on environmentId: String, access: String,
-                                        toast: @MainActor (String, String?, ToastQueue.Kind) -> Void) async -> String? {
+    static func mintPairingCode(_ environments: Environments, on environmentId: String, access: String,
+                                toast: (@MainActor (String, String?, ToastQueue.Kind) -> Void)?) async -> String? {
         guard let shell = environments.session(environmentId) else { return nil }
         do {
             let created = try await shell.http.createPairingCredential(
@@ -117,7 +150,7 @@ enum PeerLinkDialog {
             return created.credential
         } catch {
             let forbidden: Bool = if case EnvironmentHTTPError.status(let code, _) = error { code == 401 || code == 403 } else { false }
-            toast("Could not link the environment", forbidden
+            toast?("Could not link the environment", forbidden
                   ? "Your session there cannot create pairing codes. Paste a code from there instead."
                   : "Could not get a pairing code from there. Paste a code from there instead.", .error)
             return nil

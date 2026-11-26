@@ -45,6 +45,12 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// A thread chip's project: `ThreadContextChip` draws its `ProjectFavicon` in place of `messages-square`
     /// once the thread's shell names a known project (ThreadContextChip.tsx:18, 32-36).
     public var project: ProjectIconSource?
+    /// A thread chip's record, which its hover card reads (ThreadContextChip.tsx:83-90 at 5258, #38895).
+    public var threadRecord: JSONValue?
+
+    /// The hover card a composer thread chip shows (ThreadChipHoverCard.tsx at 5258): the app answers by the chip's
+    /// record and whether this machine's agent can't read the thread, nil for a thread it cannot describe.
+    @MainActor public static var threadHoverCard: ((_ record: JSONValue, _ unreadable: Bool) -> SidebarThreadHoverCardModel?)?
 
     public init(kind: Kind, label: String, detail: String? = nil, accentOverride: NSColor? = nil, foregroundOverride: NSColor? = nil,
                 state: State? = nil, project: ProjectIconSource? = nil, previewSource: URL? = nil) {
@@ -63,6 +69,7 @@ public struct ComposerChipLook: Equatable, Sendable {
     public static func look(for token: ComposerInlineToken, skillLabel: (String) -> String,
                             record: (String) -> JSONValue?, threadTitle: (JSONValue) -> String? = { _ in nil },
                             threadProject: (JSONValue) -> ProjectIconSource? = { _ in nil },
+                            threadUnreadable: (JSONValue) -> Bool = { _ in false },
                             environment: (String) -> (label: String?, machine: String?) = { _ in (nil, nil) },
                             model: (_ instanceId: String, _ model: String) -> (label: String, driver: String)? = { _, _ in nil }) -> ComposerChipLook {
         switch token.kind {
@@ -71,7 +78,8 @@ public struct ComposerChipLook: Equatable, Sendable {
             return ComposerChipLook(kind: .model(driver: found?.driver ?? ""), label: found?.label ?? slug)
         case .mention(let path):
             let base = path.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
-            return ComposerChipLook(kind: .mention(path: path), label: base.isEmpty ? path : base)
+            // Mentioned macOS paths can be NFD; the chip shows them composed (#39610).
+            return ComposerChipLook(kind: .mention(path: path), label: (base.isEmpty ? path : base).precomposedStringWithCanonicalMapping)
         case .citation(let citation): return ComposerChipLook(kind: .citation, label: citation.label)
         case .skill(let name):
             return ComposerChipLook(kind: .skill, label: skillLabel(name))
@@ -82,7 +90,12 @@ public struct ComposerChipLook: Equatable, Sendable {
                 let live = environment(r["environmentId"]?.stringValue ?? "")
                 return ComposerChipLook(kind: .environment(machine: live.machine ?? "server"), label: live.label ?? r["label"]?.stringValue ?? label)
             case "thread":
-                return ComposerChipLook(kind: .thread, label: threadTitle(r) ?? r["title"]?.stringValue ?? label, project: threadProject(r))
+                // `ComposerThreadContextChip` (composerContextPresentation.tsx:492-505 at 5258): a thread on a machine
+                // this one neither is nor links to takes the invalid state.
+                var look = ComposerChipLook(kind: .thread, label: threadTitle(r) ?? r["title"]?.stringValue ?? label,
+                                            state: threadUnreadable(r) ? .invalid : nil, project: threadProject(r))
+                look.threadRecord = r
+                return look
             case "terminal":
                 return ComposerChipLook(kind: .terminal, label: r["label"]?.stringValue ?? label)
             case "review-comment":
@@ -437,6 +450,15 @@ private final class ChipView: NSView {
         self.label = label
         super.init(frame: frame)
         setAccessibilityElement(false)
+        if let record = look.threadRecord, let card = ComposerChipLook.threadHoverCard {
+            // `ThreadHoverCardPopup side="top"`: the sidebar's card in place of a tooltip.
+            let unreadable = look.state == .invalid
+            let tip = TooltipController.attach(to: self, text: label)
+            tip.content = { () -> NSView & PopupContent in
+                if let model = card(record, unreadable) { return SidebarThreadHoverCardView(model) }
+                return TooltipView(label)
+            }
+        }
         // A fractional chip width must crop, never stretch the backing bitmap (that resample made the chip soft).
         layerContentsPlacement = .topLeft
         layerContentsRedrawPolicy = .onSetNeedsDisplay

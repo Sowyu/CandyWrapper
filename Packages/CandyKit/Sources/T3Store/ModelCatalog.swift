@@ -21,10 +21,18 @@ public struct ProviderInstanceEntry: Hashable, Sendable, Identifiable {
     }
 
     public var isAvailable: Bool { provider.availability != "unavailable" }
-    /// `isProviderInstancePickerReady`: enabled, available and `ready`.
-    /// `isProviderInstanceReady` (providerInstances.ts at 4928, #29388): a warning still offers the models of
-    /// sub-providers that report no problem of their own.
+    /// `isProviderInstancePickerReady` (providerInstances.ts:69-82, #39114): also true after a check that only failed or
+    /// ran late, since an earlier check's models stay offered.
     public var isReady: Bool {
+        if isHealthy { return true }
+        guard provider.enabled, isAvailable, provider.subProviders == nil else { return false }
+        if provider.modelsRetained == true { return true }
+        // The sign-in was confirmed, so the warning is about something else, such as a late catalog.
+        return provider.status == .warning && provider.installed && provider.auth?["status"]?.stringValue == "authenticated" && !models.isEmpty
+    }
+    /// `isProviderInstanceHealthy` (providerInstances.ts:55-67): enabled, available and `ready`. A warning still offers
+    /// the models of sub-providers that report no problem of their own (#29388).
+    public var isHealthy: Bool {
         guard provider.enabled, isAvailable else { return false }
         if provider.status == .ready { return true }
         guard provider.status == .warning, let subs = provider.subProviders else { return false }
@@ -77,7 +85,7 @@ public struct ProviderCatalog: Hashable, Sendable {
     /// candidate that is selectable, else the first ready instance, else a selectable one not in error.
     public func resolveInstance(_ candidates: [ProviderInstanceId?]) -> ProviderInstanceEntry? {
         for id in candidates { if let e = entry(id), e.isSelectable { return e } }
-        return entries.first(where: \.isReady) ?? entries.first { $0.isSelectable && $0.provider.status != .error }
+        return entries.first(where: \.isHealthy) ?? entries.first { $0.isSelectable && $0.provider.status != .error }
     }
 }
 
@@ -503,9 +511,13 @@ public enum ModelTraits {
 
     /// `REASONING_SELECT_DESCRIPTOR_IDS` (client-runtime modelTraits.ts:17-20): `REASONING_EFFORT_OPTION_IDS`
     /// plus "thinking". Cursor names its effort `reasoning_effort` (dd86a02096).
-    static let reasoningIds: Set<String> = ["reasoningEffort", "reasoning", "effort", "variant", "reasoning_effort", "thinking_level", "thinking"]
-    /// `REASONING_EFFORT_OPTION_IDS` (client-runtime state/threadExecution.ts:227-234 at 4928, Antigravity's `thinking_level` from #26929), in order.
-    public static let reasoningEffortIds = ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level"]
+    static let reasoningIds: Set<String> = ["reasoningEffort", "reasoning", "effort", "variant", "reasoning_effort", "thinking_level", "thought_level", "thinking"]
+    /// `REASONING_EFFORT_OPTION_IDS` (client-runtime state/threadExecution.ts:308-316 at 5258, Antigravity's `thinking_level`
+    /// from #26929, ACP's `thought_level` from #40136), in order.
+    /// `DEFAULT_VARIANT_CHOICE_ID` (shared model.ts:288 at 5258, #27333): the variant choice that sends no variant, which
+    /// the server offers custom OpenCode models with no inferable default.
+    public static let defaultVariantChoiceId = "t3:default"
+    public static let reasoningEffortIds = ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level", "thought_level"]
 
     /// `buildTraitsTriggerDisplay`: labels joined by " · ", Fast merged into the reasoning label.
     /// `ultrathink` is true when the prompt carries the Ultrathink prefix or word.

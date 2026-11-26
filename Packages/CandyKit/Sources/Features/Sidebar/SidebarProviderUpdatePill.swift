@@ -7,6 +7,9 @@ import T3Protocol
 public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
     public enum Tone: String, Sendable { case loading, success, warning, error }
     public var key: String
+    /// One key per provider the pill counts: dismissing it hides those providers' updates, so a later update of
+    /// another provider shows alone instead of recounting them (#39636, ProviderUpdateLaunchNotification.logic.ts at 5258).
+    public var dismissKeys: [String] = []
     public var tone: Tone
     public var title: String
     public var description: String
@@ -71,10 +74,13 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
             guard let status = p.updateState?.status, ["failed", "unchanged", "succeeded"].contains(status) else { return false }
             guard let visibleAfter, !stalledInstances.contains(p.instanceId.rawValue) else { return true }
             return (p.updateState?.finishedAt).map { $0 >= visibleAfter } ?? false
-        })
-        func key(_ prefix: String, _ ps: [ServerProvider]) -> String {
-            prefix + ":" + ps.map { "\($0.driver):\($0.updateState?.finishedAt ?? "pending"):\($0.updateState?.message ?? "")" }.sorted().joined(separator: "|")
+        }).filter { !dismissed.contains(terminalKey($0)) }
+        // `terminalPillIdentity`: the sorted per-provider keys, joined.
+        func identity(_ ps: [ServerProvider]) -> (key: String, keys: [String]) {
+            let keys = ps.map(terminalKey).sorted()
+            return (keys.joined(separator: "|"), keys)
         }
+        func key(_ prefix: String, _ ps: [ServerProvider]) -> String { identity(ps).key }
         func latest(_ ps: [ServerProvider]) -> String { ps.compactMap { $0.updateState?.finishedAt }.max() ?? "" }
         var candidates: [(SidebarProviderUpdatePillModel, String)] = []
         let failed = recent.filter { $0.updateState?.status == "failed" }
@@ -85,24 +91,29 @@ public struct SidebarProviderUpdatePillModel: Equatable, Sendable {
                 : "\(failed.count) provider updates failed"
             let description = failed.count == 1 && first.updateState?.message != nil ? first.updateState!.message!
                 : "\(list(failed)) failed to update. Check provider settings for details."
-            candidates.append((.init(key: key("failed", failed), tone: .error, title: title, description: description, dismissible: true), latest(failed)))
+            candidates.append((.init(key: key("failed", failed), dismissKeys: identity(failed).keys, tone: .error, title: title, description: description, dismissible: true), latest(failed)))
         }
         let unchanged = recent.filter { $0.updateState?.status == "unchanged" }
         if let first = unchanged.first {
-            candidates.append((.init(key: key("unchanged", unchanged), tone: .warning,
+            candidates.append((.init(key: key("unchanged", unchanged), dismissKeys: identity(unchanged).keys, tone: .warning,
                                      title: unchanged.count == 1 ? "\(name(first.driver)) still needs an update" : "\(unchanged.count) providers still need updates",
                                      description: "\(list(unchanged)) \(unchanged.count == 1 ? "still appears" : "still appear") outdated. Review provider settings for details.",
                                      dismissible: true), latest(unchanged)))
         }
         let succeeded = recent.filter { $0.updateState?.status == "succeeded" }
         if let first = succeeded.first {
-            candidates.append((.init(key: key("succeeded", succeeded), tone: .success,
+            candidates.append((.init(key: key("succeeded", succeeded), dismissKeys: identity(succeeded).keys, tone: .success,
                                      title: succeeded.count == 1 ? (first.version.map { "\(name(first.driver)) updated: \(version($0))" } ?? "\(name(first.driver)) updated")
                                          : "\(succeeded.count) providers updated",
                                      description: succeeded.count == 1 ? "New sessions will use the updated provider." : "New sessions will use the updated providers.",
                                      dismissAfterMs: 3_000), latest(succeeded)))
         }
-        return candidates.sorted { $0.1 > $1.1 }.map(\.0).first { !dismissed.contains($0.key) }
+        return candidates.sorted { $0.1 > $1.1 }.map(\.0).first
+    }
+
+    /// `terminalUpdateKey`: one provider's finished update.
+    static func terminalKey(_ p: ServerProvider) -> String {
+        "\(p.updateState?.status ?? ""):\(p.driver):\(p.updateState?.finishedAt ?? "pending"):\(p.updateState?.message ?? "")"
     }
 }
 
@@ -143,8 +154,8 @@ public final class SidebarProviderUpdatePillView: DSView {
         addSubview(close)
         main.action = { [weak self] in self?.onOpenSettings?() }
         close.action = { [weak self] in
-            guard let self, let key = self.shown?.key else { return }
-            self.dismissed.insert(key)
+            guard let self, let shown = self.shown else { return }
+            self.dismissed.formUnion(shown.dismissKeys)
             self.show(nil)
         }
         close.setTooltip("Dismiss until provider status changes")
@@ -232,10 +243,10 @@ public final class SidebarProviderUpdatePillView: DSView {
             if wasHidden, !Motion.reduced { enterAnimation() }
             if let ms = model.dismissAfterMs {
                 startDrain(ms)
-                let key = model.key
+                let key = model.key, keys = model.dismissKeys
                 let work = DispatchWorkItem { [weak self] in
                     guard let self, self.shown?.key == key else { return }
-                    self.dismissed.insert(key)
+                    self.dismissed.formUnion(keys)
                     self.show(nil)
                 }
                 dismissWork = work

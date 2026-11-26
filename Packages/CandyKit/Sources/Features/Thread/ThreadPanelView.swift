@@ -347,6 +347,14 @@ public final class ThreadPanelView: DSView {
         get { header.titleTyping }
         set { header.titleTyping = newValue; threadTitle.titleTyping = newValue }
     }
+    /// `dismissFind` (5258 useChatShortcuts.ts:115-133, #28919): an Escape that nothing inside the chat used closes
+    /// find, from anywhere in it. AppKit's `cancelOperation` bubbles from the focused view as T3's bubble listener
+    /// does, so an embedded side chat's panel closes its own find before the window sees the key.
+    public var onEscapeFind: (() -> Void)?
+    public override func cancelOperation(_ sender: Any?) {
+        if findOpen, let onEscapeFind { onEscapeFind() } else { super.cancelOperation(sender) }
+    }
+
     /// Built the first time thread search opens; wire it through `lazyFindBar`.
     public let lazyFindBar = LazyView { ThreadFindBarView() }
     public var findBar: ThreadFindBarView { lazyFindBar.view }
@@ -435,6 +443,8 @@ public final class ThreadPanelView: DSView {
     private var chatTop: CGFloat { isEmbedded || ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 0 : ThreadHeaderView.height }
     /// A side chat's chat inside its parent's right panel (`ChatView embedded`, SideChatPane.tsx:184-189): no
     /// header of its own and no right panel; the side chat pane's header sits above it.
+    /// A linked thread's bar stands in the composer's place before the first page arrives (LinkedThreadPane.tsx:200-232).
+    public var showsComposerWithoutThread = false { didSet { if showsComposerWithoutThread != oldValue { updateComposerShown() } } }
     public var isEmbedded = false { didSet { if isEmbedded != oldValue { needsLayout = true } } }
     /// A notice from the banner stack (the project clone's progress or failure), docked over the
     /// composer on drafts and threads alike. Shown through `showsNoticeBanner`.
@@ -1189,6 +1199,10 @@ public final class ThreadPanelView: DSView {
         get { rightPanel.onSideChatShown }
         set { rightPanel.onSideChatShown = newValue }
     }
+    public var onLinkedThreadShown: ((LinkedThreadSurfaceTarget?) -> Void)? {
+        get { rightPanel.onLinkedThreadShown }
+        set { rightPanel.onLinkedThreadShown = newValue }
+    }
     public func setSideChatTabs(titles: [String: String], states: [String: SideChats.TabState], offered: Bool, disabledReason: String?) {
         rightPanel.sideChatOffered = offered
         rightPanel.sideChatDisabledReason = disabledReason
@@ -1735,7 +1749,7 @@ public final class ThreadPanelView: DSView {
     /// The composer shows with a thread, a draft, or a just-sent first message. Call after
     /// changing `model.optimisticMessages`.
     public func updateComposerShown() {
-        composerShown = isDraft || switchingThread || model.projection != nil || !model.optimisticMessages.isEmpty
+        composerShown = isDraft || switchingThread || model.projection != nil || !model.optimisticMessages.isEmpty || showsComposerWithoutThread
         // `hideEmptyPlaceholder={isDraftHeroState || threadDetailLoading}` (ChatView.tsx:11474).
         timeline.allowsEmptyPlaceholder = !isDraft && !switchingThread && model.projection != nil
         needsLayout = true

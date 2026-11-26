@@ -47,6 +47,9 @@ final class UpdateEverything {
         self.toasts = toasts
         self.providers = providers
         pill.onEverything = { [weak self] in self?.confirm() }
+        pill.onCapsuleAction = { [weak self] in self?.capsuleAction($0) }
+        pill.onCapsuleDismiss = { [weak self] in self?.dismissSettled() }
+        pill.onCapsuleRestart = { [weak self] in self?.restartToUpdate() }
         environments.observe { [weak self] in self?.refresh() }
         serverUpdates.observe { [weak self] in self?.refresh() }
         updater.observe { [weak self] in self?.refresh() }
@@ -57,6 +60,10 @@ final class UpdateEverything {
         }
         // A pass that ended with this app's relaunch reports once the app is back (`DesktopUpdateLaunchNotice`).
         DispatchQueue.main.async { [weak self] in self?.showSavedResult() }
+        #if DEBUG
+        // Shows the capsule in one state without a real pass: progress, slow, failed, failures, countdown or installing.
+        if let mode = ProcessInfo.processInfo.environment["CANDY_DEBUG_UPDATE_CAPSULE"] { run = Self.debugRun(mode) }
+        #endif
     }
 
     /// A provider list changed somewhere (the composer's config observers).
@@ -128,7 +135,9 @@ final class UpdateEverything {
             return L.Machine(environmentId: id, label: environments.label(id) ?? id, serverVersion: serverUpdates.descriptor(id)?.serverVersion,
                              connected: environments.state(id)?.status == .connected, canMaintain: serverUpdates.canUpdate(id),
                              updating: serverUpdates.state(id).isRunning, capabilities: caps, ownServer: serverUpdates.isOwnServer(id),
-                             continuesThreads: caps.threadContinuation && serverUpdates.continueThreads(id))
+                             continuesThreads: caps.threadContinuation && serverUpdates.continueThreads(id),
+                             turnedOff: environments.saved.first { $0.environmentId == id }?.enabled == false,
+                             connectionError: environments.state(id)?.status == .connected ? nil : environments.state(id)?.lastFailure)
         }
     }
 
@@ -173,22 +182,144 @@ final class UpdateEverything {
         #endif
         pill?.setEverything(summary: held || runtimeOffer ? nil : summary, pending: pending, serverNotice: next.serverNotice)
         account?.updateAllCount = L.offered(pending, runningOnThisMac: runningOnThisMac).count
-        pill?.run = run.flatMap { r in
-            r.localVersion != nil || r.machines.contains(where: \.updatesServer) ? (runTooltip(r), r.localVersion != nil) : nil
+        pill?.run = run.map { ("", $0.localVersion != nil) }
+        pill?.capsule = run.map(capsule)
+        scheduleTick()
+    }
+
+    // MARK: The capsule (SidebarUpdateCapsule.tsx at 5258)
+
+    #if DEBUG
+    private static func debugRun(_ mode: String) -> L.Run {
+        let now = Date().timeIntervalSince1970
+        func m(_ id: String, server: Bool = true, at: Double = now, failed: Bool? = nil, failure: String? = nil) -> L.RunMachine {
+            L.RunMachine(environmentId: "debug-\(id)", label: id, updatesProviders: !server, updatesServer: server, startedAt: at,
+                         failed: failed, failure: failure)
+        }
+        switch mode {
+        case "slow": return L.Run(localVersion: nil, phase: .providers, machines: [m("studio", server: false, at: now - 245), m("alvin", failed: false)])
+        case "failed": return L.Run(localVersion: nil, phase: .servers, machines: [m("studio", failed: true, failure: "Connection lost"), m("alvin", failed: false)])
+        case "failures": return L.Run(localVersion: nil, phase: .servers, machines: [m("studio", server: false, failed: true, failure: "Codex: offline"),
+                                                                                   m("alvin", server: false, failed: true, failure: "Claude: offline")])
+        case "countdown": return L.Run(localVersion: "0.0.99", phase: .countdown, restartAt: now + 9, machines: [m("alvin", failed: false)])
+        case "installing": return L.Run(localVersion: "0.0.99", phase: .installing, machines: [m("alvin", failed: false)])
+        default: return L.Run(localVersion: "0.0.99", phase: .servers, machines: [m("studio"), m("alvin", failed: false)])
+        }
+    }
+    #endif
+
+    private func statuses(_ run: L.Run) -> [L.MachineStatus] {
+        run.machines.map { L.status($0, phase: run.phase, server: serverUpdates.state($0.environmentId)) }
+    }
+
+    /// The capsule for a pass: this app is CandyWrapper's own Sparkle update, the rows are other machines' servers and
+    /// providers. CandyWrapper's runtime never joins a pass, so it has no row.
+    private func capsule(_ run: L.Run) -> SidebarUpdateCapsule {
+        let now = Date().timeIntervalSince1970
+        let statuses = statuses(run)
+        let s = updater.state
+        let local: L.LocalState? = run.localVersion == nil ? nil : s.status == .downloading ? .downloading(percent: s.downloadPercent) : .waiting
+        let view = L.describeCapsule(run, statuses: statuses, local: local, now: now)
+        let rows = zip(run.machines, statuses).map { m, status in
+            SidebarUpdateCapsule.Popover.Row(label: m.label,
+                status: status.rawValue + (status.isActive && status != .waiting ? " \(L.elapsed(now - m.startedAt))" : ""),
+                failed: status == .failed, failure: m.failure)
+        }
+        let localLine: SidebarUpdateCapsule.Popover.Local? = run.localVersion != nil
+            ? .status(L.localStatus(run, local: local, now: now)) : action == .install ? .restartToUpdate : nil
+        let settled = !statuses.contains { $0.isActive && $0 != .waiting } && run.localVersion == nil
+        return SidebarUpdateCapsule(view: view, countdown: run.restartSeconds(now: now),
+            popover: .init(local: localLine, rows: rows, showsDismiss: settled && statuses.contains(.failed) && view.action != .dismiss))
+    }
+
+    private var tick: DispatchWorkItem?
+
+    /// `useNow`: a new `now` each second of the countdown and every 30 seconds while a machine works; nothing otherwise.
+    private func scheduleTick() {
+        tick?.cancel()
+        tick = nil
+        guard let run, let interval = L.tickInterval(run, statuses: statuses(run)) else { return }
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.refresh() } }
+        tick = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + interval, execute: work)
+    }
+
+    private func capsuleAction(_ action: SidebarUpdateCapsule.Action) {
+        switch action {
+        case .later: decideRestart?(false)
+        case .retry: retryFailedServers()
+        case .dismiss: dismissSettled()
         }
     }
 
-    /// `useUpdateRunTooltip`: this app first, then one line per machine.
-    private func runTooltip(_ run: L.Run) -> String {
-        let statuses = run.machines.map { ($0.label, L.status($0, phase: run.phase, server: serverUpdates.state($0.environmentId))) }
-        var local: String?
-        if run.localVersion != nil {
-            let s = updater.state
-            if s.status == .downloading { local = "downloading" + (s.downloadPercent.map { " \(Int($0.rounded(.down)))%" } ?? "") }
-            else if run.phase == .installing { local = "restarting" }
-            else { local = action == .install ? "restarts last" : "waiting" }
+    /// `dismissSettledUpdateRunMachines`: settled rows leave; the pass closes when nothing else shows.
+    private func dismissSettled() {
+        guard var r = run else { return }
+        r.machines.removeAll { $0.failed != nil }
+        run = L.closeFinished(r)
+    }
+
+    /// `retryFailedUpdateRunServers` (updateEverythingRun.tsx:66-126): failed servers update again; one already on
+    /// the target only settles.
+    private func retryFailedServers() {
+        guard var r = run else { return }
+        let target = ServerVersionSkewLogic.clientVersion
+        var retried: [L.RunMachine] = []
+        let now = Date().timeIntervalSince1970
+        for i in r.machines.indices where r.machines[i].failed == true && r.machines[i].updatesServer {
+            let id = r.machines[i].environmentId
+            if let v = serverUpdates.descriptor(id)?.serverVersion, !ServerVersionSkewLogic.serverIsBehind(v, client: target) {
+                r.machines[i].updatesServer = false
+                r.machines[i].failure = r.machines[i].providerFailure
+                r.machines[i].failed = r.machines[i].providerFailure != nil
+                continue
+            }
+            r.machines[i].failed = nil
+            r.machines[i].failure = nil
+            r.machines[i].startedAt = now
+            retried.append(r.machines[i])
         }
-        return L.runTooltip(statuses, local: local)
+        run = L.closeFinished(r)
+        for m in retried {
+            Task { [weak self, serverUpdates] in
+                let outcome = await serverUpdates.updateQuietly(m.environmentId, serverLabel: m.label)
+                let failure: String? = switch outcome {
+                case .updated: m.providerFailure
+                case .failed(let why): why
+                case .skipped: "Could not start the update"
+                }
+                self?.settle(m.environmentId, failure: failure, serverUpdated: outcome == .updated)
+            }
+        }
+    }
+
+    /// The popover's Restart to update once this app's download waits (SidebarUpdatePill.tsx:451-464).
+    private func restartToUpdate() {
+        guard run?.localVersion == nil, action == .install, let version = DesktopUpdateLogic.downloadedVersion(updater.state) else { return }
+        Self.save(L.Result(localVersion: version, updatedServers: 0, updatedProviders: 0, failures: []))
+        Task { [weak self, updater] in
+            let installed = await updater.install()
+            if !(installed.accepted && DesktopUpdateLogic.actionError(accepted: installed.accepted, completed: installed.completed, state: updater.state) == nil) {
+                Self.clearSaved()
+            }
+            self?.refresh()
+        }
+    }
+
+    private var decideRestart: ((Bool) -> Void)?
+
+    /// `waitForUpdateRestart`: the capsule counts down, Later answers false, the end of the count true.
+    private func waitForRestart() async -> Bool {
+        await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            let timer = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.decideRestart?(true) } }
+            decideRestart = { [weak self] restart in
+                timer.cancel()
+                self?.decideRestart = nil
+                done.resume(returning: restart)
+            }
+            if var r = run { r.phase = .countdown; r.restartAt = Date().timeIntervalSince1970 + L.restartDelay; run = r }
+            DispatchQueue.main.asyncAfter(deadline: .now() + L.restartDelay, execute: timer)
+        }
     }
 
     /// Dither's "Update all (N)": the Update everything pass when servers or providers wait (the runtime asks after it),
@@ -284,31 +415,42 @@ final class UpdateEverything {
         let plan = makePlan()
         let act = action
         var machines: [String: L.RunMachine] = [:], order: [String] = []
+        let startedAt = Date().timeIntervalSince1970
         for m in plan.providerMachines {
             order.append(m.environmentId)
-            machines[m.environmentId] = L.RunMachine(environmentId: m.environmentId, label: m.label, updatesProviders: true, updatesServer: false)
+            machines[m.environmentId] = L.RunMachine(environmentId: m.environmentId, label: m.label, updatesProviders: true, updatesServer: false,
+                                                     startedAt: startedAt)
         }
         for s in plan.servers {
             if machines[s.environmentId] == nil { order.append(s.environmentId) }
             machines[s.environmentId] = L.RunMachine(environmentId: s.environmentId, label: s.label,
-                                                     updatesProviders: machines[s.environmentId]?.updatesProviders ?? false, updatesServer: true)
+                                                     updatesProviders: machines[s.environmentId]?.updatesProviders ?? false, updatesServer: true,
+                                                     startedAt: startedAt)
         }
         let localVersion = act != .none ? plan.localVersion : nil
         run = L.Run(localVersion: localVersion, phase: .providers, machines: order.compactMap { machines[$0] })
         pill?.isActionPending = true
         Task { [weak self] in
             await self?.perform(plan, action: act, localVersion: localVersion)
-            self?.run = nil
+            // A pass with a failed machine stays as the capsule until it is retried or dismissed (useUpdateEverything.ts:262-272).
+            if var r = self?.run {
+                r.phase = .servers; r.restartAt = nil; r.localVersion = nil
+                self?.run = L.closeFinished(r)
+            }
             self?.pill?.isActionPending = false
             // Reached only when this app didn't restart into its update.
             if runtimeAfter { self?.serverUpdates.runtimeUpdater?.request() }
         }
     }
 
-    private func settle(_ environmentId: String, failed: Bool) {
+    /// `settleUpdateRunMachine` (updateEverythingRun.tsx:38-58).
+    private func settle(_ environmentId: String, failure: String?, serverUpdated: Bool = false, providerFailure: String?? = nil) {
         guard var r = run, let i = r.machines.firstIndex(where: { $0.environmentId == environmentId }) else { return }
-        r.machines[i].failed = failed
-        run = r
+        r.machines[i].failed = failure != nil
+        r.machines[i].failure = failure
+        if serverUpdated { r.machines[i].updatesServer = false }
+        if let providerFailure { r.machines[i].providerFailure = providerFailure }
+        run = L.closeFinished(r)
     }
 
     private func perform(_ plan: Plan, action act: DesktopUpdateLogic.ButtonAction, localVersion: String?) async {
@@ -325,7 +467,7 @@ final class UpdateEverything {
         }
         // Providers first, so no install is cut off by a server restart.
         var providerOutcomes: [(updated: Bool, line: String?)] = []
-        var failedProviderMachines: Set<String> = []
+        var providerFailures: [String: String] = [:]
         await withTaskGroup(of: (String, Bool, String?).self) { group in
             for m in plan.providerMachines {
                 for c in m.candidates {
@@ -346,11 +488,17 @@ final class UpdateEverything {
             }
             for await (env, ok, line) in group {
                 providerOutcomes.append((ok, line))
-                if !ok { failedProviderMachines.insert(env) }
+                if !ok, providerFailures[env] == nil { providerFailures[env] = line ?? "Provider update interrupted" }
             }
         }
-        for m in run?.machines ?? [] where !m.updatesServer { settle(m.environmentId, failed: failedProviderMachines.contains(m.environmentId)) }
-        if var r = run { r.phase = .servers; run = r }
+        for m in run?.machines ?? [] where !m.updatesServer { settle(m.environmentId, failure: providerFailures[m.environmentId]) }
+        // A server's time runs from the end of the providers (useUpdateEverything.ts:186-196).
+        let serversStartedAt = Date().timeIntervalSince1970
+        if var r = run {
+            r.phase = .servers
+            for i in r.machines.indices where r.machines[i].updatesServer { r.machines[i].startedAt = serversStartedAt }
+            run = r
+        }
         var serverOutcomes: [(updated: Bool, line: String?)] = []
         await withTaskGroup(of: (String, String, ServerUpdates.QuietOutcome).self) { group in
             for s in plan.servers {
@@ -362,7 +510,8 @@ final class UpdateEverything {
             }
             for await (env, label, outcome) in group {
                 let failure: String? = if case .failed(let why) = outcome { why } else { nil }
-                settle(env, failed: failure != nil || failedProviderMachines.contains(env))
+                settle(env, failure: failure ?? providerFailures[env], serverUpdated: failure == nil,
+                       providerFailure: .some(providerFailures[env]))
                 serverOutcomes.append((outcome == .updated, failure.map { "\(label): \($0)" }))
             }
         }
@@ -371,8 +520,8 @@ final class UpdateEverything {
                               updatedProviders: providerOutcomes.filter(\.updated).count,
                               failures: (local.failure.map { ["This app: \($0)"] } ?? []) + serverOutcomes.compactMap(\.line) + providerOutcomes.compactMap(\.line))
         let localReady = local.ready
-        if localReady, act != .none, let localVersion {
-            if var r = run { r.phase = .installing; run = r }
+        if localReady, act != .none, let localVersion, await waitForRestart() {
+            if var r = run { r.phase = .installing; r.restartAt = nil; run = r }
             result.localVersion = localVersion
             Self.save(result)
             let installed = await updater.install()

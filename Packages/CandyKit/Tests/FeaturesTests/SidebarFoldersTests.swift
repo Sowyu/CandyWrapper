@@ -103,6 +103,17 @@ struct SidebarFoldersTests {
         #expect(rows(sent) == ["first", "second"])
     }
 
+    /// #42884: the folder rows are saved on this device, so a project scope shows them read-only.
+    @Test func boringSidebarRowsAreReadOnlyForAProject() {
+        let context = SettingsPageContext()
+        context.client.apply(["boringSidebarEnabled": .bool(true)])
+        context.scope = SettingsProjectTests.scope([SettingsProjectTests.env("server"), SettingsProjectTests.env("laptop")])
+        let page = BetaSettingsView(context: context)
+        for id in ["boring-sidebar", "boring-sidebar-multiline"] {
+            #expect((page.anchors[id] as? SettingsRowView)?.inertReason == "Saved on this device. Select All projects to change it.")
+        }
+    }
+
     /// #33131: the Beta switch follows `boringSidebarEnabled` alone; the legacy sidebar opt-in is gone.
     @Test func boringSidebarSwitchWritesOnlyItsOwnSetting() {
         let context = SettingsPageContext()

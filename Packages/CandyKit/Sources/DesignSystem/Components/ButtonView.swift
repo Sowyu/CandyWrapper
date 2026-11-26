@@ -16,11 +16,12 @@ public final class ButtonView: ControlView {
         var isIconOnly: Bool { rawValue.hasPrefix("icon") }
 
         /// Height (border included), inline padding, gap, radius, font px, line-height, icon px.
+        /// micro, xs and compact take `gap-1.5` since 5258 (#37358, button.tsx:18-41).
         var metrics: (height: CGFloat, padding: CGFloat, gap: CGFloat, radius: CGFloat, font: CGFloat, line: CGFloat, icon: CGFloat) {
             switch self {
-            case .micro: (20, 5, 4, 6, 11, 16, 12)
-            case .xs: (24, 7, 4, 8, 12, 16, 14)
-            case .compact: (28, 7, 4, 8, 14, 20, 16)   // tailwind-merge quirk keeps sm:text-sm
+            case .micro: (20, 5, 6, 6, 11, 16, 12)
+            case .xs: (24, 7, 6, 8, 12, 16, 14)
+            case .compact: (28, 7, 6, 8, 14, 20, 16)   // tailwind-merge quirk keeps sm:text-sm
             case .sm: (28, 9, 6, 8, 14, 20, 16)
             case .default: (32, 11, 8, 8, 14, 20, 16)
             case .lg: (36, 13, 8, 8, 14, 20, 16)
@@ -120,8 +121,16 @@ public final class ButtonView: ControlView {
 
     // MARK: Layout
 
-    public override var intrinsicContentSize: NSSize {
+    /// The size's metrics, where Redesign keeps the 4pt gap its micro, xs and compact buttons always had: #37358's
+    /// `gap-1.5` is T3's, and Redesign is CandyWrapper's own look.
+    private var laidOutMetrics: (height: CGFloat, padding: CGFloat, gap: CGFloat, radius: CGFloat, font: CGFloat, line: CGFloat, icon: CGFloat) {
         var m = size.metrics
+        if [.micro, .xs, .compact].contains(size), DesignGeometry.usesClassic(self) { m.gap = 4 }
+        return m
+    }
+
+    public override var intrinsicContentSize: NSSize {
+        var m = laidOutMetrics
         if let iconSize { m.icon = iconSize }
         let joined = CGFloat((joinedSides.leading ? 1 : 0) + (joinedSides.trailing ? 1 : 0))
         if size.isIconOnly { return NSSize(width: m.height - joined, height: m.height) }
@@ -140,7 +149,7 @@ public final class ButtonView: ControlView {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         applyCornerMask()
-        var m = size.metrics
+        var m = laidOutMetrics
         if let iconSize { m.icon = iconSize }
         let iconY = (bounds.height - m.icon) / 2
         if size.isIconOnly {
