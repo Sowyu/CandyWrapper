@@ -370,3 +370,15 @@ public enum FileAssetRules {
         return .object(["_tag": .string("media-file"), "threadId": .string(threadId), "path": .string(path), "disposition": .string("attachment")])
     }
 }
+
+/// The caps on a file read in full past the 1 MB preview (5258 largeTextProtocol.ts:8-11, fb4558d77d #40631).
+public enum FullFileText {
+    /// `FULL_TEXT_MAX_BYTES`.
+    public static let maxBytes = 64 * 1024 * 1024
+    /// `RENDERED_MAX_LINES`.
+    public static let maxLines = 1_200_000
+    /// Lines as `countNewlines` + 1 (fullFileText.ts:22-28).
+    public static func lineCount(_ data: Data) -> Int {
+        data.withUnsafeBytes { raw in raw.reduce(1) { $0 + ($1 == 0x0A ? 1 : 0) } }
+    }
+}
