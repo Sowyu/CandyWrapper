@@ -56,6 +56,8 @@ public struct SettingsSearchAvailability: Sendable, Equatable {
     public var hasAgentFeedbackEnvironment = false
     /// An environment without a provider allow-list, which hides text generators.
     public var hasTextGeneratorsEnvironment = false
+    /// Redesign is on in the window's appearance: its hidden rows leave the results (`SettingsSearch.hiddenUnderRedesign`).
+    public var redesign = false
     public init() {}
 }
 
@@ -82,9 +84,24 @@ public enum SettingsSearch {
     /// `searchableSetting(id).title`.
     public static func title(_ id: String) -> String { item(id)?.title ?? id }
 
+    /// Rows Redesign leaves out because what they change isn't on its surfaces: its menus, dialogs and composer are
+    /// solid. The pages skip them and search does too.
+    public static let hiddenUnderRedesign: Set<String> = ["setting-glass-opacity"]
+
+    /// Search terms that name what a row controls under Redesign, where T3's terms name a surface Redesign replaced.
+    static let redesignSearchTerms: [String: [String]] = [
+        "thread-details-items": ["customize show hide header pill actions menu dropdown editor scripts branch pull request git changes totals servers automations lineage side chats usage limits 5 hour weekly quota tokens"],
+        "panel-animations": ["motion speed slide sidebar right panel terminal duration"],
+    ]
+
     /// `filterAvailableSettingsSearchItems`, plus the platform filter `searchSettings` applies (desktop, macOS).
     public static func available(_ a: SettingsSearchAvailability, items: [SettingsSearchItem] = items) -> [SettingsSearchItem] {
-        items.filter { item in
+        items.compactMap { item in
+            guard a.redesign else { return item }
+            if hiddenUnderRedesign.contains(item.id) { return nil }
+            guard let terms = redesignSearchTerms[item.id] else { return item }
+            return SettingsSearchItem(id: item.id, title: item.title, to: item.to, targetId: item.targetId, scope: item.scope, searchTerms: terms, flags: item.flags)
+        }.filter { item in
             let f = item.flags
             return !f.contains(.windowsOnly)
                 && (!f.contains(.cloudOnly) || a.hasCloudPublicConfig)

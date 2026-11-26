@@ -777,7 +777,7 @@ public final class ThreadDetailsCardView: DSView {
 
     /// Right-click shows and hides the card's items (ThreadDetailsPanel.tsx:146-164); fields keep their own menu.
     public override func rightMouseDown(with event: NSEvent) {
-        MenuPopupView.showContextMenu(ThreadDetailsItems.menuItems(), in: self, at: convert(event.locationInWindow, from: nil))
+        MenuPopupView.showContextMenu(ThreadDetailsItems.menuItems(redesign: relationsOnly), in: self, at: convert(event.locationInWindow, from: nil))
     }
 
     private func relayout() {

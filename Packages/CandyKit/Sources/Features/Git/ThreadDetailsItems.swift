@@ -27,6 +27,14 @@ public enum ThreadDetailsItems {
         Item(id: "context", label: "Context window", defaultVisible: false),
     ]
 
+    /// Items that change nothing under Redesign: its environment and worktree sit in the machine row under the composer,
+    /// which always shows, and it has no context window section. Their stored choices stay for the other themes.
+    public static let redesignInert: Set<String> = ["environment", "context"]
+
+    /// The items a theme offers: all of them, or under Redesign those it shows in the header pill, its actions menu
+    /// and the Thread details dropdown.
+    public static func items(redesign: Bool) -> [Item] { redesign ? all.filter { !redesignInert.contains($0.id) } : all }
+
     /// People who turned on the retired Labs toggle keep Usage and Context until they change them (threadDetailsItems.ts:41-46).
     static func defaultVisible(_ item: Item, _ settings: ClientSettings) -> Bool {
         item.id == "usage" || item.id == "context" ? settings.bool("threadDetailsUsageEnabled") : item.defaultVisible
@@ -47,29 +55,42 @@ public enum ThreadDetailsItems {
     }
 
     /// `isDefaultThreadDetailsVisibility`.
-    public static func isDefault(_ visibility: [String: Bool]) -> Bool {
-        all.allSatisfy { visibility[$0.id] == $0.defaultVisible }
+    public static func isDefault(_ visibility: [String: Bool], redesign: Bool = false) -> Bool {
+        items(redesign: redesign).allSatisfy { visibility[$0.id] == $0.defaultVisible }
     }
 
     /// `RESET_THREAD_DETAILS_ITEMS`: also clears the retired Labs flag, so Usage and Context return to off.
     public static let reset: [String: JSONValue] = ["threadDetailsItems": .object([:]), "threadDetailsUsageEnabled": .bool(false)]
 
+    /// The reset a theme offers. Under Redesign it leaves the items Redesign doesn't offer as they show now, so the
+    /// other themes get them back unchanged.
+    public static func reset(_ settings: ClientSettings, redesign: Bool) -> [String: JSONValue] {
+        guard redesign else { return reset }
+        let shown = visibility(settings)
+        var kept: [String: JSONValue] = [:]
+        for item in all where redesignInert.contains(item.id) && shown[item.id] != item.defaultVisible {
+            kept[item.id] = .bool(shown[item.id] ?? item.defaultVisible)
+        }
+        return ["threadDetailsItems": .object(kept), "threadDetailsUsageEnabled": .bool(false)]
+    }
+
     /// `ThreadDetailsItemsMenuItems`: the card's context menu and the Settings row share it. `settings` reads the
     /// latest values when an item toggles, `write` saves a patch.
+    /// `redesign` lists only the items Redesign shows, under a label that names where they show.
     @MainActor
-    public static func menuItems(settings: @escaping @MainActor () -> ClientSettings = { ClientSettingsStore.shared.current },
+    public static func menuItems(redesign: Bool = false, settings: @escaping @MainActor () -> ClientSettings = { ClientSettingsStore.shared.current },
                                  write: @escaping @MainActor ([String: JSONValue]) -> Void = { ClientSettingsStore.shared.update($0) }) -> [MenuItem] {
         let shown = visibility(settings())
-        var items: [MenuItem] = [.label("Show in thread details")]
-        for item in all {
+        var rows: [MenuItem] = [.label(redesign ? "Show in the header and Thread details" : "Show in thread details")]
+        for item in items(redesign: redesign) {
             var row = MenuItem.checkbox(item.label, checked: shown[item.id] ?? false) { on in
                 write(["threadDetailsItems": setting(settings(), item, visible: on)])
             }
             row.keepsOpen = true
-            items.append(row)
+            rows.append(row)
         }
-        items.append(.separator)
-        items.append(MenuItem("Reset to default", disabled: isDefault(shown)) { write(reset) })
-        return items
+        rows.append(.separator)
+        rows.append(MenuItem("Reset to default", disabled: isDefault(shown, redesign: redesign)) { write(reset(settings(), redesign: redesign)) })
+        return rows
     }
 }

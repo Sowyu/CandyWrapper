@@ -1016,7 +1016,9 @@ final class PaletteCommands {
                          title: card.label, description: card.previews.count == 1 ? "For \(card.previews[0].mode.rawValue) mode" : nil,
                          icon: .palette, note: current == card.id ? "Current" : nil,
                          action: .run({
-                             if card.previews.count == 1, let id = card.id { lib.setThemeHalf(card.previews[0].mode, id) } else { lib.setTheme(card.id ?? lib.appearanceMode) }
+                             // Redesign goes through its switch, which saves the theme it covers for when it goes off.
+                             if card.id == ThemeDefinition.dither.id { lib.setRedesign(true) }
+                             else if card.previews.count == 1, let id = card.id { lib.setThemeHalf(card.previews[0].mode, id) } else { lib.setTheme(card.id ?? lib.appearanceMode) }
                          }, keepOpen: false))
         }
         return PalettePage(addonIcon: .palette, groups: [PaletteGroup(value: "themes", label: "Change theme", items: items)])

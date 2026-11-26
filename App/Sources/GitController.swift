@@ -24,7 +24,11 @@ final class GitController {
     private let composer: ComposerController
     private var modal: ModalHost?
     private var keyObserver: NSObjectProtocol?
-    isolated deinit { if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) } }
+    private var detailsItemsObserver = 0
+    isolated deinit {
+        if let keyObserver { NotificationCenter.default.removeObserver(keyObserver) }
+        ClientSettingsStore.shared.removeObserver(detailsItemsObserver)
+    }
     /// Settings > Source Control, set by the app.
     var openSourceControlSettings: (() -> Void)?
 
@@ -129,6 +133,10 @@ final class GitController {
         let pill = panel.header.pill
         pill.changes.action = { [weak self] in self?.panel.toggleDiff() }
         pill.menuSections[.git] = { [weak self] in self?.actionsMenuItems() ?? [] }
+        detailsItemsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            guard keys.contains("threadDetailsItems") || keys.contains("threadDetailsUsageEnabled") else { return }
+            self?.renderPill()
+        }
         composer.onRefresh = { [weak self] in self?.syncBranchMismatch() }
         panel.setDetailsInlineOpen(UserDefaults.standard.bool(forKey: Self.detailsOpenKey))
         keyObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] note in
@@ -416,7 +424,9 @@ final class GitController {
     /// Redesign's header pill: whether it shows the git controls, and the totals.
     private func renderPill() {
         let pill = panel.header.pill
+        // Thread details' Changes item shows and hides the totals, as it did the card's Changes row.
         pill.showsVersionControl = target != nil && !isScratchTarget
+            && ThreadDetailsItems.visibility(ClientSettingsStore.shared.current)["changes"] != false
         pill.isRepo = isRepo
         let totals = GitActionsLogic.changesTotals(status).map { ($0.insertions, $0.deletions) } ?? (0, 0)
         if pill.totals.insertions != totals.0 || pill.totals.deletions != totals.1 {

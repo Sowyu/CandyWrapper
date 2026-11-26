@@ -30,10 +30,15 @@ public final class DitherHeaderPillView: DSView {
     public enum MenuSection: CaseIterable, Sendable { case editor, scripts, git, lineage }
     public var menuSections: [MenuSection: @MainActor () -> [MenuItem]] = [:]
 
-    /// The actions menu's rows as of now.
-    public func menuItems() -> [MenuItem] {
+    /// The Thread details item (Settings > Appearance) that shows each section; Lineage opens the dropdown, which
+    /// filters its own rows.
+    static let sectionItems: [MenuSection: String] = [.editor: "openIn", .scripts: "scripts", .git: "gitActions"]
+
+    /// The actions menu's rows as of now, without the sections turned off in Thread details.
+    public func menuItems(shown: [String: Bool] = ThreadDetailsItems.visibility(ClientSettingsStore.shared.current)) -> [MenuItem] {
         var items: [MenuItem] = []
         for section in MenuSection.allCases {
+            if let id = Self.sectionItems[section], shown[id] == false { continue }
             let rows = menuSections[section]?() ?? []
             guard !rows.isEmpty else { continue }
             if !items.isEmpty { items.append(.separator) }
