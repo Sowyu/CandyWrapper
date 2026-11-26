@@ -226,7 +226,7 @@ final class UserMessageRowView: TimelineRowView {
         addSubview(foldHeader)
         addSubview(openLink)
         foldHeader.action = { [weak self] in
-            guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
+            guard let self, case .message(let m, _, _, _, _)? = self.item?.row.kind else { return }
             self.context.model?.toggleMessage(m.id.rawValue)
         }
         time.lineHeight = 16
@@ -241,7 +241,7 @@ final class UserMessageRowView: TimelineRowView {
         }
         fadeMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         toggle.action = { [weak self] in
-            guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
+            guard let self, case .message(let m, _, _, _, _)? = self.item?.row.kind else { return }
             self.context.model?.toggleMessage(m.id.rawValue)
         }
         copyButton.action = { [weak self] in
@@ -249,7 +249,7 @@ final class UserMessageRowView: TimelineRowView {
             Features.copy(self.text, from: self.copyButton)
         }
         openLink.action = { [weak self] in
-            guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
+            guard let self, case .message(let m, _, _, _, _)? = self.item?.row.kind else { return }
             let p = UserMessagePresentation.resolve(m)
             if p.isAutomation { if let task = p.scheduledTaskId { self.context.model?.onOpenScheduledTask?(task) } }
             else if let linked = m.linkedSender { self.context.model?.onOpenThread?(ThreadId(linked.href)) }
@@ -265,10 +265,10 @@ final class UserMessageRowView: TimelineRowView {
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
-        guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
+        guard case .message(let m, _, _, _, _) = item.row.kind else { return }
         let presentation = UserMessagePresentation.resolve(m)
         text = presentation.text
-        let switchLabel = ModelSwitchPresentation.modelSwitch({ if case .message(_, let p, _, _, _, _) = item.row.kind { return p }; return nil }()).flatMap {
+        let switchLabel = ModelSwitchPresentation.modelSwitch({ if case .message(_, let p, _, _, _) = item.row.kind { return p }; return nil }()).flatMap {
             ModelSwitchPresentation.label(from: $0.from, to: $0.to, providers: context.model?.providers ?? [])
         }
         modelSwitch.isHidden = switchLabel == nil
@@ -353,7 +353,7 @@ final class UserMessageRowView: TimelineRowView {
         time.text = TL.dayAwareTimestamp(m.createdAt, now: context.now())
         time.setTooltip(nil)
         // A burst of your messages shows its steer label once (TimelineUserMessageRow.tsx:888-895 at 4928).
-        let pending: Bool = if case .message(_, let p, _, _, _, _) = item.row.kind { p?.item.status == .pending } else { false }
+        let pending: Bool = if case .message(_, let p, _, _, _) = item.row.kind { p?.item.status == .pending } else { false }
         let intent = item.row.continuesSteer ? nil : UserIntentMarkerView.presentation(m.inputIntent, unread: pending)
         marker.isHidden = intent == nil
         if let intent { marker.configure(intent) }
@@ -373,13 +373,13 @@ final class UserMessageRowView: TimelineRowView {
     /// A match below a collapsed message's fold opens it (`data-thread-find-fold`, MessagesTimeline.tsx:4737-4740).
     override func activeFindRect() -> CGRect? {
         // A match inside a folded message opens it, as T3's `beforematch` does (TimelineUserMessageRow.tsx:449-458).
-        if fold != nil, item?.ui.messageExpanded != true, case .message(let m, _, _, _, _, _)? = item?.row.kind {
+        if fold != nil, item?.ui.messageExpanded != true, case .message(let m, _, _, _, _)? = item?.row.kind {
             context.model?.toggleMessage(m.id.rawValue)
             return nil
         }
         guard let rect = markdown.activeFindRect() else { return nil }
         if metrics(bounds.width).collapsible, item?.ui.messageExpanded != true, rect.maxY > Self.collapsedHeight - Self.fade,
-           case .message(let m, _, _, _, _, _)? = item?.row.kind {
+           case .message(let m, _, _, _, _)? = item?.row.kind {
             context.model?.toggleMessage(m.id.rawValue)
             return nil
         }
@@ -632,7 +632,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
         for v in [icon, eyebrow, title, summary, agents, markdown, toggle] as [NSView] { addSubview(v) }
         fadeMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         toggle.action = { [weak self] in
-            guard let self, case .message(let m, _, _, _, _, _)? = self.item?.row.kind else { return }
+            guard let self, case .message(let m, _, _, _, _)? = self.item?.row.kind else { return }
             self.context.model?.toggleMessage(m.id.rawValue)
         }
         setAccessibilityElement(true)
@@ -642,7 +642,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
 
     override func configure(_ item: TimelineItem) {
         super.configure(item)
-        guard case .message(let m, _, _, _, _, _) = item.row.kind else { return }
+        guard case .message(let m, _, _, _, _) = item.row.kind else { return }
         let next = WorkflowOpening.Plan(coordinator: item.ui.workflowCoordinator)
         if next != plan { plan = next; rebuildPlan() }
         let headline = plan.headline
@@ -692,7 +692,7 @@ final class WorkflowOpeningRowView: TimelineRowView {
     override func activeFindRect() -> CGRect? {
         guard let rect = markdown.activeFindRect() else { return nil }
         if body(bounds.width).collapsible, item?.ui.messageExpanded != true, rect.maxY > UserMessageRowView.collapsedHeight - UserMessageRowView.fade,
-           case .message(let m, _, _, _, _, _)? = item?.row.kind {
+           case .message(let m, _, _, _, _)? = item?.row.kind {
             context.model?.toggleMessage(m.id.rawValue)
             return nil
         }
@@ -784,15 +784,13 @@ final class WorkflowOpeningRowView: TimelineRowView {
 }
 
 /// `AssistantTimelineRow` (:2745-2793): markdown in `px-1 py-0.5`, then the meta row that shows on
-/// hover when this is the turn's final answer. 16px under a final answer, 8px under commentary.
+/// hover when this is the turn's final answer. 16px under a final answer, 8px under commentary. 5258 dropped the
+/// changed-files card under the answer (1c6d41a9ba, #41317); the Diff panel and thread details still list the files.
 final class AssistantMessageRowView: TimelineRowView {
     private let markdown = MarkdownView(frame: .zero)
     private let empty = LabelView("(empty response)", font: TL.font(14), color: TL.c(\.foreground, 0.8))
     private let meta = AssistantMetaContent()
     private var showMeta = false
-    /// `AssistantChangedFilesSection`: the card when the run changed files.
-    private lazy var card = ChangedFilesCardView()
-    private var cardFiles: (files: [CheckpointFile], expanded: Bool, overrides: [String: Bool], hidden: Int)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -806,7 +804,7 @@ final class AssistantMessageRowView: TimelineRowView {
     override func configure(_ item: TimelineItem) {
         let sameRow = self.item?.id == item.id
         super.configure(item)
-        guard case .message(let m, let projected, let showMeta, let showCopy, let copyStreaming, let summary) = item.row.kind else { return }
+        guard case .message(let m, let projected, let showMeta, let showCopy, let copyStreaming) = item.row.kind else { return }
         self.showMeta = showMeta
         // Blocks fade in only while the message streams. T3's `@starting-style` also fades the blocks a
         // streaming message mounts with, so a view that starts showing one fades from no blocks.
@@ -827,16 +825,6 @@ final class AssistantMessageRowView: TimelineRowView {
         markdown.layoutChoices = context.markdownChoices[m.id.rawValue] ?? .init()
         markdown.onLayoutChoicesChange = { [weak context] in context?.markdownChoices[m.id.rawValue] = $0 }
         markdown.fadesNewBlocks = m.streaming
-        if let summary, !summary.files.isEmpty {
-            cardFiles = (summary.files, item.ui.filesExpanded, item.ui.folderOverrides, summary.hiddenFileCount)
-            if card.superview == nil { addSubview(card) }
-            card.model = context.model
-            card.configure(summary, allExpanded: item.ui.filesExpanded, overrides: item.ui.folderOverrides)
-            card.isHidden = false
-        } else {
-            cardFiles = nil
-            if card.superview != nil { card.isHidden = true }
-        }
         let isEmpty = !m.streaming && m.text.allSatisfy(\.isWhitespace)
         empty.isHidden = !isEmpty
         markdown.isHidden = isEmpty
@@ -872,23 +860,15 @@ final class AssistantMessageRowView: TimelineRowView {
         empty.isHidden ? markdown.height(forWidth: max(0, width - 8)) : TL.relaxed
     }
 
-    /// The answer's trailing `<p>` margin collapses with the card's `mt-4` or the meta row's `mt-1.5` (CSS margin
+    /// The answer's trailing `<p>` margin collapses with the meta row's `mt-1.5` (CSS margin
     /// collapsing through the row's wrappers, MessagesTimeline.tsx:2751-2786).
     private func collapsedMargin(_ width: CGFloat) -> CGFloat {
-        guard empty.isHidden else { return 0 }
-        let m = markdown.layout(forWidth: max(0, width - 8)).trailingMargin
-        return cardFiles != nil ? min(m, 16) : showMeta ? min(m, 6) : 0
-    }
-
-    /// The card's height plus its `mt-4`, or 0.
-    private var cardSpace: CGFloat {
-        guard let cardFiles else { return 0 }
-        return 16 + ChangedFilesCardView.height(cardFiles.files, allExpanded: cardFiles.expanded, overrides: cardFiles.overrides,
-                                         hiddenFiles: cardFiles.hidden)
+        guard empty.isHidden, showMeta else { return 0 }
+        return min(markdown.layout(forWidth: max(0, width - 8)).trailingMargin, 6)
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat {
-        2 + bodyHeight(width) - collapsedMargin(width) + cardSpace + (showMeta ? 6 + 24 : 0) + 2 + (showMeta ? 16 : 8)
+        2 + bodyHeight(width) - collapsedMargin(width) + (showMeta ? 6 + 24 : 0) + 2 + (showMeta ? 16 : 8)
     }
 
     override func layout() {
@@ -896,16 +876,8 @@ final class AssistantMessageRowView: TimelineRowView {
         let body = bodyHeight(bounds.width)
         markdown.frame = NSRect(x: 4, y: 2, width: max(0, bounds.width - 8), height: body)
         empty.frame = NSRect(x: 4, y: 2, width: bounds.width - 8, height: TL.relaxed)
-        let cardSpace = self.cardSpace, flow = body - collapsedMargin(bounds.width)
-        if cardSpace > 0 {
-            card.frame = NSRect(x: 4, y: 2 + flow + 16, width: max(0, bounds.width - 8), height: cardSpace - 16)
-            card.updateVisibleRows()
-        }
-        meta.frame = NSRect(x: 4, y: 2 + flow + cardSpace + 6, width: bounds.width - 8, height: 24)
-    }
-
-    override func setContentVisible(_ visible: Bool) {
-        if cardFiles != nil { card.updateVisibleRows() }
+        let flow = body - collapsedMargin(bounds.width)
+        meta.frame = NSRect(x: 4, y: 2 + flow + 6, width: bounds.width - 8, height: 24)
     }
 
     /// `group/assistant` sits on the whole row, padding included (MessagesTimeline.tsx:2032-2035).

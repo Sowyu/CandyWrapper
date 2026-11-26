@@ -48,7 +48,7 @@ struct UserMessageShapeTests {
     static func row(_ m: ChatMessage) -> UserMessageRowView {
         let item = TimelineItem(row: TimelineRow(id: "m", createdAt: m.createdAt,
             kind: .message(m, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false,
-                           assistantCopyStreaming: false, turnDiffSummary: nil)))
+                           assistantCopyStreaming: false)))
         let view = UserMessageRowView()
         view.context = TimelineContext()
         view.configure(item)

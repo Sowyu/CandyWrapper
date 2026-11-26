@@ -65,7 +65,7 @@ func decode<T: Decodable>(_ type: T.Type, _ json: String) -> T {
 /// A one-line description of a row for sequence assertions: `kind:id`.
 func describe(_ row: TimelineRow) -> String {
     let kind = switch row.kind {
-    case .message(let m, _, _, _, _, _): m.role == .user ? "user" : "assistant"
+    case .message(let m, _, _, _, _): m.role == .user ? "user" : "assistant"
     case .assistantMeta: "assistant-meta"
     case .work(_, true, _): "work-details"
     case .work: "work"

@@ -7,8 +7,6 @@ import T3Store
 /// scope menu, line totals and view toggles, then the virtualized file list. The panel asks for a
 /// run's patch through `loader` (`orchestration.getTurnDiff`, or `getFullThreadDiff` for the first
 /// run, research note G 5.3), parses it off the main thread and shows every file collapsed.
-///
-/// The timeline's changed files card opens it with `open(runId:filePath:)`.
 public final class DiffPanelView: DSView {
     /// Sends the request and returns the server's reply.
     public typealias Loader = @Sendable (TurnDiffs.Request) async throws -> ThreadTurnDiff
@@ -555,8 +553,7 @@ public final class DiffPanelView: DSView {
     }
 
     /// Selects a run (nil: the latest) and, once its diff is loaded, expands `filePath` and scrolls to it
-    /// (`revealDiffFile`, DiffPanel.tsx:551-580). This is what the changed files card's "Open diff" and
-    /// file rows call (`onOpenTurnDiff`).
+    /// (`revealDiffFile`, DiffPanel.tsx:551-580).
     public func open(runId: RunId?, filePath: String?) {
         closeToolCall()
         let known = runId.flatMap { id in summaries.first { $0.runId == id }?.runId }

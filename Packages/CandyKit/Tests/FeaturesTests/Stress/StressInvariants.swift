@@ -42,7 +42,7 @@ enum StressInvariants {
 
     static func kind(_ row: TimelineRow) -> String {
         switch row.kind {
-        case .message(let m, _, _, _, _, _): m.role == .user ? "user" : "assistant"
+        case .message(let m, _, _, _, _): m.role == .user ? "user" : "assistant"
         case .assistantMeta: "meta"
         case .work(_, true, _): "details"
         case .work: "work"
@@ -65,7 +65,7 @@ enum StressInvariants {
     /// Entry ids a row shows on its own (not as a repeat inside an expanded group's body).
     static func shownIds(_ row: TimelineRow) -> [String] {
         switch row.kind {
-        case .message(let m, _, _, _, _, _): [m.id.rawValue]
+        case .message(let m, _, _, _, _): [m.id.rawValue]
         case .work(let entries, false, _): entries.map(\.id)
         case .workLive(_, let entries, _, false, _, _): entries.map(\.id)
         case .contextCompaction: [row.id]
@@ -157,7 +157,7 @@ enum StressInvariants {
             switch row.kind {
             case .work(let entries, true, _): for e in entries { count[e.id, default: 0] += 1 }
             case .workLive(_, let entries, _, false, _, _), .work(let entries, false, _): for e in entries { count[e.id, default: 0] += 1 }
-            case .message(let m, _, _, _, _, _): count[m.id.rawValue, default: 0] += 1
+            case .message(let m, _, _, _, _): count[m.id.rawValue, default: 0] += 1
             case .event(let p, let subagents, false): for s in subagents ?? [p] { count[s.item.id.rawValue, default: 0] += 1 }
             case .contextCompaction, .proposedPlan, .htmlRender, .mcpApp, .pendingApproval: count[row.id, default: 0] += 1
             default: break

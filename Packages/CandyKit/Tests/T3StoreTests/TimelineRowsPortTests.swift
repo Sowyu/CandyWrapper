@@ -54,7 +54,7 @@ private func live(_ rows: [TimelineRow]) -> [(entry: WorkLogEntry, grouped: [Wor
 }
 
 private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, streaming: Bool)? {
-    guard let row, case .message(_, _, let meta, let copy, let streaming, _) = row.kind else { return nil }
+    guard let row, case .message(_, _, let meta, let copy, let streaming) = row.kind else { return nil }
     return (meta, copy, streaming)
 }
 
@@ -337,7 +337,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
             rows.map { row in
                 switch row.kind {
                 case .turnFold(_, let label, _, _): "fold:\(label)"
-                case .message(let m, _, _, _, _, _): "\(m.role.rawValue):\(m.id.rawValue)"
+                case .message(let m, _, _, _, _): "\(m.role.rawValue):\(m.id.rawValue)"
                 default: kind(row)
                 }
             }
@@ -369,7 +369,7 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
                 $0.isWorking = true
                 $0.activeTurnStartedAt = at(20)
             }.map { row in
-                if case .message(let m, _, _, _, _, _) = row.kind { return "\(m.role.rawValue):\(m.id.rawValue)" }
+                if case .message(let m, _, _, _, _) = row.kind { return "\(m.role.rawValue):\(m.id.rawValue)" }
                 return kind(row)
             }
         }

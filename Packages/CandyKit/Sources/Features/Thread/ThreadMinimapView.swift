@@ -12,7 +12,7 @@ public struct ThreadMinimapItem: Equatable, Sendable {
     public static func derive(_ rows: [TimelineRow]) -> [Self] {
         var result: [Self] = []
         for (index, row) in rows.enumerated() {
-            guard case .message(let message, _, _, _, _, _) = row.kind else { continue }
+            guard case .message(let message, _, _, _, _) = row.kind else { continue }
             if message.role == .user {
                 // The attachment-only prompt is hidden in the thread, so the minimap shows nothing for it (timelineMinimapItems.ts at 4928).
                 let text = UserMessagePresentation.isAttachmentOnlyBootstrapPrompt(message.text) ? "" : message.text

@@ -16,7 +16,7 @@ struct WorkflowOpeningPlanTests {
         ui.workflowCoordinator = coordinator
         return TimelineItem(row: TimelineRow(id: "opening", createdAt: message.createdAt, kind: .message(
             message, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false,
-            assistantCopyStreaming: false, turnDiffSummary: nil)), ui: ui)
+            assistantCopyStreaming: false)), ui: ui)
     }
 
     @Test func planShowsPhasesAndMembers() throws {

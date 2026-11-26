@@ -24,7 +24,7 @@ struct UserMessageFidelityTests {
                                   createdAt: T3Timestamp("2026-10-29T12:00:00Z"), attachments: attachments)
         var row = TimelineRow(id: message.id.rawValue, createdAt: message.createdAt,
             kind: .message(message, projectedItem: nil, showAssistantMeta: false,
-                           showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil))
+                           showAssistantCopyButton: false, assistantCopyStreaming: false))
         row.groupedWithNext = next
         row.groupedWithPrevious = previous
         let view = UserMessageRowView()

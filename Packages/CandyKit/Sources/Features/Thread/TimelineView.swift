@@ -486,7 +486,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         switch change {
         case .rows(let changed):
             for rowIndex in changed {
-                guard case .message(let message, _, _, _, _, _) = new[rowIndex].row.kind else { continue }
+                guard case .message(let message, _, _, _, _) = new[rowIndex].row.kind else { continue }
                 var lower = 0, upper = minimap.items.count
                 while lower < upper {
                     let middle = (lower + upper) / 2
@@ -718,14 +718,13 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     static func estimate(_ item: TimelineItem, width: CGFloat) -> CGFloat {
         func lines(_ text: String, _ perLine: CGFloat) -> CGFloat { estimatedLineCount(text, chars: max(1, width / perLine)) }
         switch item.row.kind {
-        case .message(let m, _, let meta, _, _, let summary):
+        case .message(let m, _, let meta, _, _):
             if m.role == .user {
                 let marker: CGFloat = UserIntentMarkerView.presentation(m.inputIntent) == nil ? 0 : 16
                 return marker + min(176, lines(m.text, 7.5 / 0.8) * 22.75) + 24 + 44
             }
-            let card = summary.map { $0.files.isEmpty ? 0 : 16 + 56 + CGFloat($0.files.count) * 28 } ?? 0
             let body = m.text.utf8.count >= TimelineContext.backgroundBytes ? estimatedLines(m.text, width: width) : lines(m.text, 7.5)
-            return body * 22.75 + 4 + card + (meta ? 46 : 8)
+            return body * 22.75 + 4 + (meta ? 46 : 8)
         case .assistantMeta: return 42
         case .proposedPlan(let p): return min(416, lines(p.planMarkdown, 7.5) * 22.75) + 140
         case .work(let entries, let group, _): return CGFloat(entries.count) * (group ? 24 : 28) + (group ? 4 : 8)
@@ -1047,7 +1046,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     static func kind(_ row: TimelineRow) -> Kind {
         switch row.kind {
-        case .message(let m, _, _, _, _, _): m.role == .user ? (m.workflowOpening ? .workflowOpening : .user) : .assistant
+        case .message(let m, _, _, _, _): m.role == .user ? (m.workflowOpening ? .workflowOpening : .user) : .assistant
         case .assistantMeta: .meta
         case .proposedPlan: .plan
         case .work: .work

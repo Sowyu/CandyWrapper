@@ -23,9 +23,9 @@ struct LargeReplyResponsivenessStress {
         answer.streaming = streaming
         return [
             TimelineRow(id: "question", createdAt: at, kind: .message(ChatMessage(id: MessageId("question"), role: .user, text: "Write a long reply.", createdAt: at),
-                                                                      projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)),
+                                                                      projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: false)),
             TimelineRow(id: "answer", createdAt: at, kind: .message(answer, projectedItem: nil, showAssistantMeta: !streaming, showAssistantCopyButton: !streaming,
-                                                                    assistantCopyStreaming: streaming, turnDiffSummary: nil)),
+                                                                    assistantCopyStreaming: streaming)),
         ].map { TimelineItem(row: $0) }
     }
 

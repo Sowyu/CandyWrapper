@@ -15,9 +15,6 @@ struct TimelineRowUI: Hashable {
     var foldTitle: String?
     /// A long plan shows in full.
     var planExpanded = false
-    /// The changed files card's fold-all state and the folders toggled since.
-    var filesExpanded = false
-    var folderOverrides: [String: Bool] = [:]
     /// Fetched output of this row's open entries whose output the stream left out.
     var outputs: [String: ToolOutputState] = [:]
     /// A secret request's answer in flight, and the error of the last one.
@@ -118,18 +115,12 @@ public final class ThreadViewModel {
         didSet { if parentSubagents != oldValue { refreshItems() } }
     }
     private var expandedPlans: Set<String> = []
-    /// Per run, like T3's `threadChangedFilesExpandedById` (kept for the thread, not persisted).
-    private var expandedChangedFiles: Set<RunId> = []
-    /// Per run, folder path to open; cleared when the run's fold-all changes (ChangedFilesTree.tsx).
-    private var folderOverrides: [RunId: [String: Bool]] = [:]
     private(set) var items: [TimelineItem] = []
 
     /// Rows changed; the panel re-applies them.
     var onChange: (@MainActor (TimelineChange) -> Void)?
     /// The inspector asks for its source tool call's recorded diff.
     public var onOpenToolDiff: (@MainActor (ToolCallDiffTarget) -> Void)?
-    /// The changed files card asks for a run's diff, at a file (`onOpenTurnDiff`).
-    public var onOpenTurnDiff: (@MainActor (RunId, String?) -> Void)?
     /// A signed URL for an attachment shown inline as HTML (`assets.createUrl`, `disposition: inline`).
     public var webAssetURL: (@MainActor (_ attachmentId: String, _ fileName: String) async -> URL?)?
     /// A link an HTML render asked to open, and whether Cmd or Ctrl was down: it opens like a chat link.
@@ -166,7 +157,7 @@ public final class ThreadViewModel {
             for item in items {
                 if case .event(let p, _, _) = item.row.kind, p.item.type == .handoff || p.item.type == .subagent { refreshRow(item.id) }
                 // A model switch row names its models by them too.
-                if case .message(_, let p?, _, _, _, _) = item.row.kind, ModelSwitchPresentation.modelSwitch(p) != nil { refreshRow(item.id) }
+                if case .message(_, let p?, _, _, _) = item.row.kind, ModelSwitchPresentation.modelSwitch(p) != nil { refreshRow(item.id) }
             }
         }
     }
@@ -397,7 +388,6 @@ public final class ThreadViewModel {
             expandedRunIds = []; expandedAttemptIds = []; expandedWorkGroupIds = []
             deferredWorkFailedRows = []; deferredWorkLoadingAnchors = []; deferredWorkCheck = false
             expandedEntries = []; expandedMessages = []; expandedPlans = []
-            expandedChangedFiles = []; folderOverrides = [:]
             dropOutputs()
         }
         projectionDerivationCount += 1
@@ -498,15 +488,6 @@ public final class ThreadViewModel {
     }
     func toggleMessage(_ id: String) { findOpenedMessages.remove(id); expandedMessages.formSymmetricDifference([id]); refreshItems() }
     func togglePlan(_ id: String) { expandedPlans.formSymmetricDifference([id]); refreshItems() }
-    func toggleChangedFiles(_ run: RunId) {
-        expandedChangedFiles.formSymmetricDifference([run])
-        folderOverrides[run] = nil
-        refreshItems()
-    }
-    func toggleChangedFolder(_ run: RunId, _ path: String) {
-        folderOverrides[run, default: [:]][path] = !(folderOverrides[run]?[path] ?? expandedChangedFiles.contains(run))
-        refreshItems()
-    }
 
     /// Sent user messages the stream hasn't confirmed yet (`optimisticMessages`, ChatView.tsx:9763-9784).
     /// Shown after the server's rows until the projection carries their id; queued ones stay hidden
@@ -606,7 +587,7 @@ public final class ThreadViewModel {
             }
         case .workLive(_, _, _, _, _, let thought?) where expandedEntries.contains(thought.id):
             ui.expandedEntries = [thought.id]
-        case .message(let m, _, _, _, _, let summary):
+        case .message(let m, _, _, _, _):
             ui.messageExpanded = !expandedMessages.isEmpty && expandedMessages.contains(m.id.rawValue)
             if m.role == .user, m.createdBy == "agent" || m.scheduledTaskId != nil || m.text.hasPrefix("[Triggered by schedule task: ") {
                 let p = UserMessagePresentation.resolve(m)
@@ -630,10 +611,6 @@ public final class ThreadViewModel {
             }
             if m.workflowOpening, let parentSubagents, let thread = projection?.thread.id {
                 ui.workflowCoordinator = WorkflowOpening.Plan.coordinator(of: thread, in: parentSubagents)
-            }
-            if let run = summary?.runId {
-                ui.filesExpanded = expandedChangedFiles.contains(run)
-                ui.folderOverrides = folderOverrides[run] ?? [:]
             }
         case .proposedPlan(let p): ui.planExpanded = expandedPlans.contains(p.id.rawValue)
         case .event(let p, _, _) where p.item.type == .secretRequest || p.item.type == .linkRequest:

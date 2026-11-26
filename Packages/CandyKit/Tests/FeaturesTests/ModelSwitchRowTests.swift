@@ -42,7 +42,7 @@ struct ModelSwitchRowTests {
             let message = ChatMessage(id: MessageId("u1"), role: .user, text: "hi", createdAt: T3Timestamp("2026-01-01T00:00:00Z"))
             let item = TimelineItem(row: TimelineRow(id: "u1", createdAt: message.createdAt,
                 kind: .message(message, projectedItem: Self.item(modelSwitch), showAssistantMeta: false,
-                               showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)))
+                               showAssistantCopyButton: false, assistantCopyStreaming: false)))
             let view = UserMessageRowView()
             view.context = TimelineContext()
             view.configure(item)

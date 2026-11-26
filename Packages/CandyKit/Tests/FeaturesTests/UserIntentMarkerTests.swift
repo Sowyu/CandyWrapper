@@ -22,7 +22,7 @@ struct UserIntentMarkerTests {
         let projection = try #require(try ThreadPreview.projections(transcript: "07-queue.jsonl").first)
         let items = TimelineRows.derive(TimelineRowsInput(projection: projection)).map { TimelineItem(row: $0) }
         let t = ThreadTimelineTests.timeline(items)
-        let users = items.filter { if case .message(let m, _, _, _, _, _) = $0.row.kind { return m.role == .user }; return false }
+        let users = items.filter { if case .message(let m, _, _, _, _) = $0.row.kind { return m.role == .user }; return false }
         #expect(users.count == 3)
         // The long answer pushes the prompts above the fold; they all sit near the top.
         t.scroll(toFraction: 0)
@@ -32,9 +32,9 @@ struct UserIntentMarkerTests {
             let view = try #require(t.view(forRow: item.id) as? UserMessageRowView, "\(item.id) has no view")
             // The same message without an intent is exactly the marker line and its gap shorter.
             var plain = item
-            guard case .message(var m, let p, let a, let b, let c, let d) = plain.row.kind else { continue }
+            guard case .message(var m, let p, let a, let b, let c) = plain.row.kind else { continue }
             m.inputIntent = nil
-            plain.row.kind = .message(m, projectedItem: p, showAssistantMeta: a, showAssistantCopyButton: b, assistantCopyStreaming: c, turnDiffSummary: d)
+            plain.row.kind = .message(m, projectedItem: p, showAssistantMeta: a, showAssistantCopyButton: b, assistantCopyStreaming: c)
             let marked = view.height(forWidth: width)
             view.configure(plain)
             heights.append(marked - view.height(forWidth: width))

@@ -11,7 +11,7 @@ import T3Store
         let message = ChatMessage(id: MessageId(id), role: .assistant, text: text, createdAt: "2026-10-14T00:00:00Z")
         return TimelineItem(row: TimelineRow(id: id, createdAt: nil, kind: .message(
             message, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false,
-            assistantCopyStreaming: false, turnDiffSummary: nil)))
+            assistantCopyStreaming: false)))
     }
 
     private func timeline() -> TimelineView {

@@ -49,12 +49,11 @@ private func foldLabels(_ rows: [TimelineRow]) -> [String] {
         #expect(label == "ls -1 | wc -l")
     }
 
-    @Test func addNotesFoldsThreeTurnsAndCarriesTheChangedFiles() throws {
+    @Test func addNotesFoldsThreeTurns() throws {
         let rows = try threadRows("03-turn2.jsonl", titled: "Add notes")
         #expect(rows.map(describe) == ["user", "turn-fold", "assistant", "user", "turn-fold", "assistant", "user", "turn-fold", "assistant"])
         #expect(foldLabels(rows) == ["Worked for 12s", "Worked for 3.6s", "Worked for 13s"])
-        guard case .message(_, _, true, true, false, let summary?) = rows[2].kind else { Issue.record("expected the first answer"); return }
-        #expect(summary.files.map(\.path).sorted() == ["hello.py", "notes.md"] && summary.checkpointTurnCount == 1)
+        guard case .message(_, _, true, true, false) = rows[2].kind else { Issue.record("expected the first answer"); return }
 
         let expanded = try threadRows("03-turn2.jsonl", titled: "Add notes") { input, p in input.expandedRunIds = [p.runs.min { $0.ordinal < $1.ordinal }!.id] }
         #expect(expanded.map(describe).prefix(4) == ["user", "turn-fold", "work-toggle", "assistant"])
@@ -88,7 +87,7 @@ private func foldLabels(_ rows: [TimelineRow]) -> [String] {
         var reducer = ThreadReducer(threadId: stream.threadId)
         func userRows(_ rows: [TimelineRow]) -> [(index: Int, intent: InputIntent?)] {
             rows.enumerated().compactMap { i, row in
-                if case .message(let m, _, _, _, _, _) = row.kind, m.role == .user { return (i, m.inputIntent) }
+                if case .message(let m, _, _, _, _) = row.kind, m.role == .user { return (i, m.inputIntent) }
                 return nil
             }
         }
@@ -118,7 +117,7 @@ private func foldLabels(_ rows: [TimelineRow]) -> [String] {
         // after back-to-back steers folds under its own row after the last of them (MessagesTimeline.logic.ts:1064-1075).
         #expect(rows.map(describe) == ["user", "turn-fold", "user", "user", "turn-fold", "assistant"])
         #expect(userRows(rows).map(\.intent) == [.turnStart, .promotedQueuedToSteer, .steer])
-        guard case .message(let steer, _, _, _, _, _) = rows[3].kind else { Issue.record("expected the steer"); return }
+        guard case .message(let steer, _, _, _, _) = rows[3].kind else { Issue.record("expected the steer"); return }
         #expect(steer.text == "Then also say: steered")
     }
 }

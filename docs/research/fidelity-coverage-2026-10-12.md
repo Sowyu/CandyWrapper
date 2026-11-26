@@ -35,7 +35,7 @@ Counts: 47 numbered reference screens (dark and light each, plus 03n, 04n, 11n v
 | 43 find in thread | none | none |
 | 44 thread details panel | none (ThreadSweep or ThreadLeftovers may touch it) | unclear |
 | 45 go to file, 46 project search | none | none |
-| 47 changed files card, 48 diff turn file | ChangedFilesFidelityTests | direct |
+| 47 changed files card, 48 diff turn file | none: 5258 removed the card (1c6d41a9ba, #41317), and the diff it opened lost its test with it | none |
 
 ## Surfaces with spec cases but no reference screenshot
 

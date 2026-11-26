@@ -5,7 +5,7 @@ import T3Protocol
 @testable import T3Store
 @testable import Features
 
-/// The open subagent panel floats over the timeline, so a changed-files card can scroll under it. In Redesign dark at
+/// The open subagent panel floats over the timeline, so timeline rows can scroll under it. In Redesign dark at
 /// Glass opacity 10% with no background picture, the card's labels must not read through the panel (the user's
 /// 1.14.10 screenshot, 2026-10-28). Redesign's surfaces are opaque and draw no blur. Run alone: theme globals belong
 /// to the whole test process.
@@ -20,7 +20,7 @@ struct SubagentPanelOverlapTests {
         #expect(DitherPill.fill(in: probe).alpha == 1)
     }
 
-    @Test func panelHidesTheChangedFilesCardUnderIt() throws {
+    @Test func panelHidesTheRowsUnderIt() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         var input = ThemeRuntimeInput(
@@ -33,11 +33,6 @@ struct SubagentPanelOverlapTests {
         #expect(ThemeRuntime.isDither(dark: true))
 
         let width: CGFloat = 860
-        let files = [CheckpointFile(path: "docs/research/subagent-strip.md", additions: 71, deletions: 0),
-                     CheckpointFile(path: "Packages/CandyKit/Sources/Thread.swift", additions: 31, deletions: 1),
-                     CheckpointFile(path: "PROGRESS.md", additions: 5, deletions: 2)]
-        let summary = TurnDiffSummary(checkpointId: "c", scopeId: "s", runId: "r", checkpointTurnCount: 1, checkpointRef: "ref", status: "ready",
-                                      files: files, assistantMessageId: nil, completedAt: T3Timestamp(stringLiteral: "2026-10-28T00:00:00Z"))
         let rows = [SubagentPanelOverlapTests.running()] + SubagentStripPanelTests.finishedRows(6)
         let panelHeight = SubagentStripPanelTests.panel(rows).preferredHeight(maxHeight: 1000)
         let size = NSSize(width: width, height: panelHeight)
@@ -46,10 +41,9 @@ struct SubagentPanelOverlapTests {
             let root = DSView(frame: NSRect(origin: .zero, size: size))
             root.layer?.backgroundColor = NSColor.black.cgColor
             if card {
-                let view = ChangedFilesCardView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
-                view.configure(summary, allExpanded: true, overrides: [:])
-                view.frame = NSRect(x: 0, y: 0, width: width,
-                                    height: max(panelHeight, ChangedFilesCardView.height(files, allExpanded: true, overrides: [:])))
+                // A white sheet under the whole panel stands in for the timeline rows that scroll under it.
+                let view = DSView(frame: NSRect(origin: .zero, size: size))
+                view.layer?.backgroundColor = NSColor.white.cgColor
                 root.addSubview(view)
             }
             let panel = SubagentStripPanelTests.panel(rows)
@@ -65,8 +59,8 @@ struct SubagentPanelOverlapTests {
         try FileManager.default.createDirectory(at: Self.out, withIntermediateDirectories: true)
         try Snapshot.writePNG(stacked, to: Self.out.appendingPathComponent("stacked.dark.png"))
 
-        // Inside the panel's border, the stacked render should match the panel alone. 255 is a full channel swing. The
-        // corner squares are skipped: the card's own corner shows outside the panel's curve there, as it should.
+        // Inside the panel's border, the stacked render should match the panel alone. 255 is a full channel swing.  The
+        // corner squares are skipped: the sheet shows outside the panel's curve there, as it should.
         var worst = 0
         let inset = 4, corner = 40, w = stacked.pixelsWide, h = stacked.pixelsHigh
         for y in inset..<(h - inset) {

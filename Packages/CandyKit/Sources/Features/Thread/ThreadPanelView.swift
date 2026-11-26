@@ -997,13 +997,6 @@ public final class ThreadPanelView: DSView {
             mutatePanel { $0.open(.diff); return [] }
             explicitDiffOpen = false
         }
-        model.onOpenTurnDiff = { [weak self] run, path in
-            guard let self else { return }
-            explicitDiffOpen = true
-            mutatePanel { $0.open(.diff); return [] }
-            explicitDiffOpen = false
-            diffPanel.open(runId: run, filePath: path)
-        }
     }
 
     /// Adds a lazily built accessory, hidden, under the first of `above` that is already a subview.

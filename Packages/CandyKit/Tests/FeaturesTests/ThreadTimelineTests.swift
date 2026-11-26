@@ -68,11 +68,11 @@ struct ThreadTimelineTests {
         message.createdBy = "agent"
         message.scheduledTaskId = "schedule"
         item.row.kind = .message(message, projectedItem: nil, showAssistantMeta: false,
-                                 showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)
+                                 showAssistantCopyButton: false, assistantCopyStreaming: false)
         #expect(item.messageAuthor == "Automation")
         message.scheduledTaskId = nil
         item.row.kind = .message(message, projectedItem: nil, showAssistantMeta: false,
-                                 showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)
+                                 showAssistantCopyButton: false, assistantCopyStreaming: false)
         #expect(item.messageAuthor == "Agent")
     }
 

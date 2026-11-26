@@ -361,7 +361,7 @@ private func fold(_ rows: [TimelineRow]) -> (runId: RunId, label: String, expand
         ]
         let result = rows(entries) { $0.latestRun = TimelineLatestRun(runId: "r", status: .completed, startedAt: "2026-01-01T00:00:00Z", completedAt: "2026-01-01T00:00:04Z") }
         #expect(result.map(\.id) == ["u", "a", "w1", "assistant-meta:a"])
-        guard case .message(_, _, let meta, let copy, _, _) = result[1].kind else { Issue.record("no message"); return }
+        guard case .message(_, _, let meta, let copy, _) = result[1].kind else { Issue.record("no message"); return }
         #expect(!meta && !copy)
     }
 

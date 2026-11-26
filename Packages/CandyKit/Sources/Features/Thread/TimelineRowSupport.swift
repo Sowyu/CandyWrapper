@@ -274,7 +274,7 @@ final class TimelineContext {
 
 extension TimelineItem {
     var messageAuthor: String? {
-        guard case .message(let message, _, _, _, _, _) = row.kind, message.role != .system else { return nil }
+        guard case .message(let message, _, _, _, _) = row.kind, message.role != .system else { return nil }
         guard message.role == .user else { return "Assistant" }
         let presentation = UserMessagePresentation.resolve(message)
         if presentation.isAutomation { return "Automation" }

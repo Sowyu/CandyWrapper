@@ -16,7 +16,7 @@ struct PromptAndPreviewLayoutTests {
             createdAt: T3Timestamp("2026-10-17T12:00:00Z"), attachments: attachments)
         return TimelineItem(row: TimelineRow(id: "prompt", createdAt: message.createdAt,
             kind: .message(message, projectedItem: nil, showAssistantMeta: false,
-                           showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)))
+                           showAssistantCopyButton: false, assistantCopyStreaming: false)))
     }
 
     @Test func imagesNeverConsumeThePromptsCollapsedHeight() throws {

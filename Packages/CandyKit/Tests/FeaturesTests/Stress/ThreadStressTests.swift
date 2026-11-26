@@ -382,9 +382,9 @@ final class ThreadStressRun {
         func comparable(_ rows: [TimelineRow]) -> [TimelineRow] {
             guard options.bounded else { return rows }
             return rows.map { row in
-                guard case .message(let m, let p, let meta, let copy, let streaming, _) = row.kind else { return row }
+                guard case .message(let m, let p, let meta, let copy, let streaming) = row.kind else { return row }
                 var row = row
-                row.kind = .message(m, projectedItem: p, showAssistantMeta: meta, showAssistantCopyButton: copy, assistantCopyStreaming: streaming, turnDiffSummary: nil)
+                row.kind = .message(m, projectedItem: p, showAssistantMeta: meta, showAssistantCopyButton: copy, assistantCopyStreaming: streaming)
                 return row
             }
         }

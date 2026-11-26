@@ -12,7 +12,7 @@ struct UserMessageWrapTests {
         let message = ChatMessage(id: MessageId("prompt"), role: .user, text: text, createdAt: T3Timestamp("2026-10-29T12:00:00Z"))
         let item = TimelineItem(row: TimelineRow(id: "prompt", createdAt: message.createdAt,
             kind: .message(message, projectedItem: nil, showAssistantMeta: false,
-                           showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)))
+                           showAssistantCopyButton: false, assistantCopyStreaming: false)))
         let row = UserMessageRowView()
         row.context = TimelineContext()
         row.configure(item)

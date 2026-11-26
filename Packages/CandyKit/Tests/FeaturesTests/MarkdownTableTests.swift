@@ -88,7 +88,7 @@ struct MarkdownTableTests {
             let message = ChatMessage(id: MessageId(id), role: .assistant, text: text, createdAt: "2026-10-14T00:00:00Z")
             return TimelineItem(row: TimelineRow(id: id, createdAt: nil, kind: .message(
                 message, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false,
-                assistantCopyStreaming: false, turnDiffSummary: nil)))
+                assistantCopyStreaming: false)))
         }
         let filler = String(repeating: "Filler paragraph with enough words to take a few lines of the lane. ", count: 8)
         let items = [item("a", code)] + (0..<30).map { item("b\($0)", filler + "\n\n" + filler) }

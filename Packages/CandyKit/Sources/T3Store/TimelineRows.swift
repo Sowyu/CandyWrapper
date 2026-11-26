@@ -36,7 +36,7 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         /// One user or assistant message. The assistant flags decide the footer and copy button.
         case message(
             ChatMessage, projectedItem: ProjectedTurnItem?, showAssistantMeta: Bool, showAssistantCopyButton: Bool,
-            assistantCopyStreaming: Bool, turnDiffSummary: TurnDiffSummary?)
+            assistantCopyStreaming: Bool)
         /// The footer under an answer that trailing tool rows pushed down.
         case assistantMeta(ChatMessage, projectedItem: ProjectedTurnItem?, showAssistantCopyButton: Bool, assistantCopyStreaming: Bool)
         /// A lone tool call (`displayLabel` set) or the expanded body of a group (`isExpandedToolGroup`).
@@ -114,7 +114,7 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
 
     public var message: ChatMessage? {
         switch kind {
-        case .message(let m, _, _, _, _, _), .assistantMeta(let m, _, _, _): m
+        case .message(let m, _, _, _, _), .assistantMeta(let m, _, _, _): m
         default: nil
         }
     }
@@ -149,7 +149,6 @@ public struct TimelineRowsInput: Sendable {
     /// Runless work is live (a provider-native subagent thread).
     public var runlessWorkActive = false
     public var activeTurnStartedAt: T3Timestamp?
-    public var turnDiffSummaries: [TurnDiffSummary] = []
     /// A `/compact` runs and its compaction has not completed (`isCompacting`, ChatView.tsx:3597-3619).
     public var isCompacting = false
     /// "Tool calls in chat" is Zen: entries were filtered to final answers (`filteringToolCalls`), so turns
@@ -162,7 +161,7 @@ public struct TimelineRowsInput: Sendable {
         entries: [TimelineEntry], latestRun: TimelineLatestRun? = nil, runningRunId: RunId? = nil,
         expandedRunIds: Set<RunId> = [], expandedAttemptIds: Set<RunAttemptId> = [],
         expandedWorkGroupIds: Set<String> = [], isWorking: Bool = false, runlessWorkActive: Bool = false,
-        activeTurnStartedAt: T3Timestamp? = nil, turnDiffSummaries: [TurnDiffSummary] = []
+        activeTurnStartedAt: T3Timestamp? = nil
     ) {
         self.entries = entries
         self.latestRun = latestRun
@@ -173,7 +172,6 @@ public struct TimelineRowsInput: Sendable {
         self.isWorking = isWorking
         self.runlessWorkActive = runlessWorkActive
         self.activeTurnStartedAt = activeTurnStartedAt
-        self.turnDiffSummaries = turnDiffSummaries
     }
 
     /// Everything a thread view needs, derived from the projection like `ChatView` does
@@ -190,9 +188,6 @@ public struct TimelineRowsInput: Sendable {
     public struct Memo: Sendable {
         var entries = TimelineEntries.Memo()
         var questions = TimelineEntries.QuestionHistoryCache()
-        var checkpoints: [Checkpoint] = []
-        var messages: [ConversationMessage] = []
-        var summaries: [TurnDiffSummary] = []
 
         public init() {}
 
@@ -215,17 +210,10 @@ public struct TimelineRowsInput: Sendable {
             entries[i].kind = .message(m, projectedItem: projected)
         }
         let state = TimelineRunState(projection: projection)
-        // Equal summaries keep the old array, so the row pass sees the same value cheaply.
-        if projection.checkpoints != memo.checkpoints || projection.messages != memo.messages {
-            let summaries = TurnDiffs.summaries(projection)
-            if summaries != memo.summaries { memo.summaries = summaries }
-            memo.checkpoints = projection.checkpoints
-            memo.messages = projection.messages
-        }
         var input = TimelineRowsInput(
             entries: entries, latestRun: state.latestRun, runningRunId: state.runningRunId, isWorking: state.isWorking,
             runlessWorkActive: state.runlessWorkStartedAt != nil,
-            activeTurnStartedAt: state.activeTurnStartedAt, turnDiffSummaries: memo.summaries)
+            activeTurnStartedAt: state.activeTurnStartedAt)
         input.pendingApprovals = PendingRequests.derive(projection).approvals
         input.isCompacting = state.isWorking && TimelineRunState.compactRequestActive(projection, latestRun: state.latestRun)
         return (input, changed)
@@ -237,7 +225,7 @@ public struct TimelineRowsInput: Sendable {
             && isCompacting == other.isCompacting && pendingApprovals == other.pendingApprovals
             && runlessWorkActive == other.runlessWorkActive && activeTurnStartedAt == other.activeTurnStartedAt
             && expandedRunIds == other.expandedRunIds && expandedAttemptIds == other.expandedAttemptIds
-            && expandedWorkGroupIds == other.expandedWorkGroupIds && turnDiffSummaries == other.turnDiffSummaries
+            && expandedWorkGroupIds == other.expandedWorkGroupIds
     }
 }
 
@@ -793,8 +781,6 @@ public enum TimelineRows {
     /// later part, and no entry here is the thread's last.
     static func derive(_ entries: [TimelineEntry], _ input: TimelineRowsInput, head: Bool) -> [TimelineRow] {
         let entries = rowEntries(entries, settleLast: head)
-        var summaryByMessageId: [MessageId: TurnDiffSummary] = [:]
-        for summary in input.turnDiffSummaries { if let id = summary.assistantMessageId { summaryByMessageId[id] = summary } }
         let terminalIds = terminalAssistantMessageIds(entries)
         let unsettled = unsettledRunId(input.latestRun, runningRunId: input.runningRunId)
         let failed = failedRunIds(entries, latestRun: input.latestRun)
@@ -1099,8 +1085,7 @@ public enum TimelineRows {
                 let showMeta = message.role == .assistant && terminalIds.contains(message.id) && !stillInProgress
                 rows.append(TimelineRow(id: entry.id, createdAt: entry.createdAt, kind: .message(
                     message, projectedItem: projected, showAssistantMeta: showMeta, showAssistantCopyButton: showMeta,
-                    assistantCopyStreaming: message.streaming || stillInProgress,
-                    turnDiffSummary: message.role == .assistant ? summaryByMessageId[message.id] : nil)))
+                    assistantCopyStreaming: message.streaming || stillInProgress)))
             }
         }
 
@@ -1167,7 +1152,7 @@ public enum TimelineRows {
     /// Back-to-back messages you typed stack as one burst (MessagesTimeline.logic.ts:2409-2436 at 4928, #27305, #27978).
     static func markUserMessageBursts(_ rows: inout [TimelineRow]) {
         func own(_ i: Int) -> ChatMessage? {
-            guard rows.indices.contains(i), case .message(let m, _, _, _, _, _) = rows[i].kind, UserMessagePresentation.isTypedByUser(m) else { return nil }
+            guard rows.indices.contains(i), case .message(let m, _, _, _, _) = rows[i].kind, UserMessagePresentation.isTypedByUser(m) else { return nil }
             return m
         }
         func steer(_ m: ChatMessage) -> Bool { m.inputIntent == .steer || m.inputIntent == .promotedQueuedToSteer }
@@ -1302,10 +1287,10 @@ public enum TimelineRows {
             guard isStreamingTextUpdate(oldMessage, message) else { return nil }
             for rowIndex in previous.messageRows(message.id.rawValue) {
                 switch next.rows[rowIndex].kind {
-                case .message(_, _, let meta, let copy, let copyStreaming, let summary):
+                case .message(_, _, let meta, let copy, let copyStreaming):
                     next.rows[rowIndex].kind = .message(
                         message, projectedItem: projected, showAssistantMeta: meta, showAssistantCopyButton: copy,
-                        assistantCopyStreaming: copyStreaming, turnDiffSummary: summary)
+                        assistantCopyStreaming: copyStreaming)
                 case .assistantMeta(_, _, let copy, let copyStreaming):
                     next.rows[rowIndex].kind = .assistantMeta(message, projectedItem: projected, showAssistantCopyButton: copy, assistantCopyStreaming: copyStreaming)
                 default:
@@ -1352,7 +1337,7 @@ public enum TimelineRows {
     static func attachCreatedThreadSummaries(_ rows: [TimelineRow], _ entries: [TimelineEntry], collapsedFoldMembers: Set<String>) -> [TimelineRow] {
         var terminalIndexes: [RunId: Int] = [:]
         for (index, row) in rows.enumerated() {
-            if case .message(let m, _, true, _, _, _) = row.kind, let runId = m.runId { terminalIndexes[runId] = index }
+            if case .message(let m, _, true, _, _) = row.kind, let runId = m.runId { terminalIndexes[runId] = index }
         }
         var createdByRun: [RunId: [TimelineRow]] = [:]
         for entry in entries {
@@ -1372,7 +1357,7 @@ public enum TimelineRows {
             {
                 return []
             }
-            if case .message(let m, _, true, _, _, _) = row.kind, let runId = m.runId {
+            if case .message(let m, _, true, _, _) = row.kind, let runId = m.runId {
                 return [row] + (createdByRun[runId] ?? [])
             }
             return [row]
@@ -1385,7 +1370,7 @@ public enum TimelineRows {
         var withoutMeta = Set<String>()
         var metaAfterIndex: [Int: TimelineRow] = [:]
         for (messageIndex, row) in rows.enumerated() {
-            guard case .message(let message, let projected, true, let copyButton, let copyStreaming, _) = row.kind,
+            guard case .message(let message, let projected, true, let copyButton, let copyStreaming) = row.kind,
                 message.role == .assistant, let runId = message.runId
             else { continue }
             var lastTrailing = -1
@@ -1424,9 +1409,9 @@ public enum TimelineRows {
         guard !metaAfterIndex.isEmpty else { return rows }
         var result: [TimelineRow] = []
         for (index, row) in rows.enumerated() {
-            if withoutMeta.contains(row.id), case .message(let m, let p, _, _, let streaming, let summary) = row.kind {
+            if withoutMeta.contains(row.id), case .message(let m, let p, _, _, let streaming) = row.kind {
                 var copy = row
-                copy.kind = .message(m, projectedItem: p, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: streaming, turnDiffSummary: summary)
+                copy.kind = .message(m, projectedItem: p, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: streaming)
                 result.append(copy)
             } else {
                 result.append(row)

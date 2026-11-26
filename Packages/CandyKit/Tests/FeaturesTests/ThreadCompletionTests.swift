@@ -69,7 +69,7 @@ struct ThreadCompletionTests {
     @Test func minimapPairsEachUserWithLastAssistant() throws {
         let timestamp = T3Timestamp("2026-10-11T12:00:00Z")
         func row(_ id: String, _ role: ChatMessage.Role, _ text: String) -> TimelineRow {
-            TimelineRow(id: id, createdAt: timestamp, kind: .message(ChatMessage(id: MessageId(id), role: role, text: text, createdAt: timestamp), projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil))
+            TimelineRow(id: id, createdAt: timestamp, kind: .message(ChatMessage(id: MessageId(id), role: role, text: text, createdAt: timestamp), projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: false))
         }
         let items = ThreadMinimapItem.derive([row("u", .user, "  A\n B "), row("a", .assistant, "First"), row("b", .assistant, "Last"), row("v", .user, "Next")])
         #expect(items.count == 2)

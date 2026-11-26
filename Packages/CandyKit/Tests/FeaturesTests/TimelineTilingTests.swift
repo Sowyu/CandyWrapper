@@ -16,7 +16,7 @@ struct TimelineTilingTests {
         var entry: WorkLogEntry?, message: ChatMessage?
         for item in all {
             if entry == nil, case .work(let entries, _, _) = item.row.kind { entry = entries.first }
-            if message == nil, case .message(let m, _, _, _, _, _) = item.row.kind, m.role == .assistant { message = m }
+            if message == nil, case .message(let m, _, _, _, _) = item.row.kind, m.role == .assistant { message = m }
         }
         return (try #require(entry), try #require(message))
     }
@@ -35,7 +35,7 @@ struct TimelineTilingTests {
         m.streaming = true
         m.text = Array(repeating: "Streaming answer paragraph \(n) grows as the turn runs.", count: 1 + n).joined(separator: "\n\n")
         rows.append(TimelineRow(id: "live-answer", createdAt: nil, kind: .message(
-            m, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: true, turnDiffSummary: nil)))
+            m, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: true)))
         return rows.map { TimelineItem(row: $0) }
     }
 
@@ -150,7 +150,7 @@ struct TimelineTilingTests {
                 kind: .turnFold(runId: "same-run", label: "Worked for 1s", expanded: false))),
             TimelineItem(row: TimelineRow(id: "answer", createdAt: nil, kind: .message(answer,
                 projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false,
-                assistantCopyStreaming: false, turnDiffSummary: nil))),
+                assistantCopyStreaming: false))),
         ])
         t.layoutSubtreeIfNeeded()
         #expect((t.scrollView.documentView?.bounds.height ?? 0) <= t.scrollView.contentView.bounds.height + 1)
@@ -188,7 +188,7 @@ struct TimelineTilingTests {
             m.id = MessageId(id)
             m.text = text
             return TimelineItem(row: TimelineRow(id: id, createdAt: nil, kind: .message(
-                m, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: false, turnDiffSummary: nil)))
+                m, projectedItem: nil, showAssistantMeta: false, showAssistantCopyButton: false, assistantCopyStreaming: false)))
         }
         func work(_ id: String) -> TimelineItem {
             TimelineItem(row: TimelineRow(id: id, createdAt: nil, kind: .work(groupedEntries: [entry, entry], isExpandedToolGroup: false, displayLabel: "Ran 2 commands")))
