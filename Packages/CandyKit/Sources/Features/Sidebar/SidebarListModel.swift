@@ -427,6 +427,7 @@ public struct SidebarListState: Equatable, Sendable {
             && a.settledRange == b.settledRange
             && a.projectSortOrder == b.projectSortOrder && a.projectOrder == b.projectOrder
             && a.hiddenThreadTags == b.hiddenThreadTags && a.titleTypings == b.titleTypings
+            && a.pendingSync == b.pendingSync
     }
 }
 

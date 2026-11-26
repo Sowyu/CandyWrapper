@@ -53,6 +53,8 @@ struct SidebarModelTests {
         let rows = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: nowMs).compactMap { if case .row(let r) = $0 { r } else { nil } }
         #expect(rows.filter(\.isPendingSync).map(\.statusLabel) == ["Pending"])
         #expect(rows.filter { !$0.isPendingSync }.allSatisfy { $0.statusLabel != "Pending" })
+        // The list rebuilds when only the waiting set changes.
+        #expect(state != SidebarListState())
     }
 
     @Test func nextLabelChangeAimsAtTheNextStep() {

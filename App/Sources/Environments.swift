@@ -817,8 +817,8 @@ final class Environments {
 
     private func triageChanged(_ env: String) {
         triage.save()
-        reapplyOptimistic(env)
         publishTriagePending()
+        reapplyOptimistic(env)
     }
 
     /// The threads whose change waits, scoped, for the sidebar's "Pending".
