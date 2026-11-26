@@ -34,12 +34,10 @@ public enum ThemedItemContextMenu {
             m.closesOnClick = true
         } else {
             // contextMenuFallback.ts:405-406: a leaf named "delete" is destructive even when the item doesn't say so.
-            m = MenuItem(t.label, icon: icons[t.id], destructive: t.destructive || t.id == "delete") { choose(t.id) }
+            m = MenuItem(t.label, icon: icons[t.id], shortcut: t.detail, destructive: t.destructive || t.id == "delete") { choose(t.id) }
         }
         m.isDisabled = t.disabled
-        m.subtitle = t.detail
-        m.tooltip = t.detail ?? t.tooltip
-        m.widensForSubtitle = t.detail != nil
+        m.tooltip = t.tooltip
         return m
     }
 

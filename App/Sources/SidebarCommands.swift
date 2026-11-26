@@ -798,33 +798,15 @@ final class SidebarCommands {
             showSelectionMenu(event: event, view: view)
             return
         }
-        let presented = self.presented(thread)
-        let row = sidebar.shownItems.lazy.compactMap { if case .row(let r) = $0, r.id == id { r } else { nil } }.first
-        let group = snapshot.flatMap { s in
-            SidebarModel.buildProjectGroups(s.projects, preferredEnvironmentId: sidebar.state.environments.primaryId)
-                .first { $0.memberProjectIds.contains(thread.projectId) }
-        }
+        let group = projectGroup(thread)
         let presets = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id))
-        var state = ThreadActionMenu.State()
-        state.canOperate = environments.canOperate(thread.id.environmentId)
-        // ponytail: every capability reads as supported; gate per environment from its descriptor when an old server shows up
-        state.branch = thread.branch
-        state.projectFilter = rename == nil ? group.map { (label: $0.label, isActive: sidebar.state.projectScopeKeys.contains($0.key)) } : nil
-        state.isPinned = thread.pinnedAt != nil
-        state.isSettled = rename == nil ? row?.section == .settled : thread.settledOverride == .settled
-        state.isSnoozed = SidebarModel.effectiveSnoozed(presented, nowMs: nowMs)
-        state.autoSettleEnabled = thread.autoSettleDisabledAt == nil
-        state.canSnoozeNow = SidebarModel.canSnooze(presented, nowMs: nowMs)
-        state.isRegeneratingTitle = thread.titleRegeneration != nil || deeperRenames[thread.id] != nil
-        state.canRewriteTitle = deeperRenameModel(thread.id) != nil
-        state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
-        state.snoozePresets = presets
-        state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
-        if let env = thread.id.environmentId, let config = threads.composer.config(env) {
-            state.canTurnIntoProject = ProjectCommands.canTurnIntoProject(
-                worktreePath: thread.worktreePath, projectRoot: snapshot?.projects.first { $0.id == thread.projectId }?.workspaceRoot,
-                scratchRoot: config.scratchWorkspaceRoot, capabilities: config.capabilities)
+        var state = menuState(thread, group: group, presets: presets)
+        if rename == nil {
+            let row = sidebar.shownItems.lazy.compactMap { if case .row(let r) = $0, r.id == id { r } else { nil } }.first
+            state.projectFilter = group.map { (label: $0.label, isActive: sidebar.state.projectScopeKeys.contains($0.key)) }
+            state.isSettled = row?.section == .settled
         }
+        state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
         let items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
         let choose: @MainActor (String) -> Void = { [weak self, weak sidebar] choice in
             if choice == "rename", let rename { rename(); return }
@@ -839,6 +821,48 @@ final class SidebarCommands {
             return
         }
         ThemedItemContextMenu.show(items, in: view, at: anchor ?? view.convert(event.locationInWindow, from: nil), choose: choose)
+    }
+
+    private func projectGroup(_ thread: ThreadShell) -> SidebarModel.ProjectGroup? {
+        snapshot.flatMap { s in
+            SidebarModel.buildProjectGroups(s.projects, preferredEnvironmentId: sidebar?.state.environments.primaryId)
+                .first { $0.memberProjectIds.contains(thread.projectId) }
+        }
+    }
+
+    /// `useThreadActionMenu`'s `readMenu` state (T3 5258 useThreadActionMenu.ts:120-153): no project filter, no guest
+    /// share and the shell's own settled flag. The sidebar's row menu adds those after.
+    private func menuState(_ thread: ThreadShell, group: SidebarModel.ProjectGroup?, presets: [SnoozePreset]) -> ThreadActionMenu.State {
+        let presented = self.presented(thread)
+        var state = ThreadActionMenu.State()
+        state.canOperate = environments.canOperate(thread.id.environmentId)
+        // ponytail: every capability reads as supported; gate per environment from its descriptor when an old server shows up
+        state.branch = thread.branch
+        state.isPinned = thread.pinnedAt != nil
+        state.isSettled = thread.settledOverride == .settled
+        state.isSnoozed = SidebarModel.effectiveSnoozed(presented, nowMs: nowMs)
+        state.autoSettleEnabled = thread.autoSettleDisabledAt == nil
+        state.canSnoozeNow = SidebarModel.canSnooze(presented, nowMs: nowMs)
+        state.isRegeneratingTitle = thread.titleRegeneration != nil || deeperRenames[thread.id] != nil
+        state.canRewriteTitle = deeperRenameModel(thread.id) != nil
+        state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
+        state.snoozePresets = presets
+        if let env = thread.id.environmentId, let config = threads.composer.config(env) {
+            state.canTurnIntoProject = ProjectCommands.canTurnIntoProject(
+                worktreePath: thread.worktreePath, projectRoot: snapshot?.projects.first { $0.id == thread.projectId }?.workspaceRoot,
+                scratchRoot: config.scratchWorkspaceRoot, capabilities: config.capabilities)
+        }
+        return state
+    }
+
+    /// The open thread's menu for the command palette, and a runner for its ids (T3 5258 CommandPaletteThreadActions.tsx:62-107,
+    /// #40742). Nil until the thread's shell has loaded.
+    func paletteThreadMenu(_ id: ThreadId) -> (items: [ThreadMenuItem], run: @MainActor (String) -> Void)? {
+        guard let thread = shell(id) else { return nil }
+        let group = projectGroup(thread)
+        let presets = SnoozePresets.resolve(now: Date(), presets: snoozeSettings(id))
+        let items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(menuState(thread, group: group, presets: presets)))
+        return (items, { [weak self] choice in self?.perform(choice, id: id, thread: thread, group: group, presets: presets) })
     }
 
     private func perform(_ choice: String, id: ThreadId, thread: ThreadShell, group: SidebarModel.ProjectGroup?, presets: [SnoozePreset]) {

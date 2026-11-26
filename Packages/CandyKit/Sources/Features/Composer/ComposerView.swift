@@ -44,7 +44,8 @@ public final class ComposerView: DSView {
     /// The thread's runs as the primary action reads them.
     /// A draft (new thread) route: `draftThreadRoute` for the send keybindings.
     public var isDraftRoute = false { didSet { if isDraftRoute != oldValue { relayoutHeight() } } }
-    /// A compaction blocks steering, so a send queues (`canSteer`, ChatComposer.tsx at 4928, #24138).
+    /// The running turn takes no steer, so a send queues (`canSteer`): a compaction blocks it (#24138), or the provider
+    /// session cannot steer at all (`threadCanSteer`, client-runtime threadWorkflows.ts at 5258, #40767).
     public var isCompacting = false { didSet { if isCompacting != oldValue { refresh() } } }
     public var runState = ComposerLogic.RunState() {
         didSet {
@@ -74,6 +75,11 @@ public final class ComposerView: DSView {
     }
     /// A send or resume is in flight: the button shows a spinner and is disabled.
     public var isBusy = false { didSet { if isBusy != oldValue { refresh() } } }
+    /// A send waits for pasted images to finish preparing (`isSendHeld`, ComposerPrimaryActions.tsx:406, 439 at 5258):
+    /// the button shows busy and reads "Sending when ready".
+    public var isSendHeld = false { didSet { if isSendHeld != oldValue { refresh() } } }
+    /// Escape while a send is held cancels it; return true when it did.
+    public var onHeldSendEscape: (() -> Bool)? { didSet { editor.onHeldSendEscape = onHeldSendEscape } }
     /// Sending is blocked (`sendDisabledReason`: loading, rewinding, worktree, clone, uploads); the reason is the tooltip.
     public var sendDisabledReason: String? { didSet { if sendDisabledReason != oldValue { refresh() } } }
     /// `isEnvironmentUnavailable`: the button is disabled with "Environment disconnected", but Enter still
@@ -488,8 +494,16 @@ public final class ComposerView: DSView {
     /// outline `⇥ Tab` after it. Tab in the empty prompt takes it, Escape calls `onDismissSuggestion`.
     public var promptSuggestion: String? { didSet { if promptSuggestion != oldValue { refresh() } } }
     public var onDismissSuggestion: (() -> Void)?
-    private var suggestionKbd: KbdView?
+    private var suggestionKbd: PromptSuggestionHintButton?
     private var suggestionOffered = false
+
+    /// A click on the hint takes the suggestion only into an empty prompt, so a late click never prepends it to text
+    /// typed since (`promptSuggestionToAccept`, usePromptSuggestion.ts:55-57 at 5258, #40841).
+    func acceptSuggestionFromHint() {
+        guard suggestionOffered, let suggestion = promptSuggestion, editor.string.isEmpty else { return }
+        window?.makeFirstResponder(editor)
+        editor.insertText(suggestion, replacementRange: editor.selectedRange())
+    }
 
     /// `ml-2 inline-flex align-[1px]` after the placeholder's last word, or on the next line when it doesn't fit.
     private func layoutSuggestionKbd() {
@@ -559,8 +573,8 @@ public final class ComposerView: DSView {
         if offersSuggestion != suggestionOffered {
             suggestionOffered = offersSuggestion
             if offersSuggestion, suggestionKbd == nil {
-                let kbd = KbdView("⇥ Tab")
-                kbd.outline = true
+                let kbd = PromptSuggestionHintButton()
+                kbd.action = { [weak self] in self?.acceptSuggestionFromHint() }
                 addSubview(kbd, positioned: .above, relativeTo: placeholder)
                 suggestionKbd = kbd
             }
@@ -591,13 +605,13 @@ public final class ComposerView: DSView {
         // With a question open the round button is only Stop (`renderStopGenerationButton(true)`).
         let face = questionFooter != nil ? .stop
             : ComposerLogic.primaryAction(run: hasContent && runsDraftLocally?(prompt) == true ? ComposerLogic.RunState() : runState,
-                                          hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued,
+                                          hasContent: hasContent, busy: isBusy || isSendHeld, mode: sendMode, editingQueued: editingQueued,
                                           stopHeld: stopTracker.holdsStop)
         if primary.face != face { needsLayout = true }
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(prompt)
         let status = ComposerLogic.submitStatus(environmentUnavailable: environmentUnavailable, providerUnavailable: providerUnavailable,
-                                                sendDisabledReason: sendDisabledReason,
+                                                sendDisabledReason: sendDisabledReason, held: isSendHeld,
                                                 busy: isBusy, editingQueued: editingQueued)
         let canSend = sendDisabledReason == nil && !environmentUnavailable
         switch face {
@@ -630,7 +644,8 @@ public final class ComposerView: DSView {
                 let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraftRoute, "turnRunning": true,
                                                  "composerRequiresModifier": ComposerLogic.requiresModifier(sendShortcut, prompt: prompt)])
                 let chord = ActiveKeymap.label(for: "composer.sendAlternate", context: context).map { " or \($0)" } ?? ""
-                primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), ⌘-click\(chord) to \(other)"
+                // Without a steer the tooltip is the label (ComposerPrimaryActions.tsx:431-437 at 5258).
+                primary.tooltip = isCompacting ? "Queue message" : "Click to \(action), ⌘-click\(chord) to \(other)"
                 // The label is `submitLabel`, not the click hint (ComposerPrimaryActions.tsx:280-289, 328).
                 primary.setAccessibilityLabel(face == .queue ? "Queue message" : "Steer message")
             }

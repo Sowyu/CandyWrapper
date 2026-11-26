@@ -1,4 +1,5 @@
-import Foundation
+import AppKit
+import DesignSystem
 import T3Protocol
 
 /// Prompt suggestions (#28047, #33706 at 4928): the provider's predicted next prompt, from
@@ -45,4 +46,29 @@ public enum ComposerPromptSuggestion {
     /// Dismissed suggestions by environment and run, for every composer, for the app's lifetime (`dismissedKeys`).
     @MainActor public static var dismissed: Set<String> = []
     public static func key(environmentId: String, runId: RunId) -> String { environmentId + "\u{0}" + runId.rawValue }
+}
+
+/// The `⇥ Tab` hint after a prompt suggestion, as a button (ChatComposer.tsx:3978-3997 at 5258, #39488, #40841):
+/// `aria-label` "Use suggested prompt", `cursor-pointer`, and the key's text turns `text-foreground` on hover.
+@MainActor
+final class PromptSuggestionHintButton: ControlView {
+    let kbd = KbdView("⇥ Tab")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        kbd.outline = true
+        addSubview(kbd)
+        scalesWhenPressed = false
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Use suggested prompt")
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: NSSize { kbd.intrinsicContentSize }
+    override var accessibilityText: String? { "Use suggested prompt" }
+    override func layout() { super.layout(); kbd.frame = bounds }
+    override func stateDidChange(from old: State) {
+        super.stateDidChange(from: old)
+        if state.hovered != old.hovered { kbd.textOverride = state.hovered ? Themed.color(\.foreground) : nil }
+    }
 }

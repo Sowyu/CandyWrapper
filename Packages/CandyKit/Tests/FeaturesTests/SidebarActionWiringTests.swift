@@ -89,12 +89,13 @@ struct SidebarActionWiringTests {
         #expect(content.undoNotice.isHidden)
     }
 
-    @Test func branchLabelKeepsTheRowClickable() throws {
+    @Test func environmentLabelKeepsTheRowClickable() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
         ThemeRuntime.apply(.init())
         let items = SidebarListBuilder.items(snapshot: SidebarPreview.richSnapshot(), state: SidebarListState(), nowMs: 0)
-        let model = try #require(items.compactMap { if case .row(let row) = $0, row.variant == .card, row.branch != nil { row } else { nil } }.first)
+        var model = try #require(items.compactMap { if case .row(let row) = $0, row.variant == .card { row } else { nil } }.first)
+        model.environmentLabel = "This Mac"
         let row = SidebarCardRowView(frame: NSRect(x: 0, y: 0, width: 240, height: 82))
         row.configure(.row(model))
         row.layoutSubtreeIfNeeded()
@@ -110,8 +111,8 @@ struct SidebarActionWiringTests {
         let items = SidebarListBuilder.items(snapshot: SidebarPreview.richSnapshot(), state: SidebarListState(), nowMs: 0)
         var model = try #require(items.compactMap { if case .row(let row) = $0, row.variant == .card { row } else { nil } }.first)
         for meta in [true, false] {
-            model.branch = meta ? "main" : nil
-            model.scratchMachineLabel = nil; model.pullRequestBadge = nil; model.issueBadge = nil
+            model.environmentLabel = meta ? "This Mac" : nil
+            model.pullRequestBadge = nil; model.issueBadge = nil
             model.terminalProcessCount = 0; model.timeInMeta = false
             #expect(model.hasMetaLine == meta)
             let height = SidebarItem.row(model).height

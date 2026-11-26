@@ -63,7 +63,8 @@ public struct PromptStashEntry: Codable, Equatable, Sendable, Identifiable {
 
     /// `stashEntrySnippet`: the prompt on one line, at most 90 characters, or an attachment count.
     public var snippet: String {
-        let collapsed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `stashEntrySnippet` (ComposerStashMenu.tsx:20-27 at 5258).
+        let collapsed = ComposerInlineTokens.previewText(prompt).trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         if !collapsed.isEmpty {
             let chars = Array(collapsed)

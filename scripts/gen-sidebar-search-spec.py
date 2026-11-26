@@ -114,6 +114,17 @@ def scope_item(label, project=None, selected=False, highlighted=False):
             '<div class="flex min-w-0 flex-1 items-center gap-2 [&_svg:not([class*=\'text-\'])]:text-muted-foreground" data-slot="combobox-item-content">'
             f'{icon}<span class="min-w-0 truncate text-sm">{label}</span>{actions}</div></div>')
 
+# 5258 leads the list with "Add project" (Sidebar.tsx:3232-3242, #33057): a plain `hideIndicator` item with the
+# folder-plus icon and a `size-7 sm:size-6` spacer that keeps it as tall as the project rows.
+FOLDER_PLUS = '<path d="M12 10v6"></path><path d="M9 13h6"></path>' + FOLDER
+
+def add_project_item(highlighted=False):
+    attrs = ' data-highlighted=""' if highlighted else ""
+    return (f'<div role="option" data-slot="combobox-item" class="{ITEM}"{attrs}>'
+            '<div class="flex min-w-0 flex-1 items-center gap-2 [&_svg:not([class*=\'text-\'])]:text-muted-foreground" data-slot="combobox-item-content">'
+            f'{svg(FOLDER_PLUS, "size-4 shrink-0")}<span class="min-w-0 truncate text-sm">Add project</span>'
+            '<span class="ml-auto size-7 shrink-0 sm:size-6"></span></div></div>')
+
 def scope_popup(query, items):
     search = ('<div class="min-w-0 shrink-0 px-3 pt-2.5"><div class="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">'
               f'{svg(SEARCH, "pointer-events-none absolute top-1.5 left-0 size-4 shrink-0 text-muted-foreground/55")}'
@@ -146,9 +157,9 @@ add("draft.active", draft_row("demo-repo", "Add a dark mode toggle", active=True
     {"kind": "draft", "project": "demo-repo", "preview": "Add a dark mode toggle", "active": "true"})
 add("status.search", status("No threads found", True), {"kind": "status", "text": "No threads found", "search": "true"})
 add("status.empty", status("No threads in demo-repo yet", False), {"kind": "status", "text": "No threads in demo-repo yet"})
-add("scope.all", scope_popup("", [scope_item("All projects", selected=True), scope_item("demo-repo", "demo-repo", highlighted=True),
+add("scope.all", scope_popup("", [add_project_item(), scope_item("All projects", selected=True), scope_item("demo-repo", "demo-repo", highlighted=True),
                                   scope_item("candywrapper", "candywrapper")]),
-    {"kind": "scope", "query": "", "selected": "", "highlighted": "1"}, box=False)
+    {"kind": "scope", "query": "", "selected": "", "highlighted": "2"}, box=False)
 add("scope.empty", scope_popup("zzz", []), {"kind": "scope", "query": "zzz", "selected": ""}, box=False)
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -8,33 +8,40 @@ import T3Store
 /// The seeded sandbox behind reference-4928 (sandbox-4928-ref). Keep the older gallery and Redesign data unchanged.
 @MainActor
 enum Screen3824Fixtures {
+    /// The rows of reference-5258/02-sidebar-populated, top to bottom: sandbox-4928-ref's data as a 5258
+    /// client shows it six days later. Approval and Input lead because `sortInboxThreadsByReturn`
+    /// (client-runtime state/threadInbox.ts:57-75) takes their latest run's time, so the fixture gives them the
+    /// newest anchors. The approval expired when the server restarted, so only Input still shows a status.
+    static let sidebarEnvironment = "sandbox"
+    static let sidebarActiveThread = ThreadId(EnvironmentScope.key(sidebarEnvironment, "t7"))
+    static let sidebarEnvironments = SidebarEnvironments(primaryId: sidebarEnvironment, labels: [sidebarEnvironment: "Sandbox Mac"],
+                                                         machines: [sidebarEnvironment: "mac-mini"])
+
     static func sidebar(dark: Bool) -> ShellSnapshot {
         let p = "project-demo"
-        // The rows of reference-4928/02-sidebar-populated, newest first, with the ages each theme's capture shows.
-        let rows: [(String, SidebarPreview.Kind, Double, Double)] = [
-            ("Lighthouse Story", .read, 1, 7),
-            ("Lighthouse Story", .read, 4, 10),
-            ("Scratch idea", .read, 3, 9),
-            ("Document greet and update notes", .done, 5, 11),
-            ("Create Approval File", .approval, 6, 12),
-            ("CLI Tool Clarification", .input, 7, 13),
-            ("Run Shell Commands", .read, 17, 23),
-            ("Markdown Response Formatting Request", .read, 17, 23),
+        let rows: [(String, SidebarPreview.Kind)] = [
+            ("Create Approval File", .read),
+            ("CLI Tool Clarification", .input),
+            ("Lighthouse Story", .read),
+            ("Lighthouse Story", .read),
+            ("Scratch idea", .read),
+            ("Document greet and update notes", .read),
+            ("Run Shell Commands", .read),
+            ("Markdown Response Formatting Request", .read),
         ]
+        // Six days and two hours: every row reads "6d", as in both captures.
+        let age = 6.0 * 1440 + 120
         var threads = rows.enumerated().map { i, row in
-            // Every seeded thread but "Scratch idea" ran on main. T3 orders active rows by creation
-            // (client-runtime state/threadSort.ts:254-275), so the second story sorts above the older scratch thread
-            // although its reply is a minute older.
-            var extra: [String: Any] = row.0 == "Scratch idea" ? [:] : ["branch": "main"]
-            extra["createdAt"] = SidebarPreview.iso(Double(40 + i))
-            return SidebarPreview.thread("t\(i)", row.0, project: p, kind: row.1, minutesAgo: dark ? row.2 : row.3, extra: extra)
+            SidebarPreview.thread("t\(i)", row.0, project: p, kind: row.1, minutesAgo: age,
+                                  extra: ["createdAt": SidebarPreview.iso(age + Double(i))])
         }
-        // The footer's Snoozed 1 and Settled 1: "Tidy the README" snoozed until 2027-01-04, "Plan release notes" settled.
-        threads.append(SidebarPreview.thread("t8", "Tidy the README", project: p, kind: .waiting, minutesAgo: 30,
-                                             extra: ["snoozedUntil": "2027-01-04T09:00:00.000Z", "snoozedAt": SidebarPreview.iso(30)]))
-        threads.append(SidebarPreview.thread("t9", "Plan release notes", project: p, kind: .waiting, minutesAgo: 30,
-                                             extra: ["settledOverride": "settled", "settledAt": SidebarPreview.iso(30)]))
-        return SidebarPreview.snapshot(projects: [SidebarPreview.project(p, "demo-repo")], threads: threads)
+        // "Tidy the README" snoozed until 2027-01-04, "Plan release notes" settled.
+        threads.append(SidebarPreview.thread("t8", "Tidy the README", project: p, kind: .waiting, minutesAgo: age + 30,
+                                             extra: ["snoozedUntil": "2027-01-04T09:00:00.000Z", "snoozedAt": SidebarPreview.iso(age + 30)]))
+        threads.append(SidebarPreview.thread("t9", "Plan release notes", project: p, kind: .waiting, minutesAgo: age + 30,
+                                             extra: ["settledOverride": "settled", "settledAt": SidebarPreview.iso(age + 30)]))
+        let snapshot = SidebarPreview.snapshot(projects: [SidebarPreview.project(p, "demo-repo")], threads: threads)
+        return EnvironmentScope.scope(snapshot, environmentId: sidebarEnvironment)
     }
 
     static func pickers(draft: Bool = false) throws -> ComposerPickers {

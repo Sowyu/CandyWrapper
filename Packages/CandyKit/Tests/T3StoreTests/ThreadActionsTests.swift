@@ -316,6 +316,7 @@ struct ThreadActionMenuTests {
         #expect(labels["unpin"] == "Unpin thread" && labels["unsettle"] == "Un-settle thread" && labels["unsnooze"] == "Wake thread")
         #expect(labels["rewrite-title"] == "Rewriting title…" && labels["filter-by-project"] == "Show all projects")
         #expect(items.first { $0.id == "auto-settle" }?.children.map(\.checked) == [false, true])
+        #expect(items.first { $0.id == "auto-settle" }?.children.map(\.label) == ["Follow settings", "Never"])
     }
 
     @Test func snoozeSubmenuListsPresetsThenCustom() {
@@ -324,7 +325,9 @@ struct ThreadActionMenuTests {
         s.snoozePresets = [SnoozePreset(id: "hour", label: "In 1 hour", whenLabel: "1:00 PM", snoozedUntil: Date())]
         let snooze = ThreadActionMenu.items(s).first { $0.id == "snooze" }
         #expect(snooze?.disabled == true)
-        #expect(snooze?.children.map(\.label) == ["In 1 hour (1:00 PM)", "Custom…"])
+        // 5258 threadActionMenu.logic.ts:202-206: the time is the row's detail, not part of its label.
+        #expect(snooze?.children.map(\.label) == ["In 1 hour", "Custom…"])
+        #expect(snooze?.children.map(\.detail) == ["1:00 PM", nil])
     }
 
     @Test func readOnlyConnectionsKeepLocalActions() {

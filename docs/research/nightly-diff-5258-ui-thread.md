@@ -192,6 +192,7 @@ Pasting or dropping an image starts compression. Pressing Send while a tile is s
 - T3: components/chat/ComposerHeldSendBanner.tsx:21 ("Sending message", or "Sending once image is ready" and "Sending once {count} images are ready"), description "Edit or press Esc to cancel", `Spinner size="xs"`, ghost `Button size="xs"` "Cancel". Esc handling at components/chat/ChatComposer.tsx:2571, banner wiring at :2823, `isSendHeld` at :4110, tile states in components/chat/preparingComposerImages.ts:14 and components/chat/ComposerAttachmentStrip.tsx:42 ("Preparing").
 - Images over 2,000 px no longer stall on "Preparing" on a busy page (#42377, lib/imageCompression.worker.ts, lib/imageCanvas.ts), screenshots keep preparing after an unanswered question closes (#39569), and a send waits for uploads (#40672).
 - CW: partly. `Features/Composer/ComposerAttachments.swift` and `Features/Composer/SnapShotPendingCapture.swift` exist. There is no held-send state or banner.
+- Correction (port-composer): CW already held the send (`sendAfterPreparing`, #37547). What was missing was the banner, the button state and the cancel rules. Ported in 9499e23d. A model, provider, access or plan mode change cancels the hold since the port-composer leftovers commit (preparingComposerImages.ts:193-205).
 - Commits: 3b3f8808f4 #40672, c3aacf1e5b #42377, 019e55bad5 #39569.
 
 ### 2.2 The Tab hint is a button (small, default look: yes)
@@ -208,6 +209,7 @@ The "Tab" kbd hint after a prompt suggestion is now a `button` with `aria-label`
 - A slash command sent during a turn waits in the queue. Its send-now button tooltip reads "Move this command to the front of the queue ({shortcut})" instead of "Send into the current turn ({shortcut})" (#40316, components/chat/QueuedRunsControl.tsx:335). Goal commands keep the old tooltip.
 - @-file mentions show by name in the stash menu, queued rows and sidebar drafts (#40924).
 - CW: partly. `Features/Composer/QueuedRunEdits.swift`, `Features/Composer/QueuedRunsView.swift` and `Features/Composer/ComposerLogic.swift` (which has the steering capabilities) exist.
+- Ported (port-composer): #40316 and #40767 in 357ba3b8, #40924 in 9ff295a2. Left: #40945 attachment chips in queued edits (medium, 726 lines in T3), #41814 model choice in queued edits (medium, adds a wire field), #40763 reply-only edits (small).
 - Commits: 87554a7b86 #40945, d572ce9afe #41814, d834a4e117 #40763, c3a330d834 #40767, c385377544 #40316, 9de4ec1bfa #40924.
 
 ### 2.4 Paste and drop (medium, default look: no)
@@ -266,6 +268,7 @@ Dragging the sidebar rail below a threshold hides it. The rail previews the coll
 - The titlebar content shifts by `--workspace-titlebar-content-left` while the drag state says collapsed (workspaceTitlebar.ts).
 - Behavior: a blur or interrupt mid-drag cancels the collapse (`cancelOnInterrupt`).
 - CW: no. The sidebar split lives in `App/Sources/MainWindow.swift`. `Features/Sidebar/SidebarSortSession.swift` is a different drag.
+- Ported in 1feaf560. The titlebar needs no shift in CW: its header already starts right of the traffic lights. Hover, the drag and the cursor are not checked on screen (they need the real pointer); SidebarDragCollapseTests drive the mouse events.
 - Commit: 801b32f3a6 #29546.
 
 ### 3.2 Rows show the environment on the second line (small, default look: yes)
@@ -275,6 +278,8 @@ The thread row's meta line now starts with the environment's machine icon and la
 - T3: components/sidebar/SidebarThreadRow.tsx:1272-1300. The meta line is `mt-0.5 flex min-w-0 items-center gap-1.5 text-secondary-label text-xs`. The environment part is `EnvironmentMachineIcon` at `size-3.5 shrink-0 text-icon-muted` and `<span className="min-w-0 flex-1 truncate">`. When there is no label the row keeps `<span className="flex-1" />`. The meta line is empty, and the trailing icons move to the title line, only when there is no label, no PR badge, no issue badge, no diff and no running terminal (:1279). The label comes from `environmentLabelById.get(thread.environmentId)` at components/Sidebar.tsx:3384 and :3593.
 - The remote-machine icon that used to trail the title is gone.
 - The hover card moves the worktree here: a `FolderGit2Icon size-3 shrink-0 stroke-muted-foreground` row with `MiddleTruncate` of the display path, after the branch row (SidebarThreadRow.tsx:349-354). The card order is project, environment, branch, worktree (:331-354).
+- Ported in abb45d0c, for card, folder and Redesign rows. The whole-sidebar reference is recaptured from 5258 in `design/reference-5258/` (21dd98f3).
+- Correction (port-composer): the meta line's diff counts never draw at 5258. `latestRunDiff` returns null for every thread (SidebarThreadRow.tsx:1761-1766), so CW shows none either.
 - CW: partly. `Features/Sidebar/SidebarListModel.swift:57-61` has `scratchMachineLabel`, set only when `spansEnvironments` and the thread has no branch (:764). `Features/Sidebar/SidebarRowViews.swift:794` draws it. Replace that rule with the always-on label, drop the branch from the row, and add environment and worktree rows to `Features/Sidebar/SidebarThreadHoverCard.swift`. Recapture the sidebar row references.
 - Commit: cd3a57ac72 #40736.
 
@@ -284,6 +289,7 @@ The thread row's meta line now starts with the environment's machine icon and la
 - The sidebar New button starts the thread in the scoped project, and Shift starts without it (#35185, `resolveScopedNewThreadProjectRef`, Sidebar.tsx:208). It is off with the Boring sidebar.
 - A grouped project's folder New thread starts on the viewed machine's copy (#41554).
 - CW: partly. `App/Sources/PaletteAddProject.swift` and `Features/CommandPalette/` have Add project. The scope menu is in `Features/Sidebar/SidebarProjectScopeView.swift`.
+- Ported in 11e1c196. Redesign keeps its own Add project button and filter glyph by the Threads label. Not ported: the New button's "New thread in current project: Shift+click" tooltip line, which predates 4928 and CW never had.
 - Commits: dbb5bdb582 #33057, 46ee2fc7ff #35185, 1c9ccc7127 #41554.
 
 ### 3.4 Drafts in jumps, and drafts with terminals stay listed (small, default look: no)
@@ -337,6 +343,7 @@ Cmd+K lists the open thread's menu actions as rows: Find in thread, Pin or Unpin
 
 - T3: components/CommandPaletteThreadActions.tsx:51 (`SKIPPED` drops Rename and Project settings), :53 (`SHORTCUTS`: settle and unsettle `thread.settle`, pin and unpin `thread.pin`, regenerate-title `thread.regenerateTitle`), :62 (`useCommandPaletteThreadActions`), :100-107 (row: `value: thread-action:<id>`, `title: item.label`, icon from the menu's icon name, `description: item.detail`, `disabled`, shortcut, `checked`). A menu item with children becomes a submenu whose group label is the item's label and whose addon icon is the same icon. Wiring at components/CommandPalette.tsx:787. Items: components/threadActionMenu.logic.ts:164-320. Default keys: packages/shared/src/keybindings.ts:136 (`mod+shift+s` settle) and :137 (`mod+shift+p` pin).
 - Icons map: archive, circle-check, clock, copy, folder, folder-plus, git-branch, hash, mail-open, message-square, message-square-plus, pin, pin-off, refresh-cw, timer, trash.
+- Correction (port-composer, 2026-11-25): the palette's menu passes no find handler and `canShareWithGuest: false` (CommandPaletteThreadActions.tsx:66, useThreadActionMenu.ts), so Find in thread and Share with guest are not among these rows. The palette's own "Find in current thread" and "Share with guest" rows stay. The rows sit after Restart agent session (CommandPalette.tsx:1621). Ported in bff82880. Since the leftovers commit, the auto-settle submenu reads "Follow settings" and "Never" (threadActionMenu.logic.ts:270-279), and a snooze preset's time is its `detail`: the palette's second line, the themed menu's shortcut column (contextMenuFallback.ts:490-498) and "label (time)" in native menus (ElectronMenu.ts:81-83).
 - CW: no. `App/Sources/PaletteCommands.swift` has "Find in current thread", "Rewrite title" (CandyWrapper's own, per docs/decisions.md) and "Copy thread reference" as separate rows. `T3Store/ThreadActions.swift` and `Features/Sidebar/DitherThreadMenu.swift` hold the menu model. Keep Rewrite title in place of Regenerate title.
 - Commit: 95411e3cd7 #40742.
 
@@ -353,6 +360,7 @@ A query wrapped in straight or curly double quotes, longer than two characters, 
 
 - T3: packages/shared/src/paletteSearch.ts (`isExactQuery`, `unwrapQuery`, `foldSearchQuery` keeps straight double quotes for exact queries), components/chat/threadFindStore.ts.
 - CW: `Features/CommandPalette/PaletteScoring.swift` and `T3Store/ThreadSearch.swift` strip all wrapping quotes.
+- Correction (port-composer): this is medium, not small. The commit rewrites 234 lines of paletteSearch.ts scoring and touches the server's ThreadSearch.
 - Commit: 62e8042b21 #37700.
 
 ### 4.4 Keys in the palette (small, default look: no)
@@ -360,6 +368,7 @@ A query wrapped in straight or curly double quotes, longer than two characters, 
 Holding Esc closes the file or content search and stops on the palette: a repeating Escape is cancelled (components/CommandPalette.tsx:350, #42279). Backspace leaves a submenu only on a plain, non-repeating, non-IME press with an empty query (:2828, #42205).
 
 - CW: `Features/CommandPalette/CommandPaletteController.swift`.
+- Ported in 8a847157.
 - Commits: 51a721da44 #42279, ccdafe1f61 #42205.
 
 ### 4.5 Project picker eligibility (small, default look: no)
@@ -393,18 +402,18 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 9eaac040de | #42697 | test(web): sidebar shift guard tests no longer race the click against fake time | sidebar | n/a (test only) |
 | 9b671699d4 | #42582 | perf(web): thread switches paint the timeline in their first frame | thread | n/a (React render speed) |
 | 221953fbf3 | #42657 | fix(web): fade project picker tooltips in place on scroll | sidebar | port (3.8) |
-| 95411e3cd7 | #40742 | feat(web): settle, pin, snooze and more for the current thread from cmd+k | palette | port (4.1) |
+| 95411e3cd7 | #40742 | feat(web): settle, pin, snooze and more for the current thread from cmd+k | palette | ported bff82880 |
 | 3e74a0aac5 | #41210 | fix(antigravity): link directly to Google account verification on failed turns | thread | ported 0dfe2558 |
 | 283de2e4d4 | #42603 | fix(web): citation comment box stays open when its cited row scrolls out | thread | n/a here: the citation comment box is the composer's citation chip editor, composer agent |
 | 89047261b1 | #42574 | fix(web): Option and Cmd arrows reach full-screen terminal apps | other | n/a (terminal, other agent) |
 | 6667f3c089 | #42575 | fix(web): timeline minimap previews no longer cut an emoji in half | thread | already: ThreadMinimapView's `prefix(1_500)` counts characters |
 | 62e8042b21 | #37700 | feat(search): a query in double quotes finds its words together | palette | port (4.3) |
-| 801b32f3a6 | #29546 | feat(web): hide and restore the sidebar by dragging | sidebar | port (3.1) |
+| 801b32f3a6 | #29546 | feat(web): hide and restore the sidebar by dragging | sidebar | ported 1feaf560 |
 | 51a8d20271 | #42543 | fix(web): project action keybinding field records shortcuts instead of running them | composer | port (2.8) |
 | b6869fad67 | #30664 | feat(terminal): Add keybindings for cycling through terminals | other | n/a (terminal, other agent) |
 | ea63274413 | #42489 | chore(deps): bump vite-plus to 1.8.0 | other | n/a (dependency bump) |
 | 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | port (1.18) |
-| c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | port (2.1) |
+| c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | n/a (web canvas worker; CW prepares images with ImageIO off the main thread) |
 | 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | port (3.5) |
 | dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | ported d11002d4 (not seen on screen: the sandbox turn used Bash grep) |
 | 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | left: HTTP quota sources on the details card need `quotaAccounts` decoded. Medium |
@@ -412,11 +421,11 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | eb7cc44727 | #42309 | fix(web): showing or hiding a requested secret keeps the caret in place | thread | ported f15f9c8d |
 | 571ed76fc3 | #42275 | fix(web): sidebar issue and pull request badges share one component | sidebar | port (3.7) |
 | 921349decf | #42295 | fix(web): Mod+S stashes a side chat's prompt | composer | port (2.8) |
-| 51a721da44 | #42279 | fix(web): a held Esc in file or content search stops on the Command Palette | palette | port (4.4) |
+| 51a721da44 | #42279 | fix(web): a held Esc in file or content search stops on the Command Palette | palette | ported 8a847157 |
 | 41675b3e4d | #42286 | fix(web): floating preview no longer covers the last timeline rows on a narrow chat | thread | port (1.10) |
 | ff7d03ddfd | #42265 | fix(client-runtime): omit failed image reads from viewed-image previews | thread | ported 255b7394 |
 | e9b227b021 | #42183 | fix(web): typing / or $ in the composer no longer waits for the suggestion menu to render | composer | n/a (React render timing) |
-| ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | port (4.4) |
+| ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | ported 8a847157 |
 | 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | port (1.18) |
 | d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | port (3.6) |
 | 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394 (the 32pt media-close at the popup's top end; reference preview.rest still from 4928, recapture from 5258) |
@@ -455,7 +464,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 36ecdeb851 | #41597 | fix(web): an unavailable work-log image keeps the 10rem strip instead of filling the row | thread | ported 255b7394 (CW drops a failed viewed image from the row, so only the loading frame keeps the strip) |
 | da7d298fae | #41582 | fix(web): triple-click selects the whole line past draggable file chips | thread | n/a (Chromium CSS quirk) |
 | a369642c1c | #41578 | fix(web): keys pressed on a focused video stay with the player | composer | n/a (web focus redirect) |
-| 1c9ccc7127 | #41554 | fix(web): a grouped project's folder New thread starts on the viewed machine's copy | sidebar | port (3.3) |
+| 1c9ccc7127 | #41554 | fix(web): a grouped project's folder New thread starts on the viewed machine's copy | sidebar | ported 11e1c196 |
 | 3b08d975ab | #41518 | fix(web): the desktop app plays thread sounds after a reload | thread | n/a (web audio unlock) |
 | 7e624c0c8d | #37405 | fix(web): chat links open their menu from the keyboard on macOS | thread | port (1.18) |
 | 92199680cc | #41365 | fix(web): hide Mark unread on threads with no completed run | sidebar | port (3.5) |
@@ -471,36 +480,36 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 0938476b95 | #41060 | fix(web): Thinking row no longer shows below a streaming reply | thread | ported ad384d3e |
 | a3323d4a43 | #41070 | perf(web): new thread opens its draft without waiting on t3.json | composer | n/a (React load order) |
 | fe9c98c98f | #35871 | feat: agents can report T3 Code problems when you turn feedback on | thread | ported 47f71d35 (not seen on screen: needs a turn that asks for feedback with feedback on) |
-| dbb5bdb582 | #33057 | feat(web): sidebar folder button picks or adds a project | sidebar | port (3.3) |
+| dbb5bdb582 | #33057 | feat(web): sidebar folder button picks or adds a project | sidebar | ported 11e1c196 |
 | 67f17528f2 | #39494 | fix(web): snooze labels follow the app language | sidebar | port (3.5) |
 | c7df7004af | #41021 | fix(web): a photo picked on a phone attaches even when the composer collapses | composer | n/a (phone photo picker) |
 | 55880c41b4 | #40986 | fix(client-runtime): count ambiguous projects in chat file links | thread | port (1.12) |
 | 87554a7b86 | #40945 | fix(web): editing a queued message keeps its attachment chips resolved | composer | port (2.3) |
 | 7ddc81d639 | #40905 | fix(web): tool calls stay grouped after a usage-limit pause again | thread | ported 00aa8a70 |
-| 9de4ec1bfa | #40924 | fix(web,mobile): @-file mentions show by name in message previews, not as raw links | composer | port (2.3) |
+| 9de4ec1bfa | #40924 | fix(web,mobile): @-file mentions show by name in message previews, not as raw links | composer | ported 9ff295a2 |
 | 2c4310eb06 | #40909 | fix(web): pasting a chat message with text and a picture keeps both | composer | port (2.4) |
 | 1e78f37618 | #25272 | fix(web): keep script-only drafts reachable in the sidebar | sidebar | port (3.4) |
-| 501e39d54a | #40841 | fix(web): clicking the Tab hint inserts short prompt suggestions again | composer | port (2.2) |
+| 501e39d54a | #40841 | fix(web): clicking the Tab hint inserts short prompt suggestions again | composer | ported 0a35f251 |
 | bcb9217e8e | #26661 | fix(web): settling a thread no longer jolts the sidebar list | sidebar | port (3.5) |
 | d834a4e117 | #40763 | fix(web): preserve reply-only edits when a queued message leaves the queue | composer | port (2.3) |
 | d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | port (1.1) |
 | 671e05bc8c | #40768 | fix(issues): an Activity cross-reference opens the issue or pull request it came from | other | n/a (issues, other agent) |
 | 1acfd37c17 | #40798 | fix(web): restore effort picker keyboard typeahead | composer | port (2.6) |
-| c3a330d834 | #40767 | fix(web): show Queue for running sessions that cannot steer | composer | port (2.3) |
-| cd3a57ac72 | #40736 | feat(web): sidebar thread rows show the environment instead of the branch | sidebar | port (3.2) |
+| c3a330d834 | #40767 | fix(web): show Queue for running sessions that cannot steer | composer | ported 357ba3b8 |
+| cd3a57ac72 | #40736 | feat(web): sidebar thread rows show the environment instead of the branch | sidebar | ported abb45d0c, reference 21dd98f3 |
 | 11224f63d2 | #40703 | fix(client-runtime): a new thread's first message and a queued send-now or steer survive a dropped socket | composer | n/a (resend rule, wire section 5) |
 | 4ac5e6e791 | #40682 | fix(client-runtime): typing a bare Windows drive lists its folders | palette | n/a (Windows drive paths) |
-| 3b3f8808f4 | #40672 | fix(web): wait for image uploads before sending | composer | port (2.1) |
+| 3b3f8808f4 | #40672 | fix(web): wait for image uploads before sending | composer | ported 9499e23d |
 | c1fbdf6cdb | #40686 | fix(web): pasting text copied from Word inserts the text instead of an image | composer | port (2.4) |
 | 0fb6ac6e65 | #27866 | perf(web): Markdown renders with Words as static islands under one shared tooltip; remark leaves the web app | thread | n/a (markdown render speed) |
-| 3f08098c99 | #40654 | fix(web): wrapped prompt suggestion no longer overlaps the composer toolbar | composer | port (2.2) |
+| 3f08098c99 | #40654 | fix(web): wrapped prompt suggestion no longer overlaps the composer toolbar | composer | left (2.2: wrapped suggestion overlap, not checked on screen) |
 | a9447cedbd | #33221 | fix(web): Cite button appears as fast after a double-click as after a drag | thread | ported d33f7446 (CW already showed Cite at once; a multi-click now anchors it under the selection) |
 | 76b421864b | #40628 | fix(web): Ctrl+click in the composer no longer outlines the whole line | composer | n/a (web editor selection) |
 | 10586f9e31 | #40594 | feat: read feature flags from one T3CODE_FEATURE_FLAGS service | other | n/a (feature flags, wire A9) |
 | 4157f383f6 | #40553 | fix(web): send queued dictation to original thread after switching th… | composer | port (2.5) |
 | 1cedd4b4ed | #37314 | fix(web): scheduled task times follow the Time format setting | other | n/a (scheduled tasks, other agent) |
 | 8cf94f2542 | #40390 | fix(web): a modified click on a remote server opens it after forwarding | thread | n/a (desktop port forward) |
-| c385377544 | #40316 | fix(server): slash commands sent during a turn wait instead of steering | composer | port (2.3) |
+| c385377544 | #40316 | fix(server): slash commands sent during a turn wait instead of steering | composer | ported 357ba3b8 (client tooltip) |
 | 47525fa3d6 | #40215 | fix(web): switching threads no longer restarts the Changes and git status reads | other | n/a (git reads, other agent) |
 | bb0d718b31 | #40253 | fix(web): typing and pasting no longer write into the read-only composer during dictation | composer | port (2.5) |
 | b19ca97827 | #40252 | fix(web): inline file and thread chips can be removed during dictation | composer | port (2.5) |
@@ -526,8 +535,8 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | af99412e9d | #24603 | fix(web): keep file path tooltips open for selection | thread | n/a (web tooltip hover) |
 | 5093d11490 | #39968 | fix(web): numbered jumps and next/previous thread include unsent drafts | sidebar | port (3.4) |
 | e7b1b88bef | #37274 | fix(web): IME composition replaces selected text beside chips | composer | n/a (AppKit handles IME) |
-| 46ee2fc7ff | #35185 | feat(web): sidebar New starts the thread in the scoped project | sidebar | port (3.3) |
-| 1d975f53ea | #39488 | feat(web): click the Tab hint to use the suggested prompt | composer | port (2.2) |
+| 46ee2fc7ff | #35185 | feat(web): sidebar New starts the thread in the scoped project | sidebar | ported 11e1c196 |
+| 1d975f53ea | #39488 | feat(web): click the Tab hint to use the suggested prompt | composer | ported 0a35f251 |
 | c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | left: hub pools on the details card (`resolveThreadDetailsLimits`, instance hubs). Medium |
 | 342b58a79f | #30644 | feat(web): add a composerEmpty keybinding condition | composer | port (2.8) |
 | 285558eb10 | #34027 | feat(desktop): dictate on this Mac with Apple Speech | composer | n/a (desktop IPC, wire A19) |
@@ -541,7 +550,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 9294a9801e | #39837 | fix(acp,web): stop showing "Running Ran" for commandless ACP tool calls | thread | ported ad384d3e |
 | 0bc9b57b93 | #31257 | feat: secret cards get a show/hide toggle and multi-value fields | thread | ported f15f9c8d (multi-value fields were already in from the wire port) |
 | d5a084c440 | #39636 | fix(web): the provider update pill no longer recounts dismissed updates | sidebar | port (3.6) |
-| 019e55bad5 | #39569 | fix(composer): keep screenshots preparing after an unanswered question closes | composer | port (2.1) |
+| 019e55bad5 | #39569 | fix(composer): keep screenshots preparing after an unanswered question closes | composer | left (2.1: screenshot preparing after a question closes, not checked) |
 | 732c03f410 | #39557 | fix(web): fold accents in thread link picker search | composer | port (2.7) |
 | 22936ae669 | #39552 | fix(web): ignore superseded microphone refreshes in voice setup | composer | n/a (web mic setup) |
 | 29b42d409c | #39351 | fix(web): show status for grouped sidebar issues | sidebar | port (3.7) |

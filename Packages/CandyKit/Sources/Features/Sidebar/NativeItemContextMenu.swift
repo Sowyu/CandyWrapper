@@ -19,7 +19,9 @@ public enum NativeItemContextMenu {
                 menu.addItem(.separator())
                 destructiveSeparated = true
             }
-            let native = NativeItemContextMenuAction(title: item.label, action: nil, keyEquivalent: "")
+            // ElectronMenu.ts:81-83: a native menu shows the detail in parentheses after the label.
+            let title = item.detail.map { "\(item.label) (\($0))" } ?? item.label
+            let native = NativeItemContextMenuAction(title: title, action: nil, keyEquivalent: "")
             if item.destructive, item.children.isEmpty {
                 native.image = NSImage(systemSymbolName: "trash", accessibilityDescription: nil)?
                     .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .regular))
@@ -29,10 +31,6 @@ public enum NativeItemContextMenu {
             }
             native.isEnabled = !item.disabled
             if let checked = item.checked { native.state = checked ? .on : .off }
-            if let detail = item.detail {
-                // The subtitle shows it; a native menu's own tooltip stands in only before macOS 14.4.
-                if #available(macOS 14.4, *) { native.subtitle = detail } else { native.toolTip = detail }
-            }
             if item.children.isEmpty {
                 native.handler = { choose(item.id) }
             } else {

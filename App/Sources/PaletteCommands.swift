@@ -451,13 +451,6 @@ final class PaletteCommands {
                                             self?.threads.composer.openThreadFind()
                                         }, keepOpen: false)))
         }
-        // CandyWrapper's Rewrite title in place of T3's Regenerate title (docs/decisions.md, 2026-11-21).
-        if let id = threads.openThreadId, commands.canRewriteTitle(id) {
-            actions.append(PaletteEntry(value: "action:rewrite-title", searchTerms: ["rewrite title", "regenerate title", "rename", "title", "model"],
-                                        title: "Rewrite title", description: ThreadActionMenu.rewriteTitleTooltip, icon: .pencilLine,
-                                        shortcutCommand: "thread.regenerateTitle",
-                                        action: .run({ [weak self] in self?.commands.rewriteTitle(id) }, keepOpen: false)))
-        }
         if let target = commands.threadReferenceTarget {
             actions.append(PaletteEntry(value: "action:copy-thread-reference", searchTerms: ["copy", "pull request", "pr link", "thread", "thread id", "reference"],
                                         title: "Copy " + target.title.replacingOccurrences(of: " copied", with: "").replacingOccurrences(of: "Thread", with: "thread"), description: target.description,
@@ -505,6 +498,9 @@ final class PaletteCommands {
                                         title: "Restart agent session", icon: .rotateCcw,
                                         action: .run({ [weak self] in self?.restartAgentSession(thread) }, keepOpen: false)))
         }
+        // The open thread's own menu actions (CommandPalette.tsx:1621 at 5258, #40742). CandyWrapper's Rewrite title
+        // comes through here in place of T3's Regenerate title (docs/decisions.md, 2026-11-21).
+        actions += threadActionEntries()
         actions.append(PaletteEntry(value: "action:open-file-picker", searchTerms: ["go to file", "open file", "file picker", "find file", "quick open"],
                                     title: "Go to file", icon: .fileSearch, shortcutCommand: "filePicker.toggle",
                                     action: .run({ [weak self] in self?.openFilePicker() }, keepOpen: true)))
@@ -575,6 +571,13 @@ final class PaletteCommands {
     }
 
     /// "New thread in..." (`projectThreadItems`): one entry per project group, `thread.jump.N` on the first nine.
+    /// `useCommandPaletteThreadActions` (CommandPaletteThreadActions.tsx:62-107 at 5258): the open thread's menu as rows,
+    /// `thread-action:<id>`, submenus for items with children. Rename and Project settings have their own rows.
+    private func threadActionEntries() -> [PaletteEntry] {
+        guard let id = threads.openThreadId, let menu = commands.paletteThreadMenu(id) else { return [] }
+        return PaletteThreadActions.entries(menu.items) { choice in DispatchQueue.main.async { menu.run(choice) } }
+    }
+
     private func newThreadInPage() -> PalettePage? {
         let all = projectGroups()
         guard !all.isEmpty else { return nil }
@@ -939,7 +942,8 @@ final class PaletteCommands {
         threads.newThread(in: project)
     }
 
-    /// The sidebar's new-thread button (`handleNewThreadClick`): one project or Shift creates at once,
+    /// The sidebar's new-thread button (`handleNewThreadClick`): a sidebar scoped to one project starts there unless
+    /// Shift is held (#35185); otherwise one project or Shift creates at once,
     /// several open "New thread in..." (`openCommandPalette({open: "new-thread-in"})`).
     /// Dither skips the palette and opens a draft with no project, picked later from the project chip (Capy's).
     /// `opened` runs once the draft shows; Dither's scratch draft opens a moment later, after `projects.ensureScratch`.
@@ -949,6 +953,12 @@ final class PaletteCommands {
             return
         }
         defer { opened?() }
+        if let project = SidebarModel.scopedNewThreadProject(shift: shift, scopedGroups: sidebar?.newThreadScopedGroups ?? [],
+                                                             viewedProjectId: threads.composer.activeProjectId,
+                                                             projects: snapshot?.projects ?? []) {
+            newThread(in: project)
+            return
+        }
         if shift || projectGroups().count <= 1 { newThreadFromContext(); return }
         if let controller = overlay?.controller, let page = newThreadInPage() { controller.setMode(nil); controller.push(page); return }
         open(newThreadIn: true)

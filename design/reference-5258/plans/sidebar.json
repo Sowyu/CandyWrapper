@@ -1,0 +1,43 @@
+{
+ "base": "http://127.0.0.1:47398",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "02-sidebar-populated",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))"
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/c80527b4-84fe-4d7e-947e-c0b9b7ab10f1"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 600
+    },
+    {
+     "wait": 500
+    },
+    {
+     "wait": 800
+    }
+   ]
+  }
+ ]
+}

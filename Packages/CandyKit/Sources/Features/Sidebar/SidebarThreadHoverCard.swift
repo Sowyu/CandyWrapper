@@ -11,6 +11,8 @@ public struct SidebarThreadHoverCardModel: Equatable {
     public var environmentLabel: String?
     public var environmentMachine: String
     public var branch: String?
+    /// The worktree folder's last path part (`formatWorktreePathForDisplay`, T3 5258 SidebarThreadRow.tsx:349-354, #40736).
+    public var worktree: String?
     /// "You're currently checked out on another branch." (`branchMismatch`, Sidebar.tsx:1350-1355, 498-505).
     public var branchMismatch = false
     /// The provider glyph's driver and "<model> · <instance>" or the model alone.
@@ -27,9 +29,17 @@ public struct SidebarThreadHoverCardModel: Equatable {
 
     public init(title: String) { self.title = title; environmentMachine = "server" }
 
+    /// `formatWorktreePathForDisplay` (T3 5258 worktreeCleanup.ts:32-42): the last path part, nil for a blank path.
+    public static func worktreeDisplay(_ path: String?) -> String? {
+        guard let trimmed = path?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        let normalized = trimmed.replacingOccurrences(of: "\\", with: "/").replacing(/\/+$/, with: "")
+        let last = normalized.split(separator: "/", omittingEmptySubsequences: false).last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        return last.isEmpty ? trimmed : last
+    }
+
     public static func == (a: Self, b: Self) -> Bool {
         a.title == b.title && a.projectLabel == b.projectLabel && a.projectIcon == b.projectIcon && a.environmentLabel == b.environmentLabel
-            && a.environmentMachine == b.environmentMachine && a.branch == b.branch && a.branchMismatch == b.branchMismatch && a.provider?.driver == b.provider?.driver
+            && a.environmentMachine == b.environmentMachine && a.branch == b.branch && a.worktree == b.worktree && a.branchMismatch == b.branchMismatch && a.provider?.driver == b.provider?.driver
             && a.provider?.label == b.provider?.label && a.providerAccent == b.providerAccent && a.handedOffFrom == b.handedOffFrom && a.terminalProcessCount == b.terminalProcessCount
             && a.errorIsUsageLimit == b.errorIsUsageLimit && a.pullRequests == b.pullRequests
     }
@@ -84,6 +94,8 @@ public final class SidebarThreadHoverCardView: DSView, PopupContent {
         }
         // The branch is a `MiddleTruncate` in the grid's `text-muted-foreground`, not at 75% foreground.
         if let branch = model.branch { add(IconView(name: .gitBranch, size: 12, strokeColor: muted), branch, muted: true) }
+        // `FolderGit2Icon size-3 stroke-muted-foreground` and a `MiddleTruncate`, like the branch.
+        if let worktree = model.worktree { add(IconView(name: .folderGit2, size: 12, strokeColor: muted), worktree, muted: true) }
         // `items-start gap-2 text-warning`, the glyph `mt-0.5`, the text `leading-5`. Built with every branch
         // row: the checkout's branch arrives after the card opens (`branchMismatch`).
         if model.branch != nil {

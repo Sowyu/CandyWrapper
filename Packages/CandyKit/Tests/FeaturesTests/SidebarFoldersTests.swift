@@ -36,16 +36,21 @@ struct SidebarFoldersTests {
     }
 
     /// Screen pass 3, item 9: Labs' Two-line folder rows turned on with the sidebar already drawn puts folder rows
-    /// with a branch on two lines (#26463, SidebarThreadRow.tsx:1268-1275 at 4928).
+    /// with an environment on two lines (#26463; the environment line is T3 5258 SidebarThreadRow.tsx:1276-1283).
     @Test func twoLineFolderRowsApplyToADrawnSidebar() throws {
-        let snapshot = SidebarPreview.snapshot(projects: [SidebarPreview.project("p", "Demo")], threads: [
+        var shells = MergedShell()
+        shells.set(SidebarPreview.snapshot(projects: [SidebarPreview.project("p", "Demo")], threads: [
             SidebarPreview.thread("blue", "Blue", project: "p", kind: .read, minutesAgo: 2, extra: ["branch": "main"]),
-        ])
+        ]), environmentId: "local")
+        let snapshot = try #require(shells.merged(order: ["local"]))
         var state = SidebarListState()
+        state.environments = SidebarEnvironments(primaryId: "local", labels: ["local": "This Mac"])
         state.boringSidebarEnabled = true
         let cache = SidebarListCache()
         func blue() throws -> SidebarItem {
-            try #require(SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: now, cache: cache).first { $0.key == "thread:blue" })
+            try #require(SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: now, cache: cache).first {
+                if case .row(let r) = $0 { r.id.localId.rawValue == "blue" } else { false }
+            })
         }
         #expect(try blue().height == 36)
         state.boringSidebarMultilineRows = true

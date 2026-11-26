@@ -89,7 +89,9 @@ public final class SidebarContentView: DSView {
     private let environmentPill = BadgeView("Nightly", variant: .secondary, size: .sm)
     let brand = SidebarBrandView()
     let search = SidebarSearchFieldView()
-    let filterButton = SidebarContentView.headerButton(.listFilter, "Filter threads by project")
+    /// The project scope trigger: T3 5258's folder button "Projects" (Sidebar.tsx:3136-3171, #33057). Redesign keeps
+    /// its filter glyph beside its own Add project button.
+    let filterButton = SidebarContentView.headerButton(.folder, "Projects")
     let addProjectButton = SidebarContentView.headerButton(.folderPlus, "Add project")
     let newThreadButton = SidebarContentView.headerButton(.squarePen, "New thread")
     let settingsButton = SidebarContentView.footerButton(.settings, "Settings")
@@ -282,7 +284,9 @@ public final class SidebarContentView: DSView {
         list.onToggleShelf = { [weak self] in self?.toggleShelf($0) }
         list.onNewProjectThread = { [weak self] key in
             guard let self, let group = SidebarListBuilder.projectScopeGroups(snapshot: self.snapshot).first(where: { $0.key == key }) else { return }
-            self.actions.newThreadInProject(group.representative)
+            // #41554: a grouped project starts on the viewed thread's machine (Sidebar.tsx:1269-1280 at 5258).
+            let viewed = self.state.activeThreadId.flatMap { id in self.snapshot?.threads.first { $0.id == id }?.projectId }
+            self.actions.newThreadInProject(SidebarModel.pickerTarget(group, preferred: viewed))
         }
         // Sidebar.tsx:1194-1221 (3814).
         list.onProjectMenu = { [weak self] key, event, view in
@@ -843,6 +847,7 @@ public final class SidebarContentView: DSView {
             m.environmentMachine = state.environments.machine(env)
         }
         m.branch = thread.branch
+        m.worktree = SidebarThreadHoverCardModel.worktreeDisplay(thread.worktreePath)
         // Sidebar.tsx:1243-1255, 1350-1355: the checkout's status when the thread has a branch; only a
         // Current checkout thread (no worktree) can be on another branch.
         if thread.branch != nil, thread.worktreePath == nil, let env = id.environmentId, let root = project?.workspaceRoot {
@@ -905,16 +910,21 @@ public final class SidebarContentView: DSView {
             preferredEnvironmentId: state.environments.primaryId))
     }
 
+    /// The scope New starts in: none with the Boring sidebar, whose header button always opens the picker
+    /// (Sidebar.tsx:3045-3050 at 5258).
+    public var newThreadScopedGroups: [SidebarModel.ProjectGroup] { state.boringSidebarEnabled ? [] : scopedGroups }
+
     private var scopedGroup: SidebarModel.ProjectGroup? { scopedGroups.count == 1 ? scopedGroups.first : nil }
 
     func updateScopeTrigger() {
         let group = scopedGroup
         filterMonogram.isHidden = group == nil
         if let group { filterMonogram.projectTitle = group.representative.title; filterMonogram.source = ProjectIconSource(group.representative) }
-        if (filterButton.icon == nil) != (group != nil) { filterButton.icon = group == nil ? .listFilter : nil }
+        let icon: IconName? = group == nil ? scopeIcon : nil
+        if filterButton.icon != icon { filterButton.icon = icon }
         let selected = scopedGroups
         filterButton.isActive = !selected.isEmpty
-        let label = selected.isEmpty ? "Filter threads by project" : "Filter threads by project: " + selected.map(\.label).joined(separator: ", ")
+        let label = selected.isEmpty ? "Projects" : "Projects: " + selected.map(\.label).joined(separator: ", ")
         filterButton.setAccessibilityLabel(label)
         filterButton.setTooltip(label)
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
@@ -938,6 +948,10 @@ public final class SidebarContentView: DSView {
         }
         view.onSelect = { [weak self] key in
             if let key { self?.toggleProjectScope(key) } else { self?.setProjectScopes([]) }
+        }
+        view.onAddProject = { [weak self] in
+            self?.closeScopePopup()
+            self?.actions.addProject()
         }
         view.onSettings = { [weak self] key in
             self?.closeScopePopup()
@@ -1089,8 +1103,13 @@ public final class SidebarContentView: DSView {
         super.viewDidChangeEffectiveAppearance()
         applyStage() // Dither hides the artwork
         syncDither()
+        updateScopeTrigger()
         needsLayout = true
     }
+
+    /// Redesign's list controls sit by the "Threads" label: Add project and a filter glyph. The default themes follow
+    /// 5258, where the folder button's menu holds Add project.
+    private var scopeIcon: IconName { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .listFilter : .folder }
 
     // MARK: Layout
 
@@ -1130,7 +1149,8 @@ public final class SidebarContentView: DSView {
         let hasProjects = !(snapshot?.projects.isEmpty ?? true)
         let capyHeader = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         for b in [newThreadButton, addProjectButton, filterButton] {
-            b.isHidden = b !== newThreadButton && !hasProjects || capyHeader && b === newThreadButton
+            // 5258 moves Add project into the folder button's menu (SidebarThreadHeader.tsx:100, #33057); Redesign keeps it.
+            b.isHidden = b !== newThreadButton && !hasProjects || capyHeader && b === newThreadButton || !capyHeader && b === addProjectButton
             if b.isHidden || capyHeader { continue }
             b.frame = NSRect(x: right - 28, y: rowY + 2, width: 28, height: 28)
             right -= 28

@@ -6,8 +6,8 @@ import T3Store
 @testable import Features
 
 /// Whole-sidebar comparison: our sidebar at 256x780, 2x, with the reference dataset, against the left 256pt
-/// of design/reference-4928/02-sidebar-populated.{light,dark}.png. Writes ref, ours and diff PNGs plus
-/// report-sidebar-whole.html to `Fidelity.root`. Text differs where the data differs.
+/// of design/reference-5258/02-sidebar-populated.{light,dark}.png. Writes ref, ours and diff PNGs plus
+/// report-sidebar-whole.html to `Fidelity.root`.
 @MainActor @Suite(.fidelity)
 struct SidebarFidelityTests {
     /// Per-case ceilings, measured 2026-10-22 plus margin (FidelitySupport.swift).
@@ -26,7 +26,9 @@ struct SidebarFidelityTests {
         content.windowedMac = false // the reference is the web client: no traffic lights
         content.stage = .nightly
         content.now = { SidebarPreview.referenceNow }
-        content.state = SidebarListState(activeThreadId: ThreadId("t7")) // the markdown thread, open in 02
+        var state = SidebarListState(activeThreadId: Screen3824Fixtures.sidebarActiveThread) // the markdown thread, open in 02
+        state.environments = Screen3824Fixtures.sidebarEnvironments
+        content.state = state
         content.setSnapshot(Screen3824Fixtures.sidebar(dark: dark), animated: false)
         container.content = content
         return Snapshot.image(of: container, size: NSSize(width: 256, height: 780), scale: 2, dark: dark)
@@ -115,7 +117,7 @@ struct SidebarFidelityTests {
         var lines: [String] = [], cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
             let full = try #require(NSBitmapImageRep(data: Data(contentsOf: Self.repo.appendingPathComponent(
-                "design/reference-4928/02-sidebar-populated.\(theme).png"))))
+                "design/reference-5258/02-sidebar-populated.\(theme).png"))))
             let ref = Self.crop(full, width: 512, height: 1560)
             let ours = Self.render(dark: theme == "dark")
             let (total, perBand, diff) = Self.compare(ref, ours, bands: bands)

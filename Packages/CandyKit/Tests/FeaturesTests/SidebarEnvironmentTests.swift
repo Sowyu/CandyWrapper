@@ -23,18 +23,27 @@ struct SidebarEnvironmentTests {
         SidebarEnvironments(primaryId: "local", labels: ["local": "This device", "mini": "Mac mini"], machines: ["mini": "mac-mini"])
     }
 
-    @Test func remoteRowsCarryTheirMachine() {
+    /// T3 5258 (#40736): every row with a known environment starts its meta line with the machine and label,
+    /// the primary environment's included; unknown machine kinds draw `server`.
+    @Test func everyRowCarriesItsEnvironment() {
         var state = SidebarListState()
         state.environments = environments
         let rows = SidebarListBuilder.items(snapshot: merged(), state: state, nowMs: nowMs)
             .compactMap { if case .row(let r) = $0 { r } else { nil } }
         #expect(rows.count == 16)
-        #expect(rows.filter { $0.id.environmentId == "local" }.allSatisfy { $0.environmentMachine == nil })
-        #expect(rows.filter { $0.id.environmentId == "mini" }.allSatisfy { $0.environmentMachine == "mac-mini" })
-        // Unknown machine kinds fall back to `server`; no primary marks every row remote (T3's hosted app).
-        #expect(SidebarEnvironments(primaryId: "local").rowMachine("x:t") == "server")
-        #expect(SidebarEnvironments().rowMachine("local:t") == "server")
-        #expect(SidebarEnvironments(primaryId: "local").rowMachine("local:t") == nil)
+        #expect(rows.filter { $0.id.environmentId == "local" }.allSatisfy { $0.environmentLabel == "This device" && $0.environmentMachine == "server" && $0.hasMetaLine })
+        #expect(rows.filter { $0.id.environmentId == "mini" }.allSatisfy { $0.environmentLabel == "Mac mini" && $0.environmentMachine == "mac-mini" })
+        let unlabeled = SidebarListBuilder.items(snapshot: merged(), state: SidebarListState(), nowMs: nowMs)
+            .compactMap { if case .row(let r) = $0 { r } else { nil } }
+        #expect(unlabeled.allSatisfy { $0.environmentLabel == nil })
+    }
+
+    /// `formatWorktreePathForDisplay` (worktreeCleanup.ts:32-42) for the hover card's worktree row.
+    @Test func worktreeShowsItsLastPathPart() {
+        #expect(SidebarThreadHoverCardModel.worktreeDisplay("/Users/me/.t3/worktrees/app/fix-sidebar/") == "fix-sidebar")
+        #expect(SidebarThreadHoverCardModel.worktreeDisplay("C:\\wt\\feature") == "feature")
+        #expect(SidebarThreadHoverCardModel.worktreeDisplay("  ") == nil)
+        #expect(SidebarThreadHoverCardModel.worktreeDisplay(nil) == nil)
     }
 
     @Test func projectBadgeSaysOnOrAlsoOn() {

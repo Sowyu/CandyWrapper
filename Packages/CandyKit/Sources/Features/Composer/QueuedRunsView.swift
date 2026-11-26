@@ -96,7 +96,7 @@ public final class QueuedRunsView: ComposerBannerView {
                           canSend: state.canSend(item),
                           editBlocked: editBlockedReason != nil,
                           editTip: editBlockedReason ?? "Edit in the composer" + (i == queued - 1 && item.runId != nil ? editShortcutLabel.map { " (\($0))" } ?? "" : ""),
-                          steerTip: (state.canSendNow ? "Start a turn with this message" : state.promoteSkipsCompaction ? "Skip compaction and send this message" : "Send into the current turn")
+                          steerTip: ComposerLogic.queuedSteerTip(state, item)
                             + (i == 0 ? steerShortcutLabel.map { " (\($0))" } ?? "" : ""))
         }
         needsLayout = true
@@ -217,7 +217,7 @@ private final class ModernQueuedRowView: DSView {
         let presentation = item.message.map(UserMessagePresentation.resolve)
         let attribution = presentation?.attribution
         folded = attribution == .automation || attribution == .agent
-        text.text = ComposerInlineTokens.citationsToPlainText(ComposerInlineTokens.contextLabels(item.text)).trimmingCharacters(in: .whitespacesAndNewlines)
+        text.text = ComposerInlineTokens.previewText(item.text).trimmingCharacters(in: .whitespacesAndNewlines)
         text.color = Themed.color(editing ? \.foreground : \.mutedForeground)
         let label = attribution == .automation ? "Automation" : item.message?.senderThreadId.flatMap { owner?.senderThreadTitles[$0] ?? owner?.threadTitle?(ThreadId($0)) } ?? "Agent"
         let cleanLabel = label.trimmingCharacters(in: .whitespacesAndNewlines)
