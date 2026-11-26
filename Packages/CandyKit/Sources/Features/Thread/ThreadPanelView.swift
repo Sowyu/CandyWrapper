@@ -347,6 +347,14 @@ public final class ThreadPanelView: DSView {
         get { header.titleTyping }
         set { header.titleTyping = newValue; threadTitle.titleTyping = newValue }
     }
+    /// `dismissFind` (5258 useChatShortcuts.ts:115-133, #28919): an Escape that nothing inside the chat used closes
+    /// find, from anywhere in it. AppKit's `cancelOperation` bubbles from the focused view as T3's bubble listener
+    /// does, so an embedded side chat's panel closes its own find before the window sees the key.
+    public var onEscapeFind: (() -> Void)?
+    public override func cancelOperation(_ sender: Any?) {
+        if findOpen, let onEscapeFind { onEscapeFind() } else { super.cancelOperation(sender) }
+    }
+
     /// Built the first time thread search opens; wire it through `lazyFindBar`.
     public let lazyFindBar = LazyView { ThreadFindBarView() }
     public var findBar: ThreadFindBarView { lazyFindBar.view }

@@ -44,6 +44,9 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         var allow: String = ""
         var dark: Bool
         var kind: Kind = .agent
+        /// An MCP app: the bridge follows the port its document's bootstrap hands over first, and acts on a message
+        /// only once that document confirms it sent it (5258 mcpAppDocumentLink.ts, #41745, #42504).
+        var documentBound = false
     }
 
     /// Where a navigation would land.
@@ -79,6 +82,9 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     }
     /// The document tried to load a second time (an MCP App left its page).
     var onNavigatedAway: (() -> Void)?
+    /// An MCP app's first message was not its document's port: the server predates the bootstrap, so the app gets
+    /// no bridge (McpAppFrame.tsx:453-463 at 5258).
+    var onBridgeMissing: (() -> Void)?
     /// The budget took the web view back.
     var onEvicted: (() -> Void)?
     /// Whether the frame counts against `ThreadWebFrameBudget`. The full screen dialog's doesn't: opening it would
@@ -134,7 +140,9 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
             config.websiteDataStore = ThreadWebFrameBudget.dataStore
             let world = WKContentWorld.world(name: "t3-host")
             controller.add(ThreadWebFrameMessageProxy(self, token: loadToken), contentWorld: world, name: "t3host")
-            controller.addUserScript(WKUserScript(source: Self.bridgeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: world))
+            // At document start, so the listener is there before the frame's bootstrap posts its port.
+            controller.addUserScript(WKUserScript(source: Self.bridgeScript(documentBound: page.documentBound), injectionTime: .atDocumentStart,
+                                                  forMainFrameOnly: true, in: world))
         } else {
             // A file tab gets no bridge at all, and nothing the page stores outlives the tab.
             config.websiteDataStore = .nonPersistent()
@@ -277,6 +285,10 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
     func received(_ body: Any, isMainFrame: Bool, token: String) {
         // Only the host page's isolated bridge speaks here; a framed document never reaches this world.
         guard isMainFrame, webView != nil, token == loadToken else { return }
+        if page?.documentBound == true, (body as? [String: Any])?["missing"] != nil {
+            onBridgeMissing?()
+            return
+        }
         guard let text = body as? String, let json = try? JSONValue(parsing: Data(text.utf8)) else { return }
         // T3 reports at DOMContentLoaded, on resize and on load (htmlRender.ts:405). While images load,
         // keep its last report without repeatedly resizing and retiling the native timeline.
@@ -393,20 +405,60 @@ final class ThreadWebFrameView: NSView, WKNavigationDelegate {
         """
     }
 
-    /// Runs in the isolated `t3-host` world: forwards the frame's messages, posts back into the frame.
-    static let bridgeScript = """
-    (function(){
-      if (window.__t3bridge) window.removeEventListener("message", window.__t3bridge);
-      window.__t3bridge = function(e){
-        var f = document.getElementById("f");
-        if (!f) return;
-        if (e.source !== f.contentWindow) return;
-        try { window.webkit.messageHandlers.t3host.postMessage(JSON.stringify(e.data)); } catch (x) {}
-      };
-      window.addEventListener("message", window.__t3bridge);
-      window.__t3post = function(text){ var f = document.getElementById("f"); if (f && f.contentWindow) f.contentWindow.postMessage(JSON.parse(text), "*"); };
-    })();
-    """
+    /// The bootstrap's first message (`MCP_APP_DOCUMENT_MESSAGE`, packages/shared/src/mcpApp.ts:254).
+    static let documentMessage = "t3-mcp-app-document"
+    /// `MAX_UNCONFIRMED_MESSAGES` (mcpAppDocumentLink.ts:3).
+    static let maxUnconfirmed = 256
+
+    /// Runs in the isolated `t3-host` world: forwards the frame's messages, posts back into the frame. With
+    /// `documentBound` it is `attachMcpAppDocumentLink` (5258 mcpAppDocumentLink.ts:24-70): a frame's window outlives
+    /// its document, so the bridge takes the port the first document's bootstrap sends, answers only over it, and
+    /// forwards a message only after that port confirms it with the probe number sent for it. A first message that
+    /// is anything else gets no bridge: nothing is forwarded or posted, and the host hears `{missing: 1}`, an object
+    /// where every forwarded message is a string.
+    static func bridgeScript(documentBound: Bool) -> String {
+        """
+        (function(){
+          if (window.__t3bridge) window.removeEventListener("message", window.__t3bridge);
+          var bound = \(documentBound), link = null, next = 0, unconfirmed = new Map();
+          function forward(data){ try { window.webkit.messageHandlers.t3host.postMessage(JSON.stringify(data)); } catch (x) {} }
+          window.__t3bridge = function(e){
+            var f = document.getElementById("f");
+            if (!f || e.source === null || e.source !== f.contentWindow) return;
+            if (!bound) { forward(e.data); return; }
+            if (link === false) return;
+            if (link === null) {
+              var port = e.data && e.data.t3 === "\(documentMessage)" ? (e.ports[0] || null) : null;
+              if (port === null) {
+                link = false;
+                try { window.webkit.messageHandlers.t3host.postMessage({missing: 1}); } catch (x) {}
+                return;
+              }
+              link = port;
+              port.onmessage = function(reply){
+                var probe = reply.data ? reply.data.alive : undefined;
+                if (typeof probe !== "number" || !unconfirmed.has(probe)) return;
+                var data = unconfirmed.get(probe);
+                unconfirmed.delete(probe);
+                forward(data);
+              };
+              return;
+            }
+            if (unconfirmed.size >= \(maxUnconfirmed)) return;
+            unconfirmed.set(next, e.data);
+            link.postMessage({alive: next});
+            next += 1;
+          };
+          window.addEventListener("message", window.__t3bridge);
+          window.__t3post = function(text){
+            var message = JSON.parse(text);
+            if (bound) { if (link) link.postMessage({message: message, origin: window.location.origin}); return; }
+            var f = document.getElementById("f");
+            if (f && f.contentWindow) f.contentWindow.postMessage(message, "*");
+          };
+        })();
+        """
+    }
 
 
 }

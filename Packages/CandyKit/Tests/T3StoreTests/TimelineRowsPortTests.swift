@@ -781,3 +781,21 @@ struct ToolCallVisibilityTests {
         #expect(kinds.contains { $0.hasSuffix(":turn-fold") })
     }
 }
+
+/// 5258 MessagesTimeline.logic.ts:1230-1290 (#38869): background work that spawns a subagent after the turn settled
+/// adds no turn time.
+struct LateSubagentTurnTimeTests {
+    @Test func aSubagentCardAfterTheReplyAddsNoTurnTime() {
+        let runId: RunId = "run"
+        func time(_ s: Int) -> T3Timestamp { T3Timestamp(String(format: "2026-01-01T00:00:%02d.000Z", s)) }
+        let entries = [
+            message("prompt", role: .user, run: runId, at: time(0), intent: .turnStart),
+            work("work", run: runId, at: time(5)),
+            message("final", role: .assistant, run: runId, at: time(10), text: "Done"),
+            work("late-agent", run: runId, at: time(50), label: "Subagent") { $0.itemType = .subagent },
+        ]
+        let rows = derive(entries)
+        let labels = rows.compactMap { row -> String? in if case .turnFold(_, let label, _, _) = row.kind { label } else { nil } }
+        #expect(labels == ["Worked for 10s"])
+    }
+}

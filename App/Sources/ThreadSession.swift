@@ -165,7 +165,8 @@ final class ThreadSession {
     /// `followLinkedThread` (5258 linkedThread.ts:283-453): every subscription starts from the linked environment's
     /// snapshot, since `PeerLinkThreadInput` takes no resume cursor. An unreachable environment is asked again after
     /// 15 s with what was read kept; any other failure ends the stream until Try again.
-    // ponytail: a resubscribe's snapshot drops the older pages loaded before it; port `keepLinkedThreadView`'s window if a reconnect mid-read shows it
+    /// A resubscribe's snapshot holds only the latest turns, so the rows read before it come back by paging to the oldest
+    /// one again (`restoreThrough`, linkedThread.ts:318-367), the way T3 recovers a newer snapshot's window.
     private func attachLinked(_ shell: ShellSession, _ linked: LinkedSource) {
         subscription?.cancel()
         historyLoad?.cancel()
@@ -182,7 +183,11 @@ final class ThreadSession {
         let input = PeerLinkRPC.threadInput(environmentId: linked.environmentId, threadId: threadId.localId)
         // Set while a failure shows, so only the first value after it hops to the main actor to clear it.
         let failed = OSAllocatedUnfairLock(initialState: false)
+        // The oldest row shown when this (re)subscribe started, until its snapshot lands.
+        let restoreThrough = OSAllocatedUnfairLock<TurnItemId?>(initialState: nil)
         subscription = supervisor.subscribe(PeerLinkRPC.subscribeThread, payload: {
+            let oldest = await store.oldestShownItemId()
+            restoreThrough.withLock { $0 = oldest }
             // Claims the store for this stream; the linked read itself takes no cursor.
             _ = await store.subscribeInput(subscription: wireSubscription)
             return input
@@ -190,6 +195,10 @@ final class ThreadSession {
             switch event {
             case .value(let json):
                 try await ThreadSession.applyWire(json, to: store, subscription: wireSubscription)
+                if Self.carriesSnapshot(json), let anchor = restoreThrough.withLock({ let a = $0; $0 = nil; return a }),
+                   await !store.shows(anchor) {
+                    await self?.restoreLinkedHistory(through: anchor)
+                }
                 if failed.withLock({ let was = $0; $0 = false; return was }) { await self?.linkedRead(nil) }
             case .interrupted(let error):
                 failed.withLock { $0 = true }
@@ -407,6 +416,44 @@ final class ThreadSession {
                 // LinkedThreadPane.tsx:174.
                 await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns. Try again.")
             }
+        }
+    }
+
+    /// Whether a stream value, one item or a chunk of them, holds a snapshot.
+    nonisolated static func carriesSnapshot(_ json: JSONValue) -> Bool {
+        if case .array(let items) = json { return items.contains { $0["kind"]?.stringValue == "snapshot" } }
+        return json["kind"]?.stringValue == "snapshot"
+    }
+
+    /// Pages a linked thread back until `anchor` shows again, or its history runs out.
+    private func restoreLinkedHistory(through anchor: TurnItemId) {
+        guard historyLoad == nil, let shell, let linked else { return }
+        let store = self.store, supervisor = shell.supervisor, local = threadId.localId
+        historyLoad = Task { [weak self] in
+            var pages = 0
+            // ponytail: stops after 50 pages; a longer read before the reconnect comes back from Load earlier
+            while pages < 50, await !store.shows(anchor), var request = await store.beginLoadEarlier() {
+                do {
+                    while pages < 50 {
+                        pages += 1
+                        try Task.checkCancellation()
+                        let json = try await supervisor.request(PeerLinkRPC.threadHistoryPage,
+                                                                payload: PeerLinkRPC.historyInput(environmentId: linked.environmentId, threadId: local, cursor: request.cursor))
+                        let page = try json.decode(as: ThreadHistoryPage.self)
+                        try Task.checkCancellation()
+                        guard let next = await store.applyHistoryPage(page, requestCursor: request.cursor) else { break }
+                        request.cursor = next
+                    }
+                } catch {
+                    if Task.isCancelled {
+                        await store.cancelHistoryLoad(requestCursor: request.cursor)
+                        return
+                    }
+                    await store.failHistoryLoad(requestCursor: request.cursor, message: "Could not load earlier turns. Try again.")
+                    break
+                }
+            }
+            self?.historyLoad = nil
         }
     }
 
@@ -710,7 +757,7 @@ final class ThreadController {
         clones = ProjectCloneController(panel: panel, environments: environments, composer: composer)
         addToMachine = AddProjectToMachineController(panel: panel, sidebar: sidebar, environments: environments, composer: composer, clones: clones)
         composer.onTargetChange = { [weak self] in
-            self?.hideNoActiveThread(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
+            self?.hideNoActiveThread(); self?.linkedThreads?.closePage(); self?.syncUnavailable(); self?.git.refresh(); self?.automations.sync(); self?.clones.syncBanner(); self?.updateServerUpdateNotice()
             self?.sideChats?.sync()
             self?.onRouteChange?()
         }
@@ -765,6 +812,8 @@ final class ThreadController {
         sideChats = SideChatController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         sideChats.parentId = { [weak self] in self?.openThreadId }
         linkedThreads = LinkedThreadController(panel: panel, environments: environments)
+        linkedThreads.openConnected = { [weak self] id in self?.open(id) }
+        linkedThreads.addWithCode = { [weak self] host in self?.addEnvironment?(host) }
         gallery = ThreadImageGalleryController(pill: panel.header.pill)
         gallery.onOpen = { [weak self] in self?.readSubagentCosts() }
         gallery.onOpenInThread = { [weak self] image in
@@ -908,10 +957,7 @@ final class ThreadController {
         }
         // MarkdownThreadLink.tsx:46-58 at 5258: a link to a machine the thread's environment links to reads through it.
         panel.model.linkedEnvironmentLabel = { [weak self] env in self?.linkedLabel(env) }
-        panel.model.onOpenLinkedThread = { [weak self] target in
-            // ponytail: always the panel; the main-screen page (`sideThreadOpenTarget` main, LinkedThreadPage.tsx) comes with its route
-            self?.panel.mutatePanel { $0.openLinkedThread(target); return [] }
-        }
+        panel.model.onOpenLinkedThread = { [weak self] target in self?.openLinkedThread(target) }
         panel.model.linkedThread = { [weak self, weak sidebar] local in
             guard let self, let env = self.openThreadId?.environmentId, let snapshot = sidebar?.snapshot else { return nil }
             guard let link = ThreadLink(href: local.rawValue) ?? ThreadLink(href: "t3-thread://v1/\(local.rawValue)") else { return nil }
@@ -1328,7 +1374,7 @@ final class ThreadController {
         environments.onSessionChange = { [weak self] env in self?.sessionChanged(env) }
         environments.onShell = { [weak self] snapshot in self?.shellChanged(snapshot) }
         environments.onRemove = { [weak self] env in self?.environmentRemoved(env) }
-        environments.observe { [weak self] in self?.updateEnvironmentBanner() }
+        environments.observe { [weak self] in self?.updateEnvironmentBanner(); self?.syncUnavailable() }
         serverUpdates.observe { [weak self] in self?.updateEnvironmentBanner() }
         serverUpdates.continueThreads = { [weak composer] env in composer?.config(env)?.settings.raw["continueThreadsAfterServerUpdate"]?.boolValue == true }
         panel.onServerUpdateAction = { [weak self] index in self?.serverUpdateAction(index) }
@@ -1463,6 +1509,7 @@ final class ThreadController {
         OpenTiming.begin(id.rawValue)
         ImageTiming.mark("open", id.rawValue)
         hideNoActiveThread()
+        linkedThreads?.closePage()
         let previousEnvironment = panel.isDraft ? nil : session?.environmentId
         session?.end()
         setCost(nil)
@@ -1516,6 +1563,7 @@ final class ThreadController {
         terminal.show(id)
         scripts.show(id)
         updateEnvironmentBanner()
+        syncUnavailable()
         if openDiff {
             openDiff = false
             panel.opensChangedTurnOnLoad = true
@@ -2048,6 +2096,64 @@ final class ThreadController {
         view.autoresizingMask = [.width, .height]
         return view
     }()
+    /// `openLinkedThreadRead` (5258 lib/sideChatPane.ts:93-113): a linked thread opens as a right panel tab, or on the
+    /// main screen for the "Main view" setting, a Cmd-click or a middle click.
+    private func openLinkedThread(_ target: LinkedThreadSurfaceTarget) {
+        let event = NSApp.currentEvent
+        let intent = SideThreadOpen.intent(command: event?.modifierFlags.contains(.command) == true,
+                                           middleButton: event?.type == .otherMouseUp && event?.buttonNumber == 2)
+        let place = SideThreadOpen.resolve(preference: ClientSettingsStore.shared.current.string("sideThreadOpenTarget"), intent: intent,
+                                           panelAvailable: openThreadId != nil)
+        if place == .panel {
+            panel.mutatePanel { $0.openLinkedThread(target); return [] }
+            return
+        }
+        // LinkedThreadPage.tsx:28-39: once this client is connected to the thread's own environment, it opens there.
+        if environments.session(target.environmentId) != nil, environments.hasShell(target.environmentId) {
+            open(ThreadId(target.threadId).scoped(to: target.environmentId))
+            return
+        }
+        // The `/linked/...` route leaves the thread: no thread is active, and the page is all that streams.
+        session?.end()
+        session = nil
+        setCost(nil)
+        lineage.update(threadId: nil, projection: nil)
+        terminal.show(nil)
+        scripts.show(nil)
+        files.show(nil)
+        panel.setProjection(nil, projectTitle: "", workspaceRoot: nil)
+        sidebar?.state.activeThreadId = nil
+        onOpenThreadChange?()
+        linkedThreads.showPage(target, over: panel)
+    }
+
+    /// `UnreachableEnvironmentState` over the thread panel (5258 ThreadRouteView.tsx:219-220, 250-268).
+    private(set) lazy var threadUnavailable: ThreadUnavailableStateView = {
+        let view = ThreadUnavailableStateView()
+        view.autoresizingMask = [.width, .height]
+        view.onOpenEnvironments = { [weak self] in self?.openEnvironments?() }
+        return view
+    }()
+    /// Settings > Connections with the add dialog, its address filled in when one is known (Enter code).
+    var addEnvironment: ((String?) -> Void)?
+    /// Settings > Connections, where T3's Open Environments goes (`/settings/connections`).
+    var openEnvironments: (() -> Void)?
+    /// Shows the unavailable page while the open thread's environment has no enabled entry, and takes it down when one
+    /// comes back (`environmentUnreachableAtom` is reactive in T3); the session attaches when that environment connects.
+    private func syncUnavailable() {
+        let id = panel.isDraft ? nil : session?.threadId
+        let unreachable = ThreadEnvironmentReach.unreachable(environmentId: id?.environmentId, catalogReady: environments.catalogReady,
+                                                             primaryId: environments.primaryId,
+                                                             enabledIds: Set(environments.saved.filter(\.enabled).map(\.environmentId)))
+        if unreachable {
+            guard threadUnavailable.superview !== panel else { return }
+            threadUnavailable.frame = panel.bounds
+            panel.addSubview(threadUnavailable)
+        } else if threadUnavailable.superview != nil {
+            threadUnavailable.removeFromSuperview()
+        }
+    }
+
     /// The open thread once a shell listed it, so a thread launched a moment ago is not taken for a deleted one.
     private var seenOpenThread: ThreadId?
 

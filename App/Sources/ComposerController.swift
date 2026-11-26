@@ -549,6 +549,7 @@ final class ComposerController {
             bar.onRetry = { [weak self] in self?.searchThread() }
             bar.onClose = { [weak self] in self?.closeThreadFind() }
         }
+        panel.onEscapeFind = { [weak self] in self?.closeThreadFind() }
         setUpMenus()
         setUpAttachments()
         // The send gate follows the connection, not only the session (`activeEnvironmentUnavailable`).

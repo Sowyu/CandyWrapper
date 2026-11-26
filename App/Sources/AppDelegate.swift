@@ -277,6 +277,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return await settings.saveActions(writes)
         }
         threads.composer.openProviderSetup = { [weak settings] in settings?.open(.providers) }
+        threads.openEnvironments = { [weak settings] in settings?.open(.connections) }
+        threads.addEnvironment = { [weak settings] host in settings?.openPairingLink(host: host ?? "", code: "") }
         threads.automations.openSettings = { [weak settings] env, taskId in settings?.openScheduledTasks(environmentId: env, taskId: taskId) }
         environments.onSshFailure = { [weak settings] title, message in settings?.toast(title, message, .error) }
         self.settings = settings
@@ -736,6 +738,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         let title = i + 1 < args.count && !args[i + 1].hasPrefix("--") ? args[i + 1] : ThreadPreview.markdownThread
         #if DEBUG
+        // Isolated test builds draw the linked thread states with no linked server: `unavailable`, or `linked-page`
+        // with a connect notice (`linked-page:manual`, `linked-page:unreachable`, `linked-page:connecting`).
+        if isTestBuild, title == "unavailable" { return ThreadUnavailableStateView() }
+        if isTestBuild, title.hasPrefix("linked-page"), let projection = try? ThreadPreview.projection(titled: ThreadPreview.markdownThread) {
+            let page = LinkedThreadPageView()
+            page.title = projection.thread.title
+            page.pane.chat.setProjection(projection, projectTitle: "", workspaceRoot: nil)
+            page.pane.bar.status = LinkedThreads.status(label: "Studio", via: "Laptop", working: true)
+            page.pane.bar.action = ButtonView("Connect to interact", icon: .plug, variant: .outline, size: .sm)
+            let phase: LinkedThreadConnect.Phase = switch title.split(separator: ":").last {
+            case "manual": .manual(label: "Studio", host: nil)
+            case "unreachable": .unreachable(label: "Studio")
+            case "connecting": .connecting
+            default: .idle
+            }
+            page.pane.showConnectNotice(LinkedThreadConnect.notice(phase, label: "Studio"))
+            return page
+        }
         // Isolated test builds can replay a sandbox projection and its local image files.
         if isTestBuild, title.hasPrefix("/"), title.hasSuffix(".json"),
            let data = try? Data(contentsOf: URL(fileURLWithPath: title)),

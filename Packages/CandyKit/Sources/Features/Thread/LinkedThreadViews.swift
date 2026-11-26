@@ -239,3 +239,70 @@ final class LinkedThreadNoticeCard: DSView {
         }
     }
 }
+
+/// `LinkedThreadPage` (5258 components/chat/LinkedThreadPage.tsx:19-66): a linked thread on the main screen, for the
+/// "Main view" side-thread setting or a Cmd-click. `WorkspacePageHeader` holds a one-item "Thread breadcrumb" with the
+/// title in `text-sm font-medium text-foreground`, over the same read-only pane the panel tab uses. Redesign draws the
+/// title as its title pill (`DitherThreadTitleView`) at the header's start.
+public final class LinkedThreadPageView: DSView {
+    public let pane = LinkedThreadPaneView()
+    private let header = NoActiveThreadHeaderView()
+    private let pill = DitherThreadTitleView()
+    public var title = "" {
+        didSet {
+            guard title != oldValue else { return }
+            header.label.text = title
+            pill.set(project: "", title: title)
+            header.setAccessibilityLabel("Thread breadcrumb")
+            needsLayout = true
+        }
+    }
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        header.label.font = DSFont.ui(14, weight: .medium)
+        header.label.color = Themed.color(\.foreground)
+        header.label.lineHeight = 20
+        header.label.truncation = .end
+        pane.chat.isEmbedded = true
+        addSubview(pane)
+        addSubview(header)
+        header.addSubview(pill)
+        setAccessibilityLabel("Linked thread")
+    }
+
+    public override var isFlipped: Bool { true }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsLayout = true }
+
+    public override func layout() {
+        super.layout()
+        let h = NoActiveThreadStateView.headerHeight
+        header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: h)
+        header.layoutSubtreeIfNeeded()
+        header.label.isHidden = redesign
+        pill.isHidden = !redesign || title.isEmpty
+        let start = header.contentStart
+        if redesign {
+            let w = min(pill.intrinsicContentSize.width, max(0, bounds.width - start - 16))
+            pill.frame = NSRect(x: start, y: ((h - DitherThreadTitleView.height) / 2).rounded(), width: w, height: DitherThreadTitleView.height)
+        }
+        // The header stacks over the pane in both looks: an embedded pane has no top fade to run under the pill.
+        let top = h
+        pane.frame = NSRect(x: 0, y: top, width: bounds.width, height: max(0, bounds.height - top))
+    }
+
+    public override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+}
+
+extension LinkedThreadPaneView {
+    /// "Connect to interact"'s notice above the bar (`ComposerBannerStack detached`, LinkedThreadPane.tsx:109-145):
+    /// a spinner while it connects, `PlugIcon` otherwise, a warning when the machine can't be reached.
+    public func showConnectNotice(_ notice: LinkedThreadConnect.Notice?) {
+        guard let notice else { chat.showsNoticeBanner = false; return }
+        chat.noticeBanner.apply(.init(variant: notice.kind == .unreachable ? .warning : .neutral, icon: .plug, title: notice.title,
+                                      description: notice.detail, actions: notice.action.map { [$0] } ?? [],
+                                      spinner: notice.kind == .connecting))
+        chat.showsNoticeBanner = true
+    }
+}
