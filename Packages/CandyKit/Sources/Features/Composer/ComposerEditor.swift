@@ -181,8 +181,12 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// The prompt with every chip as its source text.
     var expandedText: String { expanded(NSRange(location: 0, length: textStorage?.length ?? 0)) }
 
+    /// How many times the draft was serialized, and the caret placed: the keystroke test holds each to one per key.
+    private(set) var serializations = 0, caretUpdates = 0
+
     func expanded(_ range: NSRange) -> String {
         guard let storage = textStorage, range.length > 0 else { return "" }
+        serializations += 1
         return ComposerRichTextStyler.serialize(storage.attributedSubstring(from: range))
     }
 
@@ -781,7 +785,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
         if !textChanging, !isChipifying, !normalizingSource { sourceUndoOpen = false }
         if !stillSelecting, !textChanging, !isChipifying, normalizeMarkdownSource(typed: false) { return }
-        defer { selectionMoved() }
+        // Mid-edit, TextKit moves the caret before the text settles; `textDidChange` places it once the edit ends.
+        defer { if !textChanging { selectionMoved() } }
         guard richTextEnabled, !stillSelecting, !hasMarkedText(), ranges.count == 1, ranges[0].rangeValue.length == 0,
               let storage = textStorage else { return }
         let caret = ranges[0].rangeValue.location, text = storage.string as NSString
@@ -1389,6 +1394,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     /// Shows Chromium's caret while the editor has focus in the key window and nothing is selected,
     /// and the selection bands while it has focus.
     private func updateCaret(restart: Bool) {
+        caretUpdates += 1
         // AppKit turns its indicator back on as focus and selection change.
         for case let indicator as NSTextInsertionIndicator in subviews where indicator.displayMode != .hidden { indicator.displayMode = .hidden }
         let bands = window == nil ? [] : selectionBands()

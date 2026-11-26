@@ -473,9 +473,9 @@ public final class ComposerView: DSView {
     /// `composerRequiresModifier` for the current draft: Return alone doesn't send.
     public var requiresSendModifier: Bool { ComposerLogic.requiresModifier(sendShortcut, prompt: prompt) }
     /// `hasSendableContent`: prose besides context links, or a context chip (ChatView.logic.ts:866-890).
-    private var hasContent: Bool {
-        let text = prompt
-        return !ComposerContext.stripReferences(text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var hasContent: Bool { hasSendableContent(prompt) }
+    private func hasSendableContent(_ text: String) -> Bool {
+        !ComposerContext.stripReferences(text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !ComposerContext.referencedIds(text).isEmpty || attachmentCount > 0
     }
 
@@ -547,8 +547,11 @@ public final class ComposerView: DSView {
         placeholder.color = Themed.color(\.placeholder, strong || modern ? 1 : 0.75)
     }
 
-    func refresh() {
+    /// `typed` is the prompt when the caller already serialized it: each read of `prompt` serializes the whole draft.
+    func refresh(prompt typed: String? = nil) {
         defer { invalidateHeightIfNeeded() }
+        let prompt = typed ?? self.prompt
+        let hasContent = hasSendableContent(prompt)
         // ChatComposer.tsx:7489-7490.
         let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it"
             : ComposerLogic.placeholder(placeholderInput, modern: modern || capy, suggestion: promptSuggestion)
@@ -625,7 +628,7 @@ public final class ComposerView: DSView {
                 // ComposerPrimaryActions.tsx:306, with `alternateShortcutLabel` from ChatComposer.tsx:6288-6301.
                 let action = steerByDefault ? "steer" : "queue", other = steerByDefault ? "queue" : "steer"
                 let context = KeybindingContext(["composerFocus": true, "draftThreadRoute": isDraftRoute, "turnRunning": true,
-                                                 "composerRequiresModifier": requiresSendModifier])
+                                                 "composerRequiresModifier": ComposerLogic.requiresModifier(sendShortcut, prompt: prompt)])
                 let chord = ActiveKeymap.label(for: "composer.sendAlternate", context: context).map { " or \($0)" } ?? ""
                 primary.tooltip = isCompacting ? "Click to queue" : "Click to \(action), ⌘-click\(chord) to \(other)"
                 // The label is `submitLabel`, not the click hint (ComposerPrimaryActions.tsx:280-289, 328).
@@ -736,10 +739,11 @@ public final class ComposerView: DSView {
 
     private func textChanged() {
         // Any edit ends browsing, even one later undone by hand.
+        let prompt = self.prompt
         if historyPosition?.recalled != prompt { historyPosition = nil }
         placeholder.isHidden = !editor.string.isEmpty
         layoutSuggestionKbd()
-        refresh()
+        refresh(prompt: prompt)
         relayoutHeight()
         onTextChange?(prompt)
         onCaretChange?()
