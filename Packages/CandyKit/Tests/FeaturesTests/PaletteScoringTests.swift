@@ -542,6 +542,20 @@ struct PaletteScoringTests {
             #expect(PS.findSearchTokenRanges("drafts, enableFTS", query: "fts") == [SearchRange(start: 14, end: 17)])
             #expect(PS.findSearchTokenRanges("Open handlers.ts", query: ".ts") == [SearchRange(start: 13, end: 16)])
         }
+
+        /// paletteSearch.test.ts at 5258, #37700.
+        @Test("highlights a query in double quotes only where its words are together")
+        func exactRanges() {
+            #expect(PS.findSearchTokenRanges("files, then the Missing osprey  files", query: "\"missing osprey files\"")
+                == [SearchRange(start: 16, end: 37)])
+            #expect(PS.findSearchTokenRanges("models and the model", query: "\"model\"") == [SearchRange(start: 15, end: 20)])
+        }
+
+        /// threadFindStore.test.ts at 5258, #37700.
+        @Test("an exact query's find is its words as the snippet writes them together")
+        func exactFind() {
+            #expect(PS.findQuery(snippet: "cafe opening; Café open", query: "\"cafe open\"") == "Café open")
+        }
     }
 
     @Suite("scoreMessageMatch") @MainActor
@@ -587,6 +601,22 @@ struct PaletteScoringTests {
             #expect(scoreMessageMatch("Fix CI failures", "fix ci")?.quality == 1.25)
             #expect(scoreMessageMatch("Upgrade pnpm 123 today", "pnpm 12")?.quality == 1)
             #expect(scoreMessageMatch("Rename the file to index.ts", ".ts")?.quality == 1)
+        }
+
+        /// paletteSearch.test.ts at 5258, #37700: in double quotes, only the words together as typed, as whole words.
+        @Test("matches a query in double quotes only written together")
+        func exactMessages() {
+            let q = "\"missing osprey files\""
+            #expect(scoreMessageMatch("the missing osprey files", q) == PS.MessageMatch(quality: 1.25, offset: 4))
+            #expect(scoreMessageMatch("Missing osprey\n  files", "\u{201C}missing osprey files\u{201D}") == PS.MessageMatch(quality: 1.25, offset: 0))
+            #expect(scoreMessageMatch("missing the osprey files", q) == nil)
+            #expect(scoreMessageMatch("osprey files missing", q) == nil)
+            // No further apart than the server's index reads.
+            #expect(scoreMessageMatch("missing\(String(repeating: " ", count: 17))osprey files", q) == nil)
+            #expect(scoreMessageMatch("quickFix JSONSchema", "\"fix JSON\"") == PS.MessageMatch(quality: 1.25, offset: 5))
+            #expect(scoreMessageMatch("\u{1F680} launching, then \u{1F680} launch", "\"\u{1F680} launch\"") == PS.MessageMatch(quality: 1.25, offset: 19))
+            #expect(scoreMessageMatch("changed file", "\"file\"") == PS.MessageMatch(quality: 1, offset: 8))
+            #expect(scoreMessageMatch("changed files", "\"file\"") == nil)
         }
 
         @Test("finds words through case and accents, also after the same letters inside a word")

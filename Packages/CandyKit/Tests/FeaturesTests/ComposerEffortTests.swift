@@ -14,4 +14,12 @@ struct ComposerEffortTests {
         #expect(ComposerEffort.resolve(descriptor, current: nil) == nil)
         #expect(ComposerEffort.heights(count: 4) == [6, 8, 10, 12])
     }
+
+    /// EffortGlyph.test.ts at 5258 (#30810): Codex's Ultra is named above the bars, so Xhigh still fills the scale.
+    @Test func codexUltraStaysOffTheScale() {
+        let options = ["low", "medium", "high", "xhigh", "max", "ultra"].map { ProviderOptionChoice(id: $0, label: $0.capitalized) }
+        let codex = ProviderOptionDescriptor(id: "reasoningEffort", label: "Reasoning", type: .select, options: options)
+        #expect(ComposerEffort.resolve(codex, current: "xhigh") == .init(count: 4, filled: 4, label: "Xhigh", special: false))
+        #expect(ComposerEffort.resolve(codex, current: "ultra") == .init(count: 4, filled: 4, label: "Ultra", special: true))
+    }
 }

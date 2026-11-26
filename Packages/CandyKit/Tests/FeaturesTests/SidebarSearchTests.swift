@@ -259,4 +259,26 @@ struct SidebarSearchTests {
         row.discardButton.performAction()
         #expect(opened == "d1" && discarded == "d1")
     }
+
+    /// SidebarThreadHeader.tsx:55-57, :102-117 and Sidebar.tsx:3079-3084, :3322-3328 at 5258.
+    @Test func newButtonTooltipNamesShiftClickWhileNewOpensThePicker() {
+        let picker = SidebarContentView.newThreadTooltip(pickableGroups: 3, allGroups: 3, newLabel: "\u{2318}N", newLocalLabel: "\u{2325}\u{2318}N")
+        #expect(picker.text == "New thread (\u{2318}N)" && picker.detail == "New thread in current project: Shift+click (\u{2325}\u{2318}N)")
+        let unbound = SidebarContentView.newThreadTooltip(pickableGroups: 3, allGroups: 3, newLabel: nil, newLocalLabel: nil)
+        #expect(unbound.text == "New thread" && unbound.detail == "New thread in current project: Shift+click")
+        let one = SidebarContentView.newThreadTooltip(pickableGroups: 1, allGroups: 2, newLabel: nil, newLocalLabel: "\u{2325}\u{2318}N")
+        #expect(one.text == "New thread (\u{2325}\u{2318}N)" && one.detail == nil)
+    }
+
+    /// state/issues.ts `useSidebarLinkedIssueState` at 5258 (#39351): an open issue wins, an unread one hides the state,
+    /// else a closed one that was not completed, else the first.
+    @Test func groupedIssuesShowOneState() {
+        let open = IssueState(category: "open", name: "Open"), done = IssueState(category: "closed", name: "Done", closeReason: "completed")
+        let dropped = IssueState(category: "closed", name: "Won't do", closeReason: "not_planned")
+        #expect(SidebarIssueBadge.aggregateState([done, open]) == open)
+        #expect(SidebarIssueBadge.aggregateState([done, nil]) == nil)
+        #expect(SidebarIssueBadge.aggregateState([done, dropped]) == dropped)
+        #expect(SidebarIssueBadge.aggregateState([done, done]) == done)
+        #expect(SidebarIssueBadge.aggregateState([]) == nil)
+    }
 }

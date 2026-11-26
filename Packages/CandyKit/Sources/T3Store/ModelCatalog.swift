@@ -503,9 +503,13 @@ public enum ModelTraits {
 
     /// `REASONING_SELECT_DESCRIPTOR_IDS` (client-runtime modelTraits.ts:17-20): `REASONING_EFFORT_OPTION_IDS`
     /// plus "thinking". Cursor names its effort `reasoning_effort` (dd86a02096).
-    static let reasoningIds: Set<String> = ["reasoningEffort", "reasoning", "effort", "variant", "reasoning_effort", "thinking_level", "thinking"]
-    /// `REASONING_EFFORT_OPTION_IDS` (client-runtime state/threadExecution.ts:227-234 at 4928, Antigravity's `thinking_level` from #26929), in order.
-    public static let reasoningEffortIds = ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level"]
+    static let reasoningIds: Set<String> = ["reasoningEffort", "reasoning", "effort", "variant", "reasoning_effort", "thinking_level", "thought_level", "thinking"]
+    /// `REASONING_EFFORT_OPTION_IDS` (client-runtime state/threadExecution.ts:308-316 at 5258, Antigravity's `thinking_level`
+    /// from #26929, ACP's `thought_level` from #40136), in order.
+    /// `DEFAULT_VARIANT_CHOICE_ID` (shared model.ts:288 at 5258, #27333): the variant choice that sends no variant, which
+    /// the server offers custom OpenCode models with no inferable default.
+    public static let defaultVariantChoiceId = "t3:default"
+    public static let reasoningEffortIds = ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level", "thought_level"]
 
     /// `buildTraitsTriggerDisplay`: labels joined by " · ", Fast merged into the reasoning label.
     /// `ultrathink` is true when the prompt carries the Ultrathink prefix or word.

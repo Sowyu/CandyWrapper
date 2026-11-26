@@ -2370,9 +2370,9 @@ func linkMetadataThread(_ link: ThreadLink, env: String, projects: [ProjectShell
     }
 }
 
-/// The sidebar issue badge's live state (`useLinkedIssueDetail`, SidebarThreadRow.tsx:1137-1142 at 4928): `issues.detail`
-/// for each thread with one linked issue, where the server reads issues. Read again on a shell change five minutes on.
-// ponytail: reads every single-issue row, not only rows on screen as T3's lease does; lease visible rows if lists grow
+/// The sidebar issue badge's live state (`useSidebarLinkedIssueState`, state/issues.ts at 5258, #39351): `issues.detail`
+/// for each issue a thread links, where the server reads issues. Read again on a shell change five minutes on.
+// ponytail: reads every linked issue of every row, not only rows on screen as T3's lease does; lease visible rows if lists grow
 @MainActor
 final class SidebarIssueStates {
     private weak var sidebar: SidebarContentView?
@@ -2390,20 +2390,23 @@ final class SidebarIssueStates {
     func sync(_ snapshot: ShellSnapshot) {
         let now = Date()
         for thread in snapshot.threads {
-            guard let issues = thread.issues?.values, issues.count == 1, let env = thread.id.environmentId,
+            guard let issues = thread.issues?.values, !issues.isEmpty, let env = thread.id.environmentId,
                   environments.session(env) != nil, capabilities.has(env, "issues") else { continue }
-            let link = issues[0]
-            let key = SidebarIssueBadge.stateKey(environmentId: env, link)
-            guard !inFlight.contains(key), readAt[key].map({ now.timeIntervalSince($0) > 300 }) ?? true else { continue }
-            inFlight.insert(key)
-            let ref = IssueRef(projectId: link.projectId.rawValue, tracker: link.tracker, host: link.host, scope: link.scope, key: link.key)
-            Task { [weak self, environments] in
-                let detail = try? await environments.request(env, "issues.detail", .object(ref.json)).decode(as: IssueDetail.self)
-                guard let self else { return }
-                inFlight.remove(key)
-                readAt[key] = Date()
-                if let state = detail?.state, sidebar?.state.issueStates[key] != state { sidebar?.state.issueStates[key] = state }
-            }
+            for link in issues { read(link, env: env, now: now) }
+        }
+    }
+
+    private func read(_ link: ThreadIssueLink, env: String, now: Date) {
+        let key = SidebarIssueBadge.stateKey(environmentId: env, link)
+        guard !inFlight.contains(key), readAt[key].map({ now.timeIntervalSince($0) > 300 }) ?? true else { return }
+        inFlight.insert(key)
+        let ref = IssueRef(projectId: link.projectId.rawValue, tracker: link.tracker, host: link.host, scope: link.scope, key: link.key)
+        Task { [weak self, environments] in
+            let detail = try? await environments.request(env, "issues.detail", .object(ref.json)).decode(as: IssueDetail.self)
+            guard let self else { return }
+            inFlight.remove(key)
+            readAt[key] = Date()
+            if let state = detail?.state, sidebar?.state.issueStates[key] != state { sidebar?.state.issueStates[key] = state }
         }
     }
 }

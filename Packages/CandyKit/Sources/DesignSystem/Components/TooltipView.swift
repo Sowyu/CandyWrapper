@@ -11,6 +11,10 @@ public final class TooltipView: DSView, PopupContent {
     private let label = LabelView()
     /// The shortcut as a group of small key caps at the right, one per modifier and one for the key.
     private var caps: [KbdView] = []
+    /// A muted second line under the text (`flex flex-col gap-0.5` with `text-muted-foreground`, the sidebar New
+    /// button's hint in SidebarThreadHeader.tsx:104-113 at 5258). It never wraps.
+    private let detailLabel = LabelView()
+    private static let detailGap: CGFloat = 2
 
     public init(_ text: String, variant: Variant = .default, shortcut: String? = nil) {
         self.variant = variant
@@ -31,9 +35,26 @@ public final class TooltipView: DSView, PopupContent {
             label.lineHeight = 16.5   // leading-snug beats text-xs
         }
         addSubview(label)
+        detailLabel.font = label.font
+        detailLabel.lineHeight = label.lineHeight
+        detailLabel.color = Themed.color(\.mutedForeground)
+        detailLabel.isHidden = true
+        addSubview(detailLabel)
         self.shortcut = shortcut
         buildCaps()
     }
+
+    public var detail: String? {
+        didSet {
+            guard detail != oldValue else { return }
+            detailLabel.text = detail ?? ""
+            detailLabel.isHidden = detail?.isEmpty ?? true
+            invalidateIntrinsicContentSize()
+            needsLayout = true
+        }
+    }
+    private var hasDetail: Bool { !(detail?.isEmpty ?? true) }
+    private var detailHeight: CGFloat { hasDetail ? Self.detailGap + (detailLabel.lineHeight ?? 16.5) : 0 }
 
     private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
@@ -106,6 +127,11 @@ public final class TooltipView: DSView, PopupContent {
     }
 
     public override var intrinsicContentSize: NSSize {
+        let size = textSize
+        return NSSize(width: max(size.width, hasDetail ? ceil(detailLabel.textWidth) + 18 : 0), height: size.height + detailHeight)
+    }
+
+    private var textSize: NSSize {
         guard wraps else { return NSSize(width: label.textWidth + 18 + capsWidth, height: (label.lineHeight ?? 16.5) + 10) }
         // A shrink-to-fit box whose text overflows takes the whole max width; balancing only evens the lines.
         // Hard-broken lines that all fit take the widest line instead.
@@ -124,10 +150,16 @@ public final class TooltipView: DSView, PopupContent {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         dropShadow.update(boxSize: bounds.size)
-        let frame = NSRect(x: 9, y: 5, width: bounds.width - 18 - capsWidth, height: bounds.height - 10)
+        let detailLine = detailHeight
+        var frame = NSRect(x: 9, y: 5, width: bounds.width - 18 - capsWidth, height: bounds.height - 10 - detailLine)
+        if !isFlipped { frame.origin.y += detailLine }
         label.isHidden = wraps
         wrapped?.isHidden = !wraps
         if wraps { wrappedBlock().frame = frame } else { label.frame = frame }
+        if hasDetail {
+            let h = detailLabel.lineHeight ?? 16.5
+            detailLabel.frame = NSRect(x: 9, y: isFlipped ? bounds.height - 5 - h : 5, width: bounds.width - 18, height: h)
+        }
         // The caps sit on the first line, at the right.
         var x = bounds.width - 9
         let line = label.lineHeight ?? 16.5
@@ -297,6 +329,8 @@ public final class TooltipController: NSResponder, HoverSyncClient {
     public var text: String { didSet { if text != oldValue { syncAccessibility(); refresh() } } }
     /// Drawn as key caps at the right of the text.
     public var shortcut: String? { didSet { if shortcut != oldValue { refresh() } } }
+    /// A muted second line, read with the text.
+    public var detail: String? { didSet { if detail != oldValue { syncAccessibility(); refresh() } } }
     public var variant: TooltipView.Variant
     public var placement: PopupPlacement
     public var delay: TimeInterval
@@ -317,6 +351,8 @@ public final class TooltipController: NSResponder, HoverSyncClient {
     public var textProvider: (@MainActor () -> String)?
     /// The shortcut read each time the tooltip opens, drawn as key caps.
     public var shortcutProvider: (@MainActor () -> String?)?
+    /// The muted second line read each time the tooltip opens.
+    public var detailProvider: (@MainActor () -> String?)?
 
     weak var view: NSView?
     private var tracking: NSTrackingArea?
@@ -340,7 +376,7 @@ public final class TooltipController: NSResponder, HoverSyncClient {
 
     nonisolated(unsafe) private static var associationKey: UInt8 = 0
 
-    static func controller(for view: NSView) -> TooltipController? {
+    public static func controller(for view: NSView) -> TooltipController? {
         objc_getAssociatedObject(view, &associationKey) as? TooltipController
     }
 
@@ -397,7 +433,7 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         let current = view.accessibilityHelp()
         guard current == nil || current == setHelp else { return }
         // A Redesign-only tooltip is the control's label under Redesign instead.
-        setHelp = text.isEmpty || redesignOnly ? nil : text
+        setHelp = text.isEmpty || redesignOnly ? nil : [text, detail].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: "\n")
         view.setAccessibilityHelp(setHelp)
     }
 
@@ -407,6 +443,7 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         let (words, keys) = shownParts(dither: view.map { ThemeRuntime.isDither(dark: $0.effectiveAppearance.isDark) } ?? false)
         tip.text = words
         tip.shortcut = keys
+        tip.detail = detail
         if let host = popup?.container.superview as? PopupHost, let popup { host.reposition(popup) }
     }
 
@@ -462,10 +499,15 @@ public final class TooltipController: NSResponder, HoverSyncClient {
         let dither = ThemeRuntime.isDither(dark: view.effectiveAppearance.isDark)
         if redesignOnly, !dither { return }
         if let shortcutProvider { shortcut = shortcutProvider() } else if let textProvider { text = textProvider() }
+        if let detailProvider { detail = detailProvider() }
         guard !text.isEmpty || content != nil, !view.isHiddenOrHasHiddenAncestor, let host = view.popupHost else { return }
         if dither, host.popups.contains(where: { $0.trigger === view && !$0.isPassive }) { return }
         let (words, keys) = shownParts(dither: dither)
-        let tip = content?() ?? TooltipView(words, variant: variant, shortcut: keys)
+        let tip = content?() ?? {
+            let tip = TooltipView(words, variant: variant, shortcut: keys)
+            tip.detail = detail
+            return tip
+        }()
         // Redesign puts tooltips under their control, flipping above when the window has no room.
         var place = placement
         if dither, content == nil, place.side == .top { place.side = .bottom }

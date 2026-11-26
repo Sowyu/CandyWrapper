@@ -170,6 +170,8 @@ public final class PullRequestBadgeView: DSView {
     /// The tooltip (`TooltipPopup side="top" sideOffset={0} variant="glass" w-80`) holding the mini list,
     /// after the tooltip delay.
     public override func mouseEntered(with event: NSEvent) {
+        // `InlineButton`'s `hover:underline`.
+        label.isUnderlined = true
         hoverWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.showMiniList() }
         hoverWork = work
@@ -177,6 +179,7 @@ public final class PullRequestBadgeView: DSView {
     }
 
     public override func mouseExited(with event: NSEvent) {
+        label.isUnderlined = false
         hoverWork?.cancel()
         // The pointer may cross into the tooltip, which stays open while it is there.
         DispatchQueue.main.async { [weak self] in self?.closeMiniListUnlessHovered() }
@@ -211,12 +214,14 @@ public final class PullRequestBadgeView: DSView {
                                motion: .tooltip, pressesTrigger: false, returnsFocus: false, passive: true)
     }
 
-    public var preferredWidth: CGFloat { 12 + 4 + ceil(label.textWidth) + 1 }
+    /// `ThreadLinkBadge` (ThreadStatusIndicators.tsx:509-543 at 5258, #42275) in an `InlineButton`: `gap-0.5`, the text
+    /// at most `max-w-16`, cut short past it.
+    public var preferredWidth: CGFloat { 12 + 2 + min(64, ceil(label.textWidth) + 1) }
 
     public override func layout() {
         super.layout()
         icon?.frame = NSRect(x: 0, y: (bounds.height - 12) / 2, width: 12, height: 12)
-        label.frame = NSRect(x: 16, y: (bounds.height - 16) / 2, width: max(0, bounds.width - 16), height: 16)
+        label.frame = NSRect(x: 14, y: (bounds.height - 16) / 2, width: max(0, bounds.width - 14), height: 16)
     }
 
     public override func mouseDown(with event: NSEvent) {}

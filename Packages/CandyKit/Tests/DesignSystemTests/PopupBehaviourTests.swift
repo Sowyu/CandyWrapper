@@ -274,6 +274,28 @@ struct PopupBehaviourTests {
         #expect(host.popups.isEmpty)
     }
 
+    /// #42603: the citation comment box keeps its place and stays open when its cited row scrolls out.
+    @Test func aPopupThatOutlivesItsTriggerStaysWhereItWas() throws {
+        let (w, root) = window()
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        let doc = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 1000))
+        scroll.documentView = doc
+        root.addSubview(scroll)
+        let button = ButtonView("Open")
+        button.frame = NSRect(x: 20, y: 20, width: 80, height: 32)
+        doc.addSubview(button)
+        let host = PopupHost.host(for: w)
+        let popup = host.open(PopoverView(content: popoverTitle("Hi")), trigger: button, placement: PopupPlacement(side: .bottom, align: .start),
+                              motion: .none)
+        popup.staysWhenTriggerLeaves = true
+        let frame = popup.container.frame
+        button.removeFromSuperview()
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 20))
+        #expect(host.popups.count == 1)
+        host.reposition(popup)
+        #expect(popup.container.frame == frame)
+    }
+
     @Test func selectAlignsTheSelectedItemWithTheTrigger() throws {
         let (w, root) = window()
         let select = SelectView(options: ["One", "Two", "Three"], selected: 1)

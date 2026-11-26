@@ -15,6 +15,12 @@ public struct QueuedRunEdits {
         public var followsThreadSelection = false
         /// The model the edit opened on; a different pick counts as an edit when the run leaves the queue.
         public var originalModel: ModelSelection?
+        /// The reply the message's text pointed at, shown above the composer instead of as a chip while it is edited
+        /// (useQueuedRunEdit.ts:296-321 at 5258). `reply` is what the edit now replies to; Cancel reply clears it.
+        public var originalReply: JSONValue?
+        public var reply: JSONValue?
+        /// Cancel reply or a different reply counts as an edit (`originalReplyTo`, queuedMessageEdit.ts:132 at 5258).
+        public var replyChanged: Bool { reply?["contextId"] != originalReply?["contextId"] }
         /// The edit's own model picks live under this key, apart from the thread's (`queuedRunEditDraftId`).
         public var pickerKey: String { "\(threadId.rawValue)#queued-edit:\(runId.rawValue)" }
     }
@@ -25,13 +31,14 @@ public struct QueuedRunEdits {
     public func isSaving(_ thread: ThreadId) -> Bool { saves[thread] != nil }
     @discardableResult
     public mutating func begin(thread: ThreadId, run: RunId, text: String, followsThreadSelection: Bool = false,
-                               originalModel: ModelSelection? = nil) -> Edit {
+                               originalModel: ModelSelection? = nil, reply: JSONValue? = nil) -> Edit {
         let edit = Edit(runId: run, threadId: thread, originalText: text, text: text,
-                        followsThreadSelection: followsThreadSelection, originalModel: originalModel)
+                        followsThreadSelection: followsThreadSelection, originalModel: originalModel, originalReply: reply, reply: reply)
         edits[thread] = edit
         return edit
     }
     public mutating func update(_ thread: ThreadId, text: String) { edits[thread]?.text = text }
+    public mutating func cancelReply(_ thread: ThreadId) { edits[thread]?.reply = nil }
     public mutating func end(_ thread: ThreadId) { edits[thread] = nil }
     public mutating func startSave(_ thread: ThreadId) -> Edit? {
         guard saves[thread] == nil, let edit = edits[thread] else { return nil }

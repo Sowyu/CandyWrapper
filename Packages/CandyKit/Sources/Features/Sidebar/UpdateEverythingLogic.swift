@@ -21,11 +21,16 @@ public enum UpdateEverythingLogic {
         public var ownServer: Bool
         /// `threadRestartContinuation` and the server's "Continue threads after restarts".
         public var continuesThreads: Bool
+        /// The saved connection is switched off in Settings, so it never connects (#41672).
+        public var turnedOff = false
+        /// Why the connection is down, when it says (`connectionErrorText`, #41672).
+        public var connectionError: String?
         public init(environmentId: String, label: String, serverVersion: String?, connected: Bool, canMaintain: Bool, updating: Bool,
-                    capabilities: ServerUpdateCapabilities, ownServer: Bool = false, continuesThreads: Bool = false) {
+                    capabilities: ServerUpdateCapabilities, ownServer: Bool = false, continuesThreads: Bool = false,
+                    turnedOff: Bool = false, connectionError: String? = nil) {
             self.environmentId = environmentId; self.label = label; self.serverVersion = serverVersion; self.connected = connected
             self.canMaintain = canMaintain; self.updating = updating; self.capabilities = capabilities; self.ownServer = ownServer
-            self.continuesThreads = continuesThreads
+            self.continuesThreads = continuesThreads; self.turnedOff = turnedOff; self.connectionError = connectionError
         }
     }
 
@@ -46,12 +51,16 @@ public enum UpdateEverythingLogic {
         for m in machines {
             if let v = m.serverVersion, !ServerVersionSkewLogic.serverIsBehind(v, client: target) { continue }
             let skip = { (reason: String) in skipped.append(Skipped(environmentId: m.environmentId, label: m.label, reason: reason)) }
-            guard m.serverVersion != nil, m.connected else { skip("not connected"); continue }
+            // `unavailableReason` (updateEverything.logic.ts:152-173 at 5258, #41672).
+            if m.turnedOff { skip("turned off"); continue }
+            guard m.connected else { skip(m.connectionError ?? "not connected"); continue }
+            guard m.serverVersion != nil else { skip("still loading"); continue }
             guard m.canMaintain else { skip("no permission"); continue }
             guard !m.updating else { skip("already updating"); continue }
             if m.ownServer { targets.append(m); continue }
             guard let path = m.capabilities.selfUpdate else { skip("needs a manual update"); continue }
-            if path == .desktopManaged, !m.capabilities.desktopAppUpdate { skip("needs a newer desktop app"); continue }
+            // A desktop server without the desktop control cannot be updated from here (#33030, updateEverything.logic.ts:54-56).
+            if path == .desktopManaged, !m.capabilities.desktopAppUpdate { skip("update T3 Code on that machine"); continue }
             // A desktop app installs its own track's newest release. Nightly builds run ahead of Stable, so a Nightly
             // host behind a Stable target has something newer; a Stable one may not (updateEverything.logic.ts, #37490).
             if let v = m.serverVersion, channel(v) != channel(target), path != .desktopManaged || channel(v) == "stable" {

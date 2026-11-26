@@ -210,6 +210,8 @@ public enum AssistantCitationCommentPopup {
         let placement = PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .end)
         let popup = host.open(popover, trigger: view, anchorRect: anchor.rect, placement: placement, motion: .popover,
                               pressesTrigger: false, returnsFocus: false)
+        // A cited row that scrolls out leaves the draft open and unsaved (#42603, AssistantCitationChip.tsx at 5258).
+        popup.staysWhenTriggerLeaves = true
         var settled = false
         let finish: @MainActor (() -> Void) -> Void = { [weak host, weak popup] run in
             guard !settled else { return }

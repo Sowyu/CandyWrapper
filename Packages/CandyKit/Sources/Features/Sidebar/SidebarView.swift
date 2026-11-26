@@ -445,6 +445,10 @@ public final class SidebarContentView: DSView {
         filterButton.action = { [weak self] in self?.toggleScopePopup() }
         addProjectButton.action = { [weak self] in self?.actions.addProject() }
         newThreadButton.action = { [weak self] in self?.actions.newThread() }
+        if let tip = TooltipController.controller(for: newThreadButton) {
+            tip.textProvider = { [weak self] in self?.newThreadTooltip.text ?? "New thread" }
+            tip.detailProvider = { [weak self] in self?.newThreadTooltip.detail }
+        }
         settingsButton.action = { [weak self] in self?.actions.openSettings() }
         pullRequestsButton.action = { [weak self] in self?.actions.openPullRequests() }
         navRows[0].action = { [weak self] in self?.actions.newThread() }
@@ -931,6 +935,23 @@ public final class SidebarContentView: DSView {
     /// The scope New starts in: none with the Boring sidebar, whose header button always opens the picker
     /// (Sidebar.tsx:3045-3050 at 5258).
     public var newThreadScopedGroups: [SidebarModel.ProjectGroup] { state.boringSidebarEnabled ? [] : scopedGroups }
+
+    /// The New button's tooltip, read as it opens: its shortcut, and the Shift+click hint while New opens the project
+    /// picker (SidebarThreadHeader.tsx:55-57, :102-117 and Sidebar.tsx:3079-3084, :3322-3328 at 5258).
+    private var newThreadTooltip: (text: String, detail: String?) {
+        let all = snapshot.map { SidebarModel.buildProjectGroups($0.projects, grouping: state.grouping, preferredEnvironmentId: state.environments.primaryId) } ?? []
+        return Self.newThreadTooltip(pickableGroups: ProjectOrganization.pickable(all).count, allGroups: all.count,
+                                     newLabel: ActiveKeymap.label(for: "chat.new"), newLocalLabel: ActiveKeymap.label(for: "chat.newLocal"))
+    }
+
+    static func newThreadTooltip(pickableGroups: Int, allGroups: Int, newLabel: String?, newLocalLabel: String?) -> (text: String, detail: String?) {
+        // `shouldCreateNewThreadInCurrentProject(false, ...)` (Sidebar.logic.ts:816-822).
+        let inProject = pickableGroups == 1 || allGroups == 0
+        let shortcut = newLabel ?? (inProject ? newLocalLabel : nil)
+        let text = shortcut.map { "New thread (\($0))" } ?? "New thread"
+        guard !inProject else { return (text, nil) }
+        return (text, newLocalLabel.map { "New thread in current project: Shift+click (\($0))" } ?? "New thread in current project: Shift+click")
+    }
 
     private var scopedGroup: SidebarModel.ProjectGroup? { scopedGroups.count == 1 ? scopedGroups.first : nil }
 

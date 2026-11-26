@@ -488,6 +488,8 @@ public enum PaletteScoring {
         public var short: [String]
         /// Every token, in the order typed.
         public var words: [String]
+        /// The query is in double quotes: only its words together, as typed, match.
+        public var exact: Bool
     }
 
     /// `messageSearchTokens`: every `long` token must match, `short` ones only narrow hits. No long tokens means
@@ -499,16 +501,43 @@ public enum PaletteScoring {
             let length = token.unicodeScalars.count
             return length >= messageTokenMinLength || (length == 2 && hasCjkWord(token))
         }
-        return MessageSearchTokens(long: tokens.filter(searchable), short: tokens.filter { !searchable($0) }, words: tokens)
+        return MessageSearchTokens(long: tokens.filter(searchable), short: tokens.filter { !searchable($0) }, words: tokens,
+                                   exact: isExactQuery(query))
+    }
+
+    /// `EXACT_PHRASE_GAP` (paletteSearch.ts:591 at 5258): the most whitespace between two words of an exact query
+    /// in a message, a line break and its indentation. The server's index reads only hits that close.
+    static let exactPhraseGap = 16
+
+    /// `wordsTogether`: an exact pattern leaves word boundaries to `findExactPhrase`.
+    static func wordsTogether(_ words: [String], exact: Bool) -> NSRegularExpression? {
+        guard words.count > 1 else { return nil }
+        let escaped = words.map { NSRegularExpression.escapedPattern(for: $0) }
+        if exact { return try? NSRegularExpression(pattern: escaped.joined(separator: "\(jsSpace){1,\(exactPhraseGap)}"), options: [.caseInsensitive]) }
+        let body = escaped.joined(separator: "\(jsSpace)+")
+        return try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])\(body)(?![\\p{L}\\p{N}])", options: [.caseInsensitive])
     }
 
     /// `messagePhrase`: the query's words side by side as whole words, whatever whitespace is between them and
-    /// ignoring case; nil for a single word.
+    /// ignoring case; nil for a single word. An exact query allows `exactPhraseGap` of whitespace between two
+    /// words, and its pattern also matches inside longer words.
     public static func messagePhrase(_ query: String) -> NSRegularExpression? {
-        let words = messageSearchTokens(query).words
-        guard words.count > 1 else { return nil }
-        let body = words.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "\(jsSpace)+")
-        return try? NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])\(body)(?![\\p{L}\\p{N}])", options: [.caseInsensitive])
+        let tokens = messageSearchTokens(query)
+        return wordsTogether(tokens.words, exact: tokens.exact)
+    }
+
+    /// `findExactPhrase` (paletteSearch.ts:641-657 at 5258): where an exact phrase sits in `text` at or after
+    /// `from` as whole words, by the rule single words follow. `searched` is `text` folded in place.
+    static func findExactPhrase(_ text: Units, _ searched: String, _ pattern: NSRegularExpression, from: Int = 0) -> SearchRange? {
+        let length = (searched as NSString).length
+        var at = from
+        while at <= length, let match = pattern.firstMatch(in: searched, range: NSRange(location: at, length: length - at)) {
+            let start = match.range.location, end = NSMaxRange(match.range)
+            if startsWordAt(text, start) && endsWordAt(text, end) { return SearchRange(start: start, end: end) }
+            // A whole character on: from an emoji's second half the pattern finds this match again.
+            at = start + (start < text.count && UTF16.isLeadSurrogate(text[start]) ? 2 : 1)
+        }
+        return nil
     }
 
     /// Words written together, as typed, rank above the same words apart; words near each other rank above
@@ -594,8 +623,8 @@ public enum PaletteScoring {
         }
         let phrase = messagePhrase(query)
         // Accents typed or left out still read as written together: "cafe open" in "Café open".
-        let foldedPhrase = messagePhrase(split.words.map { string(foldInPlace($0)).unicodeScalars.filter { !isMark($0) }.map(String.init).joined() }
-            .joined(separator: " "))
+        let foldedPhrase = wordsTogether(split.words.map { string(foldInPlace($0)).unicodeScalars.filter { !isMark($0) }.map(String.init).joined() },
+                                         exact: split.exact)
         let queryNonAscii = hasNonASCII(query)
         return { text in
             let source = Units(text.utf16)
@@ -619,12 +648,18 @@ public enum PaletteScoring {
             }
             // Written together as typed: the snippet starts there. Straightening apostrophes keeps offsets.
             let straight = { (u: Units) in replacing(curlyApostrophes, in: string(u), with: "'") }
-            var together = firstMatch(phrase, straight(plain))
+            let phraseAt = { (pattern: NSRegularExpression?, searched: String) -> Int? in
+                guard let pattern else { return nil }
+                return split.exact ? findExactPhrase(source, searched, pattern)?.start : firstMatch(pattern, searched)
+            }
+            var together = phraseAt(phrase, straight(plain))
             if together == nil, queryNonAscii || hasNonASCII(text) {
                 if folded == nil { folded = foldInPlace(text) }
-                together = firstMatch(foldedPhrase, straight(folded!))
+                together = phraseAt(foldedPhrase, straight(folded!))
             }
             if let together { return MessageMatch(quality: quality + messagePhraseBonus, offset: together) }
+            // An exact query matches only written together; a single word must be whole (paletteSearch.ts:780).
+            if split.exact && (split.words.count > 1 || quality < 1) { return nil }
             // Else the shortest stretch that holds every word.
             let near = shortestSpan(positions)
             return MessageMatch(quality: split.long.count > 1 && near.length <= Double(messageNearSpan) ? quality + messageNearBonus : quality,
@@ -656,8 +691,20 @@ public enum PaletteScoring {
     /// `findSearchTokenRanges`: ranges of `text` holding a long message search token, for message snippets,
     /// ignoring case and accents. A short long token only counts where it starts a word.
     public static func findSearchTokenRanges(_ text: String, query: String) -> [SearchRange] {
+        let split = messageSearchTokens(query)
+        // An exact query lights up only where its words are written together (paletteSearch.ts:829-852 at 5258).
+        if split.exact, let phrase = wordsTogether(split.words.map { string(foldInPlace($0)) }, exact: true) {
+            let source = Units(text.utf16), searched = string(foldInPlace(text))
+            var ranges: [SearchRange] = []
+            var found = findExactPhrase(source, searched, phrase)
+            while let range = found {
+                ranges.append(range)
+                found = findExactPhrase(source, searched, phrase, from: range.end)
+            }
+            return ranges
+        }
         var tokens: [(Units, Bool)] = []
-        for token in messageSearchTokens(query).long {
+        for token in split.long {
             let folded = Units(foldSearchQuery(token).utf16)
             // Some tokens fold to nothing ("´´´"), which would match everywhere.
             guard !folded.isEmpty, !tokens.contains(where: { $0.0 == folded }) else { continue }
@@ -665,12 +712,16 @@ public enum PaletteScoring {
         }
         guard !tokens.isEmpty else { return [] }
         let field = foldSearchField(text)
+        let source = Units(text.utf16)
         var ranges: [SearchRange] = []
         for (token, needsWordStart) in tokens {
             let ownBoundary = !unitIsAlnum(token[0]) && !unitIsSymbol(token[0])
             var found = indexOf(field.text, token)
             while let index = found {
-                if needsWordStart && !ownBoundary && !field.wordStarts[index] {
+                // An exact single word lights up only as a whole word, as it matches.
+                let skipped = split.exact ? !startsWordAt(source, index) || !endsWordAt(source, index + token.count)
+                    : needsWordStart && !ownBoundary && !field.wordStarts[index]
+                if skipped {
                     found = indexOf(field.text, token, from: index + 1)
                     continue
                 }
@@ -686,6 +737,10 @@ public enum PaletteScoring {
     /// whole word first ("Café", not "Cafe" in "Cafeteria").
     public static func findQuery(snippet: String, query: String) -> String {
         let ns = snippet as NSString
+        // An exact query finds its words as the snippet writes them together (threadFindStore.ts:192-195 at 5258).
+        if isExactQuery(query), let range = findSearchTokenRanges(snippet, query: query).first {
+            return ns.substring(with: NSRange(location: range.start, length: range.end - range.start))
+        }
         let straight = replacing(curlyApostrophes, in: snippet, with: "'")
         if let phrase = messagePhrase(query),
            let together = phrase.firstMatch(in: straight, range: NSRange(location: 0, length: (straight as NSString).length)) {

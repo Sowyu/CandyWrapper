@@ -318,4 +318,16 @@ struct NativeTooltipGuardTests {
         }
         #expect(hits.isEmpty, "use setTooltip instead:\n\(hits.joined(separator: "\n"))")
     }
+
+    /// SidebarThreadHeader.tsx:104-113 at 5258: a muted second line 2pt under the text widens and heightens the box.
+    @MainActor @Test func aDetailLineSitsUnderTheText() {
+        let tip = TooltipView("New thread (\u{2318}N)")
+        let one = tip.intrinsicContentSize
+        tip.detail = "New thread in current project: Shift+click (\u{2325}\u{2318}N)"
+        let two = tip.intrinsicContentSize
+        #expect(two.height == one.height + 2 + 16.5)
+        #expect(two.width > one.width)
+        tip.detail = nil
+        #expect(tip.intrinsicContentSize == one)
+    }
 }

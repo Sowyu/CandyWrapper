@@ -64,4 +64,16 @@ struct QueuedRunEditsTests {
         #expect(ComposerFeedback.recoverQueuedEdit(edited: "same", original: "same", threadPrompt: "", modelChanged: false) == .clean)
         #expect(ComposerFeedback.recoverQueuedEdit(edited: "same", original: "same", threadPrompt: "busy", modelChanged: true) == .discarded)
     }
+
+    /// useQueuedRunEdit.ts:296-321 and queuedMessageEdit.ts:132 at 5258: the reply rides beside the edit, and Cancel
+    /// reply counts as an edit.
+    @Test func aCancelledReplyCountsAsAnEdit() {
+        var edits = QueuedRunEdits()
+        let reply: JSONValue = .object(["kind": .string("response"), "contextId": .string("response_1")])
+        let thread = ThreadId("env:t")
+        let edit = edits.begin(thread: thread, run: RunId("r"), text: "hi", reply: reply)
+        #expect(edit.reply == reply && !edit.replyChanged)
+        edits.cancelReply(thread)
+        #expect(edits.edit(thread)?.reply == nil && edits.edit(thread)?.replyChanged == true)
+    }
 }

@@ -811,8 +811,8 @@ public enum SidebarListBuilder {
         }
         model.isPreparing = t.runtime?.status == .preparing
         let issues = shell.issues?.values ?? []
-        model.issueBadge = SidebarIssueBadge(issues, state: issues.count == 1
-            ? state.issueStates[SidebarIssueBadge.stateKey(environmentId: shell.id.environmentId, issues[0])] : nil)
+        model.issueBadge = SidebarIssueBadge(issues, state: SidebarIssueBadge.aggregateState(
+            issues.map { state.issueStates[SidebarIssueBadge.stateKey(environmentId: shell.id.environmentId, $0)] }))
         return model
     }
 

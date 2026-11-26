@@ -10,9 +10,6 @@ import T3Store
 /// `splitSpeed` and `columnControls` (ComposerModelEffort.tsx:42-79): service tiers, Fast mode and Ultracode go to the
 /// footer; the column lists the reasoning levels, then every other option as one row each.
 struct ComposerEffortControls {
-    /// `REASONING_DESCRIPTOR_IDS` (client-runtime modelTraits.ts:12-15).
-    // ponytail: no `role: "reasoning"` on descriptors yet; add it to `isReasoning` once T3Protocol decodes it
-    static let reasoningIds: Set<String> = ["reasoningEffort", "reasoning", "effort", "variant", "reasoning_effort", "thinking"]
 
     var speedSelect: ProviderOptionDescriptor?
     var fastToggle: ProviderOptionDescriptor?
@@ -26,7 +23,7 @@ struct ComposerEffortControls {
         fastToggle = toggles.first { $0.id == "fastMode" }
         ultracodeToggle = toggles.first { $0.id == "ultracode" }
         let column = selects.filter { $0.id != "serviceTier" } + toggles.filter { $0.id != "fastMode" && $0.id != "ultracode" }
-        let effort = column.first { Self.reasoningIds.contains($0.id) }
+        let effort = column.first { $0.isReasoningControl }
         self.effort = effort
         others = column.filter { $0.id != effort?.id }
     }

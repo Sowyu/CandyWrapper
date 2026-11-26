@@ -37,9 +37,21 @@ struct UpdateEverythingLogicTests {
         ], target: "0.0.50")
         #expect(targets.map(\.label) == ["service", "other-desktop", "own"])
         #expect(skipped.map { [$0.label, $0.reason] } == [
-            ["nightly-service", "on the nightly channel"], ["offline", "not connected"], ["never-connected", "not connected"],
+            ["nightly-service", "on the nightly channel"], ["offline", "not connected"], ["never-connected", "still loading"],
             ["no-scope", "no permission"], ["busy", "already updating"], ["manual", "needs a manual update"],
         ])
+    }
+
+    /// updateEverything.logic.ts:152-173 at 5258 (#41672) and :54-56 (#33030).
+    @Test func skipsSayWhy() {
+        var off = Self.machine("off", "0.0.40", .bootService, connected: false)
+        off.turnedOff = true
+        var down = Self.machine("down", "0.0.40", .bootService, connected: false)
+        down.connectionError = "Connection refused"
+        var desk = Self.machine("desk", "0.0.40", .desktopManaged)
+        desk.capabilities.desktopAppUpdate = false
+        let (_, skipped) = L.serverTargets([off, down, desk], target: "0.0.50")
+        #expect(skipped.map(\.reason) == ["turned off", "Connection refused", "update T3 Code on that machine"])
     }
 
     @Test func describesThePass() {
