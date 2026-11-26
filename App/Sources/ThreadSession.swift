@@ -662,6 +662,7 @@ final class ThreadController {
     private(set) var automations: ThreadAutomationsController!
     private var checkoutStatus: SidebarCheckoutStatus!
     private(set) var lineage: ThreadLineageController!
+    private(set) var repositories: RepositorySectionsController!
     private(set) var sideChats: SideChatController!
     private(set) var linkedThreads: LinkedThreadController!
     /// `peerLinks.names` per environment, as the open thread's links read them (5258 state/peerLinks.ts:48-52).
@@ -809,6 +810,7 @@ final class ThreadController {
             if sidebar.state.hiddenThreadTags[env] != tags { sidebar.state.hiddenThreadTags[env] = tags }
         }
         lineage = ThreadLineageController(panel: panel)
+        repositories = RepositorySectionsController(panel: panel, sidebar: sidebar, environments: environments, git: git)
         sideChats = SideChatController(panel: panel, sidebar: sidebar, environments: environments, composer: composer)
         sideChats.parentId = { [weak self] in self?.openThreadId }
         linkedThreads = LinkedThreadController(panel: panel, environments: environments)
@@ -1384,7 +1386,7 @@ final class ThreadController {
             session?.end()
             session = nil
             setCost(nil)
-            lineage.update(threadId: nil, projection: nil)
+            lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
             terminal.show(nil)
             scripts.show(nil)
             files.show(nil)
@@ -1554,7 +1556,7 @@ final class ThreadController {
         files.show(id)
         let kept = force ? nil : (takeRetained(id) ?? keepAlive?.take(id))
         // Held rows keep their lineage header and footer; the first projection resets them.
-        if !keepRows || shell == nil { lineage.update(threadId: id, projection: nil) }
+        if !keepRows || shell == nil { lineage.update(threadId: id, projection: nil); repositories?.update(threadId: id, projection: nil) }
         let session = ThreadSession(threadId: id, panel: panel, sidebar: sidebar, retained: kept, cache: force ? nil : environments.threadCache)
         var observedLink: ThreadLinkedPullRequest?
         session.onProjection = { [weak self] projection, onlyStreamingText in
@@ -1574,6 +1576,7 @@ final class ThreadController {
             self?.composer.projectionChanged(projection, threadId: id)
             if let projection { self?.files.workspaceMutated(TurnDiffs.workspaceMutationId(projection), threadId: id) }
             self?.lineage.update(threadId: id, projection: projection)
+            self?.repositories.update(threadId: id, projection: projection)
             self?.setCost(projection, id: id)
         }
         session.onStatus = { [weak self] status in self?.composer.threadStatusChanged(status, threadId: id) }
@@ -1653,7 +1656,7 @@ final class ThreadController {
         previous?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -1873,7 +1876,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -2024,7 +2027,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -2140,7 +2143,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)
@@ -2205,7 +2208,7 @@ final class ThreadController {
         session?.end()
         session = nil
         setCost(nil)
-        lineage.update(threadId: nil, projection: nil)
+        lineage.update(threadId: nil, projection: nil); repositories?.update(threadId: nil, projection: nil)
         terminal.show(nil)
         scripts.show(nil)
         files.show(nil)

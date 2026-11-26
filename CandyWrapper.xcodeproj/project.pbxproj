@@ -76,6 +76,7 @@
 		D97D87BA1FC8BBAB38BFE647 /* OpenInController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BA027EC2BDC6A0154A676E /* OpenInController.swift */; };
 		DA045A39A44D87162AAD179E /* DesktopManagedController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6328A5E8DA411428DDB1363 /* DesktopManagedController.swift */; };
 		E1C507709202FD4039E66D29 /* CodexAuthCallbackReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08F7F6C5F7484632BD71DBDD /* CodexAuthCallbackReceiver.swift */; };
+		EB723A0D9B32B7084AAF2531 /* RepositorySectionsController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C44D4B891B34FB813E9AD6F /* RepositorySectionsController.swift */; };
 		EB86443F1218E9073AE558A0 /* T3ConnectController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B1A20A927434B822A78FBE /* T3ConnectController.swift */; };
 		EDCEDD28D34C606C2F67CDED /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 0DD18B055E5BF454B9B77F4B /* AppIcon.icon */; };
 		FA2E94FBA315BAA0B031452C /* LinkedThreadController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDF69D0BBF18BF3BC839822B /* LinkedThreadController.swift */; };
@@ -93,6 +94,7 @@
 		1C8187EB6DE90061526A5617 /* SettingsUseInAnotherApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUseInAnotherApp.swift; sourceTree = "<group>"; };
 		21423E229A8AD862537E9ECA /* SettingsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsController.swift; sourceTree = "<group>"; };
 		2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PullRequestsPage.swift; sourceTree = "<group>"; };
+		2C44D4B891B34FB813E9AD6F /* RepositorySectionsController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositorySectionsController.swift; sourceTree = "<group>"; };
 		2F5325F9CBCE93872073AE32 /* snap-shot-click.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "snap-shot-click.mp3"; sourceTree = "<group>"; };
 		31C34F45503302E5FDFE2CAD /* HiddenTerminal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HiddenTerminal.swift; sourceTree = "<group>"; };
 		34FA0C9EAFA2AAF296BE7988 /* UpdateEverything.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateEverything.swift; sourceTree = "<group>"; };
@@ -233,6 +235,7 @@
 				C7519E2E8715758466B1D137 /* ProjectScriptsController.swift */,
 				0A70434D88F7894F3A3F93A1 /* PullRequestsController.swift */,
 				2926272AC3C094AAEFF9248C /* PullRequestsPage.swift */,
+				2C44D4B891B34FB813E9AD6F /* RepositorySectionsController.swift */,
 				67881179B1757F1808884AA9 /* RunningThreadKeepAlive.swift */,
 				5E6841D4497EC3DD03F5BCCA /* RuntimeUpdateController.swift */,
 				CA354B9817B6D7ADE437AB8B /* ScheduledTasksStore.swift */,
@@ -437,6 +440,7 @@
 				617A34A7823AE2ED80FCA629 /* ProjectScriptsController.swift in Sources */,
 				7D18F1FD97C5760B0FCDD907 /* PullRequestsController.swift in Sources */,
 				7CE40A3B1A200272F887A4E6 /* PullRequestsPage.swift in Sources */,
+				EB723A0D9B32B7084AAF2531 /* RepositorySectionsController.swift in Sources */,
 				A7EF5B31A6D5CD4E006AA901 /* RunningThreadKeepAlive.swift in Sources */,
 				98518441987B7F297A77A955 /* RuntimeUpdateController.swift in Sources */,
 				844DD7E2AF76CFC5EED8FFED /* ScheduledTasksStore.swift in Sources */,

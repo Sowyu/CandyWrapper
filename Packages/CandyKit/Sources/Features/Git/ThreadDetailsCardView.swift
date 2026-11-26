@@ -1,4 +1,5 @@
 import AppKit
+import T3Store
 import DesignSystem
 
 /// Fill under a hovered or open panel control (threadDetailsPanelStyles.ts:9-10): black 3.5% in light,
@@ -567,6 +568,81 @@ public final class ThreadDetailsCardView: DSView {
 
     /// Shows the Version Control section's rows for a repository; false shows "Initialize Git".
     public var isRepo = true { didSet { if isRepo != oldValue { updateRows() } } }
+
+    // MARK: Repositories (5258 ThreadRepositorySections.tsx, ThreadDetailsPanel.tsx:185-305, #42919)
+
+    /// One repository section's collapsed row.
+    public struct RepositoryRow: Equatable, Sendable {
+        public var key: String
+        public var name: String
+        /// Nil until its first `vcs` status.
+        public var summary: ThreadRepositories.Summary?
+        public init(key: String, name: String, summary: ThreadRepositories.Summary?) { self.key = key; self.name = name; self.summary = summary }
+    }
+    public struct Repositories: Equatable, Sendable {
+        public var visible: [RepositoryRow] = []
+        public var hidden = 0
+        public var showAll = false
+        /// "Repositories appear here once this thread changes them." when none shows (`explainsEmpty`).
+        public var explainsEmpty = false
+        public init(visible: [RepositoryRow] = [], hidden: Int = 0, showAll: Bool = false, explainsEmpty: Bool = false) {
+            self.visible = visible; self.hidden = hidden; self.showAll = showAll; self.explainsEmpty = explainsEmpty
+        }
+    }
+    /// The project tracks folders: its own plain folder is not offered Initialize Git (ThreadDetailsPanel.tsx:195-199).
+    public var tracksFolders = false { didSet { if tracksFolders != oldValue { updateRows() } } }
+    /// Nil hides the sections: a project that tracks nothing and changed no repository.
+    public var repositories: Repositories? { didSet { if repositories != oldValue { rebuildRepositoryRows() } } }
+    public var onRepositoriesShowAll: (() -> Void)?
+    private var repositoryRows: [NSView] = []
+
+    private func rebuildRepositoryRows() {
+        repositoryRows.forEach { $0.removeFromSuperview() }
+        repositoryRows = []
+        if let repositories {
+            if repositories.visible.isEmpty, repositories.explainsEmpty {
+                // `px-2.5 py-1.5 text-xs text-muted-foreground`.
+                let note = RepositoryNoteView("Repositories appear here once this thread changes them.")
+                repositoryRows.append(note)
+            }
+            for row in repositories.visible { repositoryRows.append(Self.repositoryRow(row)) }
+            if repositories.hidden > 0 || (repositories.showAll && repositories.visible.count > ThreadRepositories.visibleCount) {
+                // `tone="muted"` with the label at `ms-6.5`: a clear 16pt icon holds the indent, the muted detail the words.
+                let more = DetailsRowControl(kind: .row)
+                more.icons = [IconName.chevronRight.definition]
+                more.iconColor = .clear
+                more.detail = repositories.showAll ? "Show fewer" : "Show \(repositories.hidden) more"
+                more.setAccessibilityLabel(more.detail)
+                more.setAccessibilityExpanded(repositories.showAll)
+                more.action = { [weak self] in self?.onRepositoriesShowAll?() }
+                repositoryRows.append(more)
+            }
+        }
+        repositoryRows.forEach { content.addSubview($0) }
+        updateRows()
+    }
+
+    /// The collapsed section's row (ThreadRepositorySections.tsx:104-142): a chevron, the name, then the branch or
+    /// "Not a Git repository" / "Detached HEAD" muted, and the pull request number and working tree counts after.
+    /// Read only in this slice, so it is a locked row (the git control per repository is not ported yet).
+    static func repositoryRow(_ row: RepositoryRow) -> DetailsRowControl {
+        let v = DetailsRowControl(kind: .locked)
+        v.icons = [IconName.chevronRight.definition]
+        v.text = row.name
+        if let s = row.summary {
+            v.detail = !s.isRepository ? "Not a Git repository" : (s.branch ?? "Detached HEAD")
+            if s.isRepository, s.pullRequestNumber != nil || s.changedFiles > 0 {
+                v.trailing = RepositoryCountsView(pullRequest: s.pullRequestNumber, insertions: s.changedFiles > 0 ? s.insertions : nil,
+                                                  deletions: s.changedFiles > 0 ? s.deletions : nil)
+            }
+        }
+        v.setAccessibilityLabel("Repository \(row.name)")
+        return v
+    }
+
+    private var showsRepositories: Bool {
+        repositories != nil && showsVersionControl && offersGit && density != .essential && on("gitActions") && !relationsOnly
+    }
     /// Hides the Version Control section (`gitCwd` is null).
     public var showsVersionControl = true { didSet { if showsVersionControl != oldValue { updateRows() } } }
     /// False for a No project thread, whose folder sits in the shared scratch root and must never
@@ -736,7 +812,9 @@ public final class ThreadDetailsCardView: DSView {
         gitActions.isHidden = !repo || !showsGitActions || (density != .full && gitActions.primary.mode == .idle)
             || relationsOnly || !on("gitActions")
         changes.isHidden = !repo || relationsOnly || !on("changes")
-        initGit.isHidden = !showsVersionControl || !offersGit || isRepo || !showsGitActions || relationsOnly || !on("gitActions")
+        initGit.isHidden = !showsVersionControl || !offersGit || isRepo || tracksFolders || !showsGitActions || relationsOnly || !on("gitActions")
+        let repositoriesShown = showsRepositories
+        repositoryRows.forEach { $0.isHidden = !repositoriesShown }
         scripts.isHidden = scriptsRow == nil || scriptsRow == .add || relationsOnly || !on("scripts")
         addScript.isHidden = scriptsRow != .add || relationsOnly || !on("scripts")
         pullRequestRows.forEach { $0.isHidden = !on("branch") }
@@ -752,17 +830,19 @@ public final class ThreadDetailsCardView: DSView {
         let prs = on("branch") ? pullRequestRows : []
         if relationsOnly { return prs }
         // Without a branch selector the linked pull requests still need somewhere to show, then Initialize Git.
+        let repositories = showsRepositories && density != .essential ? repositoryRows : []
         guard showsVersionControl, offersGit, isRepo else {
-            return prs + (showsVersionControl && offersGit && !isRepo && showsGitActions && on("gitActions") ? [initGit] : [])
+            return prs + (showsVersionControl && offersGit && !isRepo && !tracksFolders && showsGitActions && on("gitActions") ? [initGit] : []) + repositories
         }
         let actions: [NSView] = showsGitActions && on("gitActions") && (density == .full || gitActions.primary.mode != .idle) ? [gitActions] : []
-        return (on("branch") ? [branch] : []) + prs + actions + (on("changes") ? [changes] : [])
+        return (on("branch") ? [branch] : []) + prs + actions + (on("changes") ? [changes] : []) + repositories
     }
 
     private var versionRows: [NSView] { versionRows(density) }
 
     private func rowHeight(_ row: NSView) -> CGFloat {
         if row === gitActions { return gitActions.preferredHeight }
+        if row is RepositoryNoteView { return 28 }
         let width = max(1, bounds.width - 18)
         return (row as? ThreadDetailsPrRowView)?.preferredHeight(forWidth: width)
             ?? (row as? ThreadDetailsIssueRowView)?.preferredHeight(forWidth: width) ?? 32
@@ -925,5 +1005,55 @@ public final class ThreadDetailsCardView: DSView {
         super.viewDidChangeEffectiveAppearance()
         decoration.setNeedsDisplay()
         needsDisplay = true
+    }
+}
+
+
+/// "Repositories appear here once this thread changes them." (`px-2.5 py-1.5 text-xs text-muted-foreground`).
+final class RepositoryNoteView: DSView {
+    private let label: LabelView
+    init(_ text: String) {
+        label = LabelView(text, font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+        super.init(frame: .zero)
+        label.lineHeight = 16
+        addSubview(label)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func layout() {
+        super.layout()
+        label.frame = NSRect(x: 10, y: 6, width: max(0, bounds.width - 20), height: 16)
+    }
+}
+
+/// A repository row's trailing counts (`ms-auto flex gap-2 ps-2 font-mono tabular-nums`): "#12" in the muted sans
+/// face, then the working tree's "+n" and "-n".
+final class RepositoryCountsView: DSView {
+    private let number = LabelView()
+    private let totals = DiffTotalsView()
+    init(pullRequest: Int?, insertions: Int?, deletions: Int?) {
+        super.init(frame: .zero)
+        number.font = DSFont.ui(13)
+        number.lineHeight = 16
+        number.color = Themed.color(\.mutedForeground)
+        number.text = pullRequest.map { "#\($0)" } ?? ""
+        number.isHidden = pullRequest == nil
+        totals.insertions = insertions ?? 0
+        totals.deletions = deletions ?? 0
+        totals.isHidden = insertions == nil
+        addSubview(number)
+        addSubview(totals)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var intrinsicContentSize: NSSize {
+        let n = number.isHidden ? 0 : ceil(number.textWidth)
+        let t = totals.isHidden ? 0 : totals.intrinsicContentSize.width
+        return NSSize(width: n + t + (n > 0 && t > 0 ? 8 : 0), height: 16)
+    }
+    override func layout() {
+        super.layout()
+        let n = number.isHidden ? 0 : ceil(number.textWidth)
+        number.frame = NSRect(x: 0, y: (bounds.height - 16) / 2, width: n, height: 16)
+        let t = totals.intrinsicContentSize.width
+        totals.frame = NSRect(x: bounds.width - t, y: (bounds.height - 16) / 2, width: t, height: 16)
     }
 }
