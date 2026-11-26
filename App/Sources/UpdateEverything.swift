@@ -128,7 +128,9 @@ final class UpdateEverything {
             return L.Machine(environmentId: id, label: environments.label(id) ?? id, serverVersion: serverUpdates.descriptor(id)?.serverVersion,
                              connected: environments.state(id)?.status == .connected, canMaintain: serverUpdates.canUpdate(id),
                              updating: serverUpdates.state(id).isRunning, capabilities: caps, ownServer: serverUpdates.isOwnServer(id),
-                             continuesThreads: caps.threadContinuation && serverUpdates.continueThreads(id))
+                             continuesThreads: caps.threadContinuation && serverUpdates.continueThreads(id),
+                             turnedOff: environments.saved.first { $0.environmentId == id }?.enabled == false,
+                             connectionError: environments.state(id)?.status == .connected ? nil : environments.state(id)?.lastFailure)
         }
     }
 
