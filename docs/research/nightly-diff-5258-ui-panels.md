@@ -396,13 +396,13 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 18d5eda881 | #41630 | fix(web): Reset to default restores the built-in shortcut an edit replaced | settings | ported d476c29f |
 | 192ef9b7b2 | #41196 | fix(web): preserve alpha channel when previewing WhiteIsZero TIFF images | files | n/a (QuickLook previews) † |
 | 1a11aed1f8 | #41614 | fix(web): workflow steps on a linked environment open their thread | workflows | port (8.6): CW opens no step threads yet † |
-| 1a42ba1b5f | #39114 | fix(server,web): models stay in the picker after one failed provider check | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 1a42ba1b5f | #39114 | fix(server,web): models stay in the picker after one failed provider check | settings | ported 87d939b0: the picker keeps an instance with retained models or a confirmed sign-in; a default pick still needs a healthy one |
 | 1a51984153 | #32697 | fix(web): a tool call's diff names its files relative to the workspace | files | port (3.4) † |
 | 20a3bed880 | #42617 | fix(web): long Workflows links no longer end in a broken character | workflows | n/a (CW keeps no route params) † |
 | 20b8a9e695 | #39497 | fix(web): the preview only embeds PDFs from its own environment | files | n/a (CW never embeds preview PDFs; the check is in the web PiP), diff read 2026-11-25 |
 | 210996207d | #26760 | feat(mobile): pull request files follow the same review order as web | pull requests | ported da18c3b2 |
 | 21a96989b0 | #42745 | fix(web): include reopened issue selection in the /issues URL | shell | left: same, no closed-tab stack for the Issues page (with 45c011e218) |
-| 21d7feaff7 | #29550 | fix(web): theme hex field keeps your text while you delete it | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 21d7feaff7 | #29550 | fix(web): theme hex field keeps your text while you delete it | settings | ported 82cad7db: a shorthand hex commits on blur, the invalid state follows the typed text, an inspector pick commits first |
 | 227ac64b74 | #40501 | fix(web): downscaled image attachments keep Display P3 colors | shell | port (10.6) † |
 | 22f006c8d7 | #39207 | fix(web): zoom shortcuts zoom the app from the PR, Diff and Files panes | shell | already (previewFocus covers only the browser view, so from PR, Diff and Files the View menu zooms the app), diff read 2026-11-25 |
 | 23e6e913d5 | #40509 | fix(web): ODT previews no longer print an index's title twice or its entry separators | files | n/a (QuickLook previews) † |
@@ -444,18 +444,18 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 457a52eb0a | #42312 | fix(web): opening a resolved PR comment keeps its toggle under the cursor | pull requests | port (2.6) † |
 | 45c011e218 | #42875 | fix(web): reopening a closed pull request tab keeps saved list filters | shell | left: CW remembers closed thread panel tabs only, not Pull Requests or Issues page tabs (M) |
 | 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | ported a6197a0d (words; no hourglass icon) |
-| 46eb376dda | #41677 | fix(web): a new price row mapped to a model asks for its model ID | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 46eb376dda | #41677 | fix(web): a new price row mapped to a model asks for its model ID | settings | ported 2075c1a4: a new row with no model ID shows its error and invalid field |
 | 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | n/a (telemetry URL check) † |
 | 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d476c29f |
-| 4b697be849 | #39331 | fix(web): keep deleted ACP sessions out of pending listings | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
-| 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | ported cb5edfe1 in part: CW clears the text; T3 opens the search from a button CW lacks, port that button first (S) |
+| 4b697be849 | #39331 | fix(web): keep deleted ACP sessions out of pending listings | settings | already: ProviderAcpSessionsView runs one request at a time (`busy`), so no list can be pending while a delete lands |
+| 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | ported 8d59af6e: T3's Third-party notices header with the count and a search button; Esc clears and closes the search |
 | 4e6b1fa771 | #42585 | fix(web): element context preview no longer ends in a split surrogate | browser | port (6.2) † |
 | 511447a9f2 | #40207 | feat(server): add a TanStack Source forge and issue tracker behind T3CODE_TANSTACK_SOURCE | other | n/a (server only, wire) † |
-| 515cab980a | #42352 | fix(web): script command field shows both hyphens with ligature fonts | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 515cab980a | #42352 | fix(web): script command field shows both hyphens with ligature fonts | settings | ported 352fd2eb: `FieldView.ligatures = false` on the command field |
 | 524c757f82 | #39846 | fix(web): RTF previews read Mac Roman documents | files | n/a (QuickLook previews) † |
 | 54ba2408f4 | #42392 | fix(web): Enter commits Background Activity interval values | settings | already (NumberFieldView commits on Return) |
 | 550c26635b | #41610 | fix(web): SSH projects open in a new VS Code window | other | n/a (server only, wire) † |
-| 5935157711 | #40541 | fix(web): keep secret check replies tied to their own attempt | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 5935157711 | #40541 | fix(web): keep secret check replies tied to their own attempt | settings | n/a (CW has no secret source check, diff read 2026-11-25) |
 | 59651c1761 | #39536 | fix(web): Retry on the Pull Requests list only refetches the environments that failed | pull requests | port (2.6) † |
 | 597c8de32b | #26965 | fix(web): hidden preview tabs larger than the window capture whole | browser | n/a (HostedBrowserWebview, CW streams every tab), diff read 2026-11-25 |
 | 59fe770e01 | #42090 | fix(web): pull request review drafts survive a reload | pull requests | ported 9e30cb36 |
@@ -469,7 +469,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 620cf4770d | #40856 | fix(web): browser page translation no longer crashes the app when a turn updates | other | n/a (translation strings) † |
 | 622f96785a | #42500 | fix(web): device host limit fields stay empty when cleared | usage | port (9.2) † |
 | 6233f5d114 | #41639 | fix(web): Escape closes a dialog over a recording before canceling dictation | shell | port (1.3) † |
-| 6357d17a49 | #31637 | fix(web): toggling a model's visibility no longer jumps the model list | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 6357d17a49 | #31637 | fix(web): toggling a model's visibility no longer jumps the model list | settings | ported bdf981b2: held placements per instance, cleared by Disable all or Enable all |
 | 637cd28599 | #41845 | fix(client-runtime): Remove is no longer offered on a route the environment cannot lose | connections | n/a (CW lists saved routes only, no learned ones, so count > 1 already matches) |
 | 65b2e6dae6 | #41122 | fix(web): stop telemetry refresh spinning after data arrives | settings | n/a (telemetry refresh) † |
 | 65cd644623 | #41301 | fix(web): archive folders with leading or repeated slashes show their names | files | n/a (QuickLook previews) † |
@@ -490,7 +490,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 7380740efe | #42499 | fix(web): pooled limit refill shows when it lands again | usage | ported 8f1d707d |
 | 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables; stroked T3 icons stay default) |
 | 73bb8ece1f | #41228 | fix(web): accept TIFF files containing standard IFD tag type 13 (SubIFDs) | files | n/a (QuickLook previews) † |
-| 75443857dc | #42085 | fix(web): Settings text typed before Navigation: Back is saved | shell | port (10.2) † |
+| 75443857dc | #42085 | fix(web): Settings text typed before Navigation: Back is saved | shell | ported 6461eaf7: a page change ends editing in a focused text field first |
 | 77c230e456 | #41511 | fix(web): notebook previews show errors saved without a traceback | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | 77d299cc1c | #29438 | fix(web): closing the last open pull request clears it from the list | pull requests | port (2.6) † |
 | 784da01b29 | #41749 | fix(web): Esc in Find in PDF clears it without closing the sheet | files | port (3.5) † |
@@ -522,11 +522,11 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 8f5fd287a4 | #42837 | fix(web,mobile): Usage says "1 session", not "1 sessions" | usage | ported 8f1d707d |
 | 902d369808 | #42342 | fix(web): new-commits banner on a PR spans the full header width | pull requests | port (2.6) † |
 | 904e2671ca | #40585 | fix(web): Keep background announcements quiet for held or stopped runs | shell | port (10.6) † |
-| 908e02ee6a | #30925 | fix(web): resetting a setting no longer jumps the Settings page | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 908e02ee6a | #30925 | fix(web): resetting a setting no longer jumps the Settings page | settings | already: CW has no focus recovery that scrolls; hiding the reset button leaves the page where it is (diff read 2026-11-25) |
 | 90e6e3e69d | #42244 | fix(web): keep emoji intact in manually added folder names | other | n/a (Swift Characters) † |
-| 916fcdc364 | #39312 | fix(web): preserve newer project action drafts when imports fail | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 916fcdc364 | #39312 | fix(web): preserve newer project action drafts when imports fail | settings | ported 33bfbc6a: a form opened during the import keeps its draft, the failure is a thread toast |
 | 91d2d90f46 | #26451 | fix(web): a failed main chunk load reloads once instead of showing the boot error | shell | n/a (web chunk load) † |
-| 93b8dc3465 | #40494 | fix(web): Antigravity settings show only the fields the chosen sign-in method uses | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| 93b8dc3465 | #40494 | fix(web): Antigravity settings show only the fields the chosen sign-in method uses | settings | ported 3f61ea5f, 6b7f5c27: visibleWhen for API key and GCP fields, the new method description |
 | 962bda2eb7 | #41489 | test(web): open history documents without reloading the app in iframes | other | n/a (test only) † |
 | 966e422c9f | #39769 | fix(desktop): Cmd+T opens the new-tab menu from a focused browser page | shell | already (a focused streamed page leaves keys to the window dispatcher), diff read 2026-11-25 |
 | 9842ca0c12 | #42120 | fix(web): an image no longer jumps while its pane is resized | files | port (3.5) † |
@@ -547,7 +547,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | a0ef9d8d95 | #39574 | fix(web): editable file drag selection no longer breaks across virtualized scroll windows | other | n/a (server only, wire) † |
 | a149bdc4f6 | #42321 | fix(web): Voice Models language menu resets its search filter on close | settings | n/a (CW's Voice page is a notice) |
 | a2231ca59b | #42417 | fix(web): Cmd/Ctrl+W closes the active tab on the Issues page | issues | port (2.6) † |
-| a23085273f | #33279 | fix(web): adding the last snooze option no longer reorders rows mid-edit | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| a23085273f | #33279 | fix(web): adding the last snooze option no longer reorders rows mid-edit | settings | already: a disabled ButtonView keeps first responder, so the list sees focus inside and does not sort (diff read 2026-11-25) |
 | a3001b33fe | #40468 | fix(web): RTF previews break the line at TextEdit soft line breaks | files | n/a (QuickLook previews) † |
 | a5d86e6382 | #41844 | fix(web): Push on the default branch no longer commits files changed while confirming | git | ported eda2a88d |
 | a686952304 | #42725 | fix(web): EPUB chapter titles no longer end in a broken emoji | other | n/a (Swift Characters) † |
@@ -559,7 +559,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | aa725f4bd4 | #39616 | fix(web): file find scrolls to matches below wrapped lines | other | n/a (server only, wire) † |
 | aacdaba15c | #42852 | fix(web): panel resize handle no longer covers the chat scrollbar on touch devices | shell | n/a (touch devices) † |
 | ac3af66f21 | #41901 | fix(web): a copied issue or pull request error no longer ends in a broken character | other | n/a (Swift Characters) † |
-| acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | ported 3f6bdea7: both folder rows are inert with "Saved on this device. Select All projects to change it." |
 | aced664ed9 | #39024 | fix(client-runtime): prefer newer completed compaction over stale liveUsage | other | n/a (server only, wire) † |
 | ae926f6579 | #41852 | fix(web): Cmd/Ctrl+F opens the browser find bar while a pull request is maximized | shell | port (10.5) † |
 | b042e4ee75 | #42722 | fix(web): hide the right panel add-surface menu when no surfaces are available | shell | already (Device is always available beside a thread, so the + menu is never empty), diff read 2026-11-25 |
@@ -577,7 +577,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | ba588ef663 | #24034 | fix(web): match macOS Option shortcuts to the active keyboard layout | settings | already (charactersIgnoringModifiers reads the active layout) |
 | babc83baf1 | #39315 | fix(web): PR viewer renders GitHub :emoji: shortcodes | pull requests | left: needs the 1,917-line GitHub emoji alias table (M) |
 | bac86471fe | #40507 | fix(web): links inside a PDF are clickable in the in-app PDF viewer | files | port (3.5) † |
-| bc13afaa3c | #40965 | Invalidate pending theme imports when a replacement is too large | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| bc13afaa3c | #40965 | Invalidate pending theme imports when a replacement is too large | settings | n/a (CW reads one theme file synchronously, no pending import to supersede, diff read 2026-11-25) |
 | bc6062805d | #39057 | fix(web): preserve file preview selection after scrolling back | files | port (3.3) † |
 | bd3e495b5f | #42442 | fix(web): mod+f opens find in read-only source previews | files | port (3.3) † |
 | c14e9f9717 | #42810 | fix(server): preserve split terminal control sequences across scrollback clears | terminal | n/a (server only) † |
@@ -588,7 +588,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | c5dc20f9f5 | #37191 | fix(client): new threads from a grouped repository start in its root checkout | shell | ported 0e916fe4 |
 | c6162da7ec | #42353 | fix(server): skipped workflow runs no longer keep their webhook payloads forever | workflows | ported 76baceb4 (Labs row) |
 | c6ca01b373 | #40516 | fix(web): preserve newer navigation when reopening closed views | shell | ported 71bdfaed (newer navigation already wins; the failure toast) |
-| c8014ad590 | #42622 | fix(web): project name field restores the saved name when cleared | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| c8014ad590 | #42622 | fix(web): project name field restores the saved name when cleared | settings | already: ProjectSettingsView.rename puts the saved name back on an empty title (diff read 2026-11-25) |
 | c8625cafce | #34588 | fix(web): Ctrl+B reaches a focused terminal again | terminal | ported 04b7ee0f |
 | c8f8ad17ac | #41277 | fix(web): RTF previews open files that declare code page 0 or 866 | files | n/a (QuickLook previews) † |
 | c991a91ec6 | #42827 | fix(web): GB18030 RTF files now preview instead of showing no preview | files | n/a (QuickLook previews) † |
@@ -616,14 +616,14 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | dffbfdfc00 | #42305 | fix(web): shell calls without -c no longer add agent working folders | other | n/a (server only, wire) † |
 | e166aa1db1 | #41579 | fix(desktop): swiping sideways over a confirmation dialog no longer goes back or forward | shell | n/a (Electron only) † |
 | e242ed0e1a | #42973 | fix(web): exact 1,024-column CSV and TSV files no longer show the truncated-columns banner | files | n/a (CW table caps at 30 columns with its own notice) |
-| e25a337e5f | #39493 | fix(web): keep long-named VS Code themes separate on import | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| e25a337e5f | #39493 | fix(web): keep long-named VS Code themes separate on import | settings | n/a (CW imports one theme per file, no batch to collide, diff read 2026-11-25) |
 | e2c3c4250d | #31561 | fix(preview): streamed browser tabs show native select menus | browser | ported 12a642d9 |
 | e2e8a49d97 | #41537 | fix(web): a PDF keeps its place when the pane is resized | files | port (3.5) † |
 | e36800e61b | #42950 | fix(web): SQLite 1-byte BLOB previews show "[blob: 1 byte]" | files | n/a (QuickLook previews) † |
 | e3b79cd0bf | #41767 | fix: Windows system tools run by absolute path, and mobile links and shares are handled more strictly | other | n/a (server only, wire) † |
 | e3f7eb5085 | #42851 | fix(web): Changes pane explains a diff of only hidden test files | files | ported adb9469d |
 | e3f9db2447 | #40741 | fix(server): TanStack Source pull requests open from every client, and private ones work end to end | pull requests | n/a (env-gated forge) † |
-| e4da383485 | #42467 | fix(web,mobile): CJK project names get a one-character monogram | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| e4da383485 | #42467 | fix(web,mobile): CJK project names get a one-character monogram | settings | ported e1d51816: one glyph for Han, kana and Hangul, in Features/Sidebar ProjectMonogramView |
 | e62e5122ad | #42262 | fix(web): a held Esc in a nested panel control no longer closes the right panel sheet | shell | ported 1cba774b |
 | e668e6141f | #39840 | fix(web): scrolling a PR description no longer moves focus to the condensed header | pull requests | port (2.6) † |
 | e86a9c5169 | #41585 | fix(web): OpenDocument previews keep merged table cells | files | n/a (QuickLook previews) † |
@@ -638,7 +638,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f46f17e46f | #37358 | fix(web): small buttons leave room between icon and label | settings | left (S: DesignSystem xs and sm button gap 4 to 6, needs component references recaptured) |
 | f60c747568 | #39815 | fix(web): open PDF attachments no longer reload while the agent works | files | port (3.5) † |
 | f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | ported cb5edfe1 |
-| f82de6567c | #41775 | fix(web): restoring a saved model mapping clears its typed prices | settings | left (S, diff read only by subject; 1.8 batch, settings port) |
+| f82de6567c | #41775 | fix(web): restoring a saved model mapping clears its typed prices | settings | ported 2075c1a4: restoring the saved mapping drops the typed prices |
 | f89883c568 | #39875 | fix(web): a long commit name no longer runs under the PR code tab's icons | pull requests | port (2.6) † |
 | f8f4a0b057 | #29261 | feat: Verilog, SystemVerilog, and VHDL code is syntax highlighted | composer | port (3.6) † |
 | f9f34aab78 | #41361 | fix(web): start without WebAssembly by initialising Words in a guard | shell | n/a (web only) † |
@@ -740,6 +740,13 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 7.3 was not only server work: CW already had the map's `through-link` offer and `peerLinks.pairLink` in T3Protocol, but no dialog used them. The dialog now does (e94f2201).
 - T3's server refuses any expected-environment link to a loopback address (PeerLinks.ts:464-469), so a through-link between servers on one Mac fails at the last step in both apps. Test it with real addresses.
 - 1.3's custom model, font family and nav search rows needed more than `escapeClears`: Settings' Esc monitor runs before the focused field, so a field that owns Esc now says so through `FieldView.takesEscape`.
-- #41647: T3 opens the license search from a button; CW shows the field all the time, so "closes the search" has nothing to close yet.
+- #41647 needed T3's license header first: the page title is "Third-party notices", the count and a search button sit in the section header, and the search field opens from the button (8d59af6e).
 - 1.8's #37358 changes every xs and sm button's icon gap, which is a DesignSystem change, not a settings one.
 - The Voice rows (#42129, #42027, #42321, #39884, #41876, #40424) are n/a while CW's Voice page is a notice.
+
+## Corrections from the third settings and connections pass (2026-11-25)
+
+- 1.8 is not all subject-only work: #39114 also changes which instance becomes the default pick (`isProviderInstanceHealthy`), #29550 also commits a focused field before an inspector pick, and #39312 lives in the thread's actions menu (App/Sources/ProjectScriptsController.swift), not Settings.
+- The price table's new test found a crash that predates this range: filling a row's fields fired `onChange`, which rebuilt the table from inside its own rebuild without end (2075c1a4).
+- CW's licenses page still draws each notice as a settings row with a chevron button; T3's rows are full-width collapsible triggers. The header now matches.
+
