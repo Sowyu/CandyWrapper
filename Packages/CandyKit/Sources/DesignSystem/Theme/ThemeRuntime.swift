@@ -72,6 +72,10 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherTintFromPicture = false
     /// The picture's tint as an OKLab a and b, computed once per picture (`PictureTint.sync`), or nil before then.
     public var pictureTint: SIMD2<Double>?
+    /// Redesign's "Inset panel": the content is one rounded card inset from the window (`SidebarLayoutView`). The
+    /// setting defaults on; this input stays off unless `ThemeLibrary` passes the setting, so tests and fixtures draw
+    /// the full-bleed layout unless they ask for the card.
+    public var insetPanel = false
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -124,6 +128,9 @@ public enum ThemeRuntime {
     /// Whether project and account avatars without a picture draw `PixelSprites`: Redesign with "Project avatars" on Sprites.
     public nonisolated static func drawsSprites(dark: Bool) -> Bool { isDither(dark: dark) && spritesOn }
     nonisolated(unsafe) private static var spritesOn = true
+    /// Whether the content is Redesign's inset card: Redesign with "Inset panel" on.
+    public nonisolated static func insetPanel(dark: Bool) -> Bool { isDither(dark: dark) && insetOn }
+    nonisolated(unsafe) private static var insetOn = false
 
     /// Posted after `apply` changed something, for views that cache theme-derived values outside drawing.
     public static let didChange = Notification.Name("CandyThemeRuntimeDidChange")
@@ -176,6 +183,7 @@ public enum ThemeRuntime {
         }
         if next.ignoreReduceTransparency != old.ignoreReduceTransparency { changed = true }
         if next.projectSprites != old.projectSprites { spritesOn = next.projectSprites; changed = true }
+        if next.insetPanel != old.insetPanel { insetOn = next.insetPanel; changed = true }
         if next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark || next.ditherPicture != old.ditherPicture {
             dither = (next.ditherLight, next.ditherDark)
             ditherFlags = dither

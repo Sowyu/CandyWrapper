@@ -75,7 +75,10 @@ public final class RedesignSettingsView: SettingsPageBase {
         let account = clientSwitch("redesign-picker-account", "The provider's account and usage bar at the top of the details pane, or above the models when stacked.",
                                    key: "redesignPickerAccount", reset: "account and limits", title: "Account and limits in the model picker")
         let rows = sidebarRowsRow()
-        gated = look + [stacked, account, rows]
+        // Capy's layout (the user, 2026-11-21: "also make it a toggle").
+        let inset = clientSwitch("redesign-inset-panel", "Show the thread as one rounded card inset from the window, with its title and controls in a row at its top. Off runs the thread to the window's edges under floating pills.",
+                                 key: "redesignInsetPanel", reset: "inset panel", title: "Inset panel")
+        gated = [inset] + look + [stacked, account, rows]
         binder.add { [weak self] in
             guard let self else { return }
             let off = library.isRedesignOn ? nil : Self.offReason
@@ -97,6 +100,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         }
         items = [
             section(nil, "Theme", [masterRow]),
+            section("redesign-layout", "Layout", [inset]),
             section("redesign-look", "Look", look + [transparency]),
             section("redesign-model-picker", "Model picker", [stacked, account]),
             section("redesign-sidebar", "Sidebar", [rows]),

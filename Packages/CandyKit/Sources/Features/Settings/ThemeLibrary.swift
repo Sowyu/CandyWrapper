@@ -58,7 +58,7 @@ public final class ThemeLibrary {
     public func start() {
         migrateRemovedGlass()
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("redesignTextDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInk") || keys.contains("redesignDotSize") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("redesignTextDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInsetPanel") || keys.contains("redesignInk") || keys.contains("redesignDotSize") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -526,6 +526,7 @@ public final class ThemeLibrary {
         input.ignoreReduceTransparency = client.bool("ignoreReduceTransparency")
         input.projectSprites = client.string("redesignProjectAvatars") != "letters"
         input.ditherTintFromPicture = client.bool("redesignTintFromPicture")
+        input.insetPanel = client.bool("redesignInsetPanel")
         // The art computes the picture's tint after it loads (`PictureTint.sync`); a settings change keeps it.
         input.pictureTint = ThemeRuntime.input.pictureTint
         let accent = DitherAccent.named(client.string("ditherAccent"))

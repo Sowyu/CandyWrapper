@@ -75,6 +75,7 @@ public struct ClientSettings: Equatable, Sendable {
         "redesignProjectAvatars": SettingSpec(.literals(["sprites", "letters"]), .string("sprites")),  // CandyWrapper only: Redesign's generated project and account avatars, pixel sprites or T3's letters
         "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient and Flower backgrounds move ("Animate background")
         "redesignTintFromPicture": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's surfaces lean toward the picture's color
+        "redesignInsetPanel": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's content as one rounded card inset from the window, with a top row in place of the floating header pills
         "redesignInk": SettingSpec(.literals(["auto", "accent", "custom"]), .string("auto")),  // CandyWrapper only: where Redesign's Picture takes its two inks
         "redesignDotSize": SettingSpec(.literals(["fine", "medium", "coarse"]), .string("medium")),  // CandyWrapper only: the size of Redesign's Picture dots
         "redesignInkColor": SettingSpec(.string(maxLength: 9), .string("#86cdff")),  // CandyWrapper only: Picture's light ink when Ink is Custom, #rrggbb

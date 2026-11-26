@@ -104,6 +104,14 @@ public final class SidebarLayoutView: DSView {
     private let panelRimMask = CAGradientLayer()
     /// Dither's tab strip in the window's top band, over the framed content panel; the app fills its tabs.
     public let tabStrip = DitherTabStripView()
+    /// Redesign's inset panel (Settings > Redesign > Inset panel, after Capy): the page sits in one rounded card
+    /// `Space.s` in from the sidebar and the window's edges, under the card's top row (`tabStrip`), and the window
+    /// around it takes the sidebar's color. The art is the card's ground. The page reports the thread card's frame
+    /// (`setInsetCard`), which ends where the right panel's or the terminal drawer's own card begins.
+    private let cardRim = InsetCardRimView()
+    private var reportedCard: NSRect?
+    private weak var cardReporter: NSView?
+    var insetActive: Bool { ThemeRuntime.insetPanel(dark: effectiveAppearance.isDark) }
     /// Dither's history buttons, after Capy's: in the titlebar row at the sidebar's right, whatever the sidebar shows.
     public let backButton = ButtonView(nil, icon: .chevronLeft, variant: .ghostMuted, size: .iconSm)
     public let forwardButton = ButtonView(nil, icon: .chevronRight, variant: .ghostMuted, size: .iconSm)
@@ -135,6 +143,8 @@ public final class SidebarLayoutView: DSView {
         width = SidebarWidth.initial(stored: SidebarWidth.load(defaults), viewport: viewport)
         super.init(frame: .zero)
         addSubview(main)
+        cardRim.isHidden = true
+        addSubview(cardRim)
         addSubview(tabStrip)
         tabStrip.isHidden = true
         addSubview(sidebar)
@@ -315,23 +325,27 @@ public final class SidebarLayoutView: DSView {
         // The panel runs flush to the window's right, bottom and top edges, so the art and its top fade start at the
         // window's top and the tab strip sits on the art (the user: "start AT THE VERY TOP OF THE WINDOW"). The page
         // inside still starts below the band. The sidebar side rounds both corners and keeps a hairline.
-        let band: CGFloat = dither ? DitherChrome.band : 0
+        let inset = dither && insetActive
+        let margin = RedesignTokens.Space.s
+        let band: CGFloat = inset ? margin + CardTopRow.rowHeight : dither ? DitherChrome.band : 0
         main.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: bounds.height)
-        main.layer?.cornerRadius = dither ? DitherChrome.panelRadius : 0
+        main.layer?.cornerRadius = dither && !inset ? DitherChrome.panelRadius : 0
         main.layer?.maskedCorners = dither ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             : [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
         // Blur: the sidebar and the panel are transparent over one blurred picture, with no edge between them.
         let blur = dither && ThemeRuntime.ditherBlur
-        layoutPanelRim(dither: dither && !blur)
+        layoutPanelRim(dither: dither && !blur && !inset)
         layer?.backgroundColor = dither ? DitherChrome.bandColor(in: self) : nil
-        if main.clearsFill != blur { main.clearsFill = blur }
+        // The inset card's ground is the art; the margins around it show this view's sidebar color.
+        if main.clearsFill != (blur || inset) { main.clearsFill = blur || inset }
         if sidebar.surface.clearsFill != blur { sidebar.surface.clearsFill = blur }
         if blur { ditherArt?.frame = bounds }
         sidebar.showsBorder = !dither
         // The band and frame around the panel are flat, so the sidebar drops its grain to match them.
         if sidebar.surface.showsGrain == dither { sidebar.surface.showsGrain = !dither }
         tabStrip.isHidden = !dither
-        tabStrip.frame = NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: band)
+        tabStrip.frame = inset ? NSRect(x: gap + margin, y: margin, width: max(0, bounds.width - gap - 2 * margin), height: CardTopRow.rowHeight)
+            : NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: band)
         // Over the sidebar's titlebar row, right-aligned, while the sidebar is open.
         for (i, b) in [backButton, forwardButton].enumerated() {
             b.isHidden = !dither || !isOpen || sliding
@@ -339,8 +353,10 @@ public final class SidebarLayoutView: DSView {
         }
         for view in main.subviews {
             view.frame = view is DitherArtView || view is ThemeBackgroundView ? main.bounds
+                : inset ? NSRect(x: margin, y: band, width: max(0, main.bounds.width - 2 * margin), height: max(0, main.bounds.height - band - margin))
                 : NSRect(x: 0, y: band, width: main.bounds.width, height: max(0, main.bounds.height - band))
         }
+        placeInsetCard()
         // The padding box ends at w - 1 (inside the 1px border); the rail is centred there.
         rail.frame = NSRect(x: gap - 1 - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)
         // The rail keeps its frame through a collapse drag, so it still gets the drag's events.
@@ -350,6 +366,44 @@ public final class SidebarLayoutView: DSView {
         let zone = SidebarMetrics.restoreHandle
         restoreHandle.frame = NSRect(x: zone.minX, y: ((bounds.height - zone.height) / 2).rounded(), width: zone.width, height: zone.height)
         collapsedTrigger.frame = NSRect(x: SidebarMetrics.controlsLeft(windowedMac: true) + 1, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
+    }
+
+    /// A page in the main column reports the thread card's frame in its own coordinates from its layout, or nil for the
+    /// whole card. A page that never reports gets the whole card.
+    public func setInsetCard(_ rect: NSRect?, from page: NSView) {
+        guard rect != reportedCard || page !== cardReporter else { return }
+        reportedCard = rect
+        cardReporter = page
+        placeInsetCard()
+    }
+
+    /// The thread card in `main`'s coordinates: the reported frame while its page shows, else all of the page's room.
+    var insetCardFrame: NSRect {
+        let margin = RedesignTokens.Space.s
+        let whole = main.bounds.insetBy(dx: margin, dy: margin)
+        guard let rect = reportedCard, let page = cardReporter, page.isDescendant(of: main), !page.isHiddenOrHasHiddenAncestor else {
+            return whole
+        }
+        return main.convert(rect, from: page)
+    }
+
+    private func placeInsetCard() {
+        let inset = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && insetActive
+        let picture = inset && !ThemeRuntime.ditherBlur
+        tabStrip.insetCard = inset
+        cardRim.isHidden = !inset
+        if let art = ditherArt {
+            art.isInsetCard = picture && art.superview === main
+            if !picture, art.superview === main { art.frame = main.bounds }
+        }
+        guard inset else { return }
+        let card = insetCardFrame
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        cardRim.frame = convert(card, from: main)
+        cardRim.isHidden = card.width < 1 || card.height < 1
+        if picture, let art = ditherArt, art.superview === main, art.frame != card { art.frame = card }
+        CATransaction.commit()
+        tabStrip.contentEnd = max(0, cardRim.frame.maxX - tabStrip.frame.minX)
     }
 
     private func layoutPanelRim(dither: Bool) {
@@ -372,6 +426,17 @@ public final class SidebarLayoutView: DSView {
         panelRimMask.frame = CGRect(x: 0, y: 0, width: ceil(r * SmoothCorners.reach) + 1, height: b.height)
         panelRimMask.colors = [NSColor.black.cgColor, NSColor.black.cgColor]
         panelRimMask.locations = nil
+    }
+}
+
+/// The inset card's rim, over the page so rows never cover it: Redesign's hairline on the card's continuous corners.
+final class InsetCardRimView: DSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func updateLayer() {
+        layer?.cornerRadius = RedesignTokens.Radius.panel
+        layer?.cornerCurve = .continuous
+        layer?.borderWidth = 1
+        layer?.borderColor = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
     }
 }
 
