@@ -109,7 +109,7 @@ public final class SidebarContentView: DSView {
     /// Dither (after Capy): the account row, a pill floating at the foot of the sidebar.
     public let accountRow = SidebarAccountRowView()
     /// Dither: Capy's "Threads" section label between the nav rows and the list.
-    let navSection = LabelView("Threads", font: SB.font(12, .medium), color: SB.c(\.sidebarMutedForeground))
+    let navSection = LabelView("Threads", font: SB.font(12), color: SB.c(\.sidebarMutedForeground))
     let backButton = SidebarMenuButtonView("Back", icon: .arrowLeft)
     let undoNotice = SidebarUndoNoticeView()
     /// `SidebarProviderUpdatePill` between the undo notice and the utility buttons.
@@ -213,6 +213,15 @@ public final class SidebarContentView: DSView {
     /// On Pull Requests or Usage the footer shows only Back (`isSidebarUtilityPage`).
     /// Those pages have no route thread or draft, so no row is active (Sidebar.tsx:2490-2494), whoever sets one.
     public var isOnUtilityPage = false { didSet { if isOnUtilityPage { clearActiveRows() }; needsLayout = true } }
+    /// The Redesign nav row whose page shows, drawn selected.
+    public enum NavPage: Sendable { case pullRequests, issues, automations }
+    public var selectedNavPage: NavPage? {
+        didSet {
+            navRows[1].isSelected = selectedNavPage == .pullRequests
+            issuesNavRow.isSelected = selectedNavPage == .issues
+            navRows[2].isSelected = selectedNavPage == .automations
+        }
+    }
 
     private func clearActiveRows() {
         if state.activeThreadId != nil { state.activeThreadId = nil }
@@ -361,7 +370,8 @@ public final class SidebarContentView: DSView {
     private var clientSettingsObserver: Int?
     /// The client settings `applyClientSettings` reads; a change to any of them redraws the list.
     static let listSettingKeys: Set<String> = ["sidebarProjectGroupingMode", "sidebarProjectGroupingOverrides", "boringSidebarEnabled",
-                                                "boringSidebarMultilineRows", "sidebarWorkingShelfEnabled", "sidebarProjectSortOrder"]
+                                                "boringSidebarMultilineRows", "sidebarWorkingShelfEnabled", "sidebarProjectSortOrder",
+                                                "redesignSidebarRows"]
 
     /// `selectProjectGroupingSettings`.
     static func projectGrouping(_ c: ClientSettings) -> SidebarModel.ProjectGrouping {
@@ -378,6 +388,7 @@ public final class SidebarContentView: DSView {
         if state.grouping != grouping { state.grouping = grouping }
         state.boringSidebarEnabled = c.bool("boringSidebarEnabled")
         state.boringSidebarMultilineRows = c.bool("boringSidebarMultilineRows")
+        state.redesignOneLineRows = c.string("redesignSidebarRows") == "one"
         let working = c.bool("sidebarWorkingShelfEnabled")
         if state.workingShelfEnabled != working {
             // Off resets the tracker; on starts from a fresh baseline (`inboxReturns.observe(null)`).
