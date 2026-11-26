@@ -442,7 +442,7 @@ CandyWrapper's stream and event decoders stay tolerant in this range.
 | ba4f99ae43 | #40481 | fix(web,mobile): Limits shows why a provider's limits are unavailable | skimmed: usage and limits copy or math; for the Limits UI agent |
 | e452042db8 | #40490 | fix(contracts): older clients drop unknown values in RPC responses | read: server-side forward-compatible arrays for old web clients; no change for CandyWrapper |
 | 1ffa099e7f | #40464 | fix(shared): file links whose title holds the other quote keep their folder labels | skimmed: presentation logic with no wire change; for the UI agent of that area |
-| e2fdfd2c31 | #40452 | perf(client-runtime): opening the branch picker keeps the branch list when no ref moved | read: the branch picker's refresh also keeps refs on an unchanged refsDigest; CandyWrapper's picker goes through the same refresh, ported with A15 (3729c8b8) |
+| e2fdfd2c31 | #40452 | perf(client-runtime): opening the branch picker keeps the branch list when no ref moved | read: the branch picker's refresh also keeps refs on an unchanged refsDigest; CandyWrapper's picker goes through the same refresh, ported with A15 (e688d8bd) |
 | ac0032742b | #37154 | fix(shell): non-ASCII Windows PATH entries survive the PowerShell environment probe | skimmed: server, CLI or desktop only |
 | 3bf21c037d | #40418 | fix(acp): Devin's terminal commands run under Git Bash on Windows, not cmd.exe | skimmed: server, CLI or desktop only |
 | 1458a42419 | #40424 | fix(server): transcript cleanup failures tell the user why | cited |
