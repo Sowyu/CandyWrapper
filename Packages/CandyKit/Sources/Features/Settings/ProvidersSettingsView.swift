@@ -517,7 +517,9 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
                 let remove = ButtonView("Remove", variant: .ghost, size: .xs)
                 remove.isHidden = !env.canWrite
                 remove.action = { [weak self] in self?.confirmRemoveHub(id: id, label: label, env: env.id) }
-                rows.append(SettingsRowView(title: label, detail: "CLI Proxy" + (enabled ? "" : " · Disabled") + (label != url ? " · \(url)" : ""), control: remove))
+                // 5258 UsageProviderSettings.tsx:63: an `http` source names its kind.
+                let kind = source["kind"]?.stringValue == "http" ? "HTTP quota source" : "CLI Proxy"
+                rows.append(SettingsRowView(title: label, detail: kind + (enabled ? "" : " · Disabled") + (label != url ? " · \(url)" : ""), control: remove))
             }
         }
         usageProviders.group.rows = rows

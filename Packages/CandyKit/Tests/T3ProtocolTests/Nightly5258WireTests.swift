@@ -180,3 +180,12 @@ struct Nightly5258WireTests {
         #expect(older.followsThreadSelection == nil)
     }
 }
+
+/// A11: CandyWrapper announces `httpUsageLimitSources` on both socket URLs, so a 5258 server keeps
+/// `http` sources in the settings payload (serverSettings.ts:167-175, ws.ts:821-827).
+struct ClientCapabilitiesTests {
+    @Test func announcesHttpUsageSources() {
+        #expect(T3Protocol.clientCapabilitiesQueryItem?.name == "clientCapabilities")
+        #expect(T3Protocol.clientCapabilitiesQueryItem?.value == "httpUsageLimitSources")
+    }
+}
