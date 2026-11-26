@@ -269,6 +269,11 @@ public final class AppearanceSettingsView: SettingsPageBase {
                                  options: [("comfortable", "Comfortable (default)"), ("wide", "Wide"), ("full", "Full")], width: 160,
                                  reset: "chat width", hideIndicator: false)
         (width.control as? SelectView)?.valueLabels = ["Comfortable", "Wide", "Full"]
+        // 5258 AppearanceSettingsPanel.tsx:304-345: right after Chat width.
+        let htmlWidth = clientSelect("html-preview-width", "Let HTML previews in a chat grow wider than its messages, which stay centered.",
+                                     key: "htmlPreviewWidth", options: [("chat", "Match chat (default)"), ("wide", "Wide"), ("full", "Full")],
+                                     width: 160, reset: "HTML preview width", hideIndicator: false)
+        (htmlWidth.control as? SelectView)?.valueLabels = ["Match chat", "Wide", "Full"]
         // AppearanceSettingsPanel.tsx:354-379.
         let math = clientSwitch("math-rendering", "Typeset LaTeX math, such as $x^2$ or \\[x^2\\], in messages and Markdown previews. The composer keeps TeX source editable.",
                                 key: "mathRenderingEnabled", reset: "math rendering", label: "Render math")
@@ -280,7 +285,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             advanced.onHeightChange = { [weak self] in self?.onHeightChange?() }
             advancedInterface = advanced
             // AppearanceSettingsPanel.tsx:297 at 4928: Thread details follows the chat width.
-            var interface: [NSView & SettingsGroupRow] = [contrast, glass, width, threadDetailsRow()]
+            var interface: [NSView & SettingsGroupRow] = [contrast, glass, width, htmlWidth, threadDetailsRow()]
             if ComposerDesign.uses3814(dark: effectiveAppearance.isDark) {
                 // AppearanceSettingsPanel.tsx:275-306 at 3824: the effort row sits between chat width and math.
                 let effort = clientSelect("effort-display", "Show reasoning effort in the composer as its name, such as High, or as bars.", key: "effortDisplay",
@@ -291,7 +296,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
             interface += [math, appIconRow(), appIconAppearanceRow(), advanced]
             return section("appearance-interface", "Interface", interface)
         }
-        return section("appearance-interface", "Interface", [contrast, glass, identification, diff, strip, width, threadDetailsRow(), math,
+        return section("appearance-interface", "Interface", [contrast, glass, identification, diff, strip, width, htmlWidth, threadDetailsRow(), math,
                                                               appIconRow(), appIconAppearanceRow()])
     }
 

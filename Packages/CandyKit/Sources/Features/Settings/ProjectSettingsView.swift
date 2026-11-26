@@ -20,6 +20,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
     private var defaults: SettingsSectionView!
     private var actions: SettingsSectionView!
     private var checkouts: SettingsSectionView!
+    private var repositories: ProjectRepositoriesSection!
     private var danger: SettingsSectionView!
     private let dangerButton = ButtonView("Remove project", icon: .trash2, variant: .destructiveOutline, size: .sm)
     private let addAction = ButtonView("Add action", icon: .plus, variant: .outline, size: .xs)
@@ -43,14 +44,18 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         defaults = buildDefaults()
         actions = buildActions()
         checkouts = SettingsSectionView(title: "Checkouts", rows: [])
+        repositories = ProjectRepositoriesSection(context: context)
+        repositories.onChange = { [weak self] in self?.refresh() }
         danger = buildDanger()
-        body = [notice, info, overview, defaults, actions, checkouts, danger]
+        // 5258 ProjectSettingsPanel.tsx:696-700: Repositories follows the actions.
+        body = [notice, info, overview, defaults, actions, repositories.section, checkouts, danger]
         binder.add { [weak self] in self?.update() }
     }
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
+            repositories.cancel()
             projectFileTask?.cancel(); projectFileTask = nil; projectFileContents = nil; projectFileKey = nil
         } else { loadProjectFile() }
     }
@@ -100,7 +105,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         }
         if scopeNotice != nil {
             scopeNotice = nil
-            body = [notice, info, overview, defaults, actions, checkouts, danger]
+            body = [notice, info, overview, defaults, actions, repositories.section, checkouts, danger]
         }
         notice.message = message ?? ""
         // ProjectsSettings.tsx:13-30 (#18692): a gone selection on one machine offers every environment.
@@ -115,7 +120,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
             }
         } else { notice.button = nil }
         setHidden(notice, message == nil)
-        for item in [info, overview, defaults, actions, checkouts, danger] as [NSView & SettingsGroupRow] { setHidden(item, message != nil) }
+        for item in [info, overview, defaults, actions, checkouts, danger, repositories.section] as [NSView & SettingsGroupRow] { setHidden(item, message != nil) }
         guard message == nil, let group else { return }
         let members = self.members
         let hasOtherMembers = members.count < group.members.count
@@ -153,6 +158,7 @@ public final class ProjectSettingsView: ScopedSettingsPage {
             return SettingsRowView(title: m.environmentLabel ?? "Environment", detail: m.workspaceRoot, control: remove)
         }
         setHidden(checkouts, members.count < 2)
+        setHidden(repositories.section, !repositories.update(members, isScratch: group.isScratch))
 
         // Danger.
         let row = danger.group.rows.first as? SettingsRowView

@@ -71,6 +71,7 @@ public final class ProviderAddWizardView: DialogView {
             }
             let search = InputView(placeholder: "Search ACP Registry", size: .sm)
             search.frame.size = NSSize(width: 180, height: 32)
+            search.escapeClears = true
             let button = ButtonView("Search registry", variant: .outline, size: .sm)
             button.action = { [weak self, weak search] in self?.search(search?.text ?? "") }
             let registry = row("Or choose from ACP Registry", input: SettingsControlGroup([search, button]))

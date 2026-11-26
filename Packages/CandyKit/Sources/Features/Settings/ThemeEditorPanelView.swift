@@ -386,6 +386,7 @@ final class ThemeEditorBodyView: DSView {
         name.onChange = { [weak self] t in if self?.name.state.focused == true { self?.controller?.setName(t) } }
         name.onSubmit = { [weak self] in self?.controller?.submit() }
         filter.onChange = { [weak self] t in if self?.filter.state.focused == true { self?.controller?.setQuery(t) } }
+        filter.escapeClears = true
         advanced.onChange = { [weak self] on in self?.controller?.setAdvanced(on) }
         appearanceToggle.onChange = { [weak self] i in
             guard let self, let c = self.controller else { return }

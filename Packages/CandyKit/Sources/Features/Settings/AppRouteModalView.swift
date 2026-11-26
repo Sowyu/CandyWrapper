@@ -79,6 +79,8 @@ public final class AppRouteModalView: DSView {
                 guard let host, event.window === host.window, !host.isClosing,
                       !ModalHost.isPresented(in: host.window), !host.hasPopup else { return false }
                 if event.keyCode == 53 {
+                    // An Escape that ends an IME composition belongs to the input method (5258 1.3).
+                    if let text = host.window?.firstResponder as? NSTextView, text.hasMarkedText() { return false }
                     if !event.isARepeat, !host.escapeTaken(), (host.navigation as? SettingsSidebarView)?.consumeSearchEscape() != true { host.close() }
                     return true
                 }
@@ -107,6 +109,10 @@ public final class AppRouteModalView: DSView {
         if ThemeEditorController.shared.isInspecting { ThemeEditorController.shared.setInspecting(false); return true }
         var view = window.firstResponder as? NSView
         if let text = view as? NSTextView, text.isFieldEditor, let owner = text.delegate as? NSView { view = owner }
+        // A search field clears before Esc closes Settings (5258 #42224, #42419).
+        var up = window.firstResponder as? NSView
+        while let v = up, !(v is FieldView) { up = v.superview }
+        if let field = up as? FieldView, field.clearOnEscape() { return true }
         while let v = view {
             if let handler = v as? RouteModalEscapeHandler, handler.takeRouteModalEscape() { return true }
             view = v.superview

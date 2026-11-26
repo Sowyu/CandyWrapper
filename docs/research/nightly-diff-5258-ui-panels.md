@@ -375,7 +375,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 009ae578d0 | #42727 | fix(web): long thread titles no longer break dropped thread attachment names | shell | port (10.6) † |
 | 01794015f8 | #40998 | fix(web): prioritize visible saved notebook outputs | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | 02c5270a11 | #39328 | fix(web): keep SSH connection checks pending until they finish | connections | port (7.5) † |
-| 036751b6f5 | #41856 | fix(web): Esc in project icon search clears it without closing the dialog | settings | port (1.3) † |
+| 036751b6f5 | #41856 | fix(web): Esc in project icon search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 0591d32888 | #39179 | feat(issues): connect more than one Linear account | issues | ported 31648718 |
 | 0702c6fdca | #39856 | fix(web): Open on GitHub in a thread's PR panel honors 'Open links in' | pull requests | port (2.6) † |
 | 072611f65f | #42682 | fix(web): a 9.996 KB file reads "10.0 KB", not "10.00 KB" | files | ported 62cbede9 |
@@ -384,7 +384,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 0858096472 | #41773 | fix: Forgejo and GitCafe merges carry the expected head commit | pull requests | left: CW has no "Load new commits" banner or head pin to delay (S once the banner exists) |
 | 09385a33ce | #42974 | fix(shared): usage page says "record was skipped" for one malformed record | usage | n/a (server string) † |
 | 0afc7a1439 | #40028 | fix(web): typed runs of dots no longer vanish in the composer with ligature fonts | settings | port (1.8) † |
-| 0c13b2b8fc | #42158 | fix(web): Esc in ACP Registry search clears it without closing Add provider | settings | port (1.3) † |
+| 0c13b2b8fc | #42158 | fix(web): Esc in ACP Registry search clears it without closing Add provider | settings | ported cb5edfe1 |
 | 0f55a0dc37 | #42900 | fix(web): empty files and folders in archive previews show 0 bytes instead of 1 KB | files | n/a (QuickLook previews) † |
 | 0fd4822887 | #40216 | fix(server): per-file diff reads reuse the preview's merge base | git | n/a (server perf) † |
 | 0fd87d3c2e | #41616 | fix(web): Esc in the Files search clears it without closing the sheet | files | port (1.3) † |
@@ -410,7 +410,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 2526691ea5 | #39157 | fix(mobile): cancelling a model download keeps the current transcription model | other | n/a (mobile only) † |
 | 25440f5bd5 | #41008 | fix(web): navigate Excel sheets from the focused tab | files | n/a (QuickLook previews) † |
 | 26c21a86cf | #42149 | fix(web): ODS previews hide values a merge covers | files | n/a (QuickLook previews) † |
-| 26f4c7550e | #42076 | fix(web): Esc in provider model filter clears it without closing Settings | settings | port (1.3) † |
+| 26f4c7550e | #42076 | fix(web): Esc in provider model filter clears it without closing Settings | settings | ported cb5edfe1 |
 | 2713570406 | #38506 | fix(desktop): update checks say why a build with a different saved track offers nothing | shell | n/a (Electron updater) † |
 | 28706aceb6 | #41005 | fix(server): unlinking an environment ends its session on the other machine | connections | n/a (server side, wire) † |
 | 28bcb73736 | #40240 | fix(web): floating device preview keeps its stream across thread switches | browser | port (6.2) † |
@@ -428,7 +428,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | port (2.6) † |
 | 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | left: workspace HTML previews keep their page across agent commands (S, browser preview) |
 | 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | port (8.3) |
-| 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | port (1.3) † |
+| 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
 | 3d4fd8346e | #42563 | fix(web): long Pull Requests author and label filters no longer end in a broken character | other | n/a (Swift Characters) † |
 | 3d54dc96f9 | #33110 | fix(web): focus popup search from anywhere in its row | shell | port (10.6) † |
@@ -438,7 +438,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 4065801a00 | #30459 | fix(web): pressing the Usage shortcut again closes Usage | usage | port (10.2) † |
 | 4113f8fee5 | #39131 | fix(web): block invalid project monograms before save | settings | port (1.8) † |
 | 426dac0050 | #41948 | fix(web): expose diagnostics CPU history values to screen readers | settings | port (1.8) † |
-| 43d9d67140 | #32768 | fix(web): an IME Escape no longer clears a typed font family | settings | port (1.3) † |
+| 43d9d67140 | #32768 | fix(web): an IME Escape no longer clears a typed font family | settings | ported cb5edfe1 (an IME Esc passes to the input method) |
 | 43e0b37382 | #42179 | fix(web): PR Summary tab keeps its scroll and comment order when you switch right-panel tabs | pull requests | port (2.6) † |
 | 4568a1b741 | #42932 | fix(web): unsupported file preview no longer calls extensionless filenames a file type | files | port (3.4) † |
 | 457a52eb0a | #42312 | fix(web): opening a resolved PR comment keeps its toggle under the cursor | pull requests | port (2.6) † |
@@ -448,7 +448,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | n/a (telemetry URL check) † |
 | 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d476c29f |
 | 4b697be849 | #39331 | fix(web): keep deleted ACP sessions out of pending listings | settings | port (1.8) † |
-| 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | port (1.3) † |
+| 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | ported cb5edfe1 (CW clears the text; T3 also closes the search box) |
 | 4e6b1fa771 | #42585 | fix(web): element context preview no longer ends in a split surrogate | browser | port (6.2) † |
 | 511447a9f2 | #40207 | feat(server): add a TanStack Source forge and issue tracker behind T3CODE_TANSTACK_SOURCE | other | n/a (server only, wire) † |
 | 515cab980a | #42352 | fix(web): script command field shows both hyphens with ligature fonts | settings | port (1.8) † |
@@ -465,7 +465,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 605980d397 | #43017 | fix(web): pressing Escape on the Environments map clears selection without closing Settings | connections | left (with the map) |
 | 60eed627d0 | #42914 | fix(web): PR timeline "Open activity on host" buttons honor 'Open links in' | pull requests | port (2.6) † |
 | 617d6ab628 | #42502 | fix(web): translate the pooled limit refill line as one sentence | usage | port (9.1) † |
-| 6205330563 | #30253 | fix(web): allow setting reasoning effort for scheduled tasks | scheduled tasks | left (needs a traits picker in the task editor, M) |
+| 6205330563 | #30253 | fix(web): allow setting reasoning effort for scheduled tasks | scheduled tasks | ported 7d3c372e |
 | 620cf4770d | #40856 | fix(web): browser page translation no longer crashes the app when a turn updates | other | n/a (translation strings) † |
 | 622f96785a | #42500 | fix(web): device host limit fields stay empty when cleared | usage | port (9.2) † |
 | 6233f5d114 | #41639 | fix(web): Escape closes a dialog over a recording before canceling dictation | shell | port (1.3) † |
@@ -601,7 +601,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | d15123668e | #39579 | fix(web): keep reopened pairing link dialogs open on completion | connections | port (7.5) † |
 | d1f8636f49 | #39225 | fix(mobile,web): quote and port messages are translated in every language | other | n/a (translation strings) † |
 | d20e6c294c | #39884 | fix(speech): project name hints no longer recase ordinary words | settings | port (1.8) † |
-| d244be81ba | #41784 | fix(web): an IME Escape no longer clears the keybindings search | settings | port (1.3) † |
+| d244be81ba | #41784 | fix(web): an IME Escape no longer clears the keybindings search | settings | ported cb5edfe1 (an IME Esc passes to the input method) |
 | d49cf0bab5 | #41692 | fix(web): a second Escape in the theme CSS editor closes the theme editor | settings | port (1.3) † |
 | d5f8a7573a | #40264 | fix(web): RTF previews hide tracked deletions | files | n/a (QuickLook previews) † |
 | d63b9c4c76 | #41353 | fix(web): retry a failed port-forward locality probe | connections | port (7.5) † |
@@ -637,12 +637,12 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f30874fef7 | #41756 | fix: remote logins and webhook tokens stay with their own host and reader | connections | n/a (server side, wire) † |
 | f46f17e46f | #37358 | fix(web): small buttons leave room between icon and label | settings | port (1.8) † |
 | f60c747568 | #39815 | fix(web): open PDF attachments no longer reload while the agent works | files | port (3.5) † |
-| f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | port (1.3) † |
+| f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | ported cb5edfe1 |
 | f82de6567c | #41775 | fix(web): restoring a saved model mapping clears its typed prices | settings | port (1.8) † |
 | f89883c568 | #39875 | fix(web): a long commit name no longer runs under the PR code tab's icons | pull requests | port (2.6) † |
 | f8f4a0b057 | #29261 | feat: Verilog, SystemVerilog, and VHDL code is syntax highlighted | composer | port (3.6) † |
 | f9f34aab78 | #41361 | fix(web): start without WebAssembly by initialising Words in a guard | shell | n/a (web only) † |
-| fa2ee196b5 | #41539 | fix(web): archived threads settings stay responsive with thousands of threads | settings | left (CW builds every archived row; needs lazy rows in SettingsGroupView, M) |
+| fa2ee196b5 | #41539 | fix(web): archived threads settings stay responsive with thousands of threads | settings | ported c82cac6d |
 | fa9f154e1b | #41949 | fix(web): the Cite button appears when a selection ends on a file chip's icon in Firefox | files | port (3.4) † |
 | fb4558d77d | #40631 | fix(web,mobile,server): large files load in full without freezing the file preview | files | ported 7bb75df1 (no chunked Markdown or plain paged viewer; past the caps the 1 MB preview stays) |
 | fbd939eb4c | #42598 | fix(web,mobile): author avatars keep emoji initials whole | pull requests | port (2.6) † |
@@ -704,3 +704,8 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 1.2: CW already records the active layout's letter under Option, because `charactersIgnoringModifiers` drops Option (#39967, #24034).
 - 1.4: #30253 needs the composer's traits picker inside the task editor, so it is M, not part of an S batch.
 - Section 1 misses five 5258 settings rows, all in `settingsSearch.ts`: Projects > Repositories (`project-repositories`, #35925), Access > Preview tunnel (`preview-tunnel`, #39415), Chat > Open subagents and side chats in (`side-thread-open-target`, #39515), Appearance > HTML preview width (thread note 1.16) and Labs > Agent feedback (thread note 1.5). They stay out of CW's search through `UNPORTED_IDS` until their rows land.
+- The five rows above are ported: Preview tunnel 61294005, the side chat target, HTML preview width and Agent feedback a2b09b17, Projects > Repositories 640d7b91. Agent feedback reports go out through the server's analytics service (FeedbackStore.ts:208), so CW hides the row for servers it starts.
+- 1.1's second send-shortcut chip under multiline send is ported in a56e4677.
+- 7.4's Review opens Access for the primary environment only: CW's Access page has no environment picker (T3's `accessEnvironmentPicker`, ConnectionsSettings.tsx:1293). Opening it for the toast's environment needs that picker first (M).
+- 1.7 stays unported until CW has Workflows: the row returns nothing unless `workflowsEnabled` is on.
+- 1.3 is partly ported (cb5edfe1): settings search fields clear on Esc and an IME Esc reaches the input method. The rows outside Settings (Files, PR, diff comments, dictation, right panel sheet) and the font family, voice and custom model rows stay open.

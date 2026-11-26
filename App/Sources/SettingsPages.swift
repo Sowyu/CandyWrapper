@@ -312,7 +312,7 @@ extension SettingsController {
                 id: id, label: environments.label(id) ?? id,
                 displayURL: environments.routeInUse(id).map(EnvironmentRowStatus.displayURL),
                 machine: environments.machine(id) ?? "server", connected: state?.status == .connected,
-                settings: config.map { ServerSettingsValues($0.settings.raw) }, capabilities: config?.capabilities ?? [],
+                settings: config.map { ServerSettingsValues($0.settings.raw) }, capabilities: scopeCapabilities(id),
                 // `settings:write`; unknown until the session loads, and the server refuses a write it doesn't allow.
                 canWrite: hosts[id]?.session.map { $0.grants(AuthScopes.settingsWrite) } ?? true)
         }
@@ -364,7 +364,8 @@ extension SettingsController {
                     environmentLabel: environments.label(env), faviconPath: p.faviconPath, projectIcon: p.projectIcon,
                     scripts: p.scripts.compactMap(ProjectScript.init),
                     legacy: ProjectSettings.Legacy(defaultModelSelection: p.defaultModelSelection.flatMap { try? JSONValue(encoding: $0) },
-                                                   defaultThreadEnvMode: p.defaultThreadEnvMode))
+                                                   defaultThreadEnvMode: p.defaultThreadEnvMode),
+                    trackedFolders: p.trackedFolders ?? [])
             }, icon: ProjectIconSource(g.representative),
                threadCount: g.members.reduce(0) { $0 + threads[($1.id.environmentId ?? "") + "\u{0}" + EnvironmentScope.localId(of: $1.id.rawValue), default: 0] },
                pinned: g.members.contains { $0.pinnedAt != nil },
@@ -385,7 +386,18 @@ extension SettingsController {
         a.hasThreadAutoSettlement = environments.environmentIds.contains { composer?.config($0)?.capabilities.contains("threadAutoSettlement") == true }
         a.hasCloudPublicConfig = t3.loaded
         a.hasPeerLinkHost = !peerLinkHosts().isEmpty
+        a.hasAgentFeedbackEnvironment = environments.environmentIds.contains {
+            environments.state($0)?.status == .connected && scopeCapabilities($0).contains("agentFeedback")
+        }
         return a
+    }
+
+    /// The capabilities Settings acts on. Servers CandyWrapper starts lose `agentFeedback`: their reports would go out
+    /// through T3's analytics, which CandyWrapper keeps off there (docs/decisions.md, 2026-11-25).
+    private func scopeCapabilities(_ id: String) -> Set<String> {
+        var caps = composer?.config(id)?.capabilities ?? []
+        if serverUpdates?.isOwnServer(id) == true { caps.remove("agentFeedback") }
+        return caps
     }
 
     // MARK: Writes
@@ -595,7 +607,8 @@ extension SettingsController {
         labels += themes.appearanceMode == "system" ? [] : ["Follow system"]
         labels += themes.halves.light == nil && themes.halves.dark == nil ? [] : ["Theme mix"]
         labels += client("appearanceContrast", "Contrast") + client("glassOpacity", "Glass opacity") + client("diffColorScheme", "Diff colors")
-        labels += client("chatWidth", "Chat width") + client("panelAnimationDurationMs", "Panel animations")
+        labels += client("chatWidth", "Chat width") + client("htmlPreviewWidth", "HTML preview width")
+        labels += client("panelAnimationDurationMs", "Panel animations")
         labels += client("environmentIdentificationMode", "Environment identification") + client("timestampFormat", "Time format")
         labels += client("notificationMode", "Thread notifications") + client("inAppNotificationsEnabled", "In-app notifications")
         labels += client("sidebarThreadPreviewCount", "Visible threads") + client("sidebarProjectGroupingMode", "Project Grouping")
@@ -610,7 +623,8 @@ extension SettingsController {
         labels += client("diffLayout", "Diff layout") + client("proactivePanelsEnabled", "Open pull requests and changes panels proactively")
         labels += client("showSkillsInSlashMenu", "Show skills in slash menu")
         labels += client("composerRichTextEnabled", "Rich text composer") + client("sendShortcut", "Send shortcut")
-        labels += client("followUpBehavior", "Follow-up behavior") + client("toolCallVisibility", "Tool calls in chat")
+        labels += client("followUpBehavior", "Follow-up behavior") + client("sideThreadOpenTarget", "Open subagents and side chats in")
+        labels += client("toolCallVisibility", "Tool calls in chat")
         labels += server("responseStreamingMode", "Response streaming") + server("enableProviderUpdateChecks", "Provider update checks")
         labels += server("continueThreadsAfterServerUpdate", "Continue threads after restarts")
         labels += BackgroundActivity.isChanged(s) ? ["Background activity"] : []
@@ -651,12 +665,12 @@ extension SettingsController {
         if themes.preference != "system" { themes.setTheme("system") }
         themes.clearThemeHalves()
         if themes.appearanceMode != "system" { AppearanceMode.system.apply() }
-        let clientKeys = ["appearanceContrast", "glassOpacity", "diffColorScheme", "chatWidth", "panelAnimationDurationMs", "environmentIdentificationMode",
+        let clientKeys = ["appearanceContrast", "glassOpacity", "diffColorScheme", "chatWidth", "htmlPreviewWidth", "panelAnimationDurationMs", "environmentIdentificationMode",
                           "timestampFormat", "notificationMode", "inAppNotificationsEnabled", "sidebarThreadPreviewCount", "sidebarProjectGroupingMode",
                           "sidebarProjectSortOrder", "sidebarWorkingShelfEnabled", "mathRenderingEnabled", "wordWrap", "persistComposerContextStrip", "fontFamilySans",
                           "fontSizeInterface", "fontFamilyComposer", "fontSizePrompt", "fontFamilyCode", "fontSizeCode", "fontFamilyTerminal",
                           "fontSizeTerminal", "diffFilesCollapsed", "diffIgnoreWhitespace", "diffLayout", "proactivePanelsEnabled",
-                          "showSkillsInSlashMenu", "composerRichTextEnabled", "sendShortcut", "followUpBehavior",
+                          "showSkillsInSlashMenu", "composerRichTextEnabled", "sendShortcut", "followUpBehavior", "sideThreadOpenTarget",
                           "toolCallVisibility", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
                           "confirmTerminalClose", "language",
                           "menuBarItemEnabled", "trackpadHaptics", "messageRailHaptic", "tooltips", "titleRewriteModel", "titleRewriteOptions",

@@ -41,6 +41,7 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
     public override init(context: SettingsPageContext) {
         super.init(context: context)
         search.onChange = { [weak self] _ in self?.rebuild() }
+        search.escapeClears = true
         rebuild()
     }
     public override func viewDidMoveToWindow() {

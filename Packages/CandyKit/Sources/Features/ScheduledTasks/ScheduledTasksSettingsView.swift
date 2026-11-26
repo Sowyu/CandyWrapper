@@ -1269,6 +1269,9 @@ final class ScheduledTaskWeekdaysView: DSView {
 /// The model trigger: the composer's control opening the model picker over this environment's providers.
 final class ScheduledTaskModelPicker: DSView {
     let button = ComposerControlView()
+    /// `TraitsPicker` beside the model (5258 ScheduledTasksSettings.tsx:1938-1977, #30253): reasoning effort and the
+    /// model's other options, without prompt-injected effort, for tasks that start new threads.
+    let traits = ComposerControlView(icon: IconView(name: .brain, size: 16)).menuTrigger()
     private weak var editor: ScheduledTaskEditor?
     private weak var popup: OpenPopup?
 
@@ -1278,8 +1281,51 @@ final class ScheduledTaskModelPicker: DSView {
         button.tintsIcon = false
         button.settingsTrigger = true
         button.action = { [weak self] in self?.open() }
+        traits.settingsTrigger = true
+        traits.action = { [weak self] in self?.openTraits() }
         addSubview(button)
+        addSubview(traits)
         refresh()
+    }
+
+    /// The picked model's option descriptors with the draft's choices applied (`allowPromptInjectedEffort={false}`).
+    private var descriptors: [ProviderOptionDescriptor] {
+        guard let editor, let sel = editor.activeSelection, let entry = catalog.entry(ProviderInstanceId(rawValue: sel.instanceId)) else { return [] }
+        let base = editor.draft.baseModelSelection
+        let saved = base?["instanceId"]?.stringValue == sel.instanceId && base?["model"]?.stringValue == sel.model
+            ? base?["options"].flatMap { try? $0.decode(as: [ProviderOptionSelection].self) } : nil
+        return ModelTraits.descriptors(entry.model(sel.model), selections: saved).map { descriptor in
+            var d = descriptor
+            d.options.removeAll { d.promptInjectedValues?.contains($0.id) == true }
+            return d
+        }
+    }
+
+    private func openTraits() {
+        guard let editor, let host = traits.popupHost, let sel = editor.activeSelection else { return }
+        let ds = descriptors
+        var rows: [PickerMenuEntry] = []
+        for d in ds {
+            if !rows.isEmpty { rows.append(.separator) }
+            rows.append(.label(d.label))
+            let choices: [(String, ProviderOptionValue)] = d.type == .boolean
+                ? [("On", .bool(true)), ("Off", .bool(false))]
+                : d.options.map { ($0.label, .string($0.id)) }
+            for (label, value) in choices {
+                rows.append(.option(label, checked: ModelTraits.currentValue(d) == value) { [weak self] in
+                    guard let self, let editor = self.editor else { return }
+                    var o: [String: JSONValue] = ["instanceId": .string(sel.instanceId), "model": .string(sel.model)]
+                    if let options = ModelTraits.pick(ds, id: d.id, value: value).flatMap({ try? JSONValue(encoding: $0) }) { o["options"] = options }
+                    // The save keeps `baseModelSelection` while the model stays the same (ScheduledTaskLogic.input).
+                    editor.draft.modelKey = "\(sel.instanceId):\(sel.model)"
+                    editor.draft.baseModelSelection = .object(o)
+                    if let popup = self.popup { self.traits.popupHost?.close(popup) }
+                    self.refresh()
+                })
+            }
+        }
+        let menu = PickerMenuView(entries: rows, style: .menu, minimumWidth: 158)
+        popup = host.open(PickerPopupView(menu), trigger: traits, placement: PopupPlacement(side: .bottom, align: .start, sideOffset: 4), motion: .popover)
     }
 
     private var catalog: ProviderCatalog { editor?.catalog ?? ProviderCatalog([]) }
@@ -1298,11 +1344,23 @@ final class ScheduledTaskModelPicker: DSView {
             button.icon = nil
         }
         button.isEnabled = editor.connected && !bound
+        let ds = bound ? [] : descriptors
+        traits.isHidden = ds.isEmpty
+        traits.isEnabled = editor.connected
+        traits.title = ModelTraits.triggerLabel(ds, ultrathink: false, provider: editor.activeSelection.flatMap { catalog.entry(ProviderInstanceId(rawValue: $0.instanceId))?.driver })
         invalidateIntrinsicContentSize()
+        superview?.needsLayout = true
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: button.intrinsicContentSize.width, height: 28) }
-    override func layout() { super.layout(); button.frame = bounds }
+    // `flex flex-wrap items-center gap-1.5`.
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: button.intrinsicContentSize.width + (traits.isHidden ? 0 : traits.intrinsicContentSize.width + 6), height: 28)
+    }
+    override func layout() {
+        super.layout()
+        button.frame = NSRect(x: 0, y: 0, width: button.intrinsicContentSize.width, height: 28)
+        traits.frame = NSRect(x: button.frame.maxX + 6, y: 0, width: traits.intrinsicContentSize.width, height: 28)
+    }
 
     private func open() {
         guard let editor, let host = button.popupHost, let sel = editor.activeSelection else { return }

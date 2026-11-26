@@ -90,7 +90,7 @@ STRING = r'"(?:[^"\\]|\\.)*"'
 FLAGS = ["desktopOnly", "macOnly", "windowsOnly", "cloudOnly", "environmentOnly", "providerSettingsOnly",
          "macProviderSettingsOnly", "localBackendManagementOnly", "localEnvironmentOnly", "wslAvailableOnly",
          "managedTunnelOnly", "secondary", "requiresThreadAutoSettlement", "peerLinksOnly", "primaryEnvironmentOnly",
-         "fastWorktreeCheckoutOnly", "textGeneratorsOnly", "releaseChannelOnly", "secretsFeatureOnly"]
+         "fastWorktreeCheckoutOnly", "textGeneratorsOnly", "releaseChannelOnly", "secretsFeatureOnly", "agentFeedbackOnly"]
 PATHS = {"/settings/chat": "chat", "/settings/diffs": "diffs", "/settings/threads": "threads",
          "/settings/browser": "browser", "/settings/devices": "devices", "/settings/worktrees": "worktrees",
          "/settings/access": "access", "/settings/maintenance": "maintenance", "/settings/labs": "beta", "/settings/about": "about",
@@ -138,10 +138,8 @@ UNPORTED_PATHS = {"/settings/voice", "/settings/secrets"}
 UNPORTED_IDS = {"screen-reader-announcements", "simlock-hosts",
                 "worktree-fast-checkout", "keep-awake-while-agents-work", "ghq-clone-layout", "welcome-page", "text-generators",
                 "device-sources",
-                # 5258 rows not drawn yet: workflows (no Workflows page), the HTML preview width, side thread
-                # target and agent feedback rows (thread port), and the project repositories and preview tunnel rows.
-                "workflows-beta", "workflow-skipped-runs", "html-preview-width", "side-thread-open-target",
-                "agent-feedback", "project-repositories", "preview-tunnel"}
+                # 5258 rows not drawn yet: workflows (no Workflows page).
+                "workflows-beta", "workflow-skipped-runs"}
 
 
 def swift_string(literal):

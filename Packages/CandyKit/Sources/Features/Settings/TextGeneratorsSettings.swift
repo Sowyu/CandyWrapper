@@ -476,6 +476,7 @@ final class TextGeneratorModelsDialog {
         dialog.panelContent = [body]
         search.setAccessibilityLabel("Search models")
         search.onChange = { [weak self] t in self?.query = t; self?.rebuild() }
+        search.escapeClears = true
         context.loadTextGeneratorModels(environment: environment, id: id)
         context.observe { [weak self] in self?.rebuild() }
         rebuild()

@@ -338,7 +338,7 @@ public final class SettingsGroupView: BoxView {
 
     /// The rows' dividers: T3's border/50, or under Dither Capy's hairline (`--border-1`, black 11% in light where
     /// Capy rings its cards with that shadow).
-    static func dividerColor(dither: Bool) -> NSColor {
+    public static func dividerColor(dither: Bool) -> NSColor {
         dither ? Themed.color(light: \.foreground, 0.11, dark: \.foreground, 0.08) : Themed.color(\.contrastBorder, 0.5)
     }
 

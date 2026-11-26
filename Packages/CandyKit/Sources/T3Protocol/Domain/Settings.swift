@@ -51,6 +51,8 @@ public struct ClientSettings: Equatable, Sendable {
         "diffColorScheme": SettingSpec(.literals(["red-green", "blue-orange"]), .string("red-green")),
         "effortDisplay": SettingSpec(.literals(["label", "bars"]), .string("label")),
         "chatWidth": SettingSpec(.literals(["comfortable", "wide", "full"]), .string("comfortable")),
+        // 5258 contracts settings.ts:356, :425 (#41120 family): how wide inline HTML previews may grow.
+        "htmlPreviewWidth": SettingSpec(.literals(["chat", "wide", "full"]), .string("chat")),
         "appearanceContrast": SettingSpec(.int(50...200), .number(100)),
         "panelAnimationDurationMs": SettingSpec(.int(0...400), .number(0)),
         "confirmQuit": SettingSpec(.literals(["direct", "hold", "double-click"]), .string("hold")),
@@ -96,6 +98,8 @@ public struct ClientSettings: Equatable, Sendable {
         "composerRichTextEnabled": SettingSpec(.bool, .bool(true)),
         "sendShortcut": SettingSpec(.literals(["enter", "mod-enter-multiline", "mod-enter"]), .string("enter")),
         "followUpBehavior": SettingSpec(.literals(["queue", "steer"]), .string("steer")),
+        // 5258 contracts settings.ts:322-324, :542 (#39515): where a click opens a subagent or side chat.
+        "sideThreadOpenTarget": SettingSpec(.literals(["panel", "main"]), .string("panel")),
         "proactivePanelsEnabled": SettingSpec(.bool, .bool(false)),
         "showSkillsInSlashMenu": SettingSpec(.bool, .bool(true)),
         "boringSidebarEnabled": SettingSpec(.bool, .bool(false)),
@@ -242,6 +246,8 @@ public struct ServerSettingsValues: Equatable, Sendable {
         "defaultModelSelection": SettingSpec(.any, .null),
         "fallbackModelSelection": SettingSpec(.any, .null),  // 4928 settings.ts, #26164
         "promptSuggestionsEnabled": SettingSpec(.bool, .bool(false)),  // 4928 settings.ts, #28047
+        // 5258 contracts settings.ts:1172, :1431-1433: `{mode: "off" | "on-request" | "auto"}`, default off.
+        "agentFeedback": SettingSpec(.any, .object(["mode": .string("off")])),
         "textGenerationModelSelection": SettingSpec(.any, .object([
             "instanceId": .string("codex"), "model": .string("gpt-6-luna"),
             "options": .array([.object(["id": .string("reasoningEffort"), "value": .string("low")])]),

@@ -16,6 +16,8 @@ public struct SettingsSearchItem: Sendable, Equatable {
         /// 4928's flags (settingsSearch.ts:1606-1637). A native app has a release channel like the desktop app, and
         /// CandyWrapper has no secrets store, so those rows never show.
         case primaryEnvironmentOnly, fastWorktreeCheckoutOnly, textGeneratorsOnly, releaseChannelOnly, secretsFeatureOnly
+        /// 5258 `agentFeedbackOnly` (settingsSearch.ts:75, :1694).
+        case agentFeedbackOnly
     }
 
     public let id: String
@@ -50,6 +52,8 @@ public struct SettingsSearchAvailability: Sendable, Equatable {
     public var hasPeerLinkHost = false
     public var hasPrimaryEnvironment = true
     public var hasFastWorktreeCheckoutEnvironment = false
+    /// A connected environment has `agentFeedback` (useAvailableSettingsSearchItems.ts:48-53 at 5258).
+    public var hasAgentFeedbackEnvironment = false
     /// An environment without a provider allow-list, which hides text generators.
     public var hasTextGeneratorsEnvironment = false
     public init() {}
@@ -96,6 +100,7 @@ public enum SettingsSearch {
                 && (!f.contains(.primaryEnvironmentOnly) || a.hasPrimaryEnvironment)
                 && (!f.contains(.fastWorktreeCheckoutOnly) || a.hasFastWorktreeCheckoutEnvironment)
                 && (!f.contains(.textGeneratorsOnly) || a.hasTextGeneratorsEnvironment)
+                && (!f.contains(.agentFeedbackOnly) || a.hasAgentFeedbackEnvironment)
                 && !f.contains(.secretsFeatureOnly)
         }
     }

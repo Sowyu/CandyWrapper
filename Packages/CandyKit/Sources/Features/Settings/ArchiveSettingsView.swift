@@ -127,20 +127,10 @@ public final class ArchiveSettingsView: ScopedSettingsPage {
             return
         }
         body = groups.enumerated().map { index, g -> NSView & SettingsGroupRow in
-            let rows: [any SettingsGroupRow] = g.threads.map { t in
-                let unarchive = ButtonView("Unarchive", icon: .archiveX, variant: .outline, size: .xs)
-                unarchive.iconSize = 14
-                unarchive.action = { [weak self] in self?.unarchive(g.environmentId, t) }
-                let r = ArchivedThreadRow(title: t.title,
-                                          detail: "Archived \(TimestampFormat.formatRelativeTimeLabel(t.archivedAt ?? t.createdAt, nowMs: nowMs)) · Created \(TimestampFormat.formatRelativeTimeLabel(t.createdAt, nowMs: nowMs))",
-                                          control: unarchive)
-                r.onContextMenu = { [weak self, weak r] event in
-                    guard let self, let r else { return }
-                    let items = [MenuItem("Unarchive") { [weak self] in self?.unarchive(g.environmentId, t) },
-                                 MenuItem("Delete", destructive: true) { [weak self] in self?.delete(g.environmentId, t) }]
-                    MenuPopupView.showContextMenu(items, in: r, at: r.convert(event.locationInWindow, from: nil))
-                }
-                return r
+            // ArchivedThreadsPanel.tsx:50-80 (5258 #41539): rows come in chunks of 50 that build only near the view.
+            let rows: [any SettingsGroupRow] = stride(from: 0, to: g.threads.count, by: ArchivedThreadChunk.size).map { start in
+                let threads = Array(g.threads[start..<min(start + ArchivedThreadChunk.size, g.threads.count)])
+                return ArchivedThreadChunk(threads: threads) { [weak self] t in self?.makeRow(g.environmentId, t, nowMs: nowMs) ?? ArchivedThreadRow.blank() }
             }
             let s = SettingsSectionView(title: g.project.title, rows: rows)
             let icon = ProjectMonogramView()
@@ -152,6 +142,22 @@ public final class ArchiveSettingsView: ScopedSettingsPage {
             if index == 0 { anchors["archive"] = s }
             return s
         }
+    }
+
+    private func makeRow(_ env: String, _ t: ArchivedSnapshot.Thread, nowMs: Int64) -> ArchivedThreadRow {
+        let unarchive = ButtonView("Unarchive", icon: .archiveX, variant: .outline, size: .xs)
+        unarchive.iconSize = 14
+        unarchive.action = { [weak self] in self?.unarchive(env, t) }
+        let r = ArchivedThreadRow(title: t.title,
+                                  detail: "Archived \(TimestampFormat.formatRelativeTimeLabel(t.archivedAt ?? t.createdAt, nowMs: nowMs)) · Created \(TimestampFormat.formatRelativeTimeLabel(t.createdAt, nowMs: nowMs))",
+                                  control: unarchive)
+        r.onContextMenu = { [weak self, weak r] event in
+            guard let self, let r else { return }
+            let items = [MenuItem("Unarchive") { [weak self] in self?.unarchive(env, t) },
+                         MenuItem("Delete", destructive: true) { [weak self] in self?.delete(env, t) }]
+            MenuPopupView.showContextMenu(items, in: r, at: r.convert(event.locationInWindow, from: nil))
+        }
+        return r
     }
 
     private func unarchive(_ env: String, _ t: ArchivedSnapshot.Thread) {
@@ -202,4 +208,97 @@ final class ArchivedThreadRow: DSView, SettingsGroupRow {
     override func layout() { super.layout(); row.frame = bounds }
     override func rightMouseDown(with event: NSEvent) { onContextMenu?(event) }
     override func menu(for event: NSEvent) -> NSMenu? { nil }
+}
+
+extension ArchivedThreadRow {
+    static func blank() -> ArchivedThreadRow { ArchivedThreadRow(title: "", detail: "", control: NSView()) }
+}
+
+/// Up to 50 archived thread rows that exist only while within 1200pt of the scroller's visible part
+/// (`ArchivedRowChunk`, ArchivedThreadsPanel.tsx:50-80, 5258 #41539). Off screen it keeps the height its rows had,
+/// so the page does not jump. Rows inside are divided like the card's own (`*:not-first:border-t border-border/50`).
+final class ArchivedThreadChunk: DSView, SettingsGroupRow {
+    static let size = 50
+    static let margin: CGFloat = 1200
+    private let threads: [ArchivedSnapshot.Thread]
+    private let make: (ArchivedSnapshot.Thread) -> ArchivedThreadRow
+    private(set) var rows: [ArchivedThreadRow] = []
+    private var dividers: [CALayer] = []
+    private var measured: (width: CGFloat, height: CGFloat)?
+    private var observer: NSObjectProtocol?
+
+    init(threads: [ArchivedSnapshot.Thread], make: @escaping (ArchivedSnapshot.Thread) -> ArchivedThreadRow) {
+        self.threads = threads
+        self.make = make
+        super.init(frame: .zero)
+    }
+
+    isolated deinit { observer.map(NotificationCenter.default.removeObserver) }
+
+    var isMounted: Bool { !rows.isEmpty }
+
+    func height(forWidth width: CGFloat) -> CGFloat {
+        if isMounted {
+            let h = rows.reduce(0) { $0 + $1.height(forWidth: width) } + CGFloat(rows.count - 1)
+            measured = (width, h)
+            return h
+        }
+        if let measured, measured.width == width { return measured.height }
+        // Before its first mount: every row is one title and one detail line, like the first one.
+        let probe = make(threads[0])
+        let h = probe.height(forWidth: width) * CGFloat(threads.count) + CGFloat(threads.count - 1)
+        measured = (width, h)
+        return h
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        observer.map(NotificationCenter.default.removeObserver)
+        observer = nil
+        guard window != nil, let clip = enclosingScrollView?.contentView else { setMounted(false); return }
+        clip.postsBoundsChangedNotifications = true
+        observer = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: clip, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateMount() }
+        }
+        updateMount()
+    }
+
+    override func layout() {
+        super.layout()
+        updateMount()
+        var y: CGFloat = 0
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        for (i, row) in rows.enumerated() {
+            if i > 0 {
+                dividers[i - 1].frame = CGRect(x: 0, y: y, width: bounds.width, height: 1)
+                dividers[i - 1].backgroundColor = SettingsGroupView.dividerColor(dither: dither).cgColor(in: self)
+                y += 1
+            }
+            let h = row.height(forWidth: bounds.width)
+            row.frame = NSRect(x: 0, y: y, width: bounds.width, height: h)
+            y += h
+        }
+    }
+
+    /// Builds the rows when the chunk nears the visible part, drops them when it leaves.
+    func updateMount() {
+        guard let clip = enclosingScrollView?.contentView else { return }
+        let near = clip.convert(clip.bounds, to: self).insetBy(dx: 0, dy: -Self.margin).intersects(bounds)
+        if near != isMounted { setMounted(near) }
+    }
+
+    private func setMounted(_ on: Bool) {
+        if !on, bounds.width > 0, isMounted { measured = (bounds.width, bounds.height) }
+        rows.forEach { $0.removeFromSuperview() }
+        dividers.forEach { $0.removeFromSuperlayer() }
+        rows = on ? threads.map(make) : []
+        dividers = on ? (1..<max(1, rows.count)).map { _ in
+            let l = CALayer()
+            l.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
+            return l
+        } : []
+        rows.forEach(addSubview)
+        dividers.forEach { layer?.addSublayer($0) }
+        needsLayout = true
+    }
 }
