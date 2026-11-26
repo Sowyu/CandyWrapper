@@ -163,13 +163,29 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
     }
     private var lastHeight: CGFloat = 0
 
-    /// "Link several…": the batch dialog from the environment in the details, or the only one that can link (:870-882).
+    /// "Link several…": the batch dialog from the environment in the details, or the only one that can link (:874-880).
+    /// With several and none selected it is a menu of "From {source}" items (:946-968).
     func startLinkSeveral() {
-        let sources = canvas.graph.nodes.filter { $0.kind == .environment && $0.linking == .ready }
-        var source = sources.first { canvas.state.selection == .node($0.id) }
-        if source == nil, sources.count == 1 { source = sources[0] }
-        let ids = canvas.state.ticked.compactMap { canvas.graph.node($0)?.environmentId }.filter { $0 != source?.environmentId }
-        onLinkSeveral?(source?.environmentId, ids)
+        if let source = linkSeveralSource { return linkSeveral(from: source) }
+        MenuPopupView.show(linkSeveralMenuItems(), from: linkSeveral,
+                           placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+    }
+
+    private var linkSources: [FleetNode] { canvas.graph.nodes.filter { $0.kind == .environment && $0.linking == .ready } }
+
+    /// The environment in the details is the one the user means; a lone one needs no asking (:877-880).
+    var linkSeveralSource: FleetNode? {
+        let sources = linkSources
+        return sources.first { canvas.state.selection == .node($0.id) } ?? (sources.count == 1 ? sources[0] : nil)
+    }
+
+    func linkSeveralMenuItems() -> [MenuItem] {
+        linkSources.map { node in MenuItem("From \(node.label)") { [weak self] in self?.linkSeveral(from: node) } }
+    }
+
+    private func linkSeveral(from source: FleetNode) {
+        let ids = canvas.state.ticked.compactMap { canvas.graph.node($0)?.environmentId }.filter { $0 != source.environmentId }
+        onLinkSeveral?(source.environmentId, ids)
     }
 
     func showHelp() {

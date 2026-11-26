@@ -84,6 +84,26 @@ struct EnvironmentsMapDetailsTests {
         #expect(words.filter { $0 == "Addresses" }.count == 2)
     }
 
+    /// "Link several…" is a menu of "From {source}" items when several environments can link and none is selected
+    /// (EnvironmentsMap.tsx:946-968); a selected one, or a lone one, opens the dialog straight away (:874-880).
+    @Test func linkSeveralAsksWhichSourceWhenSeveralCanLink() throws {
+        let T = EnvironmentsMapLogicTests.self
+        let view = EnvironmentsMapView(frame: NSRect(x: 0, y: 0, width: 900, height: 400))
+        view.set(EnvironmentsMapModel(clientLabel: "This device", environments: [T.environment("a"), T.environment("b")], now: T.now))
+        #expect(view.linkSeveralSource == nil)
+        let items = view.linkSeveralMenuItems()
+        #expect(items.map(\.title) == ["From a", "From b"])
+        var opened: String?
+        view.onLinkSeveral = { source, _ in opened = source }
+        items[1].action?()
+        #expect(opened == "b")
+        view.canvas.state.selection = .node(fleetEnvironmentNodeId("a"))
+        #expect(view.linkSeveralSource?.environmentId == "a")
+        view.set(EnvironmentsMapModel(clientLabel: "This device", environments: [T.environment("a")], now: T.now))
+        view.canvas.state.selection = nil
+        #expect(view.linkSeveralSource?.environmentId == "a")
+    }
+
     @Test func anEndpointSelectsItsMachineAndEscClears() throws {
         let graph = EnvironmentsMapViewTests.make("shared").canvas.graph
         let edge = try #require(graph.links.first { $0.from == fleetEnvironmentNodeId("nucbox") })
