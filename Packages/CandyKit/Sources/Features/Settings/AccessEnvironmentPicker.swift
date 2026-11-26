@@ -64,7 +64,8 @@ final class AccessEnvironmentPickerView: DSView, SettingsGroupRow {
 
     override func layout() {
         super.layout()
-        let pad: CGFloat = DesignGeometry.usesClassic(self) ? 16 : 0
+        // `px-3 sm:px-4`, in line with the section titles in both looks.
+        let pad: CGFloat = 16
         let leadWidth = ceil(lead.intrinsicContentSize.width)
         lead.frame = NSRect(x: pad, y: 4, width: leadWidth, height: 20)
         // `w-auto max-w-72`.

@@ -143,7 +143,7 @@ final class FolderBrowseRowView: ControlView {
     override func draw(_ dirtyRect: NSRect) {
         guard state.hovered || state.focusVisible else { return }
         // Redesign: its own state fill on the control radius, as its other list rows.
-        let redesign = !DesignGeometry.usesClassic(self)
+        let redesign = DesignGeometry.usesClassic(self)
         let r: CGFloat = redesign ? RedesignTokens.Radius.control : 6
         let path = NSBezierPath(roundedRect: bounds, xRadius: r, yRadius: r)
         let fill = redesign ? RedesignTokens.State.fill(state, dark: effectiveAppearance.isDark) : Themed.color(\.muted, 0.5)
