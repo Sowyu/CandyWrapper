@@ -213,7 +213,15 @@ struct RedesignBaselineTests {
                 let (view, size) = c.make(try PickersFidelityTests.pickers())
                 try capture(c.reference, view, size)
             }
-            try capture("git-menu", GitFidelityTests.view(["kind": "menu", "variant": "remote"], size: .zero)[0], NSSize(width: 264, height: 100))
+            // Each menu at its own size: the real popup fits its rows, so the picture does too.
+            let gitMenu = try #require(GitFidelityTests.view(["kind": "menu", "variant": "remote"], size: .zero)[0] as? MenuPopupView)
+            try capture("git-menu", gitMenu, gitMenu.popupSize)
+            let actions = MenuPopupView(items: [MenuItem("Rename", icon: .pencil, shortcut: "⌘R"), MenuItem("Copy path", icon: .copy, shortcut: "⇧⌘C"),
+                                                MenuItem("Open in terminal", icon: .terminal, shortcut: "⌥⌘T"), .separator,
+                                                MenuItem("Archive", icon: .archive, shortcut: "⌘⌫"), MenuItem("Delete", icon: .trash, destructive: true)])
+            try capture("menu-shortcuts", actions, actions.popupSize)
+            let tip = TooltipView("Open in terminal", shortcut: "⌥⌘T")
+            try capture("tooltip", tip, tip.intrinsicContentSize)
             try capture("pr-panel", PullRequestsFidelityTests.view("detail-header", size: NSSize(width: 800, height: 600)), NSSize(width: 816, height: 616))
             for kind in ["chart"] {
                 let size = NSSize(width: 800, height: kind == "header" ? 140 : 300)
@@ -397,7 +405,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 156)
+        #expect(count == 160)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

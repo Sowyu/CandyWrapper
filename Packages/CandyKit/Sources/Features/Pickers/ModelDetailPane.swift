@@ -14,6 +14,8 @@ struct ModelDetailContent: Equatable {
     var description: String?
     /// "Input", "Cached input", "Output" with their dollars; empty when nothing prices the model.
     var prices: [Fact]
+    /// The plain-terms cost, "about 3¢" for 1,000 words in and 1,000 out (`example`); nil when nothing prices the model.
+    var example: String?
     /// Context and Knowledge.
     var facts: [Fact]
     /// models.dev's input types: text, image, pdf, audio, video.
@@ -31,6 +33,28 @@ struct ModelDetailContent: Equatable {
             + [Fact(label: "Output", value: dollars(p.output))]
     }
 
+    /// The input and output prices per 1M tokens the rows show: the app's table first, else models.dev's.
+    static func perMillion(driver: String, slug: String) -> (input: Double, output: Double)? {
+        if let p = ThreadCostEstimate.price(slug) { return (p.input, p.output) }
+        return ModelNotes.note(driver: driver, slug: slug)?.price.map { ($0.input, $0.output) }
+    }
+
+    /// The words in the plain-terms example, each way.
+    static let exampleWords = 1_000
+    /// Tokens for those words: about 4 tokens per 3 English words, OpenAI's rule of thumb ("1 token is about 3/4 of a
+    /// word", help.openai.com "What are tokens"). Anthropic's tokenizer runs a little higher, hence "about".
+    static let exampleTokens: Double = Double(exampleWords) * 4 / 3
+
+    /// What 1,000 words in and 1,000 words out cost at these prices, rounded so a reader takes it in at a glance:
+    /// "under 1¢", "about 3¢", "about $1.20".
+    static func example(input: Double, output: Double) -> String {
+        let usd = exampleTokens * (input + output) / 1_000_000
+        let cents = (usd * 100).rounded()
+        if cents < 1 { return "under 1¢" }
+        if cents < 100 { return "about \(Int(cents))¢" }
+        return "about " + dollars((usd * 100).rounded() / 100)
+    }
+
     /// "$2", "$0.10", "$1.25", "$0.075": whole dollars bare, cents to two places, a fraction of a cent to three.
     static func dollars(_ v: Double) -> String {
         if v == v.rounded() { return "$\(Int(v))" }
@@ -44,6 +68,7 @@ struct ModelDetailContent: Equatable {
         return ModelDetailContent(key: item.key, name: ModelNames.display(item.model),
                                   provider: item.model.subProvider.map { "\(item.entry.displayName) · \($0)" } ?? item.entry.displayName,
                                   driver: driver, slug: slug, description: note?.description, prices: prices(driver: driver, slug: slug),
+                                  example: perMillion(driver: driver, slug: slug).map { example(input: $0.input, output: $0.output) },
                                   facts: note.map { ModelNotes.facts($0).map { Fact(label: $0.0, value: $0.1) } } ?? [],
                                   inputs: note?.input ?? [])
     }
@@ -52,22 +77,26 @@ struct ModelDetailContent: Equatable {
 /// The pane at the right of Redesign's picker, after the mockup the user chose (r4-picker-chosen-layout2.png) and their
 /// note that the first build was cramped (r4-picker-wip-cramped.png, 2026-11-21): 16pt padding and 16pt between blocks,
 /// 8pt from a label to its rows, rows on a 24pt pitch, all on the 4pt grid. Only the name carries weight.
-/// Redesign's details card at the right of the model list (the user's layout 2, 2026-11-21, card option 2): its own
-/// rounded surface with the rim, the width the reader dragged.
+/// Redesign's details card at the right of the model list (the user's layout 2, 2026-11-21, card option 2): a rounded
+/// fill step without a rim, the width the reader dragged.
 final class ModelDetailPaneView: DSView {
     /// The default width, and the drag's limits: the narrowest that keeps the Reads row and the prices unclipped.
     static let width: CGFloat = 276, minWidth: CGFloat = 240
     static let pad: CGFloat = 16, gap: CGFloat = 16, labelGap: CGFloat = 8, pitch: CGFloat = 24, inputIcon: CGFloat = 16
+    /// The plain-terms row's label, for readers to whom a price per 1M tokens means little (the user, 2026-11-21).
+    static let exampleLabel = "1,000 words in and out"
 
     private(set) var content: ModelDetailContent?
     private var card: DitherProviderCardView?
     private let cardLine = CALayer()
     private var icon: NSView?
-    private let name = LabelView("", font: DSFont.ui(14, weight: .semibold))
+    private let name = LabelView("", font: DSFont.ui(14, weight: RedesignTokens.Weight.heaviest))
     private let provider = LabelView("", font: DSFont.ui(12))
     private let about = TextBlockView()
     private let priceCaption = LabelView("Price per 1M tokens", font: DSFont.ui(12))
     private var priceRows: [(LabelView, LabelView)] = []
+    /// The plain-terms cost under the prices, 8pt below them.
+    private var exampleRow: (LabelView, LabelView)?
     private var factRows: [(LabelView, LabelView)] = []
     private var readsLabel: LabelView?
     private var inputIcons: [IconView] = []
@@ -94,7 +123,8 @@ final class ModelDetailPaneView: DSView {
         for l in [cardLine] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
         for l in [name, provider, priceCaption] { l.smoothsFont = false }
         name.lineHeight = 20; provider.lineHeight = 16; priceCaption.lineHeight = 16
-        about.font = DSFont.ui(13); about.lineHeight = 20; about.maxLines = 2; about.smoothsFont = false
+        // The whole description shows; `layout` clamps it only when the host's height cannot hold every line.
+        about.font = DSFont.ui(13); about.lineHeight = 20; about.smoothsFont = false
         emptyLabel.lineHeight = 20; emptyLabel.alignment = .center; emptyLabel.smoothsFont = false
         for v in [name, provider, about, priceCaption, emptyLabel] as [NSView] { addSubview(v) }
         setAccessibilityElement(true)
@@ -113,8 +143,8 @@ final class ModelDetailPaneView: DSView {
         guard content != self.content else { return }
         self.content = content
         icon?.removeFromSuperview(); icon = nil
-        for (l, v) in priceRows + factRows { l.removeFromSuperview(); v.removeFromSuperview() }
-        priceRows = []; factRows = []
+        for (l, v) in priceRows + factRows + [exampleRow].compactMap({ $0 }) { l.removeFromSuperview(); v.removeFromSuperview() }
+        priceRows = []; factRows = []; exampleRow = nil
         readsLabel?.removeFromSuperview(); readsLabel = nil
         inputIcons.forEach { $0.removeFromSuperview() }
         inputIcons = []
@@ -129,10 +159,15 @@ final class ModelDetailPaneView: DSView {
         about.text = content.description ?? ""
         about.isHidden = content.description == nil
         let credit = ModelNotes.source.map { "From \($0.name) (\($0.licence) licence), fetched \($0.fetched)." }
-        // Two lines show; the tooltip and VoiceOver get the whole description.
-        about.setTooltip([content.description, credit].compactMap { $0 }.joined(separator: "\n\n"))
+        about.setTooltip(credit)
         about.setAccessibilityLabel(content.description)
         priceRows = content.prices.isEmpty ? [row("No price known", "", credit: nil)] : content.prices.map { row($0.label, $0.value, credit: nil) }
+        if let example = content.example {
+            let r = row(Self.exampleLabel, example, credit: nil)
+            let tip = "What \(ModelDetailContent.exampleWords.formatted()) words of your message and \(ModelDetailContent.exampleWords.formatted()) words of reply cost at the prices above, at about \(Int(ModelDetailContent.exampleTokens).formatted()) tokens each way."
+            r.0.setTooltip(tip); r.1.setTooltip(tip)
+            exampleRow = r
+        }
         factRows = content.facts.map { row($0.label, $0.value, credit: credit) }
         let inputs = content.inputs.compactMap(Self.input)
         if !inputs.isEmpty {
@@ -170,12 +205,14 @@ final class ModelDetailPaneView: DSView {
         guard let content else { return y + Self.pad }
         y += Self.pad + 20 + 16
         if let d = content.description {
-            let old = about.text
-            about.text = d
+            // Measures every line, whatever clamp the last layout left on the view.
+            let old = about.text, oldMax = about.maxLines
+            about.text = d; about.maxLines = 0
             y += Self.gap + about.height(forWidth: width - 2 * Self.pad)
-            about.text = old
+            about.text = old; about.maxLines = oldMax
         }
         y += Self.gap + 16 + Self.labelGap - 2 + CGFloat(max(1, content.prices.count)) * Self.pitch - 2
+        if content.example != nil { y += Self.labelGap + Self.pitch }
         let facts = content.facts.count + (content.inputs.contains { Self.input($0) != nil } ? 1 : 0)
         if facts > 0 { y += Self.gap - 2 + CGFloat(facts) * Self.pitch - 2 }
         return y + Self.pad
@@ -203,6 +240,12 @@ final class ModelDetailPaneView: DSView {
         provider.frame = NSRect(x: x + 24, y: y + 20, width: max(0, w - 24), height: 16)
         y += 36
         if !about.isHidden {
+            // Every line that fits: the host caps the popup's height, and the description gives up lines, ending in
+            // an ellipsis with the whole text in VoiceOver, before the prices or the facts clip.
+            about.maxLines = 0
+            let full = about.height(forWidth: w)
+            let room = full - max(0, height(for: content, card: card?.info, width: bounds.width) - bounds.height)
+            about.maxLines = room < full ? max(1, Int(room / (about.lineHeight ?? 20))) : 0
             let h = about.height(forWidth: w)
             about.frame = NSRect(x: x, y: y + Self.gap, width: w, height: h)
             y += Self.gap + h
@@ -211,7 +254,9 @@ final class ModelDetailPaneView: DSView {
         y += Self.gap
         priceCaption.frame = NSRect(x: x, y: y, width: w, height: 16)
         y += 16 + Self.labelGap - 2
-        y = place(priceRows, from: y, x: x, w: w) - 2
+        y = place(priceRows, from: y, x: x, w: w)
+        if let exampleRow { y = place([exampleRow], from: y + Self.labelGap, x: x, w: w) }
+        y -= 2
         guard !factRows.isEmpty || readsLabel != nil else { return }
         y += Self.gap - 2
         y = place(factRows, from: y, x: x, w: w)
@@ -242,7 +287,7 @@ final class ModelDetailPaneView: DSView {
         about.color = Themed.color(\.contrastMutedForeground)
         priceCaption.color = Themed.color(\.contrastMutedForeground)
         emptyLabel.color = Themed.color(\.contrastMutedForeground)
-        for (l, v) in priceRows + factRows { l.color = Themed.color(\.contrastMutedForeground); v.color = Themed.color(\.contrastForeground) }
+        for (l, v) in priceRows + factRows + [exampleRow].compactMap({ $0 }) { l.color = Themed.color(\.contrastMutedForeground); v.color = Themed.color(\.contrastForeground) }
         readsLabel?.color = Themed.color(\.contrastMutedForeground)
         for v in inputIcons { v.strokeColor = Themed.color(\.contrastMutedForeground) }
     }
@@ -251,10 +296,10 @@ final class ModelDetailPaneView: DSView {
 
     override func updateLayer() {
         cardLine.backgroundColor = Themed.color(\.contrastForeground, 0.08).cgColor(in: self)
-        // The Settings window's page card: the content ground and the rim (AppRouteModalView.updateLayer).
+        // The content ground, a step above the dock's darker ground as the list card is. A surface nested in the popup
+        // takes that fill step and no rim of its own: the popup's rim is the only one.
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
-        layer?.borderWidth = 1
-        layer?.borderColor = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
+        layer?.borderWidth = 0
         layer?.cornerRadius = RedesignTokens.Radius.control
     }
 }

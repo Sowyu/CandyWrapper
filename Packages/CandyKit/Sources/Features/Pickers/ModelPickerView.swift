@@ -751,11 +751,10 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
 
     override func updateLayer() {
         if detailed {
-            // The Settings window's page card: the content ground and the rim (AppRouteModalView.updateLayer).
+            // The content ground, a fill step above the dock's ground, and no rim: the popup's rim is the only one.
             let rim = RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor
             listCard.backgroundColor = Themed.color(\.background).cgColor(in: self)
-            listCard.borderWidth = 1
-            listCard.borderColor = rim
+            listCard.borderWidth = 0
             listCard.cornerRadius = RedesignTokens.Radius.control
             listCard.cornerCurve = .continuous
             underline.backgroundColor = rim

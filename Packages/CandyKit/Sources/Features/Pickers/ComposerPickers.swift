@@ -200,7 +200,7 @@ public final class ComposerPickers {
             // 4928's trigger keeps the control's `px-2` on both sides (ProviderModelPicker.tsx:373-379, ComposerControl.tsx:11-24).
             modelButton.paddingOverride = (8, ComposerDesign.uses3814(dark: modelButton.effectiveAppearance.isDark) ? 8 : 4)
             modelButton.maximumLabelWidth = 224
-            accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess && !unrestrictedOn ? Self.fullAccessGlyph : mode.icon.definition, size: 16)
+            accessButton.icon = IconView(definition: current.runtimeMode == .fullAccess && !unrestrictedOn ? Self.fullAccessIcon(dark: modelButton.effectiveAppearance.isDark) : mode.icon.definition, size: 16)
             accessButton.iconFollowsLabel = true
             // The picker's footer holds Permissions, so the chip shows only off the default (composerControlsOwnership.ts:1-31),
             // except in Redesign's detail picker, whose footer leaves it out.
@@ -408,6 +408,7 @@ public final class ComposerPickers {
         let primary = current.descriptors.first { $0.type == .select }?.id
         let controlled = ultrathinkControlled
         let locked = controlled && ModelTraits.ultrathinkInBody(prompt)
+        let redesign = ThemeRuntime.isDither(dark: modelButton.effectiveAppearance.isDark)
         var out: [PickerMenuEntry] = []
         for (i, d) in selects.enumerated() {
             if i > 0 { out.append(.separator) }
@@ -416,8 +417,12 @@ public final class ComposerPickers {
                 out.append(PickerMenuEntry(kind: .label, title: "Your prompt contains \"ultrathink\" in the text. Remove it to change this option."))
             }
             let selected = controlled && d.id == primary ? "ultrathink" : ModelTraits.currentValue(d)?.string
-            for o in d.options {
-                out.append(.option(o.label, badge: o.isDefault == true ? "Default" : nil, description: o.description,
+            for (j, o) in d.options.enumerated() {
+                // Redesign: sentence case ("Extra high"), and a rule between the effort levels and a value the prompt
+                // carries (Ultrathink), which is a different kind of choice.
+                if redesign, j > 0, d.promptInjectedValues?.contains(o.id) == true,
+                   d.promptInjectedValues?.contains(d.options[j - 1].id) == false { out.append(.separator) }
+                out.append(.option(redesign ? ComposerEffortColumnView.sentenceCase(o.label) : o.label, badge: o.isDefault == true ? "Default" : nil, description: o.description,
                                    checked: o.id == selected, disabled: locked && d.id == primary) { [weak self] in
                     self?.pickSelect(d, o.id)
                 })
@@ -510,6 +515,12 @@ public final class ComposerPickers {
         IconElement(.path(d: "M5 5a1 1 0 0 0-1 1v7c0 5 3.5 7.5 7.67 8.94a1 1 0 0 0 .67.01c2.35-.82 4.48-1.97 5.9-3.71")),
         IconElement(.path(d: "M9.309 3.652A12.252 12.252 0 0 0 11.24 2.28a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1v7a9.784 9.784 0 0 1-.08 1.264")),
     ])
+
+    /// Full access's glyph: T3's crossed shield, or under Redesign the open lock its menu row already draws, since a
+    /// struck-through shield reads as an error and Supervised's closed lock is its opposite.
+    @MainActor static func fullAccessIcon(dark: Bool) -> IconDefinition {
+        ThemeRuntime.isDither(dark: dark) ? IconName.lockOpen.definition : fullAccessGlyph
+    }
 
     public struct ModeInfo { public let label: String; public let description: String; public let icon: IconName }
 

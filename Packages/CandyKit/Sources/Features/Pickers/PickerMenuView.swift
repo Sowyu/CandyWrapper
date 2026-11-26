@@ -179,7 +179,8 @@ final class PickerMenuRowView: DSView {
     private let fill = CALayer()
     private let title = LabelView()
     private var icon: IconView?
-    private var badge: BadgeView?
+    private var badge: NSView?
+    private var badgeSize: CGSize = .zero
     private var detail: TextBlockView?
     private var line: CALayer?
     /// Dither's check at the row's right edge.
@@ -217,10 +218,18 @@ final class PickerMenuRowView: DSView {
                 addSubview(v)
                 icon = v
             }
-            if let b = e.badge {
+            if let b = e.badge, owner.capy {
+                // Redesign: "Default" is a note about the row, so muted 12pt text after the name, lighter than the check.
+                let v = LabelView(b, font: DSFont.ui(12))
+                v.lineHeight = 16; v.smoothsFont = false
+                addSubview(v)
+                badge = v
+                badgeSize = CGSize(width: ceil(v.textWidth), height: 16)
+            } else if let b = e.badge {
                 let v = BadgeView(b, variant: .outline, size: .sm)
                 addSubview(v)
                 badge = v
+                badgeSize = v.intrinsicContentSize
             }
             if let d = e.description {
                 let v = TextBlockView(d, font: DSFont.ui(12), lineHeight: 16)
@@ -230,8 +239,10 @@ final class PickerMenuRowView: DSView {
                 detail = v
             }
             if let text = e.shortcut {
-                let v = LabelView(text, font: DSFont.ui(13))
-                v.lineHeight = 20
+                // The same hint every other menu draws (MenuRowView): 12pt medium, tracked, on a 16pt line.
+                let v = LabelView(text, font: DSFont.ui(12, weight: .medium))
+                v.tracking = 1.2
+                v.lineHeight = 16
                 v.smoothsFont = false
                 v.alignment = .right
                 addSubview(v)
@@ -273,7 +284,7 @@ final class PickerMenuRowView: DSView {
     private func detailHeight(rowWidth: CGFloat) -> CGFloat {
         guard let detail else { return 0 }
         guard owner.style == .menu else { return 16 }
-        let width = min(224, rowWidth - 16)
+        let width = min(224, rowWidth - 16 - detailIndent)
         return TextBlockLayout(NSAttributedString(string: detail.text, attributes: [.font: detail.font]), width: width, lineHeight: 16, balanced: true).height
     }
 
@@ -296,14 +307,14 @@ final class PickerMenuRowView: DSView {
         case .label: return 16 + title.textWidth
         case .option:
             var first = title.textWidth + (icon == nil ? 0 : 14 + iconGap)
-            if let badge { first += spaceWidth + badge.intrinsicContentSize.width }
+            if badge != nil { first += badgeGap + badgeSize.width }
             // The traits description wraps at `max-w-56` (224).
             let second = detail.map { d -> CGFloat in
                 let w = TextLine(NSAttributedString(string: d.text, attributes: [.font: d.font])).width
                 return owner.style == .menu ? min(224, w) : w
             } ?? 0
             let hint = shortcut.map { ceil($0.textWidth) + 24 } ?? 0
-            return 16 + max(first + max(owner.capy ? 14 + 12 : 0, hint), second)
+            return 16 + max(first + max(owner.capy ? 14 + 12 : 0, hint), second + detailIndent)
         }
     }
 
@@ -311,6 +322,10 @@ final class PickerMenuRowView: DSView {
     private var iconGap: CGFloat { owner.capy ? 10 : 6 }
 
     private var spaceWidth: CGFloat { (" " as NSString).size(withAttributes: [.font: title.font]).width }
+    /// From the title to its badge: a space, or Redesign's 8pt before its text note.
+    private var badgeGap: CGFloat { owner.capy ? RedesignTokens.Space.s : spaceWidth }
+    /// Redesign indents the description under the title, past the icon.
+    private var detailIndent: CGFloat { owner.capy && icon != nil ? 14 + iconGap : 0 }
 
     override func layout() {
         super.layout()
@@ -318,7 +333,8 @@ final class PickerMenuRowView: DSView {
         let e = owner.entry(index)
         switch e.kind {
         case .separator:
-            line?.frame = owner.capy ? CGRect(x: -4, y: 4, width: bounds.width + 8, height: 1) : CGRect(x: 8, y: 4, width: bounds.width - 16, height: 1)
+            // Inset 8pt in every theme, as every other menu's rule (MenuRowView), so Redesign's menus agree.
+            line?.frame = CGRect(x: 8, y: 4, width: bounds.width - 16, height: 1)
         case .label:
             title.frame = NSRect(x: 8, y: 6, width: bounds.width - 16, height: 16)
         case .option:
@@ -331,16 +347,21 @@ final class PickerMenuRowView: DSView {
             check?.frame = NSRect(x: bounds.width - 8 - 14, y: top + 3, width: 14, height: 14)
             if let shortcut {
                 let w = ceil(shortcut.textWidth)
-                shortcut.frame = NSRect(x: bounds.width - 8 - w, y: top, width: w, height: 20)
+                shortcut.frame = NSRect(x: bounds.width - 8 - w, y: top + 2, width: w, height: 16)
             }
             let checkRoom: CGFloat = max(owner.capy ? 14 + 12 : 0, shortcut.map { ceil($0.textWidth) + 24 } ?? 0)
-            let w = min(title.textWidth, bounds.width - 8 - x - checkRoom - (badge.map { spaceWidth + $0.intrinsicContentSize.width } ?? 0))
+            let w = min(title.textWidth, bounds.width - 8 - x - checkRoom - (badge == nil ? 0 : badgeGap + badgeSize.width))
             title.frame = NSRect(x: x, y: top, width: max(0, w), height: 20)
             if let badge {
-                let size = badge.intrinsicContentSize
-                badge.frame = NSRect(x: x + w + spaceWidth, y: top + (20 - size.height) / 2, width: size.width, height: size.height)
+                let size = badgeSize
+                // Redesign's text note shares the title's baseline: a 16pt line 3pt down in the 20pt one (13pt over 12pt).
+                let y = owner.capy ? top + 3 : top + (20 - size.height) / 2
+                badge.frame = NSRect(x: x + w + badgeGap, y: y, width: size.width, height: size.height)
             }
-            detail?.frame = NSRect(x: 8, y: top + 20 + (owner.style == .select ? 2 : 0), width: owner.style == .menu ? min(224, bounds.width - 16) : bounds.width - 16,
+            // Redesign hangs the description under the title, past the icon, so the icons make one column.
+            let detailX = 8 + detailIndent
+            detail?.frame = NSRect(x: detailX, y: top + 20 + (owner.style == .select ? 2 : 0),
+                                   width: owner.style == .menu ? min(224, bounds.width - 8 - detailX) : bounds.width - 8 - detailX,
                                    height: detailHeight(rowWidth: bounds.width))
         }
     }
@@ -378,6 +399,7 @@ final class PickerMenuRowView: DSView {
             }
             icon?.strokeColor = Themed.color(\.contrastMutedForeground)
             shortcut?.color = Themed.color(\.contrastMutedForeground)
+            (badge as? LabelView)?.color = Themed.color(\.contrastMutedForeground)
             detail?.color = Themed.color(\.contrastMutedForeground, owner.style == .menu ? 0.8 : 1)
         }
     }

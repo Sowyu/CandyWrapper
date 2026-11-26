@@ -853,7 +853,7 @@ final class ComposerPermissionsTriggerView: ControlView {
     var focused = false { didSet { if focused != oldValue { needsDisplay = true } } }
     init(mode: RuntimeMode, unrestricted: Bool = false) {
         let info = unrestricted ? ComposerPermissionsView.info(nil, unrestricted: nil) : ComposerPickers.modes[mode] ?? ComposerPickers.modes[.fullAccess]!
-        icon = IconView(definition: mode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessGlyph : info.icon.definition, size: 14)
+        icon = IconView(definition: mode == .fullAccess && !unrestricted ? ComposerPickers.fullAccessIcon(dark: NSApp.effectiveAppearance.isDark) : info.icon.definition, size: 14)
         label = LabelView(info.label, font: DSFont.ui(12))
         super.init(frame: .zero)
         scalesWhenPressed = false
@@ -1265,20 +1265,27 @@ final class DockedModelPickerView: DSView, PickerPopupBody {
         let items = picker.listedItems
         let keys = items.map(\.key) + [picker.activeModel, picker.rail == .favorites ? "*" : ""]
         // While searching the height stays where it was when typing started, as the list's own does. Switching tabs
-        // keeps it too, so the rail under the pointer never moves; the new tab's list scrolls in that height.
+        // never shrinks it, so a shorter tab leaves the rail under the pointer in place; a tab whose rows or details
+        // need more grows it up to the ceiling, so its list is never clipped.
         if let topCache, topCache.keys == keys || picker.searching { return topCache.height }
         if let cached = topCache, cached.rail != picker.rail {
-            topCache = (keys, cached.height, picker.rail)
-            return cached.height
+            let height = max(cached.height, measuredTopHeight(items))
+            topCache = (keys, height, picker.rail)
+            return height
         }
+        let height = measuredTopHeight(items)
+        topCache = (keys, height, picker.rail)
+        return height
+    }
+
+    /// The rows or the tallest pane among `items`, whichever is more, between the floor and the ceiling.
+    private func measuredTopHeight(_ items: [ModelPickerItem]) -> CGFloat {
         // Measured at the narrowest card, so dragging the card's edge never changes the popup's height.
         let narrow = ModelDetailPaneView.minWidth
         let tallestPane = items.prefix(40).map { item in
             pane.height(for: ModelDetailContent.make(item), card: cardInfo(item), width: narrow)
         }.max() ?? pane.height(for: nil, card: nil, width: narrow)
-        let height = min(Self.detailMaxHeight, max(Self.detailMinHeight, picker.naturalSize.height, tallestPane + Self.gap))
-        topCache = (keys, height, picker.rail)
-        return height
+        return min(Self.detailMaxHeight, max(Self.detailMinHeight, picker.naturalSize.height, tallestPane + Self.gap))
     }
     private var topCache: (keys: [String], height: CGFloat, rail: ModelPickerRail)?
 

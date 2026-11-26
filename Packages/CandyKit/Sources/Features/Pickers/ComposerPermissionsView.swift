@@ -37,7 +37,7 @@ final class ComposerPermissionsView: DSView {
         for view in [heading, track, title, detail] as [NSView] { addSubview(view) }
         for (i, mode) in choices.enumerated() {
             let info = Self.info(mode, unrestricted: self.unrestricted)
-            let choice = PermissionChoice(icon: mode == .fullAccess ? ComposerPickers.fullAccessGlyph : info.icon.definition, checked: i == selectedIndex)
+            let choice = PermissionChoice(icon: mode == .fullAccess ? ComposerPickers.fullAccessIcon(dark: NSApp.effectiveAppearance.isDark) : info.icon.definition, checked: i == selectedIndex)
             choice.setAccessibilityLabel(info.label); choice.setAccessibilityHelp(info.description)
             choice.action = { [weak self] in self?.pick(i) }
             choice.onPreview = { [weak self] lit in self?.preview(lit ? i : nil) }
