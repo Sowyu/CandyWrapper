@@ -641,7 +641,7 @@ public final class ThreadDetailsCardView: DSView {
     }
 
     private var showsRepositories: Bool {
-        repositories != nil && showsVersionControl && offersGit && density != .essential && on("gitActions") && !relationsOnly
+        repositories != nil && showsVersionControl && offersGit && density != .essential && on("gitActions")
     }
     /// Hides the Version Control section (`gitCwd` is null).
     public var showsVersionControl = true { didSet { if showsVersionControl != oldValue { updateRows() } } }
@@ -661,7 +661,12 @@ public final class ThreadDetailsCardView: DSView {
     /// header band's Lineage button. The workspace and git rows live in that band and under the composer instead.
     public var relationsOnly = false { didSet { if relationsOnly != oldValue { updateRows() } } }
     /// Whether `relationsOnly` has anything to show.
-    public var hasRelations: Bool { !pullRequestRows.isEmpty || !automations.isEmpty || !lineage.isEmpty || !servers.isEmpty }
+    /// Whether Redesign's relations card has anything: its links, automations, lineage and servers, plus the thread's
+    /// repositories and usage, which Redesign has no other place for.
+    public var hasRelations: Bool {
+        !pullRequestRows.isEmpty || !automations.isEmpty || !lineage.isEmpty || !servers.isEmpty
+            || (showsRepositories && repositories?.visible.isEmpty == false) || showsUsage
+    }
     /// `hasRelations` changed.
     public var onRelationsChange: (@MainActor () -> Void)?
     private var hadRelations = false
@@ -828,7 +833,8 @@ public final class ThreadDetailsCardView: DSView {
 
     private func versionRows(_ density: Density) -> [NSView] {
         let prs = on("branch") ? pullRequestRows : []
-        if relationsOnly { return prs }
+        // Redesign's relations card lists the changed repositories after the links, without the empty note.
+        if relationsOnly { return prs + (showsRepositories ? repositoryRows.filter { !($0 is RepositoryNoteView) } : []) }
         // Without a branch selector the linked pull requests still need somewhere to show, then Initialize Git.
         let repositories = showsRepositories && density != .essential ? repositoryRows : []
         guard showsVersionControl, offersGit, isRepo else {
@@ -860,7 +866,7 @@ public final class ThreadDetailsCardView: DSView {
     private func baseHeight(_ density: Density) -> CGFloat {
         if relationsOnly {
             let rows = versionRows(density).reduce(0) { $0 + rowHeight($1) }
-            return 2 + (rows > 0 ? 8 + rows + 8 : 0) + (showsAutomations ? 1 + automations.preferredHeight : 0)
+            return 2 + (rows > 0 ? 8 + rows + 8 : 0) + (showsUsage ? usage.preferredHeight : 0) + (showsAutomations ? 1 + automations.preferredHeight : 0)
                 + (showsLineage ? lineage.preferredHeight : 0) + (on("servers") ? servers.preferredHeight : 0)
         }
         let workspace = workspaceRows(density)
@@ -901,9 +907,17 @@ public final class ThreadDetailsCardView: DSView {
         var y: CGFloat = 8
         servers.isHidden = servers.isEmpty || (!relationsOnly && density != .full) || !on("servers")
         if relationsOnly {
-            for row in versionRows(density) {
+            let rows = versionRows(density)
+            for row in rows {
                 row.frame = NSRect(x: 8, y: y, width: inner, height: rowHeight(row))
                 y += rowHeight(row)
+            }
+            // The thread's usage under the links, with its own rule when something sits above it.
+            usage.isHidden = !showsUsage
+            if showsUsage {
+                y = rows.isEmpty ? 0 : y + 8
+                usage.separated = y > 1
+                usage.frame = NSRect(x: 0, y: y, width: width, height: usage.preferredHeight)
             }
             divider.isHidden = true
             let lineageHeight = showsLineage ? lineage.preferredHeight : 0
@@ -916,7 +930,7 @@ public final class ThreadDetailsCardView: DSView {
             automationsDivider.frame = CGRect(x: 0, y: ay, width: width, height: 1)
             automations.frame = NSRect(x: 0, y: ay + 1, width: width, height: automations.preferredHeight)
             servers.frame = NSRect(x: 0, y: ay - servers.preferredHeight, width: width, height: servers.preferredHeight)
-            for v in [usage, context, chooseItems] as [NSView] { v.isHidden = true }
+            for v in [context, chooseItems] as [NSView] { v.isHidden = true }
             return
         }
         if !runContext.isHidden {

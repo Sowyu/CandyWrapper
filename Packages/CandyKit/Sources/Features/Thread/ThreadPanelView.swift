@@ -1094,9 +1094,10 @@ public final class ThreadPanelView: DSView {
         let toggle = header.toggles[0]
         header.pill.menuSections[.lineage] = { [weak self] in
             guard let self, self.lazyDetailsCard.loaded?.hasRelations == true else { return [] }
-            var item = MenuItem("Pull requests, automations and lineage", icon: .gitFork)
+            // The card holds the thread's links, repositories, usage, automations and lineage here (#42919).
+            var item = MenuItem("Thread details", icon: .gitFork)
             item.action = { [weak self] in DispatchQueue.main.async { self?.setDetailsOpen(true) } }
-            return [.label("Lineage"), item]
+            return [.label("Details"), item]
         }
         if detailsOpen { setDetailsOpen(false) }
         let items = header.pill.menuItems()

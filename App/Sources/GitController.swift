@@ -891,12 +891,19 @@ final class GitController {
 
     /// "Initialize Git" in flight, for Redesign's menu row.
     private var initializing = false
+    /// The open thread's project tracks folders (`project.trackedFolders`).
+    private var projectTracksFolders: Bool {
+        guard let id = target?.threadId, let snapshot = sidebar?.snapshot, let thread = snapshot.threads.first(where: { $0.id == id }) else { return false }
+        return !(snapshot.projects.first { $0.id == thread.projectId }?.trackedFolders ?? []).isEmpty
+    }
 
     /// Redesign's section: the quick action first (or its progress), then the split button's menu without it; outside a
     /// repository, "Initialize Git".
     private func actionsMenuItems() -> [MenuItem] {
         guard target != nil else { return [] }
         guard isRepo else {
+            // A plain folder that tracks repositories is not asked to become one (ThreadDetailsPanel.tsx:195-199).
+            if panel.lazyDetailsCard.loaded?.tracksFolders == true || projectTracksFolders { return [] }
             return [.label("Git"), MenuItem(initializing ? "Initializing..." : "Initialize Git", icon: .gitBranchPlus, disabled: initializing) { [weak self] in self?.initializeGit() }]
         }
         refreshStatus()
