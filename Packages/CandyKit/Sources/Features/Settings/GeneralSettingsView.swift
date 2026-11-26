@@ -624,7 +624,7 @@ public final class GeneralSettingsView: SettingsPageBase {
         }
         let policy = ButtonView("View policy", variant: .outline, size: .sm)
         policy.action = { [weak self] in self?.context.openURL?(URL(string: "https://t3.codes/privacy")!) }
-        let privacy = row("privacy-policy", detail: "How T3 handles your data, including the anonymous usage data the T3 Code server collects.", control: policy)
+        let privacy = row("privacy-policy", detail: "How T3 handles your data. CandyWrapper sends none and starts its servers with telemetry off.", control: policy)
         let mobile = row("nightly-mobile-beta", title: "Mobile app", detail: "Nightly needs the beta app. The App Store and Google Play versions cannot connect.", control: NightlyMobileBetaView())
         // T3's Legal card holds the privacy policy and the licenses (SettingsPanels.tsx:2507-2537 at 4928).
         let lic = ButtonView("View licenses", variant: .outline, size: .sm)
