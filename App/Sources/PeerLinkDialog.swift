@@ -108,8 +108,8 @@ enum PeerLinkDialog {
 
     /// A one-use code minted on `environmentId` with this app's session there (state/peerPairingCode.ts at 3814), carrying
     /// exactly the scopes an agent sign-in with `access` needs. Nil after a toast when it can't.
-    private static func mintPairingCode(_ environments: Environments, on environmentId: String, access: String,
-                                        toast: @MainActor (String, String?, ToastQueue.Kind) -> Void) async -> String? {
+    static func mintPairingCode(_ environments: Environments, on environmentId: String, access: String,
+                                toast: (@MainActor (String, String?, ToastQueue.Kind) -> Void)?) async -> String? {
         guard let shell = environments.session(environmentId) else { return nil }
         do {
             let created = try await shell.http.createPairingCredential(
@@ -117,7 +117,7 @@ enum PeerLinkDialog {
             return created.credential
         } catch {
             let forbidden: Bool = if case EnvironmentHTTPError.status(let code, _) = error { code == 401 || code == 403 } else { false }
-            toast("Could not link the environment", forbidden
+            toast?("Could not link the environment", forbidden
                   ? "Your session there cannot create pairing codes. Paste a code from there instead."
                   : "Could not get a pairing code from there. Paste a code from there instead.", .error)
             return nil

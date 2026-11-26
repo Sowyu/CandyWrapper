@@ -516,7 +516,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 898c22f990 | #39639 | fix(scheduled-tasks): clearing a task's thread no longer keeps the old one | scheduled tasks | n/a (wire B1) † |
 | 8b70e73371 | #42215 | fix(web): an unfinished PR inline comment survives a refresh that changes the diff | pull requests | ported da18c3b2 (the draft drop) and 9e30cb36 |
 | 8b8ec75b01 | #41937 | fix(web): copied startup error details no longer end in a broken character | shell | n/a (web boot error) † |
-| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | logic ported affd5423, dialog left (M) |
+| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | logic ported affd5423, dialog in the next commit |
 | 8ee2a8a9a0 | #40437 | fix(web): RTF previews no longer join text across section and column breaks | files | n/a (QuickLook previews) † |
 | 8f34bb193a | #42470 | fix(web): ArrowUp in a menu search field moves to the last item | shell | already (MenuView move(-1) with nothing highlighted takes the last item), diff read 2026-11-25 |
 | 8f5fd287a4 | #42837 | fix(web,mobile): Usage says "1 session", not "1 sessions" | usage | ported 8f1d707d |
@@ -596,7 +596,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | cb207e9f60 | #42228 | fix(web): long Issues and Pull Requests searches no longer end in a broken character | other | n/a (Swift Characters) † |
 | cb2a488c67 | #39302 | fix(web): an off-track desktop build no longer says "Up to date" | shell | n/a (Electron updater) † |
 | cbf4ea7ddc | #41264 | fix(web): shift-scroll and horizontal scrollers no longer navigate history | shell | n/a (web history swipe) † |
-| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4 (map, no details panel) |
+| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4, details panel and code-only notice 3c28ca0f, glide 086a837d, chrome and panel reference in the next commit (scene reference left) |
 | cef38e408d | #42805 | fix(web): file picker highlights no longer break emoji in file names | files | port (3.4) † |
 | d15123668e | #39579 | fix(web): keep reopened pairing link dialogs open on completion | connections | port (7.5) † |
 | d1f8636f49 | #39225 | fix(mobile,web): quote and port messages are translated in every language | other | n/a (translation strings) † |
@@ -730,3 +730,7 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 8.2: the queued words are "queued, next in line" and "queued, {count} ahead" (WorkflowRunFeed.tsx:198-205), not "queued · {length}".
 - 1.7: the field is a stepper-less `NumberField`, committing on Enter and blur, with "Mixed" for differing environments.
 
+- 7.1's search does not centre on each keystroke: typing only lights the matches, and Enter selects the first and centres it, or selects its stack with the machine as the stack list's filter (EnvironmentsMap.tsx:771-789, :900-904).
+- The "78722" on the sandbox's primary card is right. The 5258 server labels itself with macOS's ComputerName (ServerEnvironmentLabel.ts:161, `scutil --get ComputerName`), which is "78722" on this Mac, and T3 names its primary entry with `descriptor.label` (connection/platform.ts:483). The sidebar shows the same name, as T3 does.
+- 7.1's toolbar field is the default `h-8` input, so the toolbar is 45 tall, and Link several… and Clear are `xs` buttons (EnvironmentsMap.tsx:885-940). The help lists "Drag a plus onto a machine to link them." and the Shift-click line only when some environment can link.
+- 7.1 misses that "Link several…" is a menu of "From {source}" items when several environments can link and none is selected (EnvironmentsMap.tsx:946-968).

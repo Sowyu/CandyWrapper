@@ -86,7 +86,7 @@ struct EnvironmentsMapViewTests {
 
     @Test func searchCountsMatches() {
         let view = Self.make("shared")
-        view.find("fs")
+        view.canvas.state.query = "fs"
         #expect(view.canvas.matches?.count == 6)
         #expect(EnvironmentsMapText.matches(6) == "6 matches")
     }

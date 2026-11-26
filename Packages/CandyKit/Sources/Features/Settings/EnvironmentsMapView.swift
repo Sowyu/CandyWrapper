@@ -15,6 +15,8 @@ public struct EnvironmentsMapModel: Equatable {
     /// Environments waiting for this device's approval on the host: "Waiting for approval" (:1155).
     public var awaitingApproval: Set<String>
     public var now: Date
+    /// What the details panel shows beyond the graph.
+    public var details = EnvironmentsMapDetailsModel()
     public init(clientLabel: String = "This app", environments: [FleetEnvironmentInput] = [],
                 connectMachines: [FleetConnectMachineInput] = [], awaitingApproval: Set<String> = [], now: Date = Date()) {
         self.clientLabel = clientLabel; self.environments = environments; self.connectMachines = connectMachines
@@ -166,6 +168,8 @@ enum EnvironmentsMapIcons {
     static let help = IconDefinition(viewBox: box, elements: [IconElement(.circle(cx: 12, cy: 12, r: 10)),
                                                               IconElement(.path(d: "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3")),
                                                               IconElement(.path(d: "M12 17h.01"))])
+    /// lucide clock-alert, `HealthGlyph` for a link that expires within days.
+    static let clockAlert = paths(["M12 6v6l4 2", "M20 12v5", "M20 21h.01", "M21.25 8.2A10 10 0 1 0 16 21.16"])
     static let appWindow = IconDefinition(viewBox: box, elements: [IconElement(.rect(x: 2, y: 4, w: 20, h: 16, rx: 2, ry: 2)),
                                                                    IconElement(.path(d: "M10 4v4")), IconElement(.path(d: "M2 8h20")),
                                                                    IconElement(.path(d: "M6 4v4"))])
@@ -249,6 +253,10 @@ public struct EnvironmentsMapState: Equatable {
     public var ticked: [String] = []
     public var expanded: Set<String> = []
     public var query = ""
+    /// The canvas height a stack's anchoring chose, with `held`.
+    public var heldHeight: Double?
+    /// The machine a search landed on inside the selected stack (`found`).
+    public var found: String?
     /// The view set by hand; nil follows the fit.
     public var held: FleetViewTransform?
     public var roving = fleetClientNodeId
@@ -334,13 +342,86 @@ public final class EnvironmentsMapCanvasView: DSView {
 
     /// The height the canvas wants at `width` (:147, `fleetCanvasHeight`).
     func wantedHeight(_ width: CGFloat) -> CGFloat {
+        // A view kept while a stack opened keeps the height it chose (:676-679).
+        if let h = state.heldHeight, state.held != nil { return CGFloat(h) }
         let w = fleetLayoutWidth(Double(width))
         let l = w == layoutWidth ? fleetLayout : layoutFleetGraph(graph, stacks, canvasWidth: w > 0 ? w : nil)
         return CGFloat(fleetCanvasHeight(width: l.width, height: l.height, canvasWidth: Double(width), bounds: 180...840))
     }
 
     var fit: FleetViewTransform { fitFleetLayout(width: fleetLayout.width, height: fleetLayout.height, viewport: bounds.size) }
+    /// Where the view rests: set by hand, or the fit.
     public var view: FleetViewTransform { state.held ?? fit }
+
+    // MARK: Glide (:1037 `transition-transform duration-200 ease-out`, :160 `APPEAR`)
+
+    /// A glide in progress: the view it left, and a stack whose tray and lifted cards fade. Nil at rest, so the map
+    /// runs no display link while it sits still, and the last frame draws the resting view exactly.
+    struct Glide { var start: CFTimeInterval; var from: FleetViewTransform; var stack: String? }
+    private(set) var glide: Glide?
+    private var glideLink: CADisplayLink?
+    static let glideDuration: CFTimeInterval = 0.2
+    /// `motion-reduce:transition-none`; replaceable, with the clock, in tests.
+    var reducedMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    var now: () -> CFTimeInterval = { CACurrentMediaTime() }
+
+    /// Tailwind's `ease-out`, `cubic-bezier(0, 0, 0.2, 1)`, at `t`: x(u) = 0.6u² + 0.4u³, y(u) = 3u² − 2u³.
+    static func easeOut(_ t: Double) -> Double {
+        guard t > 0 else { return 0 }
+        guard t < 1 else { return 1 }
+        var lo = 0.0, hi = 1.0
+        for _ in 0..<30 {
+            let u = (lo + hi) / 2
+            if 0.6 * u * u + 0.4 * u * u * u < t { lo = u } else { hi = u }
+        }
+        let u = (lo + hi) / 2
+        return 3 * u * u - 2 * u * u * u
+    }
+
+    /// How far the glide has run, eased: 1 at rest.
+    var glideProgress: Double {
+        guard let glide else { return 1 }
+        return Self.easeOut((now() - glide.start) / Self.glideDuration)
+    }
+
+    /// The view drawn now: between where the glide started and where the view rests.
+    var shown: FleetViewTransform {
+        guard let glide else { return view }
+        let p = glideProgress, to = view
+        return FleetViewTransform(x: glide.from.x + (to.x - glide.from.x) * p, y: glide.from.y + (to.y - glide.from.y) * p,
+                                  scale: glide.from.scale + (to.scale - glide.from.scale) * p)
+    }
+
+    /// Runs `change` and glides from the view on screen to the one it leaves, unless motion is reduced.
+    func gliding(stack: String? = nil, _ change: () -> Void) {
+        let from = shown
+        change()
+        guard !reducedMotion(), from != view || stack != nil else { return }
+        glide = Glide(start: now(), from: from, stack: stack)
+        if glideLink == nil {
+            let link = displayLink(target: self, selector: #selector(glideFrame))
+            link.add(to: .main, forMode: .common)
+            glideLink = link
+        }
+        needsDisplay = true
+    }
+
+    @objc func glideFrame() {
+        if glide == nil || now() - glide!.start >= Self.glideDuration { endGlide() }
+        needsDisplay = true
+    }
+
+    func endGlide() {
+        glide = nil
+        glideLink?.invalidate()
+        glideLink = nil
+        needsDisplay = true
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { endGlide() }
+    }
 
     public override func layout() {
         super.layout()
@@ -350,14 +431,20 @@ public final class EnvironmentsMapCanvasView: DSView {
     // MARK: Zoom and pan (:860-870)
 
     public func zoom(_ factor: Double, at anchor: NSPoint? = nil) {
+        if glide?.stack == nil { endGlide() }
         let point = anchor ?? NSPoint(x: bounds.midX, y: bounds.midY)
         state.held = zoomFleetView(view, factor, anchor: FleetPoint(x: Double(point.x), y: Double(point.y)), fitScale: fit.scale)
     }
 
-    public func fitView() { state.held = nil }
+    /// The zoom buttons and keys glide; a pinch or a Cmd-scroll follows the fingers (`zoom(…, eased)`, :689-702).
+    public func zoomGliding(_ factor: Double) { gliding { zoom(factor) } }
+
+    public func fitView() { gliding { state.held = nil; state.heldHeight = nil } }
 
     /// Pans so `rect` (scene space) is in view, at a legible scale when `legible` (search, :157).
-    func reveal(_ rect: FleetRect, legible: Bool = false) {
+    func reveal(_ rect: FleetRect, legible: Bool = false) { gliding { revealNow(rect, legible: legible) } }
+
+    private func revealNow(_ rect: FleetRect, legible: Bool) {
         var v = view
         if legible, v.scale < fleetFitLegibleScale {
             v = FleetViewTransform(x: v.x, y: v.y, scale: fleetFitLegibleScale)
@@ -376,12 +463,12 @@ public final class EnvironmentsMapCanvasView: DSView {
     }
 
     func toScene(_ p: NSPoint) -> CGPoint {
-        let v = view
+        let v = shown
         return CGPoint(x: (Double(p.x) - v.x) / v.scale, y: (Double(p.y) - v.y) / v.scale)
     }
 
     func toView(_ r: FleetRect) -> NSRect {
-        let v = view
+        let v = shown
         return NSRect(x: r.x * v.scale + v.x, y: r.y * v.scale + v.y, width: r.width * v.scale, height: r.height * v.scale)
     }
 
@@ -460,6 +547,7 @@ public final class EnvironmentsMapCanvasView: DSView {
         case .toggle(let id): toggleStack(id)
         case .edge(let id): select(.edge(id))
         case .background:
+            if !shift { endGlide() }
             drag = shift ? .box(start: point, current: point) : .pan(start: point, view: view)
             if !shift { NSCursor.closedHand.push() }
         }
@@ -511,6 +599,7 @@ public final class EnvironmentsMapCanvasView: DSView {
                  at: convert(event.locationInWindow, from: nil))
             return
         }
+        endGlide()
         let v = view
         state.held = FleetViewTransform(x: v.x + Double(event.scrollingDeltaX), y: v.y + Double(event.scrollingDeltaY), scale: v.scale)
     }
@@ -524,8 +613,20 @@ public final class EnvironmentsMapCanvasView: DSView {
         onSelect?(state.selection)
     }
 
+    /// Opens or folds a stack. Its card stays where it is on screen and the rest makes room (`anchorFleetView`,
+    /// :641-668); its tray fades in and its lifted cards fade over the same 200 ms.
     func toggleStack(_ id: String) {
-        if state.expanded.contains(id) { state.expanded.remove(id) } else { state.expanded.insert(id) }
+        let fromView = shown, fromSize = bounds.size
+        let fromFace = fleetLayout.stacks[id]?.face
+        gliding(stack: id) {
+            if state.expanded.contains(id) { state.expanded.remove(id) } else { state.expanded.insert(id) }
+            guard let fromFace, let after = fleetLayout.stacks[id], fromSize.width > 0 else { return }
+            let anchored = anchorFleetView(key: "", fromKey: "", fromHeld: nil, fromView: fromView, fromSize: fromSize,
+                                           fromFace: FleetPoint(x: fromFace.x, y: fromFace.y), stack: after,
+                                           layoutHeight: fleetLayout.height, bounds: 180...840)
+            state.held = anchored.view
+            state.heldHeight = anchored.height
+        }
     }
 
     // MARK: Keys (:860-870, :1459-1476)
@@ -554,8 +655,8 @@ public final class EnvironmentsMapCanvasView: DSView {
         default: break
         }
         switch event.charactersIgnoringModifiers {
-        case "+", "=": zoom(1.25)
-        case "-": zoom(0.8)
+        case "+", "=": zoomGliding(1.25)
+        case "-": zoomGliding(0.8)
         case "0": fitView()
         default: super.keyDown(with: event)
         }
@@ -680,7 +781,7 @@ public final class EnvironmentsMapCanvasView: DSView {
     public override func draw(_ dirtyRect: NSRect) {
         guard let cg = NSGraphicsContext.current?.cgContext else { return }
         let paint = FleetPaint.current
-        let v = view
+        let v = shown
         cg.setFillColor(paint.canvas.cgColor(in: self))
         cg.fill(bounds)
         // `radial-gradient(circle, var(--border) 1px, transparent 1.5px)` every 24 scaled px (:1015-1019).
@@ -1065,14 +1166,25 @@ struct FleetSceneRenderer {
     func drawStack(_ stack: FleetStack, _ g: FleetStackGeometry) {
         let face = g.face.cgRect
         let dashed: [CGFloat] = stack.group != nil ? [3, 2] : []
-        if !stack.expanded {
+        // The lifted cards fade out as the stack opens and back in as it folds; the tray fades in (:1861-1886).
+        let fading = canvas.glide?.stack == stack.id ? CGFloat(canvas.glideProgress) : 1
+        let lifts = stack.expanded ? 1 - fading : fading
+        if lifts > 0 {
+            cg.saveGState()
+            cg.setAlpha(lifts)
+            cg.beginTransparencyLayer(auxiliaryInfo: nil)
             for lift in [8.0, 4.0] {
                 box(CGRect(x: face.minX + lift, y: face.minY - lift, width: face.width, height: face.height), radius: paint.cardRadius,
                     fill: paint.card, stroke: Themed.color(\.border), dash: dashed)
             }
+            cg.endTransparencyLayer()
+            cg.restoreGState()
         }
         if let tray = g.tray {
+            cg.saveGState()
+            cg.setAlpha(fading)
             box(tray.cgRect, radius: paint.trayRadius, fill: paint.foreground.withAlphaComponent(0.03), stroke: Themed.color(\.border, 0.7))
+            cg.restoreGState()
         }
         let partial = fleetStackPartial(stack)
         let band: CGFloat = partial ? 20 : 0
@@ -1219,7 +1331,7 @@ struct FleetSceneRenderer {
         case .reachable(nil):
             cg.setFillColor(c(paint.success)); cg.fillEllipse(in: CGRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8))
         case .reachable:
-            fleetDrawIcon(IconName.clock.definition, in: icon, color: c(tone, a), context: cg)
+            fleetDrawIcon(EnvironmentsMapIcons.clockAlert, in: icon, color: c(tone, a), context: cg)
         }
     }
 }
