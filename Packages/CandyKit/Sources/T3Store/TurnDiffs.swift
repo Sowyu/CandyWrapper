@@ -59,6 +59,19 @@ public enum TurnDiffs {
         }
     }
 
+    /// `deriveWorkspaceMutationId` (5258 packages/client-runtime/src/state/threadDetail.ts:53-82): changes when
+    /// the agent may have changed the workspace, so open file views and the tree read again. Commands, file
+    /// changes, dynamic tools and subagents count once they settle, since they can write without naming paths.
+    public static func workspaceMutationId(_ projection: ThreadProjection) -> String? {
+        let touching: Set<TurnItemType> = [.commandExecution, .fileChange, .dynamicTool, .subagent]
+        let unsettled: Set<TurnItemStatus> = [.pending, .running, .waiting]
+        let item = projection.visibleTurnItems.last { touching.contains($0.item.type) && !unsettled.contains($0.item.status) }?.item
+        // `turnDiffSummaries.at(-1)?.completedAt` (ChatView.tsx:1756-1759).
+        let checkpoint = summaries(projection).last?.completedAt
+        guard item != nil || checkpoint != nil else { return nil }
+        return "\(item?.id.rawValue ?? "")\u{0}\(checkpoint?.raw ?? "")"
+    }
+
     /// The diff panel's order (DiffPanel.tsx:263-277): newest run first.
     public static func sortedForPanel(_ summaries: [TurnDiffSummary]) -> [TurnDiffSummary] {
         summaries.sorted {

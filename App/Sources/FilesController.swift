@@ -174,6 +174,8 @@ final class FilesController {
     func show(_ id: ThreadId?) {
         flushEdits()
         threadId = id
+        mutation = nil
+        followTask?.cancel()
         updateWorkspace()
         panel.setPanelState(id.flatMap { states[$0.rawValue] } ?? RightPanelState())
         syncSurfaces()
@@ -393,17 +395,88 @@ final class FilesController {
     }
 
     private func refreshTree() {
-        // The root reads now. Every other listed folder waits until a row of it is on screen, so a
-        // refresh costs what shows, not every folder listed (useDirectoryEntries.ts:198-204 at 5258, #42870).
-        var model = panel.filesPanel.model
-        model.stale = Set(model.directoryPaths.filter { model.directories[$0] != nil })
-        panel.filesPanel.model = model
         reads = [:]
-        loadDirectories([""])
-        let query = panel.filesPanel.searchField.input.text
-        if !query.trimmingCharacters(in: .whitespaces).isEmpty { searchTree(query) }
+        refreshDirectories(load: true)
         if panel.panelState.active?.kind == .file { showActiveFile(force: true) }
     }
+
+    /// The root reads now. Every other listed folder waits until a row of it is on screen, so a
+    /// refresh costs what shows, not every folder listed (useDirectoryEntries.ts:198-204 at 5258, #42870).
+    /// A hidden tree only marks its folders stale and reads nothing until it shows.
+    private func refreshDirectories(load: Bool) {
+        guard let files = panel.lazyFilesPanel.loaded else { return }
+        var model = files.model
+        guard model.ready else { return }
+        model.stale = Set(model.directoryPaths.filter { model.directories[$0] != nil })
+        if !load { model.stale.insert("") }
+        files.model = model
+        guard load else { return }
+        loadDirectories([""])
+        let query = files.searchField.input.text
+        if !query.trimmingCharacters(in: .whitespaces).isEmpty { searchTree(query) }
+    }
+
+    // MARK: Workspace mutations
+
+    /// The thread's last workspace mutation id, the first one seen on a visit being its baseline: the reads that
+    /// visit started already cover it (useWorkspaceRevision.ts at 5258).
+    private var mutation: (thread: ThreadId, id: String?)?
+
+    /// A settled command, file change, tool or subagent may have changed the workspace
+    /// (`deriveWorkspaceMutationId`). The tree refreshes (FileBrowserPanel.tsx:470-477) and the open file reads
+    /// again (FilePreviewPanel.tsx:1501-1513), replacing the view only when the file changed (#39736).
+    func workspaceMutated(_ id: String?, threadId: ThreadId) {
+        guard threadId == self.threadId else { return }
+        guard let last = mutation, last.thread == threadId else { mutation = (threadId, id); return }
+        guard last.id != id else { return }
+        mutation = (threadId, id)
+        reads = [:]
+        let state = panel.panelState
+        let showing = state.isOpen && (state.active?.kind == .files || state.active?.kind == .file)
+        refreshDirectories(load: showing && panel.lazyFilesPanel.loaded?.isHiddenOrHasHiddenAncestor == false)
+        if state.isOpen, state.active?.kind == .file, state.active?.attachment == nil { followActiveFile() }
+    }
+
+    private func followActiveFile() {
+        guard case .file(let path, _, _)? = panel.panelState.active, let ws = workspace,
+              let shell = environments.session(ws.environmentId) else { return }
+        let k = key(path, in: ws)
+        // A file still loading reads on its own; unsaved edits stay until they are written.
+        guard shownFile == k, buffers[k]?.edited == nil else { return }
+        let surface = panel.fileSurface
+        let wantsAsset = surface.wantsAsset
+        let before = surface.content
+        followTask?.cancel()
+        followTask = Task { [weak self] in
+            defer { if let self, !Task.isCancelled { self.followTask = nil } }
+            if wantsAsset {
+                // Media and documents skip the text read (FilePreviewPanel.tsx:1506); their URL is minted again and
+                // the view reloads only when the server's `fileRevision` moved. Older servers report none, so they
+                // reload after every mutation, as T3 does with `workspace-revision`.
+                let (content, expiresAt, revision) = await Self.assetRevision(shell, threadId: ws.threadId, cwd: ws.cwd, path: path)
+                guard !Task.isCancelled, let self, self.shownFile == k, self.activeFilePath == path, case .asset = content else { return }
+                if let revision, revision == self.assetRevisions[k] { return }
+                self.assetRevisions[k] = revision
+                self.panel.fileSurface.assetExpiresAt = expiresAt
+                self.panel.fileSurface.followChange(content)
+                return
+            }
+            var content = await Self.read(shell.supervisor, cwd: ws.cwd, path: path)
+            guard !Task.isCancelled, let self, self.shownFile == k, self.activeFilePath == path, self.buffers[k]?.edited == nil else { return }
+            if Self.isDirectoryFailure(content) { self.panel.fileSurface.setContent(.directory); return }
+            // A file shown whole past the 1 MB read downloads whole again.
+            if case .text(_, true, let bytes, _) = content, case .text(_, false, _, _) = before, bytes <= FullFileText.maxBytes,
+               let full = await Self.fullText(shell, threadId: ws.threadId, path: FileLinks.isAbsolutePath(path) ? path : ws.cwd + "/" + path) {
+                guard !Task.isCancelled, self.shownFile == k, self.activeFilePath == path else { return }
+                content = .text(full, truncated: false, byteLength: bytes, editable: false)
+            }
+            if case .text = content { self.reads[k] = content }
+            self.panel.fileSurface.followChange(content)
+        }
+    }
+    private var followTask: Task<Void, Never>?
+    /// The `fileRevision` each asset preview was minted at (contracts assets.ts:103, #39736).
+    private var assetRevisions: [FileKey: String] = [:]
 
     /// The tree's path search (`useProjectPathSearch`, 120 ms debounce, 200 results).
     private func searchTree(_ query: String) {
@@ -517,6 +590,7 @@ final class FilesController {
         if surface.path == path, !sameFile { surface.setContent(.loading) }
         shownFile = nil
         fileTask?.cancel()
+        followTask?.cancel()
         if let edited = buffers[k]?.edited, !surface.wantsAsset {
             surface.setContent(.text(edited, truncated: false, byteLength: edited.utf8.count, editable: true))
             shownFile = k
@@ -528,8 +602,9 @@ final class FilesController {
         fileTask = Task { [weak self] in
             var content: FileSurfaceView.Content
             var expiresAt: Date?
+            var revision: String?
             if wantsAsset {
-                (content, expiresAt) = await Self.asset(shell, threadId: ws.threadId, cwd: ws.cwd, path: path)
+                (content, expiresAt, revision) = await Self.assetRevision(shell, threadId: ws.threadId, cwd: ws.cwd, path: path)
             } else {
                 content = await Self.read(shell.supervisor, cwd: ws.cwd, path: path)
             }
@@ -555,6 +630,7 @@ final class FilesController {
                 return
             }
             self.panel.fileSurface.assetExpiresAt = expiresAt
+            self.assetRevisions[k] = revision
             self.panel.fileSurface.setContent(content)
             self.shownFile = k
             // A file past the 1 MB read shows its preview at once, then the whole text once it downloads
@@ -644,6 +720,12 @@ final class FilesController {
 
     /// `assets.createUrl` with a `workspace-file` resource (filePreviewMode.ts `workspaceAssetResource`).
     nonisolated static func asset(_ shell: ShellSession, threadId: ThreadId, cwd: String, path: String) async -> (FileSurfaceView.Content, expiresAt: Date?) {
+        let (content, expiresAt, _) = await assetRevision(shell, threadId: threadId, cwd: cwd, path: path)
+        return (content, expiresAt)
+    }
+
+    /// `asset` with the server's `fileRevision` (dev:ino:size:mtime:ctime), nil on servers before #39736.
+    nonisolated static func assetRevision(_ shell: ShellSession, threadId: ThreadId, cwd: String, path: String) async -> (FileSurfaceView.Content, expiresAt: Date?, revision: String?) {
         let absolute = FileLinks.isAbsolutePath(path) ? path : cwd + "/" + path
         let inside = absolute.hasPrefix(cwd + "/")
         let kind = FilePreviewKind.of(path)
@@ -652,9 +734,9 @@ final class FilesController {
         guard let reply = try? await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource])),
               let relative = reply["relativeUrl"]?.stringValue,
               let url = URL(string: relative, relativeTo: shell.http.baseURL)?.absoluteURL else {
-            return (.failure(kind == .image ? "Unable to load workspace image." : kind == .audio ? "Unable to load audio." : "Unable to load file preview.", attemptedPath: nil, cwd: nil), nil)
+            return (.failure(kind == .image ? "Unable to load workspace image." : kind == .audio ? "Unable to load audio." : "Unable to load file preview.", attemptedPath: nil, cwd: nil), nil, nil)
         }
-        return (.asset(url), expiry(reply))
+        return (.asset(url), expiry(reply), reply["fileRevision"]?.stringValue)
     }
 
     // MARK: Saving

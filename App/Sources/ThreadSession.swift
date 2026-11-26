@@ -1359,6 +1359,7 @@ final class ThreadController {
                 self.panel.proactiveLinkedPullRequestKey = thread.flatMap { self.pullRequests.proactiveKey($0) }
             }
             self?.composer.projectionChanged(projection, threadId: id)
+            if let projection { self?.files.workspaceMutated(TurnDiffs.workspaceMutationId(projection), threadId: id) }
             self?.lineage.update(threadId: id, projection: projection)
             self?.setCost(projection, id: id)
         }

@@ -182,6 +182,32 @@ public final class FileSurfaceView: DSView {
         rebuildBody()
     }
 
+    /// A turn changed the workspace and the open file read again: an unchanged read keeps the view as it is
+    /// (#39736), a changed one replaces it at the same scroll offset, as T3's re-rendered preview keeps its place.
+    /// Returns whether anything changed.
+    @discardableResult
+    public func followChange(_ next: Content) -> Bool {
+        switch (content, next) {
+        case let (.text(a, at, ab, ae), .text(b, bt, bb, be)) where a == b && at == bt && ab == bb && ae == be: return false
+        case let (.asset(a), .asset(b)) where a == b: return false
+        default: break
+        }
+        let origin = body.flatMap(Self.firstScrollView)?.contentView.bounds.origin
+        setContent(next)
+        if let origin, let scroll = body.flatMap(Self.firstScrollView) {
+            layoutSubtreeIfNeeded()
+            scroll.contentView.scroll(to: origin)
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
+        return true
+    }
+
+    private static func firstScrollView(_ view: NSView) -> NSScrollView? {
+        if let scroll = view as? NSScrollView { return scroll }
+        for sub in view.subviews { if let found = firstScrollView(sub) { return found } }
+        return nil
+    }
+
     /// The text the editor holds now (unsaved edits included).
     public var currentText: String? { code?.text }
 
