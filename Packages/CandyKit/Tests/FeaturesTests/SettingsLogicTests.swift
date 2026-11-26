@@ -161,7 +161,8 @@ struct SettingsLogicTests {
         #expect(KeybindingsLogic.parseWhen("") == .ok(nil))
         #expect(KeybindingsLogic.parseWhen("a &&") == .invalid("Use variables with !, &&, ||, and parentheses."))
         #expect(KeybindingsLogic.unknownVariables(KeybindingWhenNode.parse("terminalFocus && nope")) == ["nope"])
-        #expect(KeybindingsLogic.whenVariableOptions.prefix(4) == ["terminalFocus", "terminalOpen", "isWeb", "isDesktop"])
+        // 5258 KeybindingsSettings.logic.ts:70-79 puts `composerEmpty` among the core names (#30644).
+        #expect(KeybindingsLogic.whenVariableOptions.prefix(5) == ["terminalFocus", "terminalOpen", "composerEmpty", "isWeb", "isDesktop"])
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "k", physicalKey: "k", meta: true, shift: true)) == "mod+shift+k")
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "escape")) == "esc")
         #expect(KeybindingsLogic.binding(from: KeyStroke(key: "{", physicalKey: "[", meta: true, shift: true)) == "mod+shift+[")

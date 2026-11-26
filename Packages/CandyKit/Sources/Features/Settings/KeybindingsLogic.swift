@@ -232,7 +232,8 @@ public enum KeybindingsLogic {
         return commands.sorted { compareCommands($0, $1, key: commandLabel) < 0 }
     }
 
-    static let coreWhenVariables = ["terminalFocus", "terminalOpen", "isWeb", "isDesktop", "true", "false"]
+    // 5258 KeybindingsSettings.logic.ts:70-79 adds `composerEmpty` (#30644); its `previewOpen` has no context value here yet.
+    static let coreWhenVariables = ["terminalFocus", "terminalOpen", "composerEmpty", "isWeb", "isDesktop", "true", "false"]
 
     static func identifiers(_ node: KeybindingWhenNode?, into set: inout [String]) {
         guard let node else { return }

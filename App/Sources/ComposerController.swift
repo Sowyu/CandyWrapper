@@ -1039,7 +1039,10 @@ final class ComposerController {
     /// Keybinding context keys the composer owns.
     var shortcutContext: [String: Bool] {
         ["composerFocus": composer.isEditorFocused, "modelPickerOpen": pickers.isModelPickerOpen,
-         "turnRunning": composer.runState.canInterrupt, "composerRequiresModifier": composer.requiresSendModifier]
+         "turnRunning": composer.runState.canInterrupt, "composerRequiresModifier": composer.requiresSendModifier,
+         // A queued edit or a question's answer owns the composer even when its text is empty (ChatView.tsx:2909-2914 at 5258, #30644).
+         "composerEmpty": queuedEdit == nil && requests.userInputs.isEmpty && composer.attachmentCount == 0
+            && draftKey.map { replyTargets[$0] == nil } != false && composer.promptIsBlank]
     }
 
     /// The open draft's project, nil on a thread.

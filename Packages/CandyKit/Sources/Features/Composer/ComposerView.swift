@@ -487,6 +487,10 @@ public final class ComposerView: DSView {
     public var requiresSendModifier: Bool { ComposerLogic.requiresModifier(sendShortcut, prompt: prompt) }
     /// `hasSendableContent`: prose besides context links, or a context chip (ChatView.logic.ts:866-890).
     private var hasContent: Bool { hasSendableContent(prompt) }
+    /// The prompt as the last refresh saw it is only whitespace, for the `composerEmpty` keybinding condition, so a
+    /// shortcut never serializes the draft again.
+    public private(set) var promptIsBlank = true
+
     private func hasSendableContent(_ text: String) -> Bool {
         !ComposerContext.stripReferences(text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !ComposerContext.referencedIds(text).isEmpty || attachmentCount > 0
@@ -572,6 +576,7 @@ public final class ComposerView: DSView {
     func refresh(prompt typed: String? = nil) {
         defer { invalidateHeightIfNeeded() }
         let prompt = typed ?? self.prompt
+        promptIsBlank = prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let hasContent = hasSendableContent(prompt)
         // ChatComposer.tsx:7489-7490.
         let placeholderText = planFollowUp ? "Add feedback to refine the plan, or leave this blank to implement it"
