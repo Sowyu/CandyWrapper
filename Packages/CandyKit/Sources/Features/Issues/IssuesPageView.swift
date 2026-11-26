@@ -869,7 +869,6 @@ final class DitherBandControls: DSView {
         super.init(frame: .zero)
         layer?.masksToBounds = false
         frost.radius = RedesignTokens.Radius.control
-        frost.flatInInsetRow = true
         addSubview(frost)
         toggle.iconSize = 16
         addSubview(toggle)

@@ -61,7 +61,6 @@ public final class DitherHeaderPillView: DSView {
         super.init(frame: frameRect)
         layer?.masksToBounds = false
         frost.radius = RedesignTokens.Radius.control
-        frost.flatInInsetRow = true
         addSubview(frost)
         changes.accessory = totals
         totals.glyphOffset = 1
