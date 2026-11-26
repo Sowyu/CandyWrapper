@@ -78,7 +78,8 @@ public enum PullRequestWriteLogic {
     /// The `runAction` input of "Merge stack", "Auto-merge stack" or "Rebase stack" (5258
     /// PullRequestStackMenu.tsx:108-148): merge and auto-merge target the open layer with the merge
     /// layers' heads, rebase targets the top with every unmerged head.
-    public static func stackActionPayload(_ stack: PullRequestStackDetail, ref: PullRequestRef, action: String, mergeMethod: String) -> JSONValue? {
+    public static func stackActionPayload(_ stack: PullRequestStackDetail, ref: PullRequestRef, action: String, mergeMethod: String,
+                                          shownHeadSha: String? = nil) -> JSONValue? {
         let plan = stackPlan(stack, current: ref.number, pending: false)
         let merging = action != "update-branch"
         let target = merging ? (plan.position > 0 ? stack.layers[plan.position - 1] : nil) : stack.layers.last
@@ -87,7 +88,8 @@ public enum PullRequestWriteLogic {
         var r = ref
         r.number = target.number
         return PullRequestPayloads.action(r, action: action, mergeMethod: merging ? mergeMethod : nil,
-                                          updateMethod: merging ? nil : "rebase", stackNumber: stack.number, expectedStackHeads: heads)
+                                          updateMethod: merging ? nil : "rebase", stackNumber: stack.number, expectedStackHeads: heads,
+                                          expectedHeadSha: PullRequestDetailLogic.mergeHeadPin(action, shownHeadSha))
     }
 
     /// The confirmation's title, description and button (5258 PullRequestStackMenu.tsx:369-445).

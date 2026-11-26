@@ -2,6 +2,7 @@ import AppKit
 import Testing
 @testable import T3Protocol
 @testable import Features
+import DesignSystem
 
 /// 5258: a pull request's Summary comes back with its order and scroll (#42179,
 /// PullRequestSummaryTab.tsx:478-487, PullRequestDetailPanel.tsx:342).
@@ -55,5 +56,54 @@ struct PullRequestKeyScrollTests {
         #expect(at(126, [.command], 500) == 0)
         #expect(at(125, [.option], 0) == nil)
         #expect(at(0, [], 0) == nil)
+    }
+}
+
+/// 5258: merges and reviews are pinned to the head the reader saw, and a newer head shows the
+/// "New commits were pushed" row (#41761, #41773, pullRequestDetail.logic.ts:1550-1565).
+@MainActor
+struct PullRequestHeadPinTests {
+    @Test func seenHeadKeepsTheFirstSettledHead() {
+        typealias L = PullRequestDetailLogic
+        let first = L.seenHead(nil, key: "a", settledHead: "111")
+        #expect(first.sha == "111")
+        #expect(L.seenHead(first, key: "a", settledHead: "222").sha == "111")
+        #expect(L.seenHead(first, key: "b", settledHead: "333").sha == "333")
+        // An unsettled read waits for the first settled one.
+        let pending = L.seenHead(nil, key: "a", settledHead: nil)
+        #expect(L.seenHead(pending, key: "a", settledHead: "444").sha == "444")
+        #expect(L.mergeHeadPin("merge", "111") == "111")
+        #expect(L.mergeHeadPin("enable-auto-merge", "111") == "111")
+        #expect(L.mergeHeadPin("update-branch", "111") == nil)
+    }
+
+    @Test func aNewerHeadShowsTheBannerUntilLoaded() throws {
+        var d = try PullRequestFixtures.detail()
+        d.state = "open"
+        d.headSha = "aaaaaaa1111"
+        let panel = PullRequestDetailView(frame: NSRect(x: 0, y: 0, width: 420, height: 600))
+        panel.show(d)
+        panel.layoutSubtreeIfNeeded()
+        let plain = panel.headerHeight
+        var loaded: String?
+        panel.onLoadNewCommits = { loaded = $0 }
+        d.headSha = "bbbbbbb2222"
+        panel.show(d)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.shownHeadSha == "aaaaaaa1111")
+        #expect(panel.headerHeight > plain)
+        let review = PullRequestPayloads.submitReview(PullRequestRef(projectId: "p", repository: "o/r", number: 1), verdict: "approve", body: "",
+                                                      expectedHeadSha: panel.shownHeadSha)
+        #expect(review["expectedHeadSha"]?.stringValue == "aaaaaaa1111")
+        func find(_ v: NSView) -> ButtonView? {
+            if let b = v as? ButtonView, b.title == "Load new commits" { return b }
+            return v.subviews.lazy.compactMap(find).first
+        }
+        find(panel)?.action?()
+        #expect(loaded == "bbbbbbb2222")
+        panel.acceptHead("bbbbbbb2222")
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.shownHeadSha == "bbbbbbb2222")
+        #expect(panel.headerHeight == plain)
     }
 }

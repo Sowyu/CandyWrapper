@@ -98,6 +98,7 @@ final class PullRequestDetailBinding {
             view.onTab = { [weak self] tab in if tab == .code { self?.loadCode() } }
             view.onRetry = { [weak self] in self?.reload(invalidate: false) }
             view.onRefresh = { [weak self] in self?.reload(invalidate: true) }
+            view.onLoadNewCommits = { [weak self] sha in self?.loadNewCommits(sha) }
             view.onOpenURL = { [weak self] url in if let u = SafeExternalURL.parse(url) { self?.openURL(u) } }
             view.onCopy = { [weak self] text, label in
                 NSPasteboard.general.clearContents()
@@ -495,8 +496,25 @@ final class PullRequestDetailBinding {
     private var actionKey: String? { environmentId.flatMap { e in target.map { "\(e) \($0.surfaceId)" } } }
 
     /// `finishAction`: the action goes to the pull request it was chosen on, even once another one shows.
+    /// "Load new commits" (5258 PullRequestDetailPanel.tsx:1976-1986, #41773): the host read that
+    /// reloads the diff is asked for first, then the pin moves to the new head.
+    private func loadNewCommits(_ sha: String) {
+        guard let shell, let ref = reference else { return }
+        let shown = showing
+        view.loadingNewCommits = true
+        Task { [weak self] in
+            _ = try? await shell.supervisor.request("pullRequests.invalidate", payload: .object(["reference": ref.payload]))
+            guard let self, self.stillShows(shown) else { return }
+            self.view.loadingNewCommits = false
+            self.view.acceptHead(sha)
+            self.patchKey = nil
+            self.reload(invalidate: false)
+        }
+    }
+
     private func run(_ action: String, mergeMethod: String?, shell: ShellSession, ref: PullRequestRef, shown: Int, provider: String?) {
         guard let key = actionKey, runningActions[key] == nil else { return }
+        let pin = PullRequestDetailLogic.mergeHeadPin(action, view.shownHeadSha)
         runningActions[key] = action
         if stillShows(shown) {
             view.pendingAction = action
@@ -506,7 +524,8 @@ final class PullRequestDetailBinding {
             do {
                 // 4928 asks for the host's summary and shows it without a re-read (client-runtime
                 // state/pullRequests.ts:1134-1137, 895-931, #25761). A 3824 server answers nothing.
-                let reply = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod, replyWithSummary: true))
+                let reply = try await shell.supervisor.request("pullRequests.runAction", payload: PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod,
+                                                                                                                 expectedHeadSha: pin, replyWithSummary: true))
                 guard let self else { return }
                 self.runningActions[key] = nil
                 // 2994 shows the new state in the panel and toasts only a revert, which opens another
@@ -532,6 +551,8 @@ final class PullRequestDetailBinding {
                 self.runningActions[key] = nil
                 if self.stillShows(shown) { self.view.actionPending = false }
                 self.toast(PullRequestDetailLogic.actionFailure(action, provider: provider, inPanel: true), Self.failure(error, number: ref.number, provider: provider).1, .error)
+                // A refused merge usually means new commits, so show what the host has now (PullRequestDetailPanel.tsx:932).
+                if pin != nil, self.stillShows(shown) { self.reload(invalidate: false) }
             }
         }
     }
@@ -557,10 +578,11 @@ final class PullRequestDetailBinding {
     /// `PullRequestReviewForm.submit`: the verdict, the summary and the pending line comments in one request.
     private func review(_ verdict: String, body: String, comments: [PullRequestReviewCommentDraft]) {
         guard let shell, let ref = reference else { return }
-        let provider = view.detail?.provider, shown = showing, composer = view.composer
+        let provider = view.detail?.provider, shown = showing, composer = view.composer, head = view.shownHeadSha
         Task { [weak self] in
             do {
-                _ = try await shell.supervisor.request("pullRequests.submitReview", payload: PullRequestPayloads.submitReview(ref, verdict: verdict, body: body, comments: comments))
+                _ = try await shell.supervisor.request("pullRequests.submitReview", payload: PullRequestPayloads.submitReview(ref, verdict: verdict, body: body, comments: comments,
+                                                                                                                         expectedHeadSha: head))
                 composer?.reviewSubmitted(body: body, comments: comments)
                 guard let self else { return }
                 if let composer, self.view.composer === composer { self.view.closeComposer() }
@@ -569,6 +591,8 @@ final class PullRequestDetailBinding {
             } catch {
                 // The draft is kept.
                 composer?.reviewPending = false
+                // A refusal usually means new commits, so show what the host has now (PullRequestComposer.tsx:200).
+                if let self, self.stillShows(shown) { self.reload(invalidate: false) }
                 // PullRequestReviewForm.tsx (#22382): the host's reason, or the hint when it gave none.
                 self?.toast("The review could not be submitted", PullRequestDetailLogic.readableFailure(Self.failure(error, number: ref.number).1,
                     hint: "The host refused the review. Your draft is still here to try again."), .error)
@@ -832,7 +856,8 @@ final class PullRequestDetailBinding {
     private func runStackAction(_ action: String) {
         guard let shell, let ref = reference, let stack = view.stack, let d = detail else { return }
         let method = PullRequestDetailLogic.selectedMergeMethod(PullRequestDetailLogic.allowedMergeMethods(d), preferred: view.preferredMergeMethod)
-        guard let payload = PullRequestWriteLogic.stackActionPayload(stack, ref: ref, action: action, mergeMethod: method) else { return }
+        guard let payload = PullRequestWriteLogic.stackActionPayload(stack, ref: ref, action: action, mergeMethod: method,
+                                                                                shownHeadSha: view.shownHeadSha) else { return }
         view.stackPending = true
         // 5258 PullRequestStackMenu.tsx:128-197 (auto-merge from 69d8f4217f #41809).
         let auto = action == "enable-auto-merge"
@@ -1121,9 +1146,12 @@ final class ThreadPullRequestsController {
         sync()
         let thread = cardDetailsThread
         let provider = cardDetails[link.key.id]?.provider
+        // The row shows no diff, so a merge lands the head it had (ThreadDetailsPrRow.tsx at 5258, #41761).
+        let pin = PullRequestDetailLogic.mergeHeadPin(action, cardDetails[link.key.id]?.headSha)
         Task { [weak self] in
             guard let self else { return }
-            let ok = (try? await self.environments.request(env, "pullRequests.runAction", PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod))) != nil
+            let ok = (try? await self.environments.request(env, "pullRequests.runAction",
+                                                            PullRequestPayloads.action(ref, action: action, mergeMethod: mergeMethod, expectedHeadSha: pin))) != nil
             self.cardActionPending[link.key.id] = nil
             self.panel.toasts.show(ToastView(title: ok ? PullRequestDetailLogic.actionSuccess(action, provider: provider) : PullRequestDetailLogic.actionFailure(action, provider: provider), kind: ok ? .success : .error))
             guard self.cardDetailsThread == thread else { return }

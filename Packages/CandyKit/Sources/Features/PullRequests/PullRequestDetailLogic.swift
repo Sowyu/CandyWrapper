@@ -47,6 +47,24 @@ public enum PullRequestDetailLogic {
     /// `ACTION_FAILURE_LABELS` (PullRequestDetailPanel.tsx:221-232).
     /// `readableFailure` (pullRequestDetail.logic.ts:1539-1563): the host's reason without the
     /// operation prefix, the hint when the reason is only tool noise, at most 320 characters.
+    /// The head a pull request's reader was shown: the first settled read's head, kept until the
+    /// reader loads newer commits (`seenPullRequestHead`, 5258 pullRequestDetail.logic.ts:1550-1558, #41761).
+    public struct SeenHead: Equatable, Sendable {
+        public var key: String
+        public var sha: String?
+        public init(key: String, sha: String?) { self.key = key; self.sha = sha }
+    }
+    public static func seenHead(_ seen: SeenHead?, key: String, settledHead: String?) -> SeenHead {
+        if let seen, seen.key == key, seen.sha != nil || settledHead == nil { return seen }
+        return SeenHead(key: key, sha: settledHead)
+    }
+
+    /// A merge lands the head the reader was shown, so it refuses a head that moved since
+    /// (`mergeHeadPin`, pullRequestDetail.logic.ts:1561-1565).
+    public static func mergeHeadPin(_ action: String, _ headSha: String?) -> String? {
+        action == "merge" || action == "enable-auto-merge" ? headSha : nil
+    }
+
     public static func readableFailure(_ raw: String, hint: String) -> String {
         var detail = raw
         if let r = detail.range(of: #"^Pull request operation \w+ failed:\s*"#, options: [.regularExpression, .caseInsensitive]) { detail.removeSubrange(r) }
