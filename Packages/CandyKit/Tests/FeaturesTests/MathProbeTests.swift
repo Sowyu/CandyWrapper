@@ -35,7 +35,7 @@ struct MathProbeTests {
 }
 
 extension MathProbeTests {
-    /// Prints each corpus formula's box next to KaTeX's: `CW_MATH_METRICS=1 scripts/test --filter MathProbeTests`.
+    /// Prints each corpus formula's box next to Words': `CW_MATH_METRICS=1 scripts/test --filter MathProbeTests`.
     @Test func metrics() throws {
         guard ProcessInfo.processInfo.environment["CW_MATH_METRICS"] != nil else { return }
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../../design/component-reference/math/metrics.json")
@@ -74,4 +74,54 @@ enum MathCorpus {
         ("32-norm", "\\| x \\|_2 = \\sqrt{\\sum_i x_i^2}", false), ("33-det", "\\det(A - \\lambda I) = 0", false),
         ("34-euler", "e^{i\\pi} + 1 = 0", true), ("35-set", "\\{ x \\in \\mathbb{Z} : x \\bmod 2 = 0 \\}", false),
     ].map { Case(name: $0.0, tex: $0.1, display: $0.2) }
+}
+
+extension MathProbeTests {
+    /// Compares each spec case's glyphs, rules and box with Words' SVG in thousandths of an em:
+    /// `CW_MATH_PARITY=1 scripts/test --filter MathProbeTests`. Prints `PARITY` lines for what is off by over 5.
+    @Test func parity() throws {
+        guard ProcessInfo.processInfo.environment["CW_MATH_PARITY"] != nil, let font = MathFont.shared else { return }
+        let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: MathFidelityTests.repo.appendingPathComponent("design/component-reference/math.json"))) as! [String: Any]
+        func attr(_ s: Substring, _ k: String) -> Double? {
+            guard let r = s.range(of: " \(k)=\"") else { return nil }
+            return Double(s[r.upperBound...].prefix { $0 != "\"" })
+        }
+        for c in spec["cases"] as! [[String: Any]] {
+            let name = c["name"] as! String, tex = c["tex"] as! String, display = c["display"] as! Bool, html = c["html"] as! String
+            guard let svgStart = html.range(of: "<svg"), let vb = html.range(of: "viewBox=\"") else { continue }
+            let box = html[vb.upperBound...].prefix { $0 != "\"" }.split(separator: " ").compactMap { Double($0) }
+            var words: [(String, Double, Double, Double)] = [], rects: [[Double]] = []
+            var rest = html[svgStart.lowerBound...]
+            while let t = rest.range(of: "<text") {
+                let tag = rest[t.lowerBound...].prefix { $0 != ">" }
+                let body = rest[t.upperBound...].drop { $0 != ">" }.dropFirst().prefix { $0 != "<" }
+                words.append((String(body), attr(tag, "x") ?? 0, attr(tag, "y") ?? 0, attr(tag, "font-size") ?? 1000))
+                rest = rest[t.upperBound...]
+            }
+            rest = html[svgStart.lowerBound...]
+            while let t = rest.range(of: "<rect") {
+                let tag = rest[t.lowerBound...].prefix { $0 != ">" }
+                rects.append(["x", "y", "width", "height"].map { attr(tag, $0) ?? 0 })
+                rest = rest[t.upperBound...]
+            }
+            guard let l = MathRenderer.layout(tex, display: display, textSize: 1000 / MathRenderer.scale) else { print("PARITY \(name) FALLBACK"); continue }
+            var out = String(format: "PARITY %@ box w %.0f/%.0f h %.0f/%.0f d %.0f/%.0f", name, l.width, box[2], l.height, -box[1], l.depth, box[3] + box[1])
+            let ours = l.glyphs
+            for (i, w) in words.enumerated() {
+                let g = w.0.unicodeScalars.count == 1 ? font.glyph(w.0.unicodeScalars.first!) : 0
+                guard i < ours.count else { out += "\n  missing \(w.0)"; continue }
+                let o = ours[i]
+                let dx = o.position.x - w.1, dy = -o.position.y - w.2, ds = o.size - w.3
+                if abs(dx) > 5 || abs(dy) > 5 || abs(ds) > 5 || (g != 0 && g != o.glyph) {
+                    out += String(format: "\n  %@ words (%.0f,%.0f,%.0f) ours (%.0f,%.0f,%.0f)%@", w.0, w.1, w.2, w.3, o.position.x, -o.position.y, o.size, g != o.glyph ? " glyph \(o.glyph)≠\(g)" : "")
+                }
+            }
+            if ours.count != words.count { out += "\n  glyphs \(ours.count)/\(words.count)" }
+            if l.rules.count != rects.count { out += "\n  rules \(l.rules.count)/\(rects.count)" }
+            for (r, w) in zip(l.rules, rects) where abs(r.minX - w[0]) > 5 || abs(-r.maxY - w[1]) > 5 || abs(r.width - w[2]) > 5 {
+                out += String(format: "\n  rule words (%.0f,%.0f,%.0f) ours (%.0f,%.0f,%.0f)", w[0], w[1], w[2], r.minX, -r.maxY, r.width)
+            }
+            print(out)
+        }
+    }
 }

@@ -2,18 +2,12 @@ import CoreText
 import Foundation
 
 /// An OpenType math font and its MATH table (https://learn.microsoft.com/typography/opentype/spec/math), read once.
-/// Latin Modern Math is bundled because it is Computer Modern, the face KaTeX draws; STIX Two Math, which ships
-/// with macOS, stands in if the bundle lacks it. Values come back in font units; `MathFont.Sized` scales them.
+/// T3 5258's Words lays math out with STIX Two Math's metrics and draws it in the system's STIX Two Math
+/// (@pierre/words README "Math"), which macOS ships, so nothing is bundled. Values come back in font units;
+/// `MathFont.Sized` scales them.
 final class MathFont: @unchecked Sendable {
-    /// The face every formula uses. Nil only when neither font has a MATH table, and then formulas show their source.
-    static let shared: MathFont? = {
-        if let url = Bundle.module.url(forResource: "latinmodern-math", withExtension: "otf"),
-           let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
-           let descriptor = descriptors.first, let font = MathFont(CTFontCreateWithFontDescriptor(descriptor, 10, nil)) {
-            return font
-        }
-        return MathFont(CTFontCreateWithName("STIXTwoMath-Regular" as CFString, 10, nil))
-    }()
+    /// The face every formula uses. Nil only when the system lacks it, and then formulas show their source.
+    static let shared: MathFont? = MathFont(CTFontCreateWithName("STIXTwoMath-Regular" as CFString, 10, nil))
 
     let base: CTFont
     let unitsPerEm: CGFloat
@@ -146,14 +140,18 @@ final class MathFont: @unchecked Sendable {
         return (advance.width * scale, CGRect(x: bounds.minX * scale, y: bounds.minY * scale, width: bounds.width * scale, height: bounds.height * scale))
     }
 
-    /// The font at one point size, for drawing.
-    private var sized: [CGFloat: CTFont] = [:]
+    /// A glyph's outline at one point size, cached: formulas repeat few glyphs at three sizes.
+    private var outlines: [Int: CGPath] = [:]
     private let lock = NSLock()
-    func font(size: CGFloat) -> CTFont {
+    func outline(_ g: CGGlyph, size: CGFloat) -> CGPath? {
+        let key = Int(g) << 20 | Int((size * 64).rounded())
         lock.lock(); defer { lock.unlock() }
-        if let f = sized[size] { return f }
-        let f = CTFontCreateCopyWithAttributes(base, size, nil, nil)
-        sized[size] = f
-        return f
+        if let p = outlines[key] { return p }
+        guard let p = CTFontCreatePathForGlyph(base, g, nil) else { return nil }
+        var t = CGAffineTransform(scaleX: size / CTFontGetSize(base), y: size / CTFontGetSize(base))
+        let scaled = p.copy(using: &t) ?? p
+        if outlines.count > 2_000 { outlines.removeAll() }
+        outlines[key] = scaled
+        return scaled
     }
 }

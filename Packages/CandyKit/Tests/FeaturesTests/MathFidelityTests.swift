@@ -3,9 +3,9 @@ import Testing
 import DesignSystem
 @testable import Features
 
-/// Formulas in MarkdownView against T3's KaTeX 0.16.47 output with T3's stylesheet in Chromium, at 1x and 2x
-/// (spec from scripts/gen-math-spec, references in design/component-reference/math). The fonts differ (Latin Modern
-/// Math against KaTeX's Computer Modern), so the ceilings allow for glyph edges; boxes and positions must match.
+/// Formulas in MarkdownView against T3 5258's Words SVG with T3's stylesheet in Chromium, at 1x and 2x (spec from
+/// scripts/gen-math-spec, references in design/component-reference/math). Both draw STIX Two Math, so what differs is
+/// rasterizing; `MathProbeTests.parity` checks the positions to a thousandth of an em.
 /// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-math.html.
 @MainActor @Suite(.fidelity)
 struct MathFidelityTests {
@@ -133,7 +133,7 @@ struct MathFidelityTests {
         }
         print(String(format: "FIDELITY Math: %d cases, mean differing %.2f%%", cases.count, cases.map(\.1).reduce(0, +) / Double(max(cases.count, 1)) * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Math fidelity</title><style>body{font:13px -apple-system}td{vertical-align:top}</style>"
-            + "<p>KaTeX in Chromium, ours, diff.</p><table>\(rows)</table>"
+            + "<p>Words in Chromium, ours, diff.</p><table>\(rows)</table>"
         try html.write(to: Fidelity.root.appendingPathComponent("report-math.html"), atomically: true, encoding: .utf8)
         Self.ceilings.check("math", cases)
     }

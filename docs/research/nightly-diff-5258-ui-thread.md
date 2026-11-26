@@ -519,7 +519,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 4ac5e6e791 | #40682 | fix(client-runtime): typing a bare Windows drive lists its folders | palette | n/a (Windows drive paths) |
 | 3b3f8808f4 | #40672 | fix(web): wait for image uploads before sending | composer | ported 9499e23d |
 | c1fbdf6cdb | #40686 | fix(web): pasting text copied from Word inserts the text instead of an image | composer | ported 8337eb04 |
-| 0fb6ac6e65 | #27866 | perf(web): Markdown renders with Words as static islands under one shared tooltip; remark leaves the web app | thread | n/a (markdown render speed) |
+| 0fb6ac6e65 | #27866 | perf(web): Markdown renders with Words as static islands under one shared tooltip; remark leaves the web app | thread | ported: math is SVG in STIX Two Math instead of KaTeX, see nightly-5258-fidelity.md "Math" |
 | 3f08098c99 | #40654 | fix(web): wrapped prompt suggestion no longer overlaps the composer toolbar | composer | left (2.2: wrapped suggestion overlap, not checked on screen) |
 | a9447cedbd | #33221 | fix(web): Cite button appears as fast after a double-click as after a drag | thread | ported 552ca433 (CW already showed Cite at once; a multi-click now anchors it under the selection) |
 | 76b421864b | #40628 | fix(web): Ctrl+click in the composer no longer outlines the whole line | composer | n/a (web editor selection) |

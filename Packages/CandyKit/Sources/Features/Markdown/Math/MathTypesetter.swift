@@ -5,52 +5,59 @@ import CoreText
 /// and depth below it follow KaTeX's box model. Parts with no color of their own take the text color.
 final class MathLayout: @unchecked Sendable {
     struct Glyph { let glyph: CGGlyph; let size: CGFloat; let position: CGPoint; var color: CGColor? = nil }
-    struct Stroke { let from: CGPoint; let to: CGPoint; let width: CGFloat; var color: CGColor? = nil }
+    /// A drawn shape: Words draws radicals and grown delimiters as paths. `stroke` nil fills it.
+    struct Shape { let path: CGPath; var stroke: CGFloat? = nil; var color: CGColor? = nil }
     let width: CGFloat
     let height: CGFloat
     let depth: CGFloat
     let glyphs: [Glyph]
     let rules: [CGRect]
     let ruleColors: [CGColor?]
-    let strokes: [Stroke]
+    let shapes: [Shape]
     /// A display formula's `\tag`, drawn at the column's right edge on the formula's baseline.
     let tag: MathLayout?
 
     init(_ box: MathBox, tag: MathBox? = nil) {
         width = box.width; height = box.height; depth = box.depth
-        glyphs = box.glyphs; rules = box.rules; ruleColors = box.ruleColors; strokes = box.strokes
+        glyphs = box.glyphs; rules = box.rules; ruleColors = box.ruleColors; shapes = box.shapes
         self.tag = tag.map { MathLayout($0) }
     }
 
     /// Draws with the baseline's left end at `origin`, in a flipped (y down) context.
     func draw(in ctx: CGContext, at origin: CGPoint, color: CGColor) {
         guard let font = MathFont.shared else { return }
-        // Rules snap to device pixels, as Blink snaps KaTeX's borders: a fraction bar stays one crisp line.
-        let scale = max(1, abs(ctx.userSpaceToDeviceSpaceTransform.d))
+        // Words draws rules as SVG rects, which Blink antialiases without snapping.
         ctx.saveGState()
         ctx.translateBy(x: origin.x, y: origin.y)
         ctx.scaleBy(x: 1, y: -1)
         for (i, r) in rules.enumerated() {
             ctx.setFillColor((i < ruleColors.count ? ruleColors[i] : nil) ?? color)
-            let h = max(1 / scale, (r.height * scale).rounded() / scale)
-            ctx.fill(CGRect(x: r.minX, y: (r.minY * scale).rounded() / scale, width: r.width, height: h))
+            ctx.fill(r)
         }
-        ctx.textMatrix = .identity
-        var start = 0
-        while start < glyphs.count {
-            let size = glyphs[start].size, tint = glyphs[start].color
-            var end = start
-            while end < glyphs.count, glyphs[end].size == size, glyphs[end].color == tint { end += 1 }
-            ctx.setFillColor(tint ?? color)
-            var ids = glyphs[start..<end].map(\.glyph), points = glyphs[start..<end].map(\.position)
-            CTFontDrawGlyphs(font.font(size: size), &ids, &points, ids.count, ctx)
-            start = end
+        // Words' glyphs are SVG text at 1000 units under the viewBox's scale, which Blink fills as outlines rather than as
+        // hinted, gamma-corrected glyph masks, so they draw as filled paths here too.
+        for g in glyphs {
+            guard let path = font.outline(g.glyph, size: g.size) else { continue }
+            ctx.saveGState()
+            ctx.translateBy(x: g.position.x, y: g.position.y)
+            ctx.addPath(path)
+            ctx.setFillColor(g.color ?? color)
+            ctx.fillPath()
+            ctx.restoreGState()
         }
-        // Over the glyphs, as KaTeX paints `\cancel`.
-        for s in strokes {
-            ctx.setStrokeColor(s.color ?? color)
-            ctx.setLineWidth(s.width)
-            ctx.strokeLineSegments(between: [s.from, s.to])
+        // After the glyphs, in Words' SVG order for radicals and delimiters, and over them for `\cancel`.
+        for s in shapes {
+            ctx.addPath(s.path)
+            if let w = s.stroke {
+                ctx.setStrokeColor(s.color ?? color)
+                ctx.setLineWidth(w)
+                ctx.setLineJoin(.miter)
+                ctx.setLineCap(.butt)
+                ctx.strokePath()
+            } else {
+                ctx.setFillColor(s.color ?? color)
+                ctx.fillPath()
+            }
         }
         ctx.restoreGState()
     }
@@ -65,11 +72,13 @@ struct MathBox {
     var rules: [CGRect] = []
     /// Colors for `rules` by index; shorter than `rules` where the rest take the text color.
     var ruleColors: [CGColor?] = []
-    var strokes: [MathLayout.Stroke] = []
+    var shapes: [MathLayout.Shape] = []
     /// A lone symbol's italic correction, included in `width`.
     var italic: CGFloat = 0
     /// A lone symbol: scripts sit at the font's shifts instead of hanging off the box (TeX rule 18a).
     var isChar = false
+    /// A big operator, whose width already holds its italic correction (Words' $AF.op).
+    var isOp = false
     /// The glyph of a lone symbol, for accent attachment.
     var glyph: CGGlyph?
 
@@ -78,8 +87,8 @@ struct MathBox {
         ruleColors += Array(repeating: nil, count: max(0, rules.count - ruleColors.count))
         ruleColors += (0..<b.rules.count).map { $0 < b.ruleColors.count ? b.ruleColors[$0] : nil }
         rules += b.rules.map { $0.offsetBy(dx: x, dy: y) }
-        strokes += b.strokes.map { .init(from: CGPoint(x: $0.from.x + x, y: $0.from.y + y), to: CGPoint(x: $0.to.x + x, y: $0.to.y + y),
-                                          width: $0.width, color: $0.color) }
+        var move = CGAffineTransform(translationX: x, y: y)
+        shapes += b.shapes.map { .init(path: $0.path.copy(using: &move) ?? $0.path, stroke: $0.stroke, color: $0.color) }
         height = max(height, b.height + y)
         depth = max(depth, b.depth - y)
     }
@@ -96,13 +105,13 @@ struct MathBox {
         var out = self
         out.glyphs = glyphs.map { var g = $0; if g.color == nil { g.color = color }; return g }
         out.ruleColors = (0..<rules.count).map { ($0 < ruleColors.count ? ruleColors[$0] : nil) ?? color }
-        out.strokes = strokes.map { var s = $0; if s.color == nil { s.color = color }; return s }
+        out.shapes = shapes.map { var s = $0; if s.color == nil { s.color = color }; return s }
         return out
     }
 }
 
-/// Lays out `MathNode`s with the TeXbook's Appendix G rules, reading the constants from the font's MATH table.
-/// KaTeX follows the same rules with Computer Modern's parameters, which Latin Modern Math carries.
+/// Lays out `MathNode`s as T3 5258's Words does (@pierre/words 0.2.2-t3.4, src/math.wat): the TeXbook's Appendix G rules
+/// with STIX Two Math's MATH constants, its glyph metrics in tens of units, and drawn radicals and grown delimiters.
 struct MathTypesetter {
     struct Unsupported: Error { let reason: String }
 
@@ -135,6 +144,8 @@ struct MathTypesetter {
         }
     }
     func k(_ c: MathFont.Constant, _ s: Style) -> CGFloat { (font.constants[c] ?? 0) * size(s) / font.unitsPerEm }
+    /// Words' lengths: thousandths of the em at style `s` (math.wat `$m.sc`).
+    func words(_ v: CGFloat, _ s: Style) -> CGFloat { v * size(s) / 1000 }
     private func units(_ v: CGFloat, _ s: Style) -> CGFloat { v * size(s) / font.unitsPerEm }
 
     /// The formula and its `\tag`. KaTeX allows a tag only in display mode.
@@ -228,7 +239,7 @@ struct MathTypesetter {
                 if let l = last {
                     let code = Self.spacing[l.rawValue][cls.rawValue]
                     if code > 0 || (code < 0 && !style.isScript) {
-                        x += CGFloat([0, 3, 4, 5][abs(code)]) * size(style) / 18
+                        x += words(111 + 56 * CGFloat(abs(code)), style)
                     }
                 }
                 out.add(box, x: x, y: 0)
@@ -316,8 +327,11 @@ struct MathTypesetter {
             out.isChar = false
             let pad = 0.2 * size(style), w = 0.046 * size(style)
             let bottom = -out.depth - pad, top = out.height + pad
-            if up { out.strokes.append(.init(from: CGPoint(x: 0, y: bottom), to: CGPoint(x: out.width, y: top), width: w)) }
-            if down { out.strokes.append(.init(from: CGPoint(x: 0, y: top), to: CGPoint(x: out.width, y: bottom), width: w)) }
+            func line(_ a: CGPoint, _ b: CGPoint) -> MathLayout.Shape {
+                let p = CGMutablePath(); p.move(to: a); p.addLine(to: b); return .init(path: p, stroke: w)
+            }
+            if up { out.shapes.append(line(CGPoint(x: 0, y: bottom), CGPoint(x: out.width, y: top))) }
+            if down { out.shapes.append(line(CGPoint(x: 0, y: top), CGPoint(x: out.width, y: bottom))) }
             return (.ord, out)
         case .xArrow(let arrow, let above, let below):
             return (.rel, try xArrow(arrow, above: above, below: below, style))
@@ -330,11 +344,13 @@ struct MathTypesetter {
     }
 
     func glyphBox(_ g: CGGlyph, _ style: Style) -> MathBox {
+        // Words' metrics table holds STIX Two Math's advance, ink bounds and italic correction in tens of units
+        // (math.wat `$m.metrics`); the italic correction stays out of the width until scripts use it.
         let m = font.metrics(g), s = size(style)
         let scale = s / font.unitsPerEm
-        let italic = font.italic(g) * scale
-        return MathBox(width: m.advance * scale + italic, height: max(0, m.bounds.maxY * scale), depth: max(0, -m.bounds.minY * scale),
-                       glyphs: [.init(glyph: g, size: s, position: .zero)], italic: italic, isChar: true, glyph: g)
+        func tens(_ v: CGFloat) -> CGFloat { (v / 10).rounded() * 10 * scale }
+        return MathBox(width: tens(m.advance), height: max(0, tens(m.bounds.maxY)), depth: max(0, tens(-m.bounds.minY)),
+                       glyphs: [.init(glyph: g, size: s, position: .zero)], italic: tens(font.italic(g)), isChar: true, glyph: g)
     }
 
     func symbol(_ s: Unicode.Scalar, _ style: Style) throws -> MathBox {
@@ -345,19 +361,19 @@ struct MathTypesetter {
 
     /// A big operator, centered on the math axis, with its display size in display style.
     func largeOp(_ s: Unicode.Scalar, _ style: Style, limits: Bool?) throws -> (box: MathBox, limits: Bool) {
-        var g = font.glyph(s)
+        // Words' `$m.bigOp`: the base glyph scaled by 1.3 in display style, 1.8 for integrals, centered on the axis.
+        // Its italic correction widens it, and a subscript tucks back under by as much.
+        let g = font.glyph(s)
         guard g != 0 else { throw Unsupported(reason: "no operator glyph") }
-        if style.kind == .display, let c = font.construction(g, vertical: true) {
-            let min = font.constants[.displayOperatorMinHeight] ?? 0
-            g = (c.variants.first { $0.advance >= min } ?? c.variants.last)?.glyph ?? g
-        }
-        var box = glyphBox(g, style)
-        // KaTeX's op.ts: an operator's width leaves out its italic correction; scripts use it instead (sup at the edge,
-        // sub pulled back by it), so `\int_a^b` hugs the glyph.
-        box.width -= box.italic
-        let shift = (box.height - box.depth) / 2 - k(.axisHeight, style)
-        var out = box.shifted(up: -shift)
-        out.isChar = false
+        let f: CGFloat = style.kind == .display ? ((0x222B...0x2233).contains(s.value) ? 1.8 : 1.3) : 1
+        let box = glyphBox(g, style)
+        let half = (box.height + box.depth) * f / 2, axis = words(258, style)
+        var out = MathBox()
+        out.add(MathBox(glyphs: [.init(glyph: g, size: size(style) * f, position: .zero)]), x: 0, y: -((box.height - box.depth) * f / 2 - axis))
+        out.width = box.width * f + box.italic * f
+        out.height = half + axis; out.depth = half - axis
+        out.italic = box.italic * f
+        out.isOp = true
         let useLimits = limits ?? (style.kind == .display && !Symbols.integrals.contains(s))
         return (out, limits == true || (useLimits && style.kind == .display))
     }
@@ -396,19 +412,17 @@ struct MathTypesetter {
     func attach(_ base: MathBox, sub: [MathNode]?, sup: [MathNode]?, _ style: Style) throws -> MathBox {
         let supBox = try sup.map { try list($0, style.sup) }
         let subBox = try sub.map { try list($0, style.sub) }
-        // KaTeX's supsub.ts with Computer Modern's sigma values (fontMetricsData): sup_drop 0.386 and sub_drop 0.05 of the
-        // script's size, sup1/sup2/sup3 0.413/0.363/0.289, sub1/sub2 0.15/0.247. The MATH table merges some of these.
-        var u: CGFloat = base.isChar ? 0 : base.height - 0.386 * size(style.sup)
-        var v: CGFloat = base.isChar ? 0 : base.depth + 0.05 * size(style.sub)
-        let supShift = (style.cramped ? 0.289 : style.kind == .display ? 0.413 : 0.363) * size(style)
+        // Words' `$m.atomBox`, TeX's rule 18 with STIX Two Math's MATH constants.
+        var u: CGFloat = base.isChar ? 0 : base.height - k(.superscriptBaselineDropMax, style)
+        var v: CGFloat = base.isChar ? 0 : base.depth + k(.subscriptBaselineDropMin, style)
         if let p = supBox {
-            u = max(u, supShift, p.depth + k(.superscriptBottomMin, style))
+            u = max(u, k(style.cramped ? .superscriptShiftUpCramped : .superscriptShiftUp, style), p.depth + k(.superscriptBottomMin, style))
         }
         if let b = subBox {
             if supBox == nil {
-                v = max(v, 0.15 * size(style), b.height - k(.subscriptTopMax, style))
+                v = max(v, k(.subscriptShiftDown, style), b.height - k(.subscriptTopMax, style))
             } else {
-                v = max(v, 0.247 * size(style))
+                v = max(v, k(.subscriptShiftDown, style))
             }
         }
         if let p = supBox, let b = subBox {
@@ -422,7 +436,7 @@ struct MathTypesetter {
         }
         var out = MathBox()
         out.add(base, x: 0, y: 0)
-        let supX = base.width, subX = base.width - base.italic
+        let supX = base.isOp ? base.width : base.width + base.italic, subX = base.isOp ? base.width - base.italic : base.width
         var right = base.width
         if let p = supBox { out.add(p, x: supX, y: u); right = max(right, supX + p.width) }
         if let b = subBox { out.add(b, x: subX, y: -v); right = max(right, subX + b.width) }
@@ -434,21 +448,18 @@ struct MathTypesetter {
     func limitsBox(_ op: MathBox, sup: [MathNode]?, sub: [MathNode]?, _ style: Style) throws -> MathBox {
         let supBox = try sup.map { try list($0, style.sup) }
         let subBox = try sub.map { try list($0, style.sub) }
+        // Words' `$m.atomBox` limits: MATH's limit gaps and baseline rise and drop, nothing added past them.
         let delta = op.italic, w0 = op.width
         let w = max(w0, supBox?.width ?? 0, subBox?.width ?? 0)
-        // KaTeX's bigOpSpacing1 to 5 (Computer Modern's xi9 to xi13): 0.111, 0.166, 0.2, 0.6 and 0.1em.
-        let em = size(style), extra = 0.1 * em
         var out = MathBox()
         out.add(op, x: (w - w0) / 2, y: 0)
         if let p = supBox {
-            let y = op.height + max(0.111 * em, 0.2 * em - p.depth) + p.depth
+            let y = op.height + p.depth + max(k(.upperLimitGapMin, style), k(.upperLimitBaselineRiseMin, style) - p.depth)
             out.add(p, x: (w - p.width) / 2 + delta / 2, y: y)
-            out.height = y + p.height + extra
         }
         if let b = subBox {
-            let y = op.depth + max(0.166 * em, 0.6 * em - b.height) + b.height
+            let y = op.depth + b.height + max(k(.lowerLimitGapMin, style), k(.lowerLimitBaselineDropMin, style) - b.height)
             out.add(b, x: (w - b.width) / 2 - delta / 2, y: -y)
-            out.depth = y + b.depth + extra
         }
         out.width = w
         return out
@@ -515,58 +526,162 @@ struct MathTypesetter {
         return wrapped
     }
 
+    /// Words' `$m.sqrt`: a drawn sign (a tick, a heavy down stroke, a long up stroke, then the bar over the body).
     func radical(_ body: [MathNode], index: [MathNode]?, _ style: Style) throws -> MathBox {
         let r = try list(body, style.crampedSelf)
-        let t = k(.radicalRuleThickness, style)
-        var gap = k(style.kind == .display ? .radicalDisplayStyleVerticalGap : .radicalVerticalGap, style)
-        let need = r.height + r.depth + gap + t
-        let surd = try vertical("\u{221A}", total: need, style)
-        let total = surd.height + surd.depth
-        if total > need { gap += (total - need) / 2 }
-        let top = r.height + gap + t
+        let t = words(68, style)
+        var gap = words(style.kind == .display ? 170 : 85, style)
+        let inner = r.height + r.depth + gap + t
+        let total = max(inner, words(1100, style))
+        gap += (total - inner) / 2
+        let sw = words(640, style) + min(total / 12, em * 0.3)
+        let h = r.height + gap + t
         var out = MathBox()
         var x: CGFloat = 0
         if let index {
             let i = try list(index, Style(kind: .scriptScript, cramped: true))
-            let before = k(.radicalKernBeforeDegree, style), after = k(.radicalKernAfterDegree, style)
-            let raise = (font.constants[.radicalDegreeBottomRaisePercent] ?? 60) / 100 * total
-            out.add(i, x: before, y: top - total + raise)
-            x = max(0, before + i.width + after)
+            var ix = words(65, style)
+            x = ix + i.width - words(335, style)
+            if x < 0 { ix -= x; x = 0 }
+            out.add(i, x: ix, y: -(total - h) + total * 0.55)
         }
-        let glyph = surd.shifted(up: top - surd.height)
-        out.add(glyph, x: x, y: 0)
-        let bodyX = x + glyph.width
-        out.add(r, x: bodyX, y: 0)
-        out.rules.append(CGRect(x: bodyX, y: top - t, width: r.width, height: t))
-        out.height = max(out.height, top + k(.radicalExtraAscender, style))
-        out.width = bodyX + r.width
+        // Words strokes the sign at 0.068em, at least 0.02 of the formula's em, and the heavy stroke twice that.
+        let k = min(total, size(style)), line = max(t, em * 0.02)
+        let top = h - line / 2, bottom = -(total - h), w = sw + r.width + words(60, style)
+        let thin = CGMutablePath(), heavy = CGMutablePath()
+        thin.addLines(between: [CGPoint(x: x + sw / 12, y: bottom + k * 9 / 20), CGPoint(x: x + sw / 5, y: bottom + k * 11 / 20),
+                                CGPoint(x: x + sw * 9 / 20, y: bottom), CGPoint(x: x + sw, y: top), CGPoint(x: x + w, y: top)])
+        heavy.addLines(between: [CGPoint(x: x + sw / 5, y: bottom + k * 11 / 20), CGPoint(x: x + sw * 9 / 20, y: bottom)])
+        out.shapes += [.init(path: thin, stroke: line), .init(path: heavy, stroke: 2 * line)]
+        out.add(r, x: x + sw, y: 0)
+        out.height = max(out.height, h + words(78, style))
+        out.depth = max(out.depth, total - h)
+        out.width = x + w
         return out
     }
 
     // MARK: Delimiters
 
-    /// `\left…\right`: delimiters grown to cover the body around the axis (TeX's \delimiterfactor 901, \delimitershortfall 5pt).
+    /// `\left…\right`: delimiters grown to cover the body around the axis (Words' `$m.fence`, TeX's 901 and 5pt).
     func leftRight(_ l: Unicode.Scalar?, _ body: [MathNode], _ r: Unicode.Scalar?, _ style: Style) throws -> MathBox {
         var inner = try items(body, style)
         let measured = join(inner)
-        let axis = k(.axisHeight, style)
+        let axis = words(258, style)
         let reach = max(measured.height - axis, measured.depth + axis)
-        let total = max(reach * 2 * 0.901, 2 * reach - 0.5 * size(style))
+        let total = max(reach * 1.802, 2 * reach - words(500, style))
         for i in inner.indices {
             if case .middle(let d, let s) = inner[i] { inner[i] = .atom(.rel, try delimiter(d, total: total, s), s) }
         }
         let left = try delimiter(l, total: total, style), right = try delimiter(r, total: total, style)
-        return join([.atom(.open, left, style)] + inner + [.atom(.close, right, style)])
+        // Words lays `\left`, the body and `\right` side by side, with no class spacing between them.
+        let body = join(inner)
+        var out = MathBox()
+        out.add(left, x: 0, y: 0)
+        out.add(body, x: left.width, y: 0)
+        out.add(right, x: left.width + body.width, y: 0)
+        out.width = left.width + body.width + right.width
+        return out
     }
 
-    /// A delimiter at least `total` tall, centered on the axis; nil is the null delimiter.
+    /// Words' `$m.delim`: the glyph itself while it is tall enough, else a drawn shape (or the glyph scaled) `total` tall
+    /// and centered on the axis. Nil is the null delimiter.
     func delimiter(_ d: Unicode.Scalar?, total: CGFloat, _ style: Style) throws -> MathBox {
-        guard let d else { return MathBox(width: 0.12 * size(style)) }
-        let box = try vertical(d, total: total, style)
-        let shift = (box.height - box.depth) / 2 - k(.axisHeight, style)
-        var out = box.shifted(up: -shift)
-        out.isChar = false
+        guard let d else { return MathBox(width: words(120, style)) }
+        var glyph = try symbol(d, style)
+        glyph.isChar = false
+        if total <= glyph.height + glyph.depth + words(20, style) { return glyph }
+        let axis = words(258, style), top = total / 2 + axis, bottom = axis - total / 2
+        guard let (shape, mirror) = Self.delimiterShapes[d.value] else {
+            let f = total / max(glyph.height + glyph.depth, 0.001)
+            var out = MathBox()
+            out.add(MathBox(glyphs: [.init(glyph: glyph.glyph ?? 0, size: size(style) * f, position: .zero)]),
+                    x: 0, y: axis - (glyph.height - glyph.depth) * f / 2)
+            out.width = glyph.width * f; out.height = top; out.depth = -bottom
+            return out
+        }
+        // Widths and line weights in thousandths of the formula's em, as Words computes them from the height.
+        let n = total / em * 1000, unit = em / 1000
+        let w: CGFloat = switch shape {
+        case 1: min(420 + n / 20, 750)
+        case 2, 7, 8: min(400 + n / 40, 600)
+        case 3: min(480 + n / 30, 750)
+        case 5: 480
+        case 6: min(400 + n / 30, 700)
+        case 9, 10: 100 + n / 3
+        default: 300
+        }
+        var out = MathBox(width: words(w, style), height: top, depth: -bottom)
+        let line = min(words(45, style) + total / 90, 90 * unit)
+        var flip = mirror ? CGAffineTransform(a: -1, b: 0, c: 0, d: 1, tx: out.width, ty: 0) : .identity
+        out.shapes = Self.delimiterPath(shape, width: out.width, top: top, bottom: bottom, line: line, unit: unit)
+            .map { .init(path: $0.path.copy(using: &flip) ?? $0.path, stroke: $0.stroke) }
         return out
+    }
+
+    /// Words' delimiter shapes (`$pairs.delim`): the shape, and whether the delimiter is the left one mirrored.
+    static let delimiterShapes: [UInt32: (Int, Bool)] = [
+        0x28: (1, false), 0x27EE: (1, false), 0x29: (1, true), 0x27EF: (1, true), 0x5B: (2, false), 0x5D: (2, true),
+        0x7B: (3, false), 0x7D: (3, true), 0x7C: (4, false), 0x2223: (4, false), 0x2016: (5, false), 0x2225: (5, false),
+        0x27E8: (6, false), 0x2329: (6, false), 0x27E9: (6, true), 0x232A: (6, true), 0x230A: (7, false), 0x230B: (7, true),
+        0x2308: (8, false), 0x2309: (8, true), 0x2F: (9, false), 0x5C: (10, false),
+    ]
+
+    /// One left-hand delimiter shape from Words' `$m.emitPath`, in a box `w` wide from `bottom` to `top` (y up). `unit` is
+    /// a thousandth of the formula's em, for the lengths Words doesn't scale.
+    static func delimiterPath(_ shape: Int, width w: CGFloat, top: CGFloat, bottom: CGFloat, line t: CGFloat, unit: CGFloat) -> [MathLayout.Shape] {
+        let size = top - bottom, mid = (top + bottom) / 2
+        let p = CGMutablePath()
+        switch shape {
+        case 1:
+            // Two curves, thick in the middle. A cubic with equal controls reaches 3/4 of the way to them.
+            let ax = w - w / 6, k = min(size / 4, w * 2)
+            var cx = ax - (ax - w / 5) * 4 / 3
+            p.move(to: CGPoint(x: ax, y: top))
+            p.addCurve(to: CGPoint(x: ax, y: bottom), control1: CGPoint(x: cx, y: top - k), control2: CGPoint(x: cx, y: bottom + k))
+            p.addLine(to: CGPoint(x: ax + t / 4, y: bottom))
+            cx += t * 4 / 3
+            p.addCurve(to: CGPoint(x: ax + t / 4, y: top), control1: CGPoint(x: cx, y: bottom + k), control2: CGPoint(x: cx, y: top - k))
+            p.closeSubpath()
+            return [.init(path: p)]
+        case 2, 7, 8:
+            // A floor has no top arm and a ceiling no bottom arm.
+            let ax = w - w / 8, cx = w / 3, k = max(t / 2, 36 * unit), topArm = shape != 7, bottomArm = shape != 8
+            p.move(to: CGPoint(x: topArm ? ax : cx, y: top))
+            if topArm { p.addLine(to: CGPoint(x: cx, y: top)) }
+            p.addLine(to: CGPoint(x: cx, y: bottom))
+            if bottomArm { p.addLine(to: CGPoint(x: ax, y: bottom)); p.addLine(to: CGPoint(x: ax, y: bottom + k)) }
+            p.addLine(to: CGPoint(x: cx + t, y: bottomArm ? bottom + k : bottom))
+            p.addLine(to: CGPoint(x: cx + t, y: topArm ? top - k : top))
+            if topArm { p.addLine(to: CGPoint(x: ax, y: top - k)) }
+            p.closeSubpath()
+            return [.init(path: p)]
+        case 3:
+            let ax = w - w / 8, cx = w / 2, r = min(ax - cx, size / 6), k = w / 8
+            p.move(to: CGPoint(x: ax, y: top))
+            p.addQuadCurve(to: CGPoint(x: cx, y: top - r), control: CGPoint(x: cx, y: top))
+            p.addLine(to: CGPoint(x: cx, y: mid + r))
+            p.addQuadCurve(to: CGPoint(x: k, y: mid), control: CGPoint(x: cx, y: mid))
+            p.addQuadCurve(to: CGPoint(x: cx, y: mid - r), control: CGPoint(x: cx, y: mid))
+            p.addLine(to: CGPoint(x: cx, y: bottom + r))
+            p.addQuadCurve(to: CGPoint(x: ax, y: bottom), control: CGPoint(x: cx, y: bottom))
+            return [.init(path: p, stroke: t * 3 / 2)]
+        case 4:
+            p.addRect(CGRect(x: w / 2 - 25 * unit, y: bottom, width: 50 * unit, height: size))
+            return [.init(path: p)]
+        case 5:
+            p.addRect(CGRect(x: w / 2 - 115 * unit, y: bottom, width: 50 * unit, height: size))
+            p.addRect(CGRect(x: w / 2 + 65 * unit, y: bottom, width: 50 * unit, height: size))
+            return [.init(path: p)]
+        case 6:
+            p.addLines(between: [CGPoint(x: w - w / 5, y: top), CGPoint(x: w / 5, y: mid), CGPoint(x: w - w / 5, y: bottom)])
+            return [.init(path: p, stroke: t)]
+        case 9:
+            p.addLines(between: [CGPoint(x: w, y: top), CGPoint(x: 0, y: bottom)])
+            return [.init(path: p, stroke: t / 2)]
+        default:
+            p.addLines(between: [CGPoint(x: 0, y: top), CGPoint(x: w, y: bottom)])
+            return [.init(path: p, stroke: t / 2)]
+        }
     }
 
     /// The smallest variant of `s` at least `total` tall, else an assembly of its parts, else the largest variant.
@@ -615,7 +730,7 @@ struct MathTypesetter {
         for (i, part) in sequence.enumerated() {
             let box = glyphBox(part.glyph, style)
             if vertical { out.add(box, x: 0, y: pos * scale) } else { out.add(box, x: pos * scale, y: 0) }
-            out.width = max(out.width, vertical ? box.width - box.italic : 0)
+            out.width = max(out.width, vertical ? box.width : 0)
             pos += part.fullAdvance - (i < sequence.count - 1 ? overlap : 0)
         }
         if vertical {
@@ -655,7 +770,7 @@ struct MathTypesetter {
         let arrow = ["\u{2192}", "\u{2190}", "\u{2194}"].contains(a)
         var mark: MathBox
         if stretchy {
-            mark = try stretch(a, width: base.width - (arrow ? 0 : base.italic), style)
+            mark = try stretch(a, width: base.width, style)
         } else {
             mark = try symbol(a, style)
         }
@@ -663,7 +778,7 @@ struct MathTypesetter {
         let markAttach: CGFloat = mark.glyph.flatMap { g in font.topAccent(g).map { $0 * scale } }
             ?? (mark.glyphs.count == 1 ? glyphCenter(mark) : mark.width / 2)
         let baseAttach: CGFloat = (base.isChar ? base.glyph.flatMap { g in font.topAccent(g).map { $0 * scale } } : nil)
-            ?? (base.width - base.italic) / 2
+            ?? base.width / 2
         var out = MathBox()
         out.add(base, x: 0, y: 0)
         let y: CGFloat
@@ -688,21 +803,24 @@ struct MathTypesetter {
 
     // MARK: Text
 
+    /// Words' `$m.textNode`: the box is the run's metrics from the table, a space a third of an em. Chromium draws the run
+    /// as one `<text>`, so the glyphs sit at the font's own advances.
     func text(_ s: String, _ variant: TeXParser.Variant, _ style: Style) throws -> MathBox {
         var out = MathBox()
-        var x: CGFloat = 0
+        var x: CGFloat = 0, width: CGFloat = 0
+        let scale = size(style) / font.unitsPerEm
         for scalar in s.unicodeScalars {
-            if scalar == " " || scalar == "\u{A0}" { x += 0.25 * size(style); continue }
-            if scalar == "\u{2009}" { x += size(style) / 6; continue }
+            if scalar == " " || scalar == "\u{A0}" { x += words(333, style); width += words(333, style); continue }
+            if scalar == "\u{2009}" { x += size(style) / 6; width += size(style) / 6; continue }
             let mapped = variant == .roman ? scalar : (TeXParser.letter(scalar, variant) ?? scalar)
             let g = font.glyph(mapped)
             guard g != 0 else { throw Unsupported(reason: "no glyph for text") }
-            var box = glyphBox(g, style)
-            box.width -= box.italic
+            let box = glyphBox(g, style)
             out.add(box, x: x, y: 0)
-            x += box.width
+            x += font.metrics(g).advance * scale
+            width += box.width
         }
-        out.width = x
+        out.width = width
         return out
     }
 

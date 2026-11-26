@@ -42,3 +42,34 @@ Every other PNG, including the ones recaptured from 5258 during the port, came o
 The 4% ceiling dates from the 3824 reference (`8de8b79e`), where the command fit on one line and the case measured 3.22%. At 4928 the command wraps to two lines of monospace text, which doubles the glyph edges that the two rasterizers draw differently.
 
 A 5258 recapture would not change this. For a command approval 5258 draws the same markup as 4928: `c4d0e05d96` (#42535) only adds the push hooks branch to `TimelinePendingApprovalRow.tsx`. The 5258 reference sandbox has no pending approval, because it expired when 5258 first started, so a recapture also needs a real turn. I made neither. Passing the case needs a decision from the user: a 5% ceiling for `approval`, or a shorter command in the fixture.
+
+## Math
+
+Written 2026-11-26 (task math-5258). #27866 (`0fb6ac6e65`) moved chat Markdown to Words, `@pierre/words` 0.2.2-t3.4 from T3's fork (`apps/web/deps/pierre-words-0.2.2-t3.4-7c04b7f1.tgz`, Apache 2.0). Words typesets TeX itself, in WebAssembly, and KaTeX is gone from chat. Only Mermaid labels still use KaTeX (`MermaidDiagram.tsx:47-67`), so `MermaidDiagrams.swift:269` stays as it is. `f9f34aab78` (#41361) only guards Words' start-up, and no later commit in the range touches math.
+
+What 5258 draws:
+
+- Each formula is an `<svg role="img" aria-label="<TeX>">` of `<text>` glyphs, `<rect>` rules and `<path>` shapes (`wordsHast.ts:323-369` keeps only those).
+- The font is the system's STIX Two Math (`font-family: 'STIX Two Math','Cambria Math','Latin Modern Math',math,serif`), at 1.21em (`index.css:2352-2354`). Letters are Unicode math italics, not KaTeX's Computer Modern.
+- Layout is Appendix G with STIX Two Math's MATH constants and its glyph metrics rounded to tens of units (Words' `src/math.wat`, `tables/math-metrics.txt`).
+- Display big operators are the text glyph scaled 1.3, integrals 1.8. Radicals are a stroked polyline, and tall parentheses, brackets, braces, bars and angles are Words' own paths.
+- Inline math is an `inline-block align-middle` span and display math a `block` span with `margin: 1em auto` on the SVG. Both scroll sideways with `max-w-full overflow-x-auto` (`wordsHast.ts:863-871`).
+- Copying is unchanged: `\(tex\)` and `\[\ntex\n\]\n\n` from `data-markdown-copy` (`wordsHast.ts:877-889`).
+- An unknown command draws in red (`#c00`), and an unclosed group closes itself. A formula Words can't lay out shows as code.
+
+CandyWrapper's port, in `Features/Markdown/Math`:
+
+1. `scripts/gen-math-spec` renders the corpus through that Words build, and the 156 math PNGs are recaptured from it.
+2. `MathFont` uses the system STIX Two Math, so the bundled Latin Modern Math (717 KB, GUST license) and its notice are gone.
+3. `MathTypesetter` follows Words for glyph metrics, script shifts, limits, big operators, radicals, `\left…\right` and delimiter shapes, and `\text` runs. `MathProbeTests.parity` with `CW_MATH_PARITY=1` compares every glyph and rule with Words' SVG. After the port, 36 of the 39 cases match to within 0.005em. The probe pairs glyphs one by one, so for the cases where Words draws a word as one `<text>` (`lim`, `det`, `mod`, `\text`) it checks the box.
+4. Glyphs draw as filled outlines, as Blink fills Words' 1000-unit SVG text.
+5. VoiceOver reads a display formula as its TeX, as T3's `aria-label` gives it.
+
+`MathFidelityTests` against the 5258 references: 33 of 152 cases over their ceilings with the 4928 port, 1 after this one. `10-inline-sum` light at 1x differs by 9.81% against 9.00%. Its glyph positions match Words to within 0.005em, so the rest is rasterizing: Blink draws the subscripts about a fifth of a CSS pixel higher and 14% heavier. The ceiling stays.
+
+Left:
+
+- `cases` rows are 0.24em taller than Words', `\mathbb{R}^n` puts the exponent 0.07em lower, and accents sit 0.12em lower.
+- An unknown command shows the formula as code, where Words draws the command in red.
+- `\frac{a}{` shows as code, where Words draws a fraction with an empty denominator.
+- An inline formula wider than the column is clipped, where T3 scrolls it.

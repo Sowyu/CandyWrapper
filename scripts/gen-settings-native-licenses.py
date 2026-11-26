@@ -9,8 +9,6 @@ for name, version, license, source, path in [
     ('Lucide', None, 'ISC', 'https://lucide.dev', 'Packages/CandyKit/Sources/DesignSystem/Icons/LICENSE-lucide.txt'),
     ('Tabler Icons', '3.50.0', 'MIT', 'https://tabler.io/icons', 'Packages/CandyKit/Sources/DesignSystem/Icons/LICENSE-tabler.txt'),
     ('pele', '1.8.0', 'MIT', 'https://github.com/obsidianmd/pele', 'Packages/CandyKit/Sources/Features/Resources/LICENSE-pele.txt'),
-    ('Latin Modern Math', '1.959', 'GUST Font License', 'https://www.gust.org.pl/projects/e-foundry/lm-math',
-     'Packages/CandyKit/Sources/Features/Resources/LICENSE-latin-modern-math.txt'),
     # The model picker's descriptions and facts, bundled by scripts/gen-model-notes.
     ('models.dev', None, 'MIT', 'https://github.com/anomalyco/models.dev', 'docs/research/models-dev/LICENSE.txt'),
     # The pull request viewer's `:alias:` emoji, bundled by scripts/gen-github-emoji.py.
