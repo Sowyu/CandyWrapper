@@ -131,4 +131,15 @@ struct UsageLogicTests {
         #expect(UsageLimitWindowBar.paceMark(timeLeft: 50, width: 5) == nil)
         #expect(UsageLimitWindowBar.paceMark(timeLeft: nil, width: 200) == nil)
     }
+
+    /// #41775: putting a saved mapping back drops the prices typed while it was cleared.
+    @Test func restoringSavedMappingClearsTypedPrices() {
+        let table = UsagePriceTableView(initialModel: nil)
+        table.targets = [Self.target("a", aliases: ["gpt-x": "gpt-y"])]
+        table.editAlias("model:gpt-x", "")
+        table.editCell("model:gpt-x", .input, "3")
+        #expect(table.drafts.first?.values[.input] == "3")
+        table.editAlias("model:gpt-x", "gpt-y")
+        #expect(table.drafts.isEmpty)
+    }
 }

@@ -196,6 +196,9 @@ public final class LinkEnvironmentFormView: DSView {
     private var prefilledAddress = ""
     /// Machines that would not give a code through a link, so the form asks for one instead.
     public var throughFailed: Set<String> = [] { didSet { apply() } }
+    /// Whether this app's session on the route's environment may ask it for a code at `access` (#41742): handing out
+    /// access takes holding it, so a route this session can't use is not offered.
+    public var mayPairThrough: (LinkThroughRoute, String) -> Bool = { _, _ in true }
     private let addressTitle = LabelView("Address", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.foreground))
     public let addressInput = InputView(placeholder: "https://box.example.ts.net")
     private let addressHint = TextBlockView()
@@ -297,7 +300,7 @@ public final class LinkEnvironmentFormView: DSView {
         if let p = prefilledThrough, selected == Self.anotherAddress, addressInput.text == prefilledAddress { candidate = p }
         else if let m = machine, !mints, !answersRequest { candidate = throughRoutes.first { $0.environmentId == m.environmentId } }
         else { candidate = nil }
-        guard let candidate, !throughFailed.contains(candidate.environmentId) else { return nil }
+        guard let candidate, !throughFailed.contains(candidate.environmentId), mayPairThrough(candidate, access) else { return nil }
         return candidate
     }
 

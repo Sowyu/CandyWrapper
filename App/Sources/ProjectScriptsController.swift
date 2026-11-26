@@ -20,6 +20,8 @@ final class ProjectScriptsController {
     /// Settings, Project: where actions are added and edited.
     var saveActions: (([ProjectActionsLogic.Write]) async -> String?)?
     private var editor: ProjectActionEditor?
+    /// `editorRequestIdRef` (#39312, ProjectScriptsControl.tsx:112-160): a form opened after an import started is newer.
+    private var editorRequest = 0
     var openProjectSettings: ((String) -> Void)?
     /// `useT3ProjectFileScripts`: the scripts of the workspace's `t3.json`, keyed by environment and cwd.
     private var fileScripts: (key: String, scripts: [T3ProjectFile.Script])?
@@ -178,9 +180,17 @@ final class ProjectScriptsController {
         let id = ProjectActionsLogic.newId(input.name, targets: [target])
         let writes = ProjectActionsLogic.plan([target], transform: { ProjectScripts.applySubmit($0, id: id, isNew: true, input: input) },
                                               scriptId: id, keybinding: input.keybinding)
+        editorRequest += 1
+        let request = editorRequest
         Task { [weak self] in
             if let error = await saveActions(writes) {
-                self?.openEditor(nil, prefill: input, error: error)
+                guard let self else { return }
+                // A form opened meanwhile keeps its draft; the failure becomes a toast instead.
+                if request != self.editorRequest {
+                    self.panel.toasts.show(ToastView(title: "Failed to import \(fileScript.name).", message: error, kind: .error))
+                    return
+                }
+                self.openEditor(nil, prefill: input, error: error)
             } else {
                 self?.refresh()
             }
@@ -196,6 +206,7 @@ final class ProjectScriptsController {
     }
 
     private func openEditor(_ script: ProjectScript?, prefill: ProjectScriptInput? = nil, error: String? = nil) {
+        if prefill == nil { editorRequest += 1 }
         guard let threadId, project(threadId) != nil, let env = threadId.environmentId,
               let config = composer?.config(env), let window = panel.window, let target = actionsTarget() else { return }
         let editor = ProjectActionEditor(script: script, keybinding: script.flatMap {

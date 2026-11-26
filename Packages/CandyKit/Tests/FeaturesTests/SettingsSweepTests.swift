@@ -66,4 +66,20 @@ import T3Protocol
         #expect(Set(entries.map(\.name)) == ["T3 Code", "SwiftTerm", "Lucide", "Tabler Icons", "pele", "Latin Modern Math", "models.dev", "GitHub gemoji alias data", "Candy Town by Aya_Lu"])
         #expect(entries.allSatisfy { !$0.noticeText.isEmpty && $0.bundles == ["CandyWrapper"] })
     }
+
+    /// #41647: the search opens from its button, and Esc clears and closes it, keeping Settings open.
+    @Test func licenseSearchClosesOnEscape() {
+        let header = LicenseHeaderActionView()
+        var changes = 0
+        header.onQueryChange = { changes += 1 }
+        header.setCounts(filtered: 3, total: 3)
+        #expect(header.count.text == "3 notices" && header.field.isHidden && !header.open.isHidden)
+        header.open.action?()
+        #expect(header.isSearchOpen && !header.field.isHidden)
+        header.field.input.text = "swift"
+        #expect(header.field.input.takesEscape?() == true)
+        #expect(!header.isSearchOpen && header.query.isEmpty && changes == 2)
+        header.setCounts(filtered: 1, total: 3)
+        #expect(header.count.text == "1 of 3")
+    }
 }

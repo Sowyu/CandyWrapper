@@ -131,14 +131,29 @@ public final class ProjectMonogramView: DSView {
         if let first = words.first {
             let glyphs = first.map(String.init)
             let head = glyphs[0]
+            if Self.isSingleGlyphScript(head) { return (head, Self.color(normalized)) }
             let second = glyphs.dropFirst().first { $0.first?.isNumber == true }
                 ?? (words.count > 1 ? words.last!.first.map(String.init) : glyphs.last) ?? head
             monogram = String((head + second).uppercased().prefix(2))
         }
+        return (monogram, color(normalized))
+    }
+
+    private static func color(_ normalized: String) -> String {
         let seed = normalized.lowercased().isEmpty ? "project" : normalized.lowercased()
         var index = 0
         for scalar in seed.unicodeScalars { index = (index * 31 + Int(scalar.value)) % colors.count }
-        return (monogram, colors[index])
+        return colors[index]
+    }
+
+    /// `SINGLE_GLYPH_SCRIPT` (#42467, shared/projectMonogram.ts:2): one ideograph or syllable block already reads as a mark.
+    // ponytail: block ranges for Han, kana and Hangul, not Unicode's Script_Extensions; widen if a CJK name still gets two
+    static func isSingleGlyphScript(_ glyph: String) -> Bool {
+        guard let v = glyph.unicodeScalars.first?.value else { return false }
+        let ranges: [ClosedRange<UInt32>] = [0x1100...0x11FF, 0x2E80...0x2FDF, 0x3005...0x3007, 0x3021...0x3029, 0x3031...0x3035,
+                                             0x3038...0x303B, 0x3040...0x30FF, 0x3130...0x318F, 0x31F0...0x31FF, 0x3400...0x4DBF,
+                                             0x4E00...0x9FFF, 0xA960...0xA97F, 0xAC00...0xD7FF, 0xF900...0xFAFF, 0x20000...0x3FFFF]
+        return ranges.contains { $0.contains(v) }
     }
 
     public override func draw(_ dirtyRect: NSRect) {

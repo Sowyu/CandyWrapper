@@ -501,7 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                   threads: ThreadController, commands: SidebarCommands, settings: SettingsController) {
         threads.permissionNotice.openConnections = { [weak settings] in settings?.open(.access) }
         // ponytail: opens Access on its current machine; T3 also passes `machine`, add it when Access takes a machine.
-        threads.connectDeviceNotice.openAccess = { [weak settings] _ in settings?.open(.access) }
+        threads.connectDeviceNotice.openAccess = { [weak settings] env in settings?.openAccess(for: env) }
         threads.git.openSourceControlSettings = { [weak settings] in settings?.open(); settings?.show(.sourceControl) }
         let shortcuts = Shortcuts(window: window)
         threads.panel.model.onFrameShortcut = { [weak shortcuts] stroke in shortcuts?.run(stroke) }

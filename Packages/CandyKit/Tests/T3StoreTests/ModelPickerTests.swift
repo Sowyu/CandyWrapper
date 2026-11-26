@@ -235,6 +235,21 @@ struct ModelPickerTests {
         #expect(ModelTraits.ultrathinkInBody("Ultrathink:\nplease ultrathink") && !ModelTraits.ultrathinkInBody("Ultrathink:\nfix"))
     }
 
+    /// #39114: a failed or late check keeps an earlier check's models in the picker, but not as the default pick.
+    @Test func failedCheckKeepsRetainedModels() {
+        var p = ServerProvider(instanceId: "codex", driver: "codex", status: .error, models: [ServerProviderModel(slug: "m", name: "M")])
+        #expect(!ProviderInstanceEntry(provider: p).isReady)
+        p.modelsRetained = true
+        #expect(ProviderInstanceEntry(provider: p).isReady)
+        #expect(!ProviderInstanceEntry(provider: p).isHealthy)
+        p.modelsRetained = nil
+        p.status = .warning
+        p.auth = .object(["status": .string("authenticated")])
+        #expect(ProviderInstanceEntry(provider: p).isReady)
+        p.installed = false
+        #expect(!ProviderInstanceEntry(provider: p).isReady)
+    }
+
     /// #29388: a provider with sub-providers lists ungrouped models, then one heading per backend that shows
     /// its models only while expanded; a warning provider stays usable through a backend that reports no problem.
     @Test func subProvidersGroupModelsUnderHeadings() throws {

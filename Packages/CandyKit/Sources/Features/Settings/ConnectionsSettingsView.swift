@@ -107,6 +107,13 @@ public struct ConnectionsPageModel: Equatable {
     }
 
     public var thisMachine: Machine?
+    /// The Access page's environment picker (5258 ConnectionsSettings.tsx:201-247), with two or more candidates.
+    public struct AccessPicker: Equatable {
+        public var candidates: [AccessEnvironment.Candidate]
+        public var selected: String
+        public init(candidates: [AccessEnvironment.Candidate], selected: String) { self.candidates = candidates; self.selected = selected }
+    }
+    public var accessPicker: AccessPicker?
     /// "Authorized clients", shown with `access:read` or `access:write` on this machine.
     public var access: Access?
     /// "T3 Connect devices", under Authorized clients on a 4928 server that has a request or a trusted device.
@@ -179,6 +186,8 @@ public struct ConnectionsActions {
     public var retryCloud: () -> Void = {}
     /// A "This machine" switch changed: (row id, on).
     public var setHostSwitch: (String, Bool) -> Void = { _, _ in }
+    /// The Access page's environment picker chose an environment.
+    public var pickAccessEnvironment: (String) -> Void = { _ in }
     /// The Icon submenu picked a kind: (environment id, kind).
     public var setIcon: (String, String) -> Void = { _, _ in }
     /// A route was dragged to a new place: (environment id, routes preferred first).
@@ -216,6 +225,11 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     /// ConnectionsSettings.tsx:155,1468-1476 (3814). Nil keeps the combined preview used by older captures.
     public var showsAccess: Bool? { didSet { relayout() } }
     private let thisAppSection = SettingsSectionView(title: "This app", rows: [])
+    private lazy var accessPicker: AccessEnvironmentPickerView = {
+        let picker = AccessEnvironmentPickerView()
+        picker.onPick = { [weak self] id in self?.actions.pickAccessEnvironment(id) }
+        return picker
+    }()
     private let localSettingRow = SettingsRowView(title: "Local environment")
     private(set) var machineSection: SettingsSectionView?
     private var hostRows: [String: SettingsRowView] = [:]
@@ -249,6 +263,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     }()
     private var linkedSections: [String: (section: SettingsSectionView, link: ButtonView, rows: [String: LinkedEnvironmentRowView], note: SettingsRowView)] = [:]
     /// The primary environment's id, for the Icon submenu of This machine.
+    /// The environment the machine section shows: the primary, or the Access page's picked environment.
     public var primaryId: String?
     private var openPermissions: Set<String> = []
     private var openDiagnoses: Set<String> = []
@@ -320,6 +335,12 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
 
     public func set(_ model: ConnectionsPageModel) {
         self.model = model
+        if let picker = model.accessPicker {
+            accessPicker.configure(picker)
+            if accessPicker.superview == nil { addSubview(accessPicker) }
+        } else if accessPicker.superview != nil {
+            accessPicker.removeFromSuperview()
+        }
         // This machine.
         if let m = model.thisMachine {
             let section = machineSection ?? SettingsSectionView(title: m.label, rows: [])
@@ -641,6 +662,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     private var visibleSections: [NSView & SettingsGroupRow] {
         var parts: [NSView & SettingsGroupRow] = []
         if showsAccess != false {
+            if showsAccess == true, accessPicker.superview != nil { parts.append(accessPicker) }
             if let machineSection { parts.append(machineSection) }
             if accessSection.superview != nil { parts.append(accessSection) }
             if connectDevicesSection.superview != nil { parts.append(connectDevicesSection) }
@@ -676,7 +698,7 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     public override func layout() {
         super.layout()
         let shown = visibleSections
-        let all: [NSView] = [thisAppSection, environmentsSection, accessSection, connectDevicesSection, loadBalancingSection]
+        let all: [NSView] = [thisAppSection, environmentsSection, accessSection, connectDevicesSection, loadBalancingSection, accessPicker]
             + (machineSection.map { [$0] } ?? []) + linkedSections.values.map(\.section)
         for part in all { part.isHidden = !shown.contains(where: { $0 === part }) }
         var y: CGFloat = 0

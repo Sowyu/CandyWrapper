@@ -29,6 +29,7 @@ public final class BetaSettingsView: SettingsPageBase {
     ]
     private var unsubscribe: [() -> Void] = []
 
+    static let deviceReadOnlyReason = "Saved on this device. Select All projects to change it."
     static let guestDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Sharing & access. Turning it off stops every guest link."
     static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While off, nothing new starts over a link; running tasks finish."
     static let guestSignedOutDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Sign in to T3 Connect to use guest links."
@@ -43,9 +44,12 @@ public final class BetaSettingsView: SettingsPageBase {
         let multiline = clientSwitch("boring-sidebar-multiline",
             "In the boring sidebar, show folder threads on two lines: the title, then the branch, pull request, and agent.",
             key: "boringSidebarMultilineRows", label: "Two-line folder rows", title: "Two-line folder rows")
-        binder.add { [weak self, weak multiline] in
-            guard let self, let multiline else { return }
+        binder.add { [weak self, weak folders, weak multiline] in
+            guard let self, let folders, let multiline else { return }
             multiline.isHidden = !self.context.client.bool("boringSidebarEnabled")
+            // `devicePreference` (#42884, LabsSettingsPanel.tsx:64, :93, settingsLayout.tsx:384, :476-477).
+            let inert = self.context.scope.isProjectScope ? Self.deviceReadOnlyReason : nil
+            for r in [folders, multiline] where r.inertReason != inert { r.inertReason = inert }
         }
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"

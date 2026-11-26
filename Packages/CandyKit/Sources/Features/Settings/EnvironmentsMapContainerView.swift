@@ -47,6 +47,7 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
         search.input.setAccessibilityLabel("Find a machine on the map")
         // Typing lights the matches; Enter goes to the first (:893-910).
         search.input.onChange = { [weak self] text in self?.canvas.state.query = text }
+        canvas.onHeightGlide = { [weak self] in self?.heightChanged() }
         search.input.onCommand = { [weak self] selector in
             guard let self else { return false }
             if selector == #selector(NSResponder.insertNewline(_:)) { self.goToFirstMatch(); return true }
@@ -157,9 +158,13 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
         fitButton.isEnabled = canvas.state.held != nil
         syncDetails()
         needsLayout = true
-        // A stack's anchoring or a fit changes the canvas height: the page lays out again.
+        heightChanged()
+    }
+
+    /// A stack's anchoring, a fit or a frame of the height glide changes the canvas height: the page lays out again.
+    func heightChanged() {
         let height = bounds.width > 0 ? self.height(forWidth: bounds.width) : 0
-        if height != lastHeight { lastHeight = height; onHeightChange?() }
+        if height != lastHeight { lastHeight = height; needsLayout = true; onHeightChange?() }
     }
     private var lastHeight: CGFloat = 0
 
