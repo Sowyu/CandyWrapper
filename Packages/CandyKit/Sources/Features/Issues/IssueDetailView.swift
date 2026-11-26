@@ -716,7 +716,7 @@ final class IssueActivityItem: DSView, StackItem {
             case .comment(let c):
                 let pr = PullRequestComment(id: c.id, kind: "issue-comment", author: c.author, body: c.body, createdAt: c.createdAt,
                                             url: c.url, reactions: c.reactions)
-                let card = CommentCard(pr, nowMs: m.nowMs, cwd: m.cwd ?? "", canReact: m.access.react)
+                let card = CommentCard(pr, nowMs: m.nowMs, cwd: m.cwd ?? "", canReact: m.access.react, headingLevel: 3)
                 card.reactionBar.isHidden = c.reactions == nil
                 card.reactionBar.onToggle = { [weak self, weak card] content, reacted in
                     guard let card else { return }
