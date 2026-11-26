@@ -10,8 +10,11 @@ import T3Store
 /// references and retain their existing per-surface ceilings. Coordinates are CSS points.
 @MainActor @Suite(.fidelity)
 struct PanelScreensFidelityTests {
+    /// `approval` is 5% at the user's word on 2026-11-26 (docs/decisions.md). The case reads 4.80% light and 4.89%
+    /// dark with the layout matching: Chrome's text rasterizer against CoreText, and the 4% was set when the command
+    /// fit on one line, where at 4928 it wraps to two and has twice the glyph edges.
     static let ceilings: FidelityCeilings = [
-        "approval": .init(0.04), "palette": .init(0.065), "files": .init(0.045),
+        "approval": .init(0.05), "palette": .init(0.065), "files": .init(0.045),
         "terminal": .init(0.035), "git": .init(0.06), "find": .init(0.055),
         "notice": .init(0.045),
     ]
