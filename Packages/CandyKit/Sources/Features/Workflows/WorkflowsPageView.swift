@@ -7,7 +7,12 @@ import T3Store
 /// T3 commits 69c1d53826 #38884, 5ac27b4007 #42008, 7be3a767cc #42515, 3b5033a28c #42506, 462596a0f7 #42518).
 /// The 52pt header, then one environment's runs: a `w-72` list beside the picked run told as a feed. The app's
 /// controller owns the subscription and feeds `content`; the page holds only its picks.
-public final class WorkflowsPageView: DSView {
+public final class WorkflowsPageView: DSView, DitherBandPage {
+    /// Redesign: the title and Definitions sit in the tab band as pills, as on Pull requests and Issues.
+    public var bandLeading: DitherStripLeading? { bandTitle }
+    public var bandTrailing: NSView? { bandControls }
+    private let bandTitle = DitherThreadTitleView()
+    private let bandControls = DitherBandControls(button: ButtonView("Definitions", icon: .fileCode2, variant: .ghost, size: .xs))
     public enum Content: Equatable {
         case loading
         case failed(String)
@@ -85,6 +90,9 @@ public final class WorkflowsPageView: DSView {
         feedScroll = ScrollAreaView(documentView: feedDocument)
         super.init(frame: frameRect)
         header.plainTitle = "Workflows"
+        bandTitle.set(project: "", title: "Workflows")
+        bandControls.toggle.action = { [weak self] in self?.onOpenDefinitions?() }
+        bandControls.toggle.setAccessibilityLabel("Definitions")
         tabs.setAccessibilityLabel("Which runs")
         // `<ToggleGroup className="w-full *:flex-1">`, segmented by default (ui/toggle-group.tsx:16).
         tabs.fillsWidth = true
@@ -273,13 +281,19 @@ public final class WorkflowsPageView: DSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
+        // Redesign: the title and Definitions sit in the tab band above the page, so the page starts at its top.
+        let band = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        header.isHidden = band
         header.frame = NSRect(x: 0, y: 0, width: w, height: 52)
         definitions.isHidden = onOpenDefinitions == nil || content == .noEnvironment || content == .off
+        let controlsHidden = !band || definitions.isHidden
+        if bandControls.isHidden != controlsHidden { bandControls.isHidden = controlsHidden; bandControls.superview?.needsLayout = true }
         let dw = definitions.fittingSize.width
         definitions.frame = NSRect(x: w - 20 - dw, y: (52 - 28) / 2, width: dw, height: 28)
-        toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
+        toasts.frame = ToastViewport.frame(in: bounds, dither: band)
         // The header's `border-b` is its own last row (WorkspacePageHeader, border-box).
-        let body = NSRect(x: 0, y: 52, width: w, height: max(0, h - 52))
+        let top: CGFloat = band ? 0 : 52
+        let body = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
         loadingLabel.frame = NSRect(x: 24, y: body.minY + 24, width: max(0, w - 48), height: 20)
         if let empty {
             let size = empty.fittingSize
@@ -295,16 +309,20 @@ public final class WorkflowsPageView: DSView {
 
     public override var wantsUpdateLayer: Bool { false }
     public override func draw(_ dirtyRect: NSRect) {
-        Themed.color(\.background).setFill()
-        bounds.fill()
-        // Redesign draws no rule under a page's header (as on Pull Requests) and parts the columns with its rim.
+        // Redesign lies on the art under the pages' scrim, as Pull Requests does, draws no rule under a page's header
+        // and parts the columns with its rim.
         let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if !redesign {
+            Themed.color(\.background).setFill()
+            bounds.fill()
+        }
         (redesign ? RedesignTokens.Card.border : Themed.color(\.border)).setFill()
         if !redesign { NSRect(x: 0, y: 51, width: bounds.width, height: 1).fill() }
-        if !listColumn.isHidden { NSRect(x: 287, y: 52, width: 1, height: bounds.height - 52).fill() }
+        let top: CGFloat = redesign ? 0 : 52
+        if !listColumn.isHidden { NSRect(x: 287, y: top, width: 1, height: bounds.height - top).fill() }
     }
     public override var isFlipped: Bool { true }
-    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true; needsLayout = true }
 
     private func layoutList() {
         let w = listColumn.bounds.width

@@ -858,13 +858,15 @@ public final class IssuesPageContainer: DSView, DitherBandPage {
 }
 
 /// Redesign's controls pill for a page in the tab band: the header pill's surface, inset and 24pt controls.
+/// It holds the panel toggle, or another ghost button such as Workflows' Definitions, which keeps its text's width.
 final class DitherBandControls: DSView {
-    let toggle = ButtonView(nil, icon: .panelRight, variant: .ghost, size: .xs)
+    let toggle: ButtonView
     private let frost = DitherPillSurface()
     private static let inset: CGFloat = 2, control: CGFloat = 24
 
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
+    init(button: ButtonView = ButtonView(nil, icon: .panelRight, variant: .ghost, size: .xs)) {
+        toggle = button
+        super.init(frame: .zero)
         layer?.masksToBounds = false
         frost.radius = RedesignTokens.Radius.control
         addSubview(frost)
@@ -873,11 +875,13 @@ final class DitherBandControls: DSView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: Self.control + 2 * Self.inset, height: DitherTabStripView.tabHeight) }
+    private var controlWidth: CGFloat { toggle.title == nil ? Self.control : max(Self.control, ceil(toggle.fittingSize.width)) }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: controlWidth + 2 * Self.inset, height: DitherTabStripView.tabHeight) }
 
     override func layout() {
         super.layout()
         frost.frame = bounds
-        toggle.frame = NSRect(x: Self.inset, y: ((bounds.height - Self.control) / 2).rounded(), width: Self.control, height: Self.control)
+        toggle.frame = NSRect(x: Self.inset, y: ((bounds.height - Self.control) / 2).rounded(), width: controlWidth, height: Self.control)
     }
 }
