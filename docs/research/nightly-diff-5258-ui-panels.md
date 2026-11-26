@@ -437,7 +437,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 3fb76f1be8 | #41945 | fix(web): issue links in HTML renders open in the issue panel | issues | ported 7835705c (chat and HTML render issue links open the issue panel) |
 | 4065801a00 | #30459 | fix(web): pressing the Usage shortcut again closes Usage | usage | ported e9ebf28f |
 | 4113f8fee5 | #39131 | fix(web): block invalid project monograms before save | settings | already (Save stays off for an invalid monogram, ProjectIconPickerDialog.swift:162-166) |
-| 426dac0050 | #41948 | fix(web): expose diagnostics CPU history values to screen readers | settings | ported (next commit): each bar reads its values to VoiceOver |
+| 426dac0050 | #41948 | fix(web): expose diagnostics CPU history values to screen readers | settings | ported cb62f9b3: each bar reads its values to VoiceOver |
 | 43d9d67140 | #32768 | fix(web): an IME Escape no longer clears a typed font family | settings | ported cb5edfe1 (an IME Esc passes to the input method) |
 | 43e0b37382 | #42179 | fix(web): PR Summary tab keeps its scroll and comment order when you switch right-panel tabs | pull requests | port (2.6) † |
 | 4568a1b741 | #42932 | fix(web): unsupported file preview no longer calls extensionless filenames a file type | files | port (3.4) † |
@@ -596,7 +596,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | cb207e9f60 | #42228 | fix(web): long Issues and Pull Requests searches no longer end in a broken character | other | n/a (Swift Characters) † |
 | cb2a488c67 | #39302 | fix(web): an off-track desktop build no longer says "Up to date" | shell | n/a (Electron updater) † |
 | cbf4ea7ddc | #41264 | fix(web): shift-scroll and horizontal scrollers no longer navigate history | shell | n/a (web history swipe) † |
-| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4, details panel and code-only notice 3c28ca0f, glide 086a837d, chrome and panel reference in the next commit (scene reference left) |
+| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4, details panel and code-only notice 3c28ca0f, glide 086a837d, chrome and panel reference in the next commit (scene reference left); first-visit load, clip and scroll fixed 674feadb, From menu 0637c827 |
 | cef38e408d | #42805 | fix(web): file picker highlights no longer break emoji in file names | files | port (3.4) † |
 | d15123668e | #39579 | fix(web): keep reopened pairing link dialogs open on completion | connections | already (Create link closes only the dialog that started it, SettingsHostAccess.swift:481-490) |
 | d1f8636f49 | #39225 | fix(mobile,web): quote and port messages are translated in every language | other | n/a (translation strings) † |
