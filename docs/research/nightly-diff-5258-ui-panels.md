@@ -412,7 +412,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 26c21a86cf | #42149 | fix(web): ODS previews hide values a merge covers | files | n/a (QuickLook previews) † |
 | 26f4c7550e | #42076 | fix(web): Esc in provider model filter clears it without closing Settings | settings | ported cb5edfe1 |
 | 2713570406 | #38506 | fix(desktop): update checks say why a build with a different saved track offers nothing | shell | n/a (Electron updater) † |
-| 28706aceb6 | #41005 | fix(server): unlinking an environment ends its session on the other machine | connections | n/a (server side, wire) † |
+| 28706aceb6 | #41005 | fix(server): unlinking an environment ends its session on the other machine | connections | ported e81f4f9e: the Forget copy and the "{label} did not answer" warning; the rest is server side |
 | 28bcb73736 | #40240 | fix(web): floating device preview keeps its stream across thread switches | browser | ported 5c75e9ac |
 | 2a411317d9 | #39105 | fix(web): PDF pages no longer turn black while the panel is resized | files | port (3.5) † |
 | 2c33cbdf02 | #39643 | fix(web): strip terminal colors from saved notebook output | files | n/a (QuickLook previews) † |
@@ -445,7 +445,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 45c011e218 | #42875 | fix(web): reopening a closed pull request tab keeps saved list filters | shell | left: CW remembers closed thread panel tabs only, not Pull Requests or Issues page tabs (M) |
 | 462596a0f7 | #42518 | feat(workflows): named pools cap how much runs at once, with queueing | workflows | ported a6197a0d (words; no hourglass icon) |
 | 46eb376dda | #41677 | fix(web): a new price row mapped to a model asks for its model ID | settings | ported 2075c1a4: a new row with no model ID shows its error and invalid field |
-| 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | n/a (telemetry URL check) † |
+| 475ae52ac2 | #39067 | fix(web): a corrected telemetry URL can be tested while an earlier check runs | settings | ported 40fa9c76: only the latest check attempt lands, and Test stays enabled for a corrected URL. This is the user's own OpenTelemetry export, not T3 telemetry |
 | 480f9f4861 | #42187 | fix(web): shortcut recorder takes Shift+Esc instead of cancelling | settings | ported d476c29f |
 | 4b697be849 | #39331 | fix(web): keep deleted ACP sessions out of pending listings | settings | already: ProviderAcpSessionsView runs one request at a time (`busy`), so no list can be pending while a delete lands |
 | 4ce9f8c1b8 | #41647 | fix(web): Esc in the license search closes it without closing Settings | settings | ported 8d59af6e: T3's Third-party notices header with the count and a search button; Esc clears and closes the search |
@@ -471,7 +471,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 6233f5d114 | #41639 | fix(web): Escape closes a dialog over a recording before canceling dictation | shell | port (1.3) † |
 | 6357d17a49 | #31637 | fix(web): toggling a model's visibility no longer jumps the model list | settings | ported bdf981b2: held placements per instance, cleared by Disable all or Enable all |
 | 637cd28599 | #41845 | fix(client-runtime): Remove is no longer offered on a route the environment cannot lose | connections | n/a (CW lists saved routes only, no learned ones, so count > 1 already matches) |
-| 65b2e6dae6 | #41122 | fix(web): stop telemetry refresh spinning after data arrives | settings | n/a (telemetry refresh) † |
+| 65b2e6dae6 | #41122 | fix(web): stop telemetry refresh spinning after data arrives | settings | already: Diagnostics' refresh state follows the explicit load, never the live resource subscription (diff read 2026-11-25) |
 | 65cd644623 | #41301 | fix(web): archive folders with leading or repeated slashes show their names | files | n/a (QuickLook previews) † |
 | 65d2b4f081 | #41081 | fix(web): center the Connections map zoom controls | connections | ported 07228df4 (diff read: footer items centred) |
 | 66a4d99d1d | #37215 | fix(web): git action progress text centers with its spinner | git | already (ThreadDetailsCardView centres the label and time in the 32pt row) |
@@ -499,7 +499,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 7997916673 | #41505 | fix(web): Markdown previews load relative images in timestamped and root folders | files | port (3.4) † |
 | 7be3a767cc | #42515 | feat(server): workflow questions take described choices, required reasons, links, and keep who answered | workflows | ported a6197a0d (answers read by name: CW has no session id for "You") |
 | 7d3677fe70 | #40389 | fix(web): picker branch switches no longer re-read the full local status | git | n/a (CW has no stale-ref reload after a picker checkout to skip), diff read 2026-11-25 |
-| 7dd35d324d | #41742 | fix(server): link codes and guest links require the access they hand out | connections | n/a (server side, wire) † |
+| 7dd35d324d | #41742 | fix(server): link codes and guest links require the access they hand out | connections | ported 86fe4224: a through link is offered only when this session holds access:write and the access it hands out |
 | 7e004b80e2 | #39142 | fix(client-runtime): a chat file link opens a file that overlapping projects both list | other | n/a (server only, wire) † |
 | 7e0d1cb9ba | #42548 | fix(web): Link PR dialog stops duplicate Enter submits and locks input | pull requests | ported dbb2df1b (Enter repeats were already guarded by `pending`) |
 | 7ef0558f75 | #40177 | fix(desktop): preview tabs drop a destroyed webview's WebContents | browser | n/a (Electron only) † |
@@ -634,8 +634,8 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f15d908759 | #42027 | fix(web): Esc in voice alias input cancels it without closing Settings | settings | n/a (CW's Voice page is a notice) |
 | f1c13177d8 | #41263 | fix(web): spreadsheet text and fills no longer vanish when their cell scrolls out | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | f1efcfb494 | #42855 | fix(client-runtime): feedback trace shows "1 character", not "1 characters" | other | n/a (server only, wire) † |
-| f30874fef7 | #41756 | fix: remote logins and webhook tokens stay with their own host and reader | connections | n/a (server side, wire) † |
-| f46f17e46f | #37358 | fix(web): small buttons leave room between icon and label | settings | left (S: DesignSystem xs and sm button gap 4 to 6, needs component references recaptured) |
+| f30874fef7 | #41756 | fix: remote logins and webhook tokens stay with their own host and reader | connections | ported dc6bcde3: the clone URL loses an HTTP login (Features/Composer); the rest is server side |
+| f46f17e46f | #37358 | fix(web): small buttons leave room between icon and label | settings | ported db3efd0b: micro, xs and compact gap 4 to 6 in the default themes (sm already had it), 86 component references recaptured; Redesign keeps 4 |
 | f60c747568 | #39815 | fix(web): open PDF attachments no longer reload while the agent works | files | port (3.5) † |
 | f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | ported cb5edfe1 |
 | f82de6567c | #41775 | fix(web): restoring a saved model mapping clears its typed prices | settings | ported 2075c1a4: restoring the saved mapping drops the typed prices |
@@ -741,7 +741,7 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - T3's server refuses any expected-environment link to a loopback address (PeerLinks.ts:464-469), so a through-link between servers on one Mac fails at the last step in both apps. Test it with real addresses.
 - 1.3's custom model, font family and nav search rows needed more than `escapeClears`: Settings' Esc monitor runs before the focused field, so a field that owns Esc now says so through `FieldView.takesEscape`.
 - #41647 needed T3's license header first: the page title is "Third-party notices", the count and a search button sit in the section header, and the search field opens from the button (8d59af6e).
-- 1.8's #37358 changes every xs and sm button's icon gap, which is a DesignSystem change, not a settings one.
+- 1.8's #37358 changes every xs and sm button's icon gap, which is a DesignSystem change, not a settings one. It changes compact, micro and xs; sm already had `gap-1.5` at 4928.
 - The Voice rows (#42129, #42027, #42321, #39884, #41876, #40424) are n/a while CW's Voice page is a notice.
 
 ## Corrections from the third settings and connections pass (2026-11-25)
@@ -750,4 +750,4 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - The price table's new test found a crash that predates this range: filling a row's fields fired `onChange`, which rebuilt the table from inside its own rebuild without end (2075c1a4).
 - Projects > Repositories' Add folder dialog now has T3's browse list (ea13818e), the part 640d7b91 left out.
 - CW's licenses page still draws each notice as a settings row with a chevron button; T3's rows are full-width collapsible triggers. The header now matches.
-
+- Five rows marked n/a from their subjects were not: #41005, #41742 and #41756 change the web client as well as the server, and #39067 and #41122 are the user's own OpenTelemetry export and Diagnostics' resource monitor, not T3 telemetry.
