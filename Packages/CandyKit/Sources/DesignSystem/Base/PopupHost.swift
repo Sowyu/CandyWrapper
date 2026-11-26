@@ -327,6 +327,11 @@ public final class OpenPopup {
     public internal(set) var isPassive = false
     /// Combobox: pressing the trigger (its input) leaves the popup open.
     public var keepsOpenOnTriggerPress = false
+    /// Stays open, where it last sat, when its trigger scrolls out of the window: the citation comment box, whose cited
+    /// row the timeline recycles while the user types (AssistantCitationChip.tsx at 5258, #42603).
+    public var staysWhenTriggerLeaves = false
+    /// The trigger's last place in the host, for a popup that outlives its trigger.
+    var lastHostAnchor: CGRect?
     /// Child popups (submenus) close with their parent.
     weak var parent: OpenPopup?
     public internal(set) var result: PopupPositioner.Result?
@@ -430,8 +435,9 @@ public final class PopupHost: DSView {
         let anchor: CGRect
         if let trigger = popup.trigger, trigger.window === window {
             anchor = convert(popup.anchorRect ?? trigger.bounds, from: trigger)
+            popup.lastHostAnchor = anchor
         } else {
-            anchor = popup.anchorRect ?? .zero
+            anchor = popup.lastHostAnchor ?? popup.anchorRect ?? .zero
         }
         var size = popup.content.popupSize
         // Redesign: popups stay below the window's top band (traffic lights, tabs), never over it.
@@ -476,6 +482,7 @@ public final class PopupHost: DSView {
                     // floating-ui's `hide` middleware: a trigger that scrolled out of the window (a recycled
                     // or removed row) takes its popup with it instead of leaving it at the host's corner.
                     guard let trigger = popup.trigger, trigger.window === self.window else {
+                        if popup.staysWhenTriggerLeaves { return }
                         self.close(popup, returnFocus: false)
                         return
                     }
