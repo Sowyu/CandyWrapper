@@ -910,7 +910,11 @@ final class BrowserController {
         shortcuts.on("preview.toggle") { [weak self] call in
             guard let self, !call.isRepeat, self.threadId != nil else { return false }
             guard self.panel.browserAvailable else {
-                self.panel.toasts.show(ToastView(title: "Preview is desktop-only", message: "Open T3 Code in the desktop app to use the in-app preview.", kind: .info))
+                // T3's wording; Redesign says why: the environment's server has no `serverBrowser`.
+                let toast = ThemeRuntime.isDither(dark: self.panel.effectiveAppearance.isDark)
+                    ? ToastView(title: "Preview isn't available here", message: "This environment's server doesn't offer the in-app preview.", kind: .info)
+                    : ToastView(title: "Preview is desktop-only", message: "Open T3 Code in the desktop app to use the in-app preview.", kind: .info)
+                self.panel.toasts.show(toast)
                 return true
             }
             if self.panel.panelState.isOpen, self.panel.panelState.active?.kind == .browser {

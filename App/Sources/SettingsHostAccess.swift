@@ -262,7 +262,7 @@ extension SettingsController {
         var rows: [ConnectionsPageModel.HostRow] = []
         // `LocalEnvironmentSetting`: CandyWrapper is talking to the local server, so it is on.
         rows.append(.init(id: "local-environment", title: "Local environment",
-                          detail: "Run agents on this computer. Turn off to use T3 Code only with remote environments.",
+                          detail: "Run agents on this computer. Turn off to use \(ThemeRuntime.appName(dark: NSApp.effectiveAppearance.isDark)) only with remote environments.",
                           control: .toggle(.init(isOn: true, isEnabled: false, tooltip: Self.bridgeTooltip, label: "Local environment"))))
         // `canManageLocalBackend` (5258 ConnectionsSettings.tsx:438, :1342-1398): the version and network rows belong to
         // the backend this app runs; another environment shows its T3 Connect and preview tunnel rows only.
