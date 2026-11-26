@@ -40,4 +40,17 @@ struct DiffHideTestsTests {
         #expect(list?.diff.files.count == 2)
         #expect(!DiffHideTestFiles.value)
     }
+
+    /// 5258 DiffPanel.tsx:1679-1690 (e3f7eb5085 #42851): a diff of only hidden test files says so.
+    @Test func panelExplainsOnlyHiddenTests() {
+        let saved = DiffHideTestFiles.value
+        defer { DiffHideTestFiles.value = saved }
+        DiffHideTestFiles.value = true
+        let panel = DiffPanelView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        panel.showPatch("diff --git a/math.test.ts b/math.test.ts\n--- a/math.test.ts\n+++ b/math.test.ts\n@@ -1 +1 @@\n-a\n+b\n")
+        #expect(!panel.hiddenTestsLabel.isHidden && panel.hiddenTestsLabel.text == "1 test file hidden")
+        #expect(!panel.showTestsButton.isHidden)
+        panel.showTestsButton.action?()
+        #expect(!DiffHideTestFiles.value && panel.hiddenTestsLabel.isHidden)
+    }
 }

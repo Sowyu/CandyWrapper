@@ -28,6 +28,7 @@ public final class DiffPanelView: DSView {
             searchMatches = []; searchIndex = 0
             list.annotations = []; reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil
             hasDiff = false; hideTestsToggle.isHidden = true; shownFull = nil
+            hiddenTestsLabel.isHidden = true; showTestsButton.isHidden = true
             shownSection = nil
             gitSource = nil
             list.loadDiffFiles = nil
@@ -369,6 +370,10 @@ public final class DiffPanelView: DSView {
     /// The last diff `show` got, before test files were hidden.
     private var shownFull: (diff: UnifiedDiff, collapsed: Bool)?
     let message = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.7))
+    /// "N test files hidden" and "Show test files" when hiding leaves no file (5258 DiffPanel.tsx:1679-1690,
+    /// e3f7eb5085 #42851): `text-xs text-muted-foreground/70`, `gap-2`, centered in the file list.
+    let hiddenTestsLabel = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.7))
+    let showTestsButton = DiffInlineButton("Show test files")
     /// The failed request's message above the empty state (DiffPanel.tsx:1093-1097, `text-2xs text-error/80`).
     let errorLine = LabelView("", font: DSFont.ui(11), color: Themed.color(\.error, 0.8))
     /// Redesign's state in place of `message` and `errorLine`: an icon, a plain sentence and Retry for a failure, and
@@ -414,8 +419,14 @@ public final class DiffPanelView: DSView {
         }
         for toggle in [wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle] { toggle.iconSize = 14 }
         hideTestsToggle.isHidden = true
+        hiddenTestsLabel.isHidden = true
         hideTestsToggle.setAccessibilityLabel("Hide test files")
         hideTestsTooltip = TooltipController.attach(to: hideTestsToggle, text: "Hide test files", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
+        showTestsButton.action = { [weak self] in
+            DiffHideTestFiles.value = false
+            guard let self, let full = self.shownFull else { return }
+            self.show(full.diff, collapsed: full.collapsed)
+        }
         hideTestsToggle.onPressedChange = { [weak self] hide in
             DiffHideTestFiles.value = hide
             guard let self, let full = self.shownFull else { return }
@@ -477,7 +488,7 @@ public final class DiffPanelView: DSView {
         message.alignment = .center
         message.lineHeight = 16
         errorLine.lineHeight = 16.5
-        [treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle, message, errorLine,
+        [treeScroll, scroll, scopeButton, totals, refreshButton, collapseButton, layoutToggle, wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle, message, hiddenTestsLabel, showTestsButton, errorLine,
          compareHead, compareArrow, baseRefButton, truncatedNotice, omittedNotice, findWidget, stateView, stateSkeleton].forEach(addSubview)
         stateView.isHidden = true
         stateSkeleton.isHidden = true
@@ -743,6 +754,10 @@ public final class DiffPanelView: DSView {
         let diff = hide ? full.selecting(full.files.indices.filter { full.files[$0].path == pendingFile || !ChangedFileKind.isTest(full.files[$0].path) }) : full
         recordedScroll.isHidden = true; recordedText.string = ""
         hasDiff = true
+        let onlyHiddenTests = hide && diff.files.isEmpty
+        hiddenTestsLabel.text = "\(testCount) test \(testCount == 1 ? "file" : "files") hidden"
+        hiddenTestsLabel.isHidden = !onlyHiddenTests
+        showTestsButton.isHidden = !onlyHiddenTests
         message.isHidden = true
         errorLine.isHidden = true
         redesignState = .none
@@ -761,7 +776,7 @@ public final class DiffPanelView: DSView {
         let keepDraft = section == shownSection && reviewDraft != nil
         shownSection = section
         if !keepDraft { reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil }
-        scroll.isHidden = false
+        scroll.isHidden = onlyHiddenTests
         list.annotations = []
         updateContextLoader()
         list.setDiff(diff, collapsedByDefault: collapsed, folds: foldScope.flatMap { Self.folds[$0] } ?? [:])
@@ -799,6 +814,8 @@ public final class DiffPanelView: DSView {
         searchMatches = []; searchIndex = 0
         message.text = text
         message.isHidden = false
+        hiddenTestsLabel.isHidden = true
+        showTestsButton.isHidden = true
         errorLine.text = error ?? ""
         errorLine.isHidden = error == nil
         scroll.isHidden = true
@@ -1074,6 +1091,10 @@ public final class DiffPanelView: DSView {
                                   y: scroll.frame.minY + 40 - DiffFindWidget.overhang, width: widget.width, height: widget.height)
         // The error paragraph (`px-3`, `mb-2`) takes its height off the top of the centered area.
         errorLine.frame = NSRect(x: 12, y: bodyTop, width: max(0, bounds.width - 24), height: 16.5)
+        let hw = ceil(hiddenTestsLabel.textWidth), bw = showTestsButton.intrinsicContentSize.width
+        let hx = scroll.frame.minX + max(12, (scroll.frame.width - hw - 8 - bw) / 2), hy = scroll.frame.minY + (scroll.frame.height - 16) / 2
+        hiddenTestsLabel.frame = NSRect(x: hx, y: hy, width: hw, height: 16)
+        showTestsButton.frame = NSRect(x: hx + hw + 8, y: hy, width: bw, height: 16)
         let messageTop = bodyTop + (errorLine.isHidden ? 0 : 16.5 + 8)
         message.frame = NSRect(x: 20, y: messageTop + (bounds.height - messageTop - 16) / 2, width: max(0, bounds.width - 40), height: 16)
         let stateFrame = NSRect(x: 0, y: bodyTop, width: max(0, bounds.width - treeWidth), height: max(0, bounds.height - bodyTop))
@@ -1125,4 +1146,29 @@ enum DiffPanelState: Equatable {
             self = .empty(StateCopy(title: message, icon: .fileDiff))
         }
     }
+}
+
+/// `InlineButton` (5258 ui/button.tsx:103-120) at `text-xs`: medium foreground text, underlined on hover.
+final class DiffInlineButton: ControlView {
+    private let label = LabelView("", font: DSFont.ui(12, weight: .medium))
+    init(_ title: String) {
+        super.init(frame: .zero)
+        label.text = title
+        label.lineHeight = 16
+        scalesWhenPressed = false
+        addSubview(label)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(title)
+        isHidden = true
+        restyle()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var intrinsicContentSize: NSSize { NSSize(width: ceil(label.textWidth), height: 16) }
+    override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
+    private func restyle() {
+        label.color = Themed.color(\.foreground)
+        label.isUnderlined = state.hoverOrPressed
+    }
+    override func layout() { super.layout(); label.frame = bounds }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 }
