@@ -213,7 +213,10 @@ public final class ProjectMonogramView: DSView {
         ctx.addPath(CGPath(roundedRect: tile, cornerWidth: 4, cornerHeight: 4, transform: nil))
         ctx.setFillColor(color.copy(alpha: color.alpha * 0.14)!)
         ctx.fillPath()
-        let font = DSFont.mono(8.25, weight: RedesignTokens.Weight.chrome(.bold, dark: NSAppearance.currentDrawing().isDark))
+        // Bold in every theme: this is T3's monogram, an icon the user can ask Redesign to keep ("Letters") or
+        // can set themselves, and it must come out the same either way (PixelSpritesTests). Redesign's 500 cap is
+        // for the app's own text.
+        let font = DSFont.mono(8.25, weight: .bold) // redesign-weight-exempt: T3's monogram is an icon
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: identity.monogram, attributes: [
             .font: font, .foregroundColor: NSColor(cgColor: color) ?? .gray]))
         let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))

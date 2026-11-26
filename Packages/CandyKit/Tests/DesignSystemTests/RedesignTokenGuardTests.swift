@@ -182,7 +182,9 @@ struct RedesignTokenGuardTests {
             let feeds = ["LabelView(", "TextBlockView(", ".font = ", "Weight.chrome(", "UsageStyle.label("] + helpers
             for (i, raw) in text.components(separatedBy: "\n").enumerated() {
                 let s = raw.components(separatedBy: "//")[0]
-                guard !Self.matches(heavy, s).isEmpty, !s.contains("case "), !feeds.contains(where: { s.contains($0) }) else { continue }
+                // `redesign-weight-exempt:` on the line names a glyph that is an icon, not the app's text, with its reason.
+                guard !Self.matches(heavy, s).isEmpty, !s.contains("case "), !feeds.contains(where: { s.contains($0) }),
+                      !raw.contains("redesign-weight-exempt:") else { continue }
                 hits.append("\(file.lastPathComponent):\(i + 1): \(raw.trimmingCharacters(in: .whitespaces))")
             }
         }
