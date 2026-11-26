@@ -1202,7 +1202,11 @@ public final class SidebarContentView: DSView {
         // Dither (after Capy): the account row takes the footer, a 44pt pill floating 8 in from the sidebar's edges.
         let accountFooter = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isOnUtilityPage
         // T3 4928 ui/sidebar.tsx:675 (#22027): `pt-1 pb-[--sidebar-content-inset]`, 8 under the buttons.
-        let menuTop = accountFooter ? h - 8 - SidebarAccountRowView.height : h - 40
+        // Redesign: a pass's capsule takes its own line inside the account card, so the name keeps the full row.
+        let capsuleWidth = w - 2 * SidebarAccountRowView.inset - 16
+        let capsuleLine = accountFooter && !updatePill.isHidden && updatePill.capsuleWidth(available: max(28, capsuleWidth), side: 28) > 28
+        let accountHeight = SidebarAccountRowView.height + (capsuleLine ? SidebarAccountRowView.capsuleLine : 0)
+        let menuTop = accountFooter ? h - 8 - accountHeight : h - 40
         var footerTop = accountFooter ? menuTop - 8 : h - 44
         var stackTop = menuTop
         if !providerUpdatePill.isHidden {
@@ -1263,12 +1267,11 @@ public final class SidebarContentView: DSView {
         if accountFooter {
             for b in [settingsButton, pullRequestsButton, issuesButton, usageButton] { b.isHidden = true }
             // The update button sits inside the row at its right, a quiet 28pt control (the user, 2026-10-22).
-            // A pass grows it into a capsule: up to its label, leaving the name at least 48pt while the pass shows
-            // ponytail: fixed 48pt floor for the name, measure the name if a short one gives up room for nothing
-            ditherPillWidth = updatePill.capsuleWidth(available: max(28, w - 2 * SidebarAccountRowView.inset - 46 - 48 - 8), side: 28)
-            accountRow.trailingReserve = updatePill.isHidden ? 0 : ditherPillWidth + 4
+            // A pass that grows it into a capsule moves it to a line of its own under the name, the card's width.
+            ditherPillWidth = capsuleLine ? max(28, capsuleWidth) : 28
+            accountRow.trailingReserve = updatePill.isHidden || capsuleLine ? 0 : ditherPillWidth + 4
             accountRow.frame = NSRect(x: SidebarAccountRowView.inset, y: menuTop, width: max(0, w - 2 * SidebarAccountRowView.inset),
-                                      height: SidebarAccountRowView.height)
+                                      height: accountHeight)
         }
         backButton.isHidden = !isOnUtilityPage
         // `SidebarMenu` is a `gap-1` row; Back is `flex-1`, the update pill `ml-auto shrink-0`.
@@ -1290,7 +1293,8 @@ public final class SidebarContentView: DSView {
             undoNotice.frame = NSRect(x: x, y: menuTop + 4, width: max(0, rowEnd - x), height: 24)
         }
         if accountFooter {
-            updatePill.frame = NSRect(x: w - 8 - 8 - ditherPillWidth, y: menuTop + (SidebarAccountRowView.height - 28) / 2, width: ditherPillWidth, height: 28)
+            let pillY = capsuleLine ? menuTop + SidebarAccountRowView.height : menuTop + (SidebarAccountRowView.height - 28) / 2
+            updatePill.frame = NSRect(x: w - 8 - 8 - ditherPillWidth, y: pillY, width: ditherPillWidth, height: 28)
         } else {
             let pw = updatePill.capsule == nil ? 32 : updatePill.capsuleWidth(available: max(32, pillRoom - 4), side: 32)
             updatePill.frame = NSRect(x: w - 8 - pw, y: menuTop, width: pw, height: 32)

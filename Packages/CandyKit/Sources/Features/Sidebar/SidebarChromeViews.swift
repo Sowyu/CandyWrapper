@@ -537,6 +537,8 @@ final class SidebarAccountChevronButton: ControlView {
 
 public final class SidebarAccountRowView: ControlView {
     public static let height: CGFloat = 44
+    /// What a pass's capsule adds under the name row in Redesign: the 28pt capsule and the card's 8pt foot.
+    public static let capsuleLine: CGFloat = 28 + 8
     /// Its distance from the sidebar's left, right and bottom edges.
     public static let inset: CGFloat = 8
     /// Concentric with the window's bottom left corner, which it sits `inset` inside.
@@ -608,7 +610,8 @@ public final class SidebarAccountRowView: ControlView {
 
     public override func layout() {
         super.layout()
-        let h = bounds.height
+        // The name row; a pass's capsule takes a line below it.
+        let h = Self.height
         let a = SidebarAccountAvatarView.size + 2 * SidebarAccountAvatarView.ringGap
         avatar.frame = NSRect(x: 8 - SidebarAccountAvatarView.ringGap, y: (h - a) / 2, width: a, height: a)
         CATransaction.begin(); CATransaction.setDisableActions(true)
