@@ -50,7 +50,8 @@ public struct TimelineRow: Sendable, Hashable, Identifiable {
         case pendingApproval(PendingApproval)
         /// Placeholder while running with no visible activity. `compacting` blanks it (:3793-3795).
         /// `label` replaces "Thinking" while the run waits on subagents it launched (#36334).
-        case thinking(groupId: String?, expanded: Bool?, compacting: Bool, label: String? = nil)
+        /// `providerDriver` draws that provider's logo in place of the brain while it starts (`ProviderStartingIcon`, #41928).
+        case thinking(groupId: String?, expanded: Bool?, compacting: Bool, label: String? = nil, providerDriver: String? = nil)
         /// Header of a settled group of tool calls.
         case workToggle(WorkToggle)
         /// "Worked for 22s" header of a settled turn.
@@ -149,6 +150,9 @@ public struct TimelineRowsInput: Sendable {
     /// Runless work is live (a provider-native subagent thread).
     public var runlessWorkActive = false
     public var activeTurnStartedAt: T3Timestamp?
+    /// The activity run's provider has not answered yet (`providerStartingLabel`, ChatView.tsx:1605-1616): its step
+    /// replaces the Thinking label (TimelineWorkGroupRows.tsx:458-474).
+    public var providerStarting: RunStartup.ProviderStarting?
     /// A `/compact` runs and its compaction has not completed (`isCompacting`, ChatView.tsx:3597-3619).
     public var isCompacting = false
     /// "Tool calls in chat" is Zen: entries were filtered to final answers (`filteringToolCalls`), so turns
@@ -216,13 +220,15 @@ public struct TimelineRowsInput: Sendable {
             activeTurnStartedAt: state.activeTurnStartedAt)
         input.pendingApprovals = PendingRequests.derive(projection).approvals
         input.isCompacting = state.isWorking && TimelineRunState.compactRequestActive(projection, latestRun: state.latestRun)
+        input.providerStarting = state.latestRun.flatMap { latest in projection.runs.first { $0.id == latest.runId } }
+            .flatMap { RunStartup.providerStarting(for: $0, in: projection) }
         return (input, changed)
     }
 
     /// Everything but the entries matches `other`: the row pass would fold and group the same way.
     func sameContext(_ other: TimelineRowsInput) -> Bool {
         latestRun == other.latestRun && runningRunId == other.runningRunId && isWorking == other.isWorking
-            && isCompacting == other.isCompacting && pendingApprovals == other.pendingApprovals
+            && isCompacting == other.isCompacting && providerStarting == other.providerStarting && pendingApprovals == other.pendingApprovals
             && runlessWorkActive == other.runlessWorkActive && activeTurnStartedAt == other.activeTurnStartedAt
             && expandedRunIds == other.expandedRunIds && expandedAttemptIds == other.expandedAttemptIds
             && expandedWorkGroupIds == other.expandedWorkGroupIds
@@ -1110,7 +1116,9 @@ public enum TimelineRows {
                 let groupId = workGroupId(anchor.id)
                 let expanded = input.expandedWorkGroupIds.contains(groupId)
                 rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
-                                        kind: .thinking(groupId: groupId, expanded: expanded, compacting: compacting, label: input.liveAnswerPreview)))
+                                        kind: .thinking(groupId: groupId, expanded: expanded, compacting: compacting,
+                                                        label: input.providerStarting?.label ?? input.liveAnswerPreview,
+                                                        providerDriver: input.providerStarting?.driver)))
                 if expanded { rows.append(expandedBody(groupId, anchor.createdAt, visibleActive.map { $0.work! })) }
                 appendViewedImages(groupId, anchor.createdAt, visibleActive.map { $0.work! })
             } else {
@@ -1126,7 +1134,9 @@ public enum TimelineRows {
                 }
                 rows.append(TimelineRow(id: liveActivityRowId, createdAt: input.activeTurnStartedAt,
                                         kind: .thinking(groupId: nil, expanded: nil, compacting: compacting,
-                                                        label: waitingOn == 0 ? input.liveAnswerPreview : waitingOn == 1 ? "Waiting on a subagent" : "Waiting on \(waitingOn) subagents")))
+                                                        label: input.providerStarting?.label ?? (waitingOn == 0 ? input.liveAnswerPreview
+                                                            : waitingOn == 1 ? "Waiting on a subagent" : "Waiting on \(waitingOn) subagents"),
+                                                        providerDriver: input.providerStarting?.driver)))
             }
         }
 

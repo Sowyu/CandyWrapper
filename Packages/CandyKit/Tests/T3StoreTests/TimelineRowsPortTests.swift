@@ -494,12 +494,12 @@ private func messageFlags(_ row: TimelineRow?) -> (meta: Bool, copy: Bool, strea
             if case .workLive(_, _, _, _, let active, _)? = row?.kind { #expect(active) } else { Issue.record("no live row: \(set.map(\.id))") }
         }
         #expect(live(failed).isEmpty)
-        guard let last = failed.last, case .thinking(let groupId?, _, _, _) = last.kind, last.id == "live-activity-row" else {
+        guard let last = failed.last, case .thinking(let groupId?, _, _, _, _) = last.kind, last.id == "live-activity-row" else {
             Issue.record("a failed latest tool hands the row back to thinking with its group: \(failed.map(\.id))")
             return
         }
         let open = rows(.failed, expanded: [groupId])
-        if case .thinking(_, let expanded?, _, _) = open[open.count - 2].kind { #expect(expanded) } else { Issue.record("no open thinking row") }
+        if case .thinking(_, let expanded?, _, _, _) = open[open.count - 2].kind { #expect(expanded) } else { Issue.record("no open thinking row") }
         if case .work(let grouped, true, _) = open[open.count - 1].kind { #expect(grouped.map(\.id) == ["latest-command"]) } else { Issue.record("no group body") }
         #expect(live(declined).first?.active == false)
         #expect(declined.last.map { kind($0) == "thinking" && $0.id == "live-activity-row" } == true)
@@ -697,7 +697,7 @@ struct ToolCallVisibilityTests {
         var input = TimelineRowsInput(entries: entries, latestRun: TimelineLatestRun(runId: "r1", status: .running, startedAt: at), isWorking: true)
         input.activeTurnStartedAt = at
         func label(_ rows: [TimelineRow]) -> String?? {
-            rows.lazy.compactMap { if case .thinking(_, _, _, let label) = $0.kind { label } else { nil } }.first
+            rows.lazy.compactMap { if case .thinking(_, _, _, let label, _) = $0.kind { label } else { nil } }.first
         }
         #expect(label(TimelineRows.derive(input)) == .some("Waiting on 2 subagents"))
         input.entries.append(message("b", role: .assistant, run: "r1", at: at))

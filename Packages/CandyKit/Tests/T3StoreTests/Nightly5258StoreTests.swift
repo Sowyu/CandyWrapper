@@ -95,7 +95,17 @@ import T3Protocol
         #expect(RunStartup.startupPhase(mine, threadId: tid) == "mcp")
         #expect(RunStartup.startupPhase(other, threadId: tid) == nil)
         let p = Self.projection(runs: "[\(Self.run("r1", "starting"))]", sessions: Self.session(nativeResume: nil, phase: "plugins"))
-        #expect(RunStartup.startupPhase(for: p.runs[0], in: p, items: []) == "plugins")
+        #expect(RunStartup.providerStarting(for: p.runs[0], in: p) == .init(label: "Loading Codex plugins", driver: "codex"))
+        // A finished run, or a driver with no display name, says nothing more than "Starting".
+        let done = Self.projection(runs: "[\(Self.run("r1", "completed"))]", sessions: Self.session(nativeResume: nil, phase: "plugins"))
+        #expect(RunStartup.providerStarting(for: done.runs[0], in: done) == nil)
+        #expect(RunStartup.ProviderStarting(driver: "custom-acp") == .init(label: "Starting", driver: nil))
+        // The Thinking row names the step and carries the driver for the logo (TimelineWorkGroupRows.tsx:458-474).
+        let thinking = TimelineRows.derive(TimelineRowsInput(projection: p)).compactMap { row -> String? in
+            if case .thinking(_, _, _, let label, let driver) = row.kind { return "\(label ?? "") \(driver ?? "")" }
+            return nil
+        }
+        #expect(thinking == ["Loading Codex plugins codex"])
         #expect(RunStartup.startingLabel(phase: "plugins", provider: "Codex") == "Loading Codex plugins")
         #expect(RunStartup.startingLabel(phase: "connecting", provider: "Cursor") == "Connecting to Cursor")
         #expect(RunStartup.startingLabel(phase: "warming", provider: "Claude") == "Starting Claude")

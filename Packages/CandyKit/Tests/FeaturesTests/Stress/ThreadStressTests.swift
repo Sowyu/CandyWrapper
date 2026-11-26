@@ -268,7 +268,7 @@ final class ThreadStressRun {
             case .turnFold(let run, _, _, _): choices.append { self.expandedRuns.formSymmetricDifference([run]) }
             case .attemptFold(_, let attempt, _, _, _): choices.append { self.expandedAttempts.formSymmetricDifference([attempt]) }
             case .workToggle(let t): choices.append { self.expandedGroups.formSymmetricDifference([t.groupId]) }
-            case .workLive(_, _, let id, _, _, _), .thinking(let id?, _, _, _): choices.append { self.expandedGroups.formSymmetricDifference([id]) }
+            case .workLive(_, _, let id, _, _, _), .thinking(let id?, _, _, _, _): choices.append { self.expandedGroups.formSymmetricDifference([id]) }
             default: break
             }
         }

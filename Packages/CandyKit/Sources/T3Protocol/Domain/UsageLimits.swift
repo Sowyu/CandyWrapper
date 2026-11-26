@@ -279,7 +279,7 @@ public enum UsageLimitsLogic {
     static let kindOrder = ["session": 0, "weekly": 1, "monthly": 2, "other": 3]
 
     /// `PROVIDER_DISPLAY_NAMES` (4928 contracts model.ts:197-209).
-    static let providerDisplayNames = ["antigravity": "Antigravity", "codex": "Codex", "claudeAgent": "Claude", "cursor": "Cursor", "grok": "Grok",
+    public static let providerDisplayNames = ["antigravity": "Antigravity", "codex": "Codex", "claudeAgent": "Claude", "cursor": "Cursor", "grok": "Grok",
                                        "fx": "fx", "kiro": "Kiro", "muse": "Muse Code", "acpRegistry": "ACP Registry", "pi": "Pi", "opencode": "OpenCode"]
 
     /// `providersWithLimits`: enabled, installed, available and reporting usage at all.

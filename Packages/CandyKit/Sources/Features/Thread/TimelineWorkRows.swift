@@ -103,8 +103,28 @@ final class WorkLineView: DSView {
                 addSubview(g)
                 dotGrid = g
             } else if !showsDotGrid { dotGrid?.removeFromSuperview(); dotGrid = nil }
-            iconView.isHidden = showsDotGrid
+            iconView.isHidden = showsDotGrid || providerIcon != nil
         }
+    }
+    /// A starting provider's logo in the icon slot (`ProviderStartingIcon`, ProviderStartingIcon.tsx:51-66, `size-4`),
+    /// at `opacity-70` because the row is not highlighted (TimelineWorkGroupRows.tsx:581-582). Redesign draws the
+    /// provider's mono glyph in the work icons' muted color, as its model chip does, so it reads with the dot grid.
+    private var providerIcon: (key: String, view: NSView)?
+    func setProviderIcon(_ driver: String?, redesign: Bool) {
+        let key = driver.map { "\($0)|\(redesign)" }
+        if providerIcon?.key != key {
+            providerIcon?.view.removeFromSuperview()
+            providerIcon = nil
+            if let driver, let key {
+                let view = redesign ? ProviderIcon.make(driver: driver, displayName: driver, size: 16, color: WorkIcons.muted, model: true)
+                    : ProviderIcon.make(driver: driver, displayName: driver, size: 16)
+                view.alphaValue = redesign ? 1 : 0.7
+                addSubview(view)
+                providerIcon = (key, view)
+                needsLayout = true
+            }
+        }
+        iconView.isHidden = showsDotGrid || providerIcon != nil
     }
     private var iconName: IconName = .zap
     let label = ShineLabelView()
@@ -197,7 +217,7 @@ final class WorkLineView: DSView {
             iconView = IconView(name: icon, size: 16)
             iconName = icon
             addSubview(iconView)
-            iconView.isHidden = showsDotGrid
+            iconView.isHidden = showsDotGrid || providerIcon != nil
         }
         switch style {
         case .destructive:
@@ -227,6 +247,7 @@ final class WorkLineView: DSView {
         let h: CGFloat = 24
         iconView.frame = NSRect(x: 4, y: 4, width: 16, height: 16)
         dotGrid?.frame = iconView.frame
+        providerIcon?.view.frame = iconView.frame
         // Trailing slot, right to left: the timestamp flush right while shown, then the chevron cell (16) only when
         // the row expands, `gap-1.5` apart (TimelineWorkEntryRow.tsx:627-637 at 4928, #35549).
         var right = bounds.width
@@ -803,7 +824,7 @@ final class ThinkingRowView: WorkRowBase {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         onClick = { [weak self] in
-            guard let self, case .thinking(let groupId?, _, _, _)? = self.item?.row.kind else { return }
+            guard let self, case .thinking(let groupId?, _, _, _, _)? = self.item?.row.kind else { return }
             self.context.disclosure(self.item?.id)
             self.context.model?.toggleGroup(groupId)
         }
@@ -813,15 +834,16 @@ final class ThinkingRowView: WorkRowBase {
         super.configure(item)
         let l = line(0)
         // While a `/compact` waits for its row, the slot stays at its height with nothing in it (:3793-3795).
-        var label: String?
-        if case .thinking(_, _, let compacting, let waiting) = item.row.kind { blank = compacting; label = waiting } else { blank = false }
+        var label: String?, driver: String?
+        if case .thinking(_, _, let compacting, let text, let provider) = item.row.kind { blank = compacting; label = text; driver = provider } else { blank = false }
         l.isHidden = blank
         l.configure(icon: .brain, text: label ?? "Thinking", style: .tool, time: nil, expanded: false, active: !blank, now: context.now())
         l.label.style = .focus // `LiveActivityRow ... shimmer` (MessagesTimeline.tsx:3796)
         l.expandable = false
-        // Dither: Capy's dot grid in place of the brain.
+        // Dither: Capy's dot grid in place of the brain, and the provider's glyph while it starts.
         let capy = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        l.showsDotGrid = capy && !blank
+        l.setProviderIcon(blank ? nil : driver, redesign: capy)
+        l.showsDotGrid = capy && !blank && driver == nil
     }
 
     override func height(forWidth width: CGFloat) -> CGFloat { 28 + blockPadding }

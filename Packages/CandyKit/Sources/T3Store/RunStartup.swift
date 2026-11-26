@@ -18,17 +18,39 @@ public enum RunStartup {
         projection.providerSessions.last { $0["providerInstanceId"]?.stringValue == run.providerInstanceId?.rawValue }
     }
 
-    /// The phase to show for a run that has no provider output yet, or nil (:208-230). A run with no turn yet shows it
-    /// while it prepares or starts; one whose turn opened shows it until its first output.
-    public static func startupPhase(for run: Run, in projection: ThreadProjection, items: [TurnItem]) -> String? {
-        guard let phase = startupPhase(session(for: run, in: projection), threadId: projection.thread.id) else { return nil }
+    /// A provider that has not produced output yet: the step it reports and its driver for the logo
+    /// (`presentProviderStarting`, threadExecution.ts:142-163). No driver means the plain "Starting" and no logo.
+    public struct ProviderStarting: Sendable, Hashable {
+        public var label: String
+        public var driver: String?
+        public init(label: String, driver: String?) { self.label = label; self.driver = driver }
+
+        public init(driver: String?, phase: String? = nil) {
+            let name = driver.flatMap { UsageLimitsLogic.providerDisplayNames[$0] }
+            self.init(label: name.map { startingLabel(phase: phase, provider: $0) } ?? "Starting", driver: name == nil ? nil : driver)
+        }
+    }
+
+    /// `summarizeThreadRun`'s provider-starting half (threadExecution.ts:196-230). A run with no provider turn yet is
+    /// starting while it is `starting` or `running`; one whose turn opened shows the step it reports until its first
+    /// output, and nothing when it reports none.
+    public static func providerStarting(for run: Run, in projection: ThreadProjection) -> ProviderStarting? {
+        guard [.preparing, .starting, .running, .waiting].contains(run.status) else { return nil }
+        let session = session(for: run, in: projection)
+        let phase = startupPhase(session, threadId: projection.thread.id)
+        // `session?.driver ?? providers.find(instanceId).driver`. The pipeline has no provider list, and a default
+        // instance's id is its driver, so the id stands in for it.
+        // ponytail: a custom instance with no session yet says "Starting"; pass the server's providers if one shows up
+        let driver = session?["driver"]?.stringValue ?? run.providerInstanceId?.rawValue
+        let present = ProviderStarting(driver: driver, phase: phase)
         let attempt = run.activeAttemptId?.rawValue
-        let turn = projection.providerTurns.last { $0["runAttemptId"]?.stringValue == attempt && attempt != nil }
-        guard let turn else { return [.preparing, .starting, .running].contains(run.status) ? phase : nil }
+        func ordinal(_ turn: JSONValue) -> Double { if case .number(let n)? = turn["ordinal"] { return n }; return 0 }
+        let turn = attempt == nil ? nil : projection.providerTurns.filter { $0["runAttemptId"]?.stringValue == attempt }.max { ordinal($0) < ordinal($1) }
+        guard let turn else { return [.starting, .running].contains(run.status) ? present : nil }
         let status = turn["status"]?.stringValue
-        guard status == "pending" || status == "running" else { return nil }
-        let answered = items.contains { $0.runId == run.id && $0.providerTurnId != nil && $0.type != .userMessage }
-        return answered ? nil : phase
+        guard status == "pending" || status == "running", phase != nil else { return nil }
+        let answered = projection.turnItems.contains { $0.runId == run.id && $0.providerTurnId != nil && $0.type != .userMessage }
+        return answered ? nil : present
     }
 
     /// `providerStartingPhase` (:119-135): the label for a phase; an unknown one keeps the plain label.
