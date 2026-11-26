@@ -167,7 +167,8 @@ private final class KeyWindow: NSWindow {
 @MainActor
 private func expectTypingWork(_ presses: [Press]) {
     #expect(presses[0].fragments >= 1 && presses[0].lateFragments == 0, "the first glyph lands in the keystroke's own commit")
-    for (i, p) in presses.enumerated().dropFirst() {
+    // About 90 `a`s fill the 736 pt line; past that a wrap grows the composer and relays it out, as it should.
+    for (i, p) in presses.prefix(60).enumerated().dropFirst() {
         // ComposerView.refresh and the host share one serialization of the draft (`refresh(prompt:)`).
         #expect(p.serializations == 1, "press \(i): \(p.serializations) serializations")
         // TextKit moves the caret mid-edit; only `textDidChange` places ours.
