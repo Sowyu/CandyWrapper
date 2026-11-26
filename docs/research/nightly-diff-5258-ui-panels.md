@@ -420,7 +420,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 2e6b05011f | #24888 | fix(web): terminal Powerline caps and slants fill their cells | terminal | n/a (SwiftTerm draws it) † |
 | 2f7b7f03e3 | #42824 | fix(web): issue number in the Issue panel follows 'Open links in' | issues | ported 7835705c |
 | 3336504f31 | #42445 | fix(preview): agent recordings keep refining the frame while the page is idle | browser | n/a (recording compositor, CW records nothing in the client), diff read 2026-11-25 |
-| 3373a78606 | #42872 | fix(web): update terminal labels when the language changes | terminal | port (5.3) † |
+| 3373a78606 | #42872 | fix(web): update terminal labels when the language changes | terminal | n/a (CW has no translations: General settings says other languages are not available), diff stat read 2026-11-25 |
 | 338352dee2 | #39833 | fix(web): spreadsheet scrollbars are visible in dark mode | files | n/a (QuickLook previews) † |
 | 356dff3352 | #40783 | fix(web): RTF previews respect hidden character formatting | files | n/a (QuickLook previews) † |
 | 3571f28cca | #40816 | fix(web): Usage Limits no longer shows a stale scrollbar | usage | n/a (web scrollbar) † |
@@ -711,6 +711,8 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 1.3 is partly ported (cb5edfe1): settings search fields clear on Esc and an IME Esc reaches the input method. The rows outside Settings (Files, PR, diff comments, dictation, right panel sheet) and the font family, voice and custom model rows stay open.
 
 ## Corrections from the panels port (2026-11-25)
+
+- #41073 (not in the table, 7103527dcc): T3 resolves a PR description's relative file link against the PR checkout before it opens the Files panel. CW's PR markdown has no `onOpenFile`, so its file links never open the panel at all and go to the editor. Left: wire PR markdown to the thread's Files panel with the checkout-relative path (M).
 
 - 2.5: #26760 is not `n/a`. CW never had T3's review order (`orderDiffFiles` was already in 4928's web client), so the Code tab now runs `orderDiffFilesForReview` (da18c3b2).
 - 3.5: #39497 changes the web picture-in-picture's PDF embedding, not the file preview. CW never embeds preview PDFs.
