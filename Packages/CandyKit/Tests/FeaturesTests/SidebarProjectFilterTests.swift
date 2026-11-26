@@ -27,9 +27,53 @@ struct SidebarProjectFilterTests {
         #expect(groups.first { $0.label == "old-repo" }?.archived == true)
         #expect(ProjectOrganization.pickable(groups).map(\.label) == ["candywrapper", "demo-repo"])
         let view = SidebarProjectScopeView(groups: groups, selectedKey: nil, minimumWidth: 200, selectedKeys: groups.filter { $0.label == "old-repo" }.map(\.key))
-        #expect(view.items.map(\.label) == ["All projects", "candywrapper", "demo-repo"])
+        #expect(view.items.map(\.label) == ["Add project", "All projects", "candywrapper", "demo-repo"])
         // An archived project's scope reads as all projects.
         #expect(view.selectedKeys.isEmpty)
+    }
+
+    /// 5258 #33057: the folder button's list leads with "Add project", which opens the add flow and never scopes;
+    /// a search drops it with "All projects" (Sidebar.logic.ts:1186-1201, Sidebar.tsx:3118-3120).
+    @Test func addProjectLeadsTheScopeList() {
+        let groups = SidebarListBuilder.projectScopeGroups(snapshot: Self.snapshot())
+        let view = SidebarProjectScopeView(groups: groups, selectedKey: nil, minimumWidth: 200)
+        #expect(view.items[0].isAddProject && !view.items[1].isAddProject)
+        var added = 0, selected: [String?] = []
+        view.onAddProject = { added += 1 }
+        view.onSelect = { selected.append($0) }
+        view.highlighted = 0
+        #expect(view.handleKey(.enter))
+        #expect(added == 1 && selected.isEmpty)
+        view.setQuery("demo")
+        #expect(view.shown.map(\.label) == ["demo-repo"])
+    }
+
+    /// Sidebar.tsx:3136-3171 at 5258: the scope trigger is a folder labelled "Projects", and Add project leaves the
+    /// header for the folder's menu. Redesign keeps its own Add project button.
+    @Test func headerShowsTheProjectsFolder() {
+        let content = SidebarContentView(frame: NSRect(x: 0, y: 0, width: 256, height: 600))
+        content.setSnapshot(Self.snapshot(), animated: false)
+        content.layoutSubtreeIfNeeded()
+        #expect(content.filterButton.icon == .folder && content.filterButton.accessibilityLabel() == "Projects")
+        #expect(content.addProjectButton.isHidden && !content.filterButton.isHidden)
+        var state = content.state
+        state.projectScopeKeys = [SidebarListBuilder.projectScopeGroups(snapshot: Self.snapshot()).first { $0.label == "demo-repo" }!.key]
+        content.state = state
+        content.updateScopeTrigger()
+        #expect(content.filterButton.accessibilityLabel() == "Projects: demo-repo")
+    }
+
+    /// `resolveScopedNewThreadProjectRef` (Sidebar.logic.ts:829-851 at 5258, #35185).
+    @Test func newStartsInTheScopedProject() {
+        let snapshot = Self.snapshot()
+        let groups = SidebarListBuilder.projectScopeGroups(snapshot: snapshot)
+        let demo = groups.first { $0.label == "demo-repo" }!
+        #expect(SidebarModel.scopedNewThreadProject(shift: false, scopedGroups: [demo], viewedProjectId: nil, projects: snapshot.projects)?.id == "p1")
+        #expect(SidebarModel.scopedNewThreadProject(shift: true, scopedGroups: [demo], viewedProjectId: nil, projects: snapshot.projects) == nil)
+        #expect(SidebarModel.scopedNewThreadProject(shift: false, scopedGroups: groups, viewedProjectId: nil, projects: snapshot.projects) == nil)
+        #expect(SidebarModel.scopedNewThreadProject(shift: false, scopedGroups: [], viewedProjectId: nil, projects: snapshot.projects) == nil)
+        // A viewed thread outside the group leaves the group's own project.
+        #expect(SidebarModel.scopedNewThreadProject(shift: false, scopedGroups: [demo], viewedProjectId: "p2", projects: snapshot.projects)?.id == "p1")
     }
 
     @Test func updatePayloadMatchesProjectUpdate() {
@@ -61,9 +105,9 @@ struct SidebarProjectFilterTests {
         var writes: [(String, Bool)] = []
         view.onTogglePin = { writes.append(($0, $1)) }
         let before = view.items.map(\.label)
-        let key = view.items[2].key!
+        let key = view.items[3].key!
         view.togglePin(key)
-        #expect(view.items.map(\.label) == before && view.items[2].pinned)
+        #expect(view.items.map(\.label) == before && view.items[3].pinned)
         #expect(writes.count == 1 && writes[0].0 == key && writes[0].1)
     }
 
@@ -93,8 +137,8 @@ struct SidebarProjectFilterTests {
         let view = SidebarProjectScopeView(groups: groups, selectedKey: nil, minimumWidth: 200)
         var writes = 0
         view.onTogglePin = { _, _ in writes += 1 }
-        view.togglePin(view.items[1].key!)
-        #expect(writes == 0 && !view.items[1].pinned)
+        view.togglePin(view.items[2].key!)
+        #expect(writes == 0 && !view.items[2].pinned)
     }
 
     /// The pin turns to pin-off under the pointer and goes back when the rows rebuild or the popup closes under a

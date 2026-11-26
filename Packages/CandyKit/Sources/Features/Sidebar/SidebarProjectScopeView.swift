@@ -20,6 +20,8 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
         var pinned = false
         /// `canPinProjectGroup`: every member's server keeps pins and this connection may change it.
         var canPin = false
+        /// The "Add project" row (`ADD_PROJECT_SCOPE_ITEM_VALUE`, Sidebar.logic.ts:1186 at 5258).
+        var isAddProject = false
     }
 
     struct Badge: Equatable { var machine: String; var description: String }
@@ -34,6 +36,8 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     var highlighted: Int? { didSet { if highlighted != oldValue { rows.forEach { $0.restyle() }; scrollToHighlight() } } }
 
     var onSelect: (@MainActor (String?) -> Void)?
+    /// The sidebar's "Add project" row: close and open the Add project palette (Sidebar.tsx:3118-3120 at 5258).
+    var onAddProject: (@MainActor () -> Void)?
     var onSettings: (@MainActor (String) -> Void)?
     /// A row's pin button or the pin shortcut: the group's key and whether it should now be pinned.
     var onTogglePin: (@MainActor (String, Bool) -> Void)?
@@ -68,7 +72,9 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
                  badge: badges ? environments.badge(group).map { Badge(machine: $0.machine, description: $0.description) } : nil,
                  pinned: group.pinned, canPin: canPin(group))
         }
-        items = extra == .allProjects ? [Item(key: nil, label: "All projects")] + projects : projects + [Item(key: nil, label: "Add project")]
+        // 5258 leads the sidebar's list with "Add project" (Sidebar.tsx:851-858, #33057).
+        let add = Item(key: nil, label: "Add project", isAddProject: true)
+        items = extra == .allProjects ? [add, Item(key: nil, label: "All projects")] + projects : projects + [add]
         // `selectedProjectScopeItem` falls back to "All projects" when the key's group is gone; an archived
         // project's scope reads as all projects.
         self.selectedKeys = Set((selectedKeys ?? selectedKey.map { [$0] } ?? []).filter { key in groups.contains { $0.key == key } })
@@ -112,7 +118,8 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     private func reload() {
         rows.forEach { $0.removeFromSuperview() }
         rows = shown.indices.map { i in
-            let row = ScopeRowView(item: shown[i], selected: (shown[i].key.map { selectedKeys.contains($0) } ?? (selectedKeys.isEmpty && extra == .allProjects)),
+            let row = ScopeRowView(item: shown[i], selected: (shown[i].key.map { selectedKeys.contains($0) }
+                                                               ?? (selectedKeys.isEmpty && extra == .allProjects && !shown[i].isAddProject)),
                                    extra: extra)
             row.isHighlighted = { [weak self] in self?.highlighted == i }
             row.onHover = { [weak self] in self?.highlighted = i }
@@ -148,6 +155,7 @@ final class SidebarProjectScopeView: DSView, PickerPopupBody {
     private func choose(_ i: Int) {
         guard shown.indices.contains(i) else { return }
         let key = shown[i].key
+        if extra == .allProjects, shown[i].isAddProject { onAddProject?(); return }
         if extra == .allProjects {
             if let key { if !selectedKeys.insert(key).inserted { selectedKeys.remove(key) } } else { selectedKeys.removeAll() }
             reload()
@@ -264,7 +272,7 @@ final class ScopeRowView: ControlView {
     init(item: SidebarProjectScopeView.Item, selected: Bool, extra: SidebarProjectScopeView.Extra = .allProjects, icon: IconName? = nil) {
         self.item = item
         self.selected = selected
-        folder = IconView(name: icon ?? (extra == .allProjects ? .folder : .folderPlus), size: 16)
+        folder = IconView(name: icon ?? (item.isAddProject ? .folderPlus : .folder), size: 16)
         settings = item.key == nil || extra == .addProject || icon != nil ? nil : ButtonView(nil, icon: .settings, variant: .ghostMuted, size: .iconXs)
         pin = item.key != nil && item.canPin && icon == nil ? ProjectPinSlot(name: item.label, pinned: item.pinned) : nil
         actionsColumn = extra == .allProjects && icon == nil

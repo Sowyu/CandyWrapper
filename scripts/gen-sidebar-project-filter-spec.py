@@ -1,5 +1,5 @@
 """Writes design/component-reference/sidebar-project-filter.json for scripts/component-reference: the sidebar's project
-filter popup at Nightly 4928, after pinned projects (#26154) and the aligned row actions (#29639, #29704). Each project
+filter popup at Nightly 4928 with 5258's leading Add project row (#33057), after pinned projects (#26154) and the aligned row actions (#29639, #29704). Each project
 row is the favicon, the label, then `ProjectRowActions`: the settings button, visible on the highlighted row, and the
 pin column, which holds `ProjectPinButton` or a `size-6` stand-in (Sidebar.tsx:3120-3190, ProjectComboboxRow.tsx,
 ProjectPinButton.tsx:24-73). "All projects" ends in the same stand-in. The popup frame, rows and search field come
@@ -19,6 +19,7 @@ exec(load("gen-sidebar-search-spec.py", "cases = []"), g)
 r = {"__file__": os.path.join(ROOT, "scripts/gen-run-on-spec.py")}
 exec(load("gen-run-on-spec.py", "def machine"), r)
 svg, favicon, ITEM, FOLDER, SETTINGS, scope_popup = g["svg"], g["favicon"], g["ITEM"], g["FOLDER"], g["SETTINGS"], g["scope_popup"]
+add_project_item = g["add_project_item"]
 lucide = r["lucide"]
 # button.tsx base + ghost-muted + icon-xs, without the old row's `ml-auto`.
 ICON_BUTTON = g["GHOST_MUTED_ICON_XS"].removesuffix(" ml-auto")
@@ -50,14 +51,14 @@ def row(label, project=None, highlighted=False, pinned=False, can_pin=True, sele
 
 CASES = [
     # Pinned first, then the rest; the highlighted unpinned row shows its settings and its pin.
-    ("pinned", [row("All projects", selected=True), row("candywrapper", "candywrapper", pinned=True), row("demo-repo", "demo-repo", highlighted=True)],
-     {"pinned": "candywrapper", "highlighted": "2"}),
+    ("pinned", [add_project_item(), row("All projects", selected=True), row("candywrapper", "candywrapper", pinned=True), row("demo-repo", "demo-repo", highlighted=True)],
+     {"pinned": "candywrapper", "highlighted": "3"}),
     # The pinned row highlighted: settings and the pin together.
-    ("pinned-highlighted", [row("All projects", selected=True), row("candywrapper", "candywrapper", highlighted=True, pinned=True), row("demo-repo", "demo-repo")],
-     {"pinned": "candywrapper", "highlighted": "1"}),
+    ("pinned-highlighted", [add_project_item(), row("All projects", selected=True), row("candywrapper", "candywrapper", highlighted=True, pinned=True), row("demo-repo", "demo-repo")],
+     {"pinned": "candywrapper", "highlighted": "2"}),
     # A server without `projectOrganization`: no pins, the column keeps its room.
-    ("no-pins", [row("All projects", selected=True), row("demo-repo", "demo-repo", highlighted=True, can_pin=False), row("candywrapper", "candywrapper", can_pin=False)],
-     {"highlighted": "1", "canPin": "no"}),
+    ("no-pins", [add_project_item(), row("All projects", selected=True), row("demo-repo", "demo-repo", highlighted=True, can_pin=False), row("candywrapper", "candywrapper", can_pin=False)],
+     {"highlighted": "2", "canPin": "no"}),
 ]
 spec = {"component": "sidebar-project-filter", "source": "apps/web/src/components/Sidebar.tsx",
         "cases": [{"name": n, "html": scope_popup("", rows), "wrapperStyle": "display:inline-block", "native": native} for n, rows, native in CASES],

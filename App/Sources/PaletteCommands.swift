@@ -942,7 +942,8 @@ final class PaletteCommands {
         threads.newThread(in: project)
     }
 
-    /// The sidebar's new-thread button (`handleNewThreadClick`): one project or Shift creates at once,
+    /// The sidebar's new-thread button (`handleNewThreadClick`): a sidebar scoped to one project starts there unless
+    /// Shift is held (#35185); otherwise one project or Shift creates at once,
     /// several open "New thread in..." (`openCommandPalette({open: "new-thread-in"})`).
     /// Dither skips the palette and opens a draft with no project, picked later from the project chip (Capy's).
     /// `opened` runs once the draft shows; Dither's scratch draft opens a moment later, after `projects.ensureScratch`.
@@ -952,6 +953,12 @@ final class PaletteCommands {
             return
         }
         defer { opened?() }
+        if let project = SidebarModel.scopedNewThreadProject(shift: shift, scopedGroups: sidebar?.newThreadScopedGroups ?? [],
+                                                             viewedProjectId: threads.composer.activeProjectId,
+                                                             projects: snapshot?.projects ?? []) {
+            newThread(in: project)
+            return
+        }
         if shift || projectGroups().count <= 1 { newThreadFromContext(); return }
         if let controller = overlay?.controller, let page = newThreadInPage() { controller.setMode(nil); controller.push(page); return }
         open(newThreadIn: true)

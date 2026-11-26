@@ -821,6 +821,28 @@ public enum SidebarModel {
         public var id: String { key }
     }
 
+    /// `resolveScopedNewThreadProjectRef` (Sidebar.logic.ts:829-851 at 5258, #35185): a sidebar scoped to one project
+    /// starts New there, on the viewed thread's copy when it belongs to the group, else on the group's own project.
+    /// Shift, no scope or several scoped projects return nil.
+    public static func scopedNewThreadProject(shift: Bool, scopedGroups: [ProjectGroup], viewedProjectId: ProjectId?,
+                                              projects: [ProjectShell]) -> ProjectShell? {
+        guard !shift, scopedGroups.count == 1, let group = scopedGroups.first else { return nil }
+        if let viewed = viewedProjectId, group.memberProjectIds.contains(viewed),
+           let project = projects.first(where: { $0.id == viewed }) { return project }
+        return group.representative
+    }
+
+    /// `buildSidebarProjectPickerEntries`' `targetProject` (sidebarProjectGrouping.ts:220-252 at 5258): the member the
+    /// viewed thread uses, else a member on its machine, else the group's own project, skipping archived copies.
+    public static func pickerTarget(_ group: ProjectGroup, preferred: ProjectId?) -> ProjectShell {
+        let members = group.members.filter { $0.archivedAt == nil }
+        if let preferred {
+            if let exact = members.first(where: { $0.id == preferred }) { return exact }
+            if let sameMachine = members.first(where: { $0.id.environmentId == preferred.environmentId }) { return sameMachine }
+        }
+        return members.first { $0.id == group.representative.id } ?? members.first ?? group.representative
+    }
+
     /// Port of `normalizeProjectPathForComparison` (packages/shared/src/path.ts:49-55) for POSIX
     /// paths: trim, then drop trailing slashes.
     public static func normalizeProjectPath(_ path: String) -> String {

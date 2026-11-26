@@ -120,7 +120,7 @@ struct SidebarSearchTests {
         c.clearSearch()
         // A key whose group is gone scopes nothing.
         c.setProjectScope("gone")
-        #expect(keys(c).contains("thread:r3") && c.filterButton.icon == .listFilter)
+        #expect(keys(c).contains("thread:r3") && c.filterButton.icon == .folder)
         // A scoped project without threads.
         let empty = content(SidebarPreview.snapshot(projects: [SidebarPreview.project("p1", "demo-repo"), SidebarPreview.project("p9", "lonely")],
                                                     threads: [SidebarPreview.thread("x", "X", project: "p1", kind: .read, minutesAgo: 2)]))
@@ -178,7 +178,7 @@ struct SidebarSearchTests {
     @Test func scopePopupFiltersAndPicks() {
         let groups = SidebarListBuilder.projectScopeGroups(snapshot: SidebarPreview.richSnapshot())
         let view = SidebarProjectScopeView(groups: groups, selectedKey: nil, minimumWidth: 150)
-        #expect(view.shown.map(\.label) == ["All projects", "candywrapper", "demo-repo", "t3code"])
+        #expect(view.shown.map(\.label) == ["Add project", "All projects", "candywrapper", "demo-repo", "t3code"])
         var picked: String?? = .none
         view.onSelect = { picked = .some($0) }
         view.setQuery("REPO")
@@ -188,8 +188,8 @@ struct SidebarSearchTests {
         view.setQuery("nothing")
         #expect(view.shown.isEmpty && view.highlighted == nil)
         view.setQuery("")
-        #expect(view.shown.count == 4 && view.highlighted == nil)
-        #expect(view.handleKey(.up) && view.highlighted == 3)
+        #expect(view.shown.count == 5 && view.highlighted == nil)
+        #expect(view.handleKey(.up) && view.highlighted == 4)
         #expect(view.naturalSize.width >= 148 && view.naturalSize.width <= 286)
     }
 
