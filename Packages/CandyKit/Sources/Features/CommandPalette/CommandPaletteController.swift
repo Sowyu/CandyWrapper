@@ -355,16 +355,26 @@ public final class CommandPaletteController {
             guard let tab = activeMode?.onTab, !view.input.hasMarkedText else { return false }
             return tab(query, highlightedEntry)
         case #selector(NSResponder.deleteBackward(_:)):
-            guard query.isEmpty, isInSubmenu else { return false }
+            // Only a plain, fresh press leaves the submenu, never a held key or one an input method uses
+            // (CommandPalette.tsx:2826-2838 at 5258, #42205).
+            guard query.isEmpty, isInSubmenu, Self.isFreshPlainKey(NSApp.currentEvent), !view.input.hasMarkedText else { return false }
             pop()
             return true
         case #selector(NSResponder.cancelOperation(_:)):
+            // A held Escape repeats; only a fresh press steps back or closes (CommandPalette.tsx:348-352, #42279).
+            if let event = NSApp.currentEvent, event.type == .keyDown, event.isARepeat { return true }
             if mode != nil, let onLeaveMode { onLeaveMode(); return true }
             onClose?()
             return true
         default:
             return false
         }
+    }
+
+    /// A key press without Control, Shift, Option or Command that is not a key repeat. No event counts as fresh.
+    static func isFreshPlainKey(_ event: NSEvent?) -> Bool {
+        guard let event, event.type == .keyDown else { return true }
+        return !event.isARepeat && event.modifierFlags.intersection([.control, .shift, .option, .command]).isEmpty
     }
 
     /// The highlighted row's value (`highlightedItemValue`), nil while none is.

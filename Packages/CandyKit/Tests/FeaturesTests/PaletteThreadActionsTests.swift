@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 import DesignSystem
 @testable import T3Store
@@ -39,5 +39,21 @@ struct PaletteThreadActionsTests {
         #expect(page.groups[0].items.allSatisfy { $0.isDisabled })
         // CommandPaletteThreadActions.tsx:100-107: the preset's time is the row's description.
         #expect(page.groups[0].items.first?.title == "Later" && page.groups[0].items.first?.description == "6:00 PM")
+    }
+}
+
+/// CommandPalette.tsx at 5258: a held Escape or Backspace repeats and must not step back (#42279, #42205).
+@MainActor
+struct PaletteKeyRepeatTests {
+    func key(_ repeatFlag: Bool, _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil,
+                         characters: "\u{7f}", charactersIgnoringModifiers: "\u{7f}", isARepeat: repeatFlag, keyCode: 51)!
+    }
+
+    @Test func onlyAFreshPlainPressCounts() {
+        #expect(CommandPaletteController.isFreshPlainKey(key(false)))
+        #expect(!CommandPaletteController.isFreshPlainKey(key(true)))
+        #expect(!CommandPaletteController.isFreshPlainKey(key(false, .shift)))
+        #expect(CommandPaletteController.isFreshPlainKey(nil))
     }
 }
