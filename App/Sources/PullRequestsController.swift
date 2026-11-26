@@ -49,6 +49,8 @@ final class PullRequestDetailBinding {
     private let environments: Environments
     private let capabilities: PullRequestCapabilities
     var toast: (String, String?, ToastQueue.Kind) -> Void = { _, _, _ in }
+    /// Where the pull request's links go. A thread's panel follows "Open links in" (#39856, #39926, #42914).
+    var openURL: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The state the surface's tab glyph wears, by surface id.
     var onStatus: ((String, PullRequestStateTone) -> Void)?
     /// A write landed; the list or the thread's status behind it may have moved.
@@ -96,7 +98,7 @@ final class PullRequestDetailBinding {
             view.onTab = { [weak self] tab in if tab == .code { self?.loadCode() } }
             view.onRetry = { [weak self] in self?.reload(invalidate: false) }
             view.onRefresh = { [weak self] in self?.reload(invalidate: true) }
-            view.onOpenURL = { url in if let u = SafeExternalURL.parse(url) { NSWorkspace.shared.open(u) } }
+            view.onOpenURL = { [weak self] url in if let u = SafeExternalURL.parse(url) { self?.openURL(u) } }
             view.onCopy = { [weak self] text, label in
                 NSPasteboard.general.clearContents()
                 // 4928 dropped routine success toasts; only a failure speaks (#36527).
@@ -938,6 +940,11 @@ final class ThreadPullRequestsController {
         detail = PullRequestDetailBinding(surface: panel.lazyPullRequestView, environments: environments, capabilities: capabilities)
         detail.toast = { [weak panel] title, message, kind in panel?.toasts.show(ToastView(title: title, message: message, kind: kind)) }
         detail.onStatus = { [weak self] id, tone in self?.panel.pullRequestStatus[id] = tone }
+        // `useOpenLink(threadRef)` (PullRequestDetailCrumbs.tsx, PullRequestTimelineTab.tsx, IssueDetailPanel.tsx at 5258):
+        // beside a thread, links follow "Open links in"; Cmd or Ctrl still leaves the app.
+        let follow: (URL) -> Void = { [weak self] url in if self?.openBrowserLink?(url) != true { NSWorkspace.shared.open(url) } }
+        detail.openURL = follow
+        issueDetail.openURL = follow
         panel.lazyPullRequestView.set(\.context, .thread)
         panel.lazyPullRequestView.configure { [weak self] view in
             view.onLinkThread = { [weak self] in self?.toggleLinkFromPanel() }
@@ -1523,7 +1530,7 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
     }
 
     /// A chat link (and an HTML render's link, BrowserDocumentFrame.tsx in 3105): Cmd or Ctrl goes to the system
-    /// browser, a pull request opens in the panel, anything else follows "Open links in".
+    /// browser, a pull request or an issue opens in the panel, anything else follows "Open links in".
     func openChatLink(_ url: URL, modified: Bool) {
         if modified { NSWorkspace.shared.open(url); return }
         // A pull request a project here reads opens in the panel (`useOpenChangeRequestLink`).
@@ -1531,6 +1538,17 @@ extension ThreadPullRequestsController: MarkdownLinkHandler {
             panel.mutatePanel {
                 $0.openPullRequest(PullRequestSurfaceTarget(environmentId: target.env, projectId: target.ref.projectId, host: target.ref.host,
                                                             repository: target.ref.repository, number: target.ref.number, url: url.absoluteString))
+                return []
+            }
+            return
+        }
+        // `useOpenIssueLink` (lib/openIssueLink.ts:21-91 at 5258, #41945): an issue a project here reads opens beside the
+        // thread, from the chat and from an HTML render alike.
+        if let target = issuePreviewTarget(url) {
+            let ref = target.ref
+            panel.mutatePanel {
+                $0.openIssue(IssueSurfaceTarget(projectId: ref.projectId, tracker: ref.tracker, host: ref.host, scope: ref.scope,
+                                                key: ref.key, url: url.absoluteString))
                 return []
             }
             return
