@@ -26,6 +26,16 @@ public enum SidebarMetrics {
     }
     /// The rail: 16px hit area centred on the border's inner edge, a 2px line on hover.
     public static let railWidth: CGFloat = 16
+    /// `SIDEBAR_COLLAPSE_DRAG_RATIO` (ui/sidebar.tsx:34 at 5258): a rail drag below a quarter of the minimum width hides
+    /// the sidebar (#29546).
+    public static let collapseDragRatio: CGFloat = 0.75
+    /// `SidebarRestoreHandle` (ui/sidebar.tsx:485-570): a drag from the left edge opens the sidebar once it reaches 48px.
+    public static let restoreDistance: CGFloat = 48
+    /// The restore handle's zone: `fixed top-1/2 left-[8px] h-16 w-[16px] -translate-y-1/2`.
+    public static let restoreHandle = NSRect(x: 8, y: 0, width: 16, height: 64)
+
+    /// Whether a rail drag to `rawWidth` hides the sidebar on release (ui/sidebar.tsx:620-626).
+    public static func collapses(rawWidth: CGFloat, minimum: CGFloat) -> Bool { rawWidth < minimum * (1 - collapseDragRatio) }
 }
 
 /// Width rules from threadSidebarWidth.ts and the rail's drag (useResizeDrag.ts), plus persistence.
@@ -80,6 +90,13 @@ public final class SidebarLayoutView: DSView {
     public let defaults: UserDefaults
 
     public private(set) var isOpen = true
+    /// A rail drag past the collapse threshold: the sidebar is already off to the left and the main panel full width,
+    /// as T3 previews it (`data-sidebar-drag-state="collapsed"`, ui/sidebar.tsx:603-648).
+    public private(set) var dragCollapsed = false { didSet { if dragCollapsed != oldValue { layoutNow() } } }
+    /// A restore-handle drag past 48px: the sidebar shows at this width before it opens (ui/sidebar.tsx:503-516).
+    public private(set) var restorePreviewWidth: CGFloat? { didSet { if restorePreviewWidth != oldValue { layoutNow() } } }
+    /// The left-edge handle that drags a hidden sidebar back (`SidebarRestoreHandle`).
+    public let restoreHandle = SidebarRestoreHandleView()
     /// The Dither theme's picture in the main panel, present only while it shows.
     private var ditherArt: DitherArtView?
     /// Dither's hairline down the panel's sidebar edge and round its bottom left corner, faded in below the band.
@@ -125,6 +142,9 @@ public final class SidebarLayoutView: DSView {
         forwardButton.setAccessibilityLabel("Forward")
         for b in [backButton, forwardButton] { b.isHidden = true; addSubview(b) }
         addSubview(rail)
+        addSubview(restoreHandle)
+        restoreHandle.layoutView = self
+        restoreHandle.isHidden = true
         addSubview(collapsedTrigger)
         collapsedTrigger.isHidden = true
         slide.onFrame = { [weak self] _ in self?.layoutNow() }
@@ -149,10 +169,13 @@ public final class SidebarLayoutView: DSView {
     /// frame of the slide; here `PanelSlide` steps the same curve on the display link and lays out each step.
     /// A toggle mid-slide starts from where the panels are, and a reversal takes the share of the duration it
     /// has left to travel, like a reversed CSS transition.
-    public func setOpen(_ open: Bool) {
+    public func setOpen(_ open: Bool) { setOpen(open, slides: true) }
+
+    /// `slides: false` lands at once: a drag that already moved the sidebar there must not restart the slide.
+    func setOpen(_ open: Bool, slides: Bool) {
         guard open != isOpen else { return }
         let duration = SettingsPanelMotion.duration
-        let animated = duration > 0 && window != nil && bounds.width > 0
+        let animated = slides && duration > 0 && window != nil && bounds.width > 0
         isOpen = open
         rail.isOpen = open
         collapsedTrigger.isSidebarOpen = open
@@ -218,6 +241,35 @@ public final class SidebarLayoutView: DSView {
         SidebarWidth.save(width, defaults)
     }
 
+    /// The rail drag crossed the collapse threshold one way or the other.
+    func previewCollapse(_ collapsed: Bool) { dragCollapsed = collapsed }
+
+    /// A rail drag ended: past the threshold the sidebar hides where it already is; `cancelled` (the window lost
+    /// focus mid-drag, `cancelOnInterrupt`) keeps it open.
+    func finishCollapse(commit: Bool) {
+        let collapse = dragCollapsed && commit
+        dragCollapsed = false
+        if collapse { setOpen(false, slides: false) }
+    }
+
+    /// One restore-handle drag step to `proposed` from the left edge. Returns the width the sidebar would open at.
+    @discardableResult
+    func restoreDrag(to proposed: CGFloat) -> CGFloat {
+        let next = widthRules.clamp(proposed, viewport: bounds.width)
+        restorePreviewWidth = proposed >= SidebarMetrics.restoreDistance ? next : nil
+        return next
+    }
+
+    /// The restore drag ended; past 48px the previewed width is saved and the sidebar opens in place.
+    func finishRestore(commit: Bool) {
+        let preview = restorePreviewWidth
+        restorePreviewWidth = nil
+        guard commit, let preview else { return }
+        width = preview
+        SidebarWidth.save(width, defaults)
+        setOpen(true, slides: false)
+    }
+
     /// Double-clicking the rail forgets the stored width and returns to the default.
     public func resetWidth() {
         SidebarWidth.reset(defaults)
@@ -243,15 +295,17 @@ public final class SidebarLayoutView: DSView {
         super.layout()
         // The main page may have changed, say from a new thread to Settings.
         ditherArt?.updateScrim()
-        let w = effectiveWidth
+        let w = restorePreviewWidth ?? effectiveWidth
         // Offcanvas: the container slides fully off screen to `left: -width`, the gap collapses to 0. Mid-slide
         // the gap is the open share of the width, on whole device pixels so the main panel's text stays sharp.
+        // A drag preview shows the end state: hidden past the rail's threshold, open past the restore handle's.
         let sliding = slide.isRunning
         let scale = window?.backingScaleFactor ?? 2
-        let gap = sliding ? (w * slide.value * scale).rounded() / scale : isOpen ? w : 0
+        let shown = restorePreviewWidth != nil || isOpen && !dragCollapsed
+        let gap = sliding ? (w * slide.value * scale).rounded() / scale : shown ? w : 0
         // While it slides the container keeps its open frame and only its layer moves: AppKit draws nothing
         // for a view whose frame lies outside the window (the art, the brand and every label went blank).
-        sidebar.frame = NSRect(x: isOpen || sliding ? 0 : -w, y: 0, width: w, height: bounds.height)
+        sidebar.frame = NSRect(x: shown || sliding ? 0 : -w, y: 0, width: w, height: bounds.height)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         sidebar.layer?.setAffineTransform(sliding ? CGAffineTransform(translationX: gap - w, y: 0) : .identity)
@@ -289,7 +343,12 @@ public final class SidebarLayoutView: DSView {
         }
         // The padding box ends at w - 1 (inside the 1px border); the rail is centred there.
         rail.frame = NSRect(x: gap - 1 - SidebarMetrics.railWidth / 2, y: 0, width: SidebarMetrics.railWidth, height: bounds.height)
+        // The rail keeps its frame through a collapse drag, so it still gets the drag's events.
         rail.isHidden = !isOpen // collapsed offcanvas rail has `pointer-events: none`
+        // ui/sidebar.tsx:429: the handle exists only while the left sidebar is hidden (`collapseOnResize`).
+        restoreHandle.isHidden = isOpen && restorePreviewWidth == nil
+        let zone = SidebarMetrics.restoreHandle
+        restoreHandle.frame = NSRect(x: zone.minX, y: ((bounds.height - zone.height) / 2).rounded(), width: zone.width, height: zone.height)
         collapsedTrigger.frame = NSRect(x: SidebarMetrics.controlsLeft(windowedMac: true) + 1, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
     }
 
@@ -363,6 +422,7 @@ public final class SidebarRailView: DSView {
     private var dragStart: (x: CGFloat, width: CGFloat, current: CGFloat)?
     private var moved = false
     private var trackingArea: NSTrackingArea?
+    private var resignObserver: NSObjectProtocol?
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -409,23 +469,125 @@ public final class SidebarRailView: DSView {
         moved = false
         NSCursor.resizeLeftRight.push() // body `cursor: col-resize` while dragging
         needsDisplay = true
+        // `cancelOnInterrupt`: losing the window mid-drag keeps the sidebar open.
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.endDrag(commit: false) }
+        }
     }
 
     public override func mouseDragged(with event: NSEvent) {
         guard let start = dragStart, let layoutView else { return }
         let delta = event.locationInWindow.x - start.x
         if abs(delta) > 2 { moved = true }
-        let current = layoutView.drag(to: start.width + delta, current: start.current)
+        let raw = start.width + delta
+        let current = layoutView.drag(to: raw, current: start.current)
         dragStart?.current = current
+        layoutView.previewCollapse(SidebarMetrics.collapses(rawWidth: raw, minimum: layoutView.widthRules.minimum))
     }
 
-    public override func mouseUp(with event: NSEvent) {
+    public override func mouseUp(with event: NSEvent) { endDrag(commit: true) }
+
+    private func endDrag(commit: Bool) {
         guard dragStart != nil else { return }
         dragStart = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
         NSCursor.pop()
         needsDisplay = true
         // A click without movement on an open resizable sidebar is a no-op; a drag commits the width.
         if moved { layoutView?.endDrag() }
+        layoutView?.finishCollapse(commit: commit && moved)
+    }
+}
+
+/// `SidebarRestoreHandle` (ui/sidebar.tsx:485-570 at 5258, #29546): an invisible 16x64 zone 8pt from the window's
+/// left edge while the sidebar is hidden. The pointer in the zone shows a bar in its left half (`before:w-1/2
+/// before:rounded-md before:bg-sidebar-border`); dragging it right 48pt or more opens the sidebar at the dragged width,
+/// and a plain click opens it. Redesign draws the bar as a capsule in its card rim color.
+public final class SidebarRestoreHandleView: DSView {
+    weak var layoutView: SidebarLayoutView?
+    public private(set) var isNear = false { didSet { if isNear != oldValue { needsDisplay = true } } }
+    private let bar = CALayer()
+    private var dragStartX: CGFloat?
+    private var moved = false
+    private var trackingArea: NSTrackingArea?
+    private var resignObserver: NSObjectProtocol?
+
+    public override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        bar.actions = ["backgroundColor": NSNull(), "frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "cornerRadius": NSNull()]
+        layer?.addSublayer(bar)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Show sidebar")
+    }
+
+    /// For tests and the gallery.
+    public func previewNear(_ near: Bool) { isNear = near }
+
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+
+    public override func layout() {
+        super.layout()
+        let w = bounds.width / 2
+        bar.frame = CGRect(x: 0, y: 0, width: w, height: bounds.height)
+        bar.cornerRadius = redesign ? RedesignTokens.Radius.capsule(w) : 6
+    }
+
+    public override func updateLayer() {
+        bar.backgroundColor = isNear || dragStartX != nil
+            ? (redesign ? RedesignTokens.Card.border.cgColor(in: self) : Themed.color(\.sidebarBorder, sidebar: true).cgColor(in: self)) : nil
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    public override func mouseEntered(with event: NSEvent) { isNear = true }
+    public override func mouseExited(with event: NSEvent) { isNear = false }
+    public override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeRight) }
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    public override func mouseDown(with event: NSEvent) {
+        dragStartX = event.locationInWindow.x
+        moved = false
+        needsDisplay = true
+        resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.endDrag(commit: false) }
+        }
+    }
+
+    public override func mouseDragged(with event: NSEvent) {
+        guard let start = dragStartX else { return }
+        let delta = event.locationInWindow.x - start
+        if abs(delta) > 2 { moved = true }
+        layoutView?.restoreDrag(to: max(0, delta))
+    }
+
+    public override func mouseUp(with event: NSEvent) { endDrag(commit: true) }
+
+    private func endDrag(commit: Bool) {
+        guard dragStartX != nil else { return }
+        dragStartX = nil
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        resignObserver = nil
+        needsDisplay = true
+        if moved { layoutView?.finishRestore(commit: commit) } else if commit { layoutView?.setOpen(true) }
+    }
+
+    public override func accessibilityPerformPress() -> Bool {
+        layoutView?.setOpen(true)
+        return true
     }
 }
 
