@@ -8,7 +8,9 @@ import T3Store
 /// "{label} · {outcome}" with a lock, check or minus. The typed value lives only in the field and the request,
 /// and the field clears when the row is recycled or the answer is sent. 8pt under it (`pb-2`).
 /// A 5258 card with `fields` shows one labelled input per field, masked unless `secret: false`, and moves Save
-/// next to Decline (SecretRequestCard.tsx:233-300, 305-380).
+/// next to Decline (SecretRequestCard.tsx:233-300, 305-380). Every masked input has 5258's show/hide eye
+/// (`SecretRequestField`, :303-372, #31257, #42309). Redesign draws the card as its card on the ground
+/// (`RedesignTokens.Card`), like code blocks and tables, with no shadow.
 final class SecretRequestRowView: TimelineRowView {
     /// One input of the card. Text sits only in the AppKit field.
     @MainActor private final class Entry {
@@ -23,6 +25,7 @@ final class SecretRequestRowView: TimelineRowView {
             label.lineHeight = 16
             if input.secret {
                 let f = SecureInputView(placeholder: input.placeholder); secure = f; plain = nil; view = f
+                f.revealLabel = "Show \(input.label)" // :359
             } else {
                 let f = InputView(placeholder: input.placeholder); plain = f; secure = nil; view = f
             }
@@ -172,8 +175,9 @@ final class SecretRequestRowView: TimelineRowView {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
     private func restyle() {
-        card.fill = TL.c(\.card)
-        card.border = TL.c(\.border, 0.6)
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        card.fill = redesign ? RedesignTokens.Card.fill : TL.c(\.card)
+        card.border = redesign ? RedesignTokens.Card.border : TL.c(\.border, 0.6)
         title.color = TL.c(\.foreground)
         shield.strokeColor = TL.c(\.mutedForeground)
         privacy.color = TL.c(\.mutedForeground)
