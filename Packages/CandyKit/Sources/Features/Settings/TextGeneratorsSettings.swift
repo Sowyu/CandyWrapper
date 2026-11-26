@@ -216,6 +216,10 @@ final class TextGeneratorWizard {
         url.onChange = { [weak self] t in self?.draft.baseUrl = t; self?.checkError = nil; self?.refreshFooter() }
         key.onChange = { [weak self] t in self?.draft.key = t; self?.checkError = nil; self?.refreshFooter() }
         label.onChange = { [weak self] t in self?.draft.label = t; self?.refreshFooter() }
+        // The fields sit in a form whose submit is Connect, so Enter connects (#42449, TextGeneratorsSettings.tsx at 5258).
+        url.onSubmit = { [weak self] in self?.connect() }
+        key.onSubmit = { [weak self] in self?.connect() }
+        label.onSubmit = { [weak self] in self?.connect() }
         steps.onStepChange = { [weak self] i in guard let self, i <= self.step else { return }; self.step = i; self.rebuild() }
         rebuild()
     }

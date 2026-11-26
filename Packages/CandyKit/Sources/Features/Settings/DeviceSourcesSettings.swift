@@ -38,6 +38,9 @@ public enum DeviceSourcesLogic {
         /// One machine or account every environment reaches the same way, so one answer speaks for all.
         public var shared: Bool
         public var kind: Kind
+        /// Every member environment's id for an SSH host, so a check stays pending on the row that remains after an
+        /// environment drops out (#39328, DeviceSourcesSettings.tsx `testSsh` at 5258).
+        public var hostIds: [String] = []
     }
     public struct Member: Sendable {
         public var environmentId: String
@@ -127,7 +130,8 @@ public enum DeviceSourcesLogic {
                                 }
                                 return Environment(environmentId: m.environmentId, label: m.label, added: true, status: status,
                                                    platforms: m.state?.hosts.first { $0.id == hostId }?.platforms)
-                            }, shared: true, kind: .ssh(g.host, holders: holders)))
+                            }, shared: true, kind: .ssh(g.host, holders: holders),
+                            hostIds: g.members.compactMap { $0.host["id"]?.stringValue }))
         }
         guard supportsEas else { return rows }
         var seen: Set<String> = []
@@ -227,7 +231,7 @@ final class DeviceSourcesSection {
             view.onAction = { [weak self] env, retry in self?.list(env, retryHostId: retry) }
             if !disabled, case .ssh(let host, let holders) = row.kind {
                 view.actions(edit: { [weak self] in self?.edit(host) },
-                             more: [("Test connection", { [weak self] in self?.test(host) }), ("Remove", { [weak self] in self?.remove(sshHost: host, holders: holders) })])
+                             more: [("Test connection", { [weak self] in self?.test(host, ids: row.hostIds) }), ("Remove", { [weak self] in self?.remove(sshHost: host, holders: holders) })])
             } else if !disabled, case .eas(let host) = row.kind {
                 view.actions(edit: nil, more: [("Remove", { [weak self] in self?.remove(easHost: host) })])
             }
@@ -247,11 +251,12 @@ final class DeviceSourcesSection {
     }
 
     /// `device.testHost` on every selected environment, then one toast.
-    private func test(_ host: JSONValue) {
+    private func test(_ host: JSONValue, ids: [String]) {
         guard let request = context.request, let id = host["id"]?.stringValue else { return }
         let name = host["label"]?.stringValue ?? id
         let targets = context.scope.targets
-        testing.insert(id)
+        let ids = Set(ids + [id])
+        testing.formUnion(ids)
         refresh()
         Task { [weak self] in
             var failed: [String] = []
@@ -259,7 +264,7 @@ final class DeviceSourcesSection {
                 do { _ = try await request(t.environmentId, "device.testHost", host) } catch { failed.append("\(t.label): \(error)") }
             }
             guard let self else { return }
-            self.testing.remove(id)
+            self.testing.subtract(ids)
             self.refresh()
             if failed.isEmpty {
                 self.context.toast?("\(name): connection checks passed", "Connected or already available locally on each selected environment.", .success)
@@ -337,7 +342,7 @@ final class DeviceSourceRowView: DSView, SettingsGroupRow {
         layer?.addSublayer(border)
         let several = row.environments.count > 1
         var issues = row.environments.filter { $0.status != nil }
-        if case .ssh(let host, _) = row.kind, let id = host["id"]?.stringValue, testing.contains(id) {
+        if case .ssh(let host, _) = row.kind, let id = host["id"]?.stringValue, testing.contains(id) || row.hostIds.contains(where: testing.contains) {
             issues = issues.map { var e = $0; e.status = .init(tone: .pending, label: "Testing connection"); return e }
             if issues.isEmpty { issues = row.environments.filter(\.added).map { var e = $0; e.status = .init(tone: .pending, label: "Testing connection"); return e } }
         }
