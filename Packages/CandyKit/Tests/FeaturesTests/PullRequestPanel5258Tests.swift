@@ -3,6 +3,7 @@ import Testing
 @testable import T3Protocol
 @testable import Features
 import DesignSystem
+@testable import T3Store
 
 /// 5258: a pull request's Summary comes back with its order and scroll (#42179,
 /// PullRequestSummaryTab.tsx:478-487, PullRequestDetailPanel.tsx:342).
@@ -128,5 +129,25 @@ struct PullRequestMarkdownFileLinkTests {
                                            basename: "a.ts", line: nil, column: nil), false)
         #expect(opened?.0 == "/checkout/a.ts")
         #expect(opened?.2 == "/checkout")
+    }
+}
+
+/// 5258 #42875, #42745: the Pull Requests and Issues pages report the tabs they close, for Mod+Shift+T.
+@MainActor
+struct PageClosedTabTests {
+    @Test func closingAPageTabReportsIt() {
+        let container = PullRequestsPageContainer()
+        var closed: [RightPanelSurface] = []
+        container.onClosed = { closed += $0 }
+        let target = PullRequestSurfaceTarget(projectId: "p", repository: "o/r", number: 7)
+        container.mutate { $0.openPullRequest(target) }
+        #expect(closed.isEmpty)
+        let id = container.panelState.surfaces[0].id
+        container.mutate { _ = $0.close(id) }
+        #expect(closed.map(\.id) == [id])
+        var stack = ClosedPanelTabs()
+        for s in closed { stack.remember(s, threadKey: "page:pull-requests") }
+        let next = stack.popNext(threadExists: { $0.hasPrefix("page:") }, panel: { _ in container.panelState })
+        #expect(next?.surface.id == id)
     }
 }

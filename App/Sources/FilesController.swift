@@ -24,6 +24,16 @@ final class FilesController {
     var browserURL: ((String) -> String?)?
     var onBrowserTabsClosed: (([String]) -> Void)?
     var onReopenBrowser: ((ThreadId, String?) -> Void)?
+    /// The Pull Requests and Issues pages share the closed-tab stack under `page:` keys, as T3
+    /// keeps their tabs under PULL_REQUESTS_PANEL_REF and the issues ref (reopenClosedView.ts).
+    /// Reopening opens the page, then restores the tab into its panel.
+    static let pullRequestsPageKey = "page:pull-requests", issuesPageKey = "page:issues"
+    var pagePanelState: ((String) -> RightPanelState?)?
+    var onReopenPageTab: ((String, RightPanelSurface) -> Void)?
+    func rememberPageTabs(_ removed: [RightPanelSurface], page: String) {
+        for surface in removed { closed.remember(surface, threadKey: page) }
+        save()
+    }
     /// Terminal tabs closed: their terminals stop on the server.
     var onTerminalTabsClosed: (([TerminalPanelSurface]) -> Void)?
     /// An attachment tab's Save file: the thread's attachment download.
@@ -721,10 +731,14 @@ final class FilesController {
     private func reopenClosed() {
         let snapshot = sidebar?.snapshot
         let current = threadId?.rawValue
-        let entry = closed.popNext(threadExists: { key in snapshot?.threads.contains { $0.id.rawValue == key } ?? false },
-                                   panel: { [states, panel] key in key == current ? panel.panelState : states[key] ?? RightPanelState() })
+        let pages = pagePanelState
+        let entry = closed.popNext(threadExists: { key in key.hasPrefix("page:") || snapshot?.threads.contains { $0.id.rawValue == key } ?? false },
+                                   panel: { [states, panel] key in
+                                       key.hasPrefix("page:") ? pages?(key) ?? RightPanelState()
+                                           : key == current ? panel.panelState : states[key] ?? RightPanelState() })
         save()
         guard let entry else { return }
+        if entry.threadKey.hasPrefix("page:") { onReopenPageTab?(entry.threadKey, entry.surface); return }
         if entry.surface.browserTabId != nil {
             if entry.threadKey != current { openThread?(ThreadId(entry.threadKey)) }
             let url = entry.browserURL.flatMap { $0.isEmpty ? nil : $0 }

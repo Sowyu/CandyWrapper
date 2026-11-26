@@ -29,6 +29,7 @@ final class SidebarCommands {
         c.onAddProject = { [weak self] in self?.addProject() }
         c.container.onEscape = { [weak self] in self?.goBack() }
         c.onSearchThreads = { [weak self] url in self?.onSearchThreads?(url) }
+        c.container.onClosed = { [weak self] removed in self?.threads.files.rememberPageTabs(removed, page: FilesController.pullRequestsPageKey) }
         return c
     }()
     /// The Issues page, made on first open and kept for the session (`ISSUES_PANEL_REF`).
@@ -36,6 +37,7 @@ final class SidebarCommands {
         let c = IssuesPageController(sidebar: sidebar!, environments: environments, capabilities: threads.pullRequests.capabilities)
         c.container.onEscape = { [weak self] in self?.goBack() }
         c.onSearchThreads = { [weak self] url in self?.onSearchThreads?(url) }
+        c.container.onClosed = { [weak self] removed in self?.threads.files.rememberPageTabs(removed, page: FilesController.issuesPageKey) }
         return c
     }()
     /// `useIssuesSupported`: some connected server has the `issues` capability.
@@ -84,6 +86,22 @@ final class SidebarCommands {
         self.layout = layout
         self.environments = environments
         self.threads = threads
+        threads.files.pagePanelState = { [weak self] key in
+            guard let self else { return nil }
+            return key == FilesController.pullRequestsPageKey ? self.pullRequestsPage.container.panelState : self.issuesPage.container.panelState
+        }
+        // A closed Pull Requests or Issues page tab reopens on its page with the page's saved list
+        // filters (5258 reopenClosedView.ts, #42875, #42745).
+        threads.files.onReopenPageTab = { [weak self] key, surface in
+            guard let self else { return }
+            if key == FilesController.pullRequestsPageKey {
+                self.openUtilityPage(.pullRequests)
+                self.pullRequestsPage.container.mutate { ClosedPanelTabs.restore(surface, into: &$0) }
+            } else {
+                self.openUtilityPage(.issues)
+                self.issuesPage.container.mutate { ClosedPanelTabs.restore(surface, into: &$0) }
+            }
+        }
         sidebar.actions.settle = { [weak self] in self?.settle($0) }
         environments.observeShell { [weak self] in self?.deleteLeftoverHelpers() }
         sidebar.actions.unsettle = { [weak self] in self?.unsettle($0) }

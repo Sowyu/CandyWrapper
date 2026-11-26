@@ -806,11 +806,17 @@ public final class IssuesPageContainer: DSView {
         rightPanel.onMove = { [weak self] id, index in self?.mutate { $0.move(id, to: index) } }
     }
 
+    /// Tabs a change closed, for Mod+Shift+T (`useClosedViewStore` with the page's panel ref, 5258
+    /// reopenClosedView.ts, #42875, #42745).
+    public var onClosed: (([RightPanelSurface]) -> Void)?
+
     public func mutate(_ change: (inout RightPanelState) -> Void) {
         var next = panelState
         change(&next)
+        let removed = panelState.surfaces.filter { s in !next.surfaces.contains { $0.id == s.id } }
         setPanelState(next)
         onPanelChange?(next)
+        if !removed.isEmpty { onClosed?(removed) }
     }
 
     public func setPanelState(_ state: RightPanelState) {
