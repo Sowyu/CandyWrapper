@@ -80,13 +80,13 @@ public struct ProviderOptionDescriptor: Codable, Hashable, Sendable {
     /// `isReasoningControl` (client-runtime modelTraits.ts:12-23).
     public var isReasoningControl: Bool {
         (type == .select && role == "reasoning")
-            || ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level", "thinking"].contains(id)
+            || ["reasoningEffort", "effort", "reasoning", "variant", "reasoning_effort", "thinking_level", "thought_level", "thinking"].contains(id)
     }
 
     public init(id: String, label: String, description: String? = nil, type: Kind, options: [ProviderOptionChoice] = [],
-                currentValue: ProviderOptionValue? = nil, promptInjectedValues: [String]? = nil) {
+                currentValue: ProviderOptionValue? = nil, promptInjectedValues: [String]? = nil, role: String? = nil) {
         self.id = id; self.label = label; self.description = description; self.type = type; self.options = options
-        self.currentValue = currentValue; self.promptInjectedValues = promptInjectedValues
+        self.currentValue = currentValue; self.promptInjectedValues = promptInjectedValues; self.role = role
     }
 
     private enum CodingKeys: String, CodingKey { case id, label, description, type, options, currentValue, promptInjectedValues, role }

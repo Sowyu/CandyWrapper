@@ -31,22 +31,21 @@ enum ModelSwitchPresentation {
         providers.first { $0.instanceId == selection.instanceId }?.models.first { $0.slug == selection.model }
     }
 
-    /// `REASONING_DESCRIPTOR_IDS` (client-runtime modelTraits.ts:12-15 at 4928).
-    // ponytail: no `role: "reasoning"` check, CW doesn't decode the descriptor role; add it when a provider relies on it
-    static let reasoningIds = Set(ModelTraits.reasoningEffortIds + ["thinking"])
-
     /// `resolveEffort`: the model's reasoning select, or the stated value when the catalog lacks the model.
     static func effort(_ selection: ModelSelection, _ model: ServerProviderModel?) -> (value: String, label: String)? {
         let stated = ((try? selection.options?.decode(as: [ProviderOptionSelection].self)) ?? nil) ?? []
         guard let model else {
             // Pi states its effort as `thinking`.
+            // OpenCode's "t3:default" sends no variant, so it names no effort (#27333, threadExecution.ts:373-388 at 5258).
             for id in ModelTraits.reasoningEffortIds + ["thinking"] {
-                if let value = stated.first(where: { $0.id == id })?.value.string { return (value, value) }
+                if let value = stated.first(where: { $0.id == id })?.value.string, !value.isEmpty, value != ModelTraits.defaultVariantChoiceId {
+                    return (value, value)
+                }
             }
             return nil
         }
         let resolved = ModelTraits.descriptors(model, selections: stated)
-        guard let descriptor = resolved.first(where: { $0.type == .select && reasoningIds.contains($0.id) }),
+        guard let descriptor = resolved.first(where: { $0.type == .select && $0.isReasoningControl }),
               let value = ModelTraits.currentValue(descriptor)?.string else { return nil }
         return (value, descriptor.options.first { $0.id == value }?.label ?? value)
     }

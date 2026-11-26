@@ -609,8 +609,13 @@ public enum ThreadRelationships {
         let stated = values(selection.options)
         let sameRun = reported.map { $0.instanceId == selection.instanceId && $0.model == selection.model } ?? false
         let reportedValues = sameRun ? values(reported?.options) : [:]
-        for id in ModelTraits.reasoningEffortIds {
-            guard let d = model.optionDescriptors.first(where: { $0.id == id }), d.type == .select else { continue }
+        // Selects the model marks as its reasoning control come first, then the known ids (#40136,
+        // threadExecution.ts:326-338 at 5258).
+        let selects = model.optionDescriptors.filter { $0.type == .select }
+        let reasoning = selects.filter { $0.role == "reasoning" }
+            + ModelTraits.reasoningEffortIds.compactMap { id in selects.first { $0.id == id && $0.role != "reasoning" } }
+        for d in reasoning {
+            let id = d.id
             let reportedValue = stated[id] == nil ? reportedValues[id] : nil
             let value = stated[id] ?? reportedValue
             if value == nil && id != "variant" { continue }

@@ -300,4 +300,21 @@ import Testing
         #expect(ThreadRelationships.effortLabel(bare, model: model, reported: otherModel) == nil)
     }
 
+    /// threadExecution.test.ts at 5258 (#40136): ACP's `thought_level` and any select marked `role: reasoning` name the effort.
+    @Test func effortLabelReadsThoughtLevelAndReasoningRoles() {
+        let neon = ServerProviderModel(slug: "gemini-4-neon", name: "Gemini 4 Neon", optionDescriptors: [
+            ProviderOptionDescriptor(id: "thought_level", label: "Thinking", type: .select,
+                                     options: [.init(id: "medium", label: "Medium", isDefault: true), .init(id: "high", label: "High")]),
+        ])
+        let custom = ServerProviderModel(slug: "acp-custom-agent", name: "ACP Custom Agent", optionDescriptors: [
+            ProviderOptionDescriptor(id: "custom_thinking_mode", label: "Thinking", type: .select,
+                                     options: [.init(id: "deep", label: "Deep")], role: "reasoning"),
+        ])
+        func pick(_ model: String, _ id: String, _ value: String) -> ModelSelection {
+            ModelSelection(instanceId: "acp", model: model, options: .array([.object(["id": .string(id), "value": .string(value)])]))
+        }
+        #expect(ThreadRelationships.effortLabel(pick("gemini-4-neon", "thought_level", "high"), model: neon) == "High")
+        #expect(ThreadRelationships.effortLabel(pick("acp-custom-agent", "custom_thinking_mode", "deep"), model: custom) == "Deep")
+    }
+
 }
