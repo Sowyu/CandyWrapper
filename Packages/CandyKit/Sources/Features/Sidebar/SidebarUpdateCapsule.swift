@@ -44,6 +44,7 @@ public struct SidebarUpdateCapsule: Equatable, Sendable {
 final class SidebarUpdateCapsuleLink: ControlView {
     let label = LabelView("", font: DSFont.ui(12))
     private let line = CALayer()
+    private let hover = CALayer()
     var onPress: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
@@ -52,6 +53,8 @@ final class SidebarUpdateCapsuleLink: ControlView {
         label.lineHeight = 16
         addSubview(label)
         line.actions = ["backgroundColor": NSNull(), "frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        hover.actions = line.actions
+        layer?.addSublayer(hover)
         layer?.addSublayer(line)
         setAccessibilityRole(.button)
         restyle()
@@ -79,9 +82,21 @@ final class SidebarUpdateCapsuleLink: ControlView {
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
+    /// Redesign draws the link as its other text controls: no underline, the state fill on the control corner.
     private func restyle() {
         let fg = Themed.color(\.sidebarForeground, sidebar: true)
         label.color = fg
+        let dark = effectiveAppearance.isDark
+        if ThemeRuntime.isDither(dark: dark) {
+            line.isHidden = true
+            hover.isHidden = false
+            hover.frame = bounds.insetBy(dx: 2, dy: 2)
+            hover.cornerRadius = RedesignTokens.Radius.nested(in: RedesignTokens.Radius.control, inset: 2)
+            hover.backgroundColor = RedesignTokens.State.fill(state, dark: dark)?.cgColor(in: self)
+            return
+        }
+        line.isHidden = false
+        hover.isHidden = true
         let decoration = state.hovered ? fg : Themed.color(\.mutedForeground, 0.6, sidebar: true)
         line.backgroundColor = decoration.cgColor(in: self)
     }
