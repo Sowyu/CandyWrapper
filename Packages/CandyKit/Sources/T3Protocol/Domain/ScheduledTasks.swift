@@ -226,6 +226,9 @@ public struct ScheduledTaskDraft: Equatable, Sendable {
     public var weekdays: Set<Int> = [1, 2, 3, 4, 5]
     public var projectId = ""
     public var threadId = ""
+    /// The thread the task had when the editor opened. Clearing `threadId` sends `unbindThread`, because a
+    /// 5258 server keeps the stored thread on `threadId: null` (scheduledTasksSettings.logic.ts:133, 333).
+    public var savedThreadId = ""
     /// `new_thread`, `continue` or `fresh_session` (4928 #30326, logic.ts:72).
     public var threadMode = "new_thread"
     public var workspaceMode = WorkspaceMode.worktree
@@ -482,6 +485,7 @@ public enum ScheduledTaskLogic {
         }
         d.projectId = t.projectId
         d.threadId = t.threadId ?? ""
+        d.savedThreadId = d.threadId
         d.threadMode = t.effectiveThreadMode
         let strategy = t.workspaceStrategy
         d.workspaceMode = ScheduledTaskDraft.WorkspaceMode(rawValue: strategy["type"]?.stringValue ?? "root") ?? .root
@@ -664,6 +668,9 @@ public enum ScheduledTaskLogic {
             "workspaceStrategy": strategy, "modelSelection": model, "runtimeMode": .string(d.runtimeMode),
             "interactionMode": .string(d.interactionMode), "creationSource": .string(creationSource),
         ]
+        // 5258 keeps the bound thread unless told to clear it (ScheduledTasksSettings.tsx:1680,
+        // ScheduledTaskService.ts:1497). A 4928 server ignores the key and clears on null.
+        if d.threadId.isEmpty, !d.savedThreadId.isEmpty { input["unbindThread"] = .bool(true) }
         if threadModes { input["threadMode"] = .string(d.threadMode) }
         if let id = d.editingId { input["id"] = .string(id); input["requireExisting"] = .bool(true) }
         return .success(.object(input))
