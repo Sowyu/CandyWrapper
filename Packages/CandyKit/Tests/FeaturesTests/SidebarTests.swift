@@ -43,6 +43,11 @@ struct SidebarModelTests {
         #expect(ProjectMonogramView.identity("demo-repo").monogram == "DR")
         #expect(ProjectMonogramView.identity("t3code").monogram == "T3")
         #expect(ProjectMonogramView.identity("candywrapper").monogram == "CR")
+        // #42467: CJK names get one character, and keep the color they had.
+        #expect(ProjectMonogramView.identity("项目管理").monogram == "项")
+        #expect(ProjectMonogramView.identity("プロジェクト").monogram == "プ")
+        #expect(ProjectMonogramView.identity("한국어 앱").monogram == "한")
+        #expect(ProjectMonogramView.identity("项目管理").color == ProjectMonogramView.identity(" 项目管理 ").color)
     }
 
     @Test func nextLabelChangeAimsAtTheNextStep() {
