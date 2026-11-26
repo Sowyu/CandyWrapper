@@ -269,4 +269,16 @@ struct SidebarSearchTests {
         let one = SidebarContentView.newThreadTooltip(pickableGroups: 1, allGroups: 2, newLabel: nil, newLocalLabel: "\u{2325}\u{2318}N")
         #expect(one.text == "New thread (\u{2325}\u{2318}N)" && one.detail == nil)
     }
+
+    /// state/issues.ts `useSidebarLinkedIssueState` at 5258 (#39351): an open issue wins, an unread one hides the state,
+    /// else a closed one that was not completed, else the first.
+    @Test func groupedIssuesShowOneState() {
+        let open = IssueState(category: "open", name: "Open"), done = IssueState(category: "closed", name: "Done", closeReason: "completed")
+        let dropped = IssueState(category: "closed", name: "Won't do", closeReason: "not_planned")
+        #expect(SidebarIssueBadge.aggregateState([done, open]) == open)
+        #expect(SidebarIssueBadge.aggregateState([done, nil]) == nil)
+        #expect(SidebarIssueBadge.aggregateState([done, dropped]) == dropped)
+        #expect(SidebarIssueBadge.aggregateState([done, done]) == done)
+        #expect(SidebarIssueBadge.aggregateState([]) == nil)
+    }
 }
