@@ -121,9 +121,11 @@ final class LinkRequestRowView: TimelineRowView {
 
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
+    /// Redesign draws the card as its card on the ground (`RedesignTokens.Card`), as the secret and feedback requests do.
     private func restyle() {
-        card.fill = TL.c(\.card)
-        card.border = TL.c(\.border, 0.6)
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        card.fill = redesign ? RedesignTokens.Card.fill : TL.c(\.card)
+        card.border = redesign ? RedesignTokens.Card.border : TL.c(\.border, 0.6)
         title.color = TL.c(\.foreground)
         url.color = TL.c(\.mutedForeground, 0.8)
         note.color = TL.c(\.mutedForeground)
