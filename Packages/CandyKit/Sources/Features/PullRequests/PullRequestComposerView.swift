@@ -2,26 +2,30 @@ import AppKit
 import DesignSystem
 import T3Protocol
 
-/// `usePullRequestReviewStore` (pullRequestReviewStore.ts): the review being written, held until it
-/// is sent. Line comments and the summary per pull request, never persisted (a half-written review
-/// lives as long as the app does).
+/// `usePullRequestReviewStore` (pullRequestReviewStore.ts at 5258): the review being written, held until it is sent.
+/// Line comments and the summary per pull request, kept under T3's storage key so they survive a relaunch (#42090).
 @MainActor
 public final class PullRequestReviewStore {
-    public static let shared = PullRequestReviewStore()
+    public static let shared = PullRequestReviewStore(defaults: .standard)
     public static let didChange = Notification.Name("PullRequestReviewStore.didChange")
+    static let storageKey = "t3code:pull-request-review-drafts:v1"
     public private(set) var drafts: [String: [PullRequestReviewCommentDraft]] = [:]
     public private(set) var summaries: [String: String] = [:]
-    private var sequence = 0
+    private let defaults: UserDefaults?
 
-    public init() {}
+    /// `defaults` nil keeps the drafts in memory only.
+    public init(defaults: UserDefaults? = nil) {
+        self.defaults = defaults
+        restore()
+    }
 
     /// `pullRequestReviewKey` (line 28): project, host and repository lower cased, number.
     public static func key(_ ref: PullRequestRef) -> String {
         "\(ref.projectId)\u{1f}\(ref.host?.lowercased() ?? "")\u{1f}\(ref.repository.lowercased())\u{1f}\(ref.number)"
     }
 
-    /// `nextPendingReviewCommentId` (line 22).
-    public func nextId() -> String { sequence += 1; return "pending-review-comment-\(sequence)" }
+    /// `nextPendingReviewCommentId` (:11-14): a counter would restart below persisted ids.
+    public func nextId() -> String { "pending-review-comment-\(UUID().uuidString.lowercased())" }
 
     public func comments(_ key: String) -> [PullRequestReviewCommentDraft] { drafts[key] ?? [] }
     public func summary(_ key: String) -> String { summaries[key] ?? "" }
@@ -41,7 +45,31 @@ public final class PullRequestReviewStore {
         changed()
     }
 
-    private func changed() { NotificationCenter.default.post(name: Self.didChange, object: self) }
+    private func changed() {
+        persist()
+        NotificationCenter.default.post(name: Self.didChange, object: self)
+    }
+
+    /// `restoreReviewDrafts` (:45-58): entries that fail the draft schema are dropped, empty lists too.
+    private func restore() {
+        guard let data = defaults?.data(forKey: Self.storageKey), let json = try? JSONValue(parsing: data) else { return }
+        for (key, list) in json["drafts"]?.objectValue ?? [:] {
+            let valid = (list.arrayValue ?? []).compactMap(PullRequestReviewCommentDraft.init(stored:))
+            if !valid.isEmpty { drafts[key] = valid }
+        }
+        for (key, body) in json["summaries"]?.objectValue ?? [:] {
+            if let body = body.stringValue { summaries[key] = body }
+        }
+    }
+
+    private func persist() {
+        guard let defaults else { return }
+        let json = JSONValue.object([
+            "drafts": .object(drafts.mapValues { .array($0.map(\.stored)) }),
+            "summaries": .object(summaries.mapValues { .string($0) }),
+        ])
+        defaults.set(json.utf8, forKey: Self.storageKey)
+    }
 }
 
 /// `PullRequestComposer` (PullRequestComposer.tsx:102-186) with `PullRequestCommentForm` and

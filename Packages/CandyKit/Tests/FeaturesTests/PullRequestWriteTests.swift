@@ -220,6 +220,24 @@ struct PullRequestWriteTests {
         #expect(store.summary(key).isEmpty)
     }
 
+    /// #42090: drafts and summaries come back after a relaunch; entries that fail the schema are dropped.
+    @Test @MainActor func reviewDraftsSurviveARelaunch() throws {
+        let suite = "PullRequestWriteTests.reviewDrafts"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = PullRequestReviewStore(defaults: defaults)
+        let c = PullRequestReviewCommentDraft(id: store.nextId(), path: "b", oldPath: "a", position: .context(oldLine: 2, newLine: 3, side: "left"), body: "why")
+        store.add("k", c)
+        store.setSummary("k", "summary")
+        let reopened = PullRequestReviewStore(defaults: defaults)
+        #expect(reopened.comments("k") == [c])
+        #expect(reopened.summary("k") == "summary")
+        defaults.set(Data(#"{"drafts":{"k":[{"id":"x","path":"a","body":"b","position":{"kind":"added"}}],"j":[]},"summaries":{"k":1}}"#.utf8),
+                     forKey: "t3code:pull-request-review-drafts:v1")
+        let broken = PullRequestReviewStore(defaults: defaults)
+        #expect(broken.drafts.isEmpty && broken.summaries.isEmpty)
+    }
+
     @Test func threadsPickersAndLinks() throws {
         let c = { (id: String, body: String) in try JSONDecoder().decode(PullRequestThreadComment.self, from: Data(#"{"id":"\#(id)","author":null,"body":"\#(body)","createdAt":"2026-01-01T00:00:00Z"}"#.utf8)) }
         let merged = PullRequestWriteLogic.mergeThreadComments([try c("1", "a")], [try c("1", "dup"), try c("2", "b")])
