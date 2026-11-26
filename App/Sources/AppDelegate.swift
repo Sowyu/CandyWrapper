@@ -453,7 +453,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         startSession(environments, window: window)
         if !Self.isPreview { t3Connect.start() }
-        scheduleSelfSnapshot(window)
+        scheduleSelfSnapshot(window, sidebar: sidebar)
         PerfScroll.schedule(window)
         let early = pendingURLs ?? []
         pendingURLs = nil
@@ -879,11 +879,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Development: `--snapshot <png> [--snapshot-delay seconds]` renders the window's own layer
     /// tree to a PNG (no screen-recording permission needed) and quits.
-    private func scheduleSelfSnapshot(_ window: NSWindow) {
+    private func scheduleSelfSnapshot(_ window: NSWindow, sidebar: SidebarContentView) {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count else { return }
         let path = args[i + 1]
         let delay = args.firstIndex(of: "--snapshot-delay").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 4
+        #if DEBUG
+        // `--snapshot-open thread,panel,terminal,pulls,collapsed` puts a test app in those states halfway through the delay,
+        // since keys sent to an app behind the other windows don't reach its palette.
+        if Self.isTestBuild, let o = args.firstIndex(of: "--snapshot-open"), o + 1 < args.count {
+            let steps = args[o + 1].split(separator: ",").map(String.init)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay / 2) { [weak self, weak sidebar] in
+                MainActor.assumeIsolated {
+                    guard let self, let threads = self.threads else { return }
+                    for step in steps {
+                        switch step {
+                        case "thread":
+                            if let id = sidebar?.snapshot?.threads.first?.id { threads.open(id) }
+                        case "panel": threads.panel.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
+                        case "terminal": threads.panel.onTerminalToggle?()
+                        case "pulls": self.sidebarCommands?.openUtilityPage(.pullRequests)
+                        case "collapsed": (window.contentView as? SidebarLayoutView)?.setOpen(false)
+                        default: break
+                        }
+                    }
+                }
+            }
+        }
+        #endif
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             MainActor.assumeIsolated {
                 guard let view = window.contentView, let layer = view.layer else { return }
