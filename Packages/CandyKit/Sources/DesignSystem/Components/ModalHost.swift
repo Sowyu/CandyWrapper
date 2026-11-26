@@ -9,6 +9,8 @@ import QuartzCore
 /// to the previous first responder on close.
 public final class ModalHost: DSView {
     public var allowsUserDismissal = true
+    /// base-ui `disablePointerDismissal`: a click on the backdrop leaves the dialog open; Escape and Cancel still close it.
+    public var closesOnBackdropClick = true
     public let panel: DialogView
     /// Called once the exit transition has finished and the host is gone.
     public var onDismiss: (@MainActor () -> Void)?
@@ -146,7 +148,7 @@ public final class ModalHost: DSView {
 
     public override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        if allowsUserDismissal, !panel.frame.contains(point), panel.kind != .alertDialog { close() }
+        if allowsUserDismissal, closesOnBackdropClick, !panel.frame.contains(point), panel.kind != .alertDialog { close() }
     }
 
     /// Swallows clicks and scrolls everywhere so nothing under the backdrop reacts.

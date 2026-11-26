@@ -445,6 +445,8 @@ final class ScheduledTaskEditor {
 
     func present() {
         guard let h = context.presentDialog?(dialog) else { return }
+        // A stray click outside would discard the unsaved draft (ScheduledTasksSettings.tsx, 5258 #40708).
+        h.closesOnBackdropClick = false
         host = h
         let key = ObjectIdentifier(self)
         Self.live[key] = self

@@ -199,6 +199,8 @@ final class ProjectScriptsController {
         editor.error = error
         self.editor = editor
         let host = ModalHost.present(editor.dialog, in: window)
+        // projectScriptEditor.tsx (5258 #40776): a click outside keeps the draft.
+        host.closesOnBackdropClick = false
         editor.dialog.onClose = { [weak host] in host?.close() }
         host.onDismiss = { [weak self] in self?.editor = nil }
         editor.onCancel = { [weak host] in host?.close() }

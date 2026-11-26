@@ -375,6 +375,8 @@ public final class ProjectSettingsView: ScopedSettingsPage {
         let keybindings = context.scope.target.flatMap { context.configs[$0.environmentId]?.keybindings } ?? []
         let editor = ProjectActionEditor(script: script, keybinding: script.flatMap { ProjectActionsLogic.keybindingValue(keybindings, command: ProjectScripts.command($0.id)) })
         guard let host = context.presentDialog?(editor.dialog) else { return }
+        // projectScriptEditor.tsx (5258 #40776): a click outside keeps the draft.
+        host.closesOnBackdropClick = false
         // The dialog lives as long as its host; keep the editor that drives it until then.
         openEditor = editor
         let previous = host.onDismiss
