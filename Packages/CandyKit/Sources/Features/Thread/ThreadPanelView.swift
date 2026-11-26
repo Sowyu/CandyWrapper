@@ -2475,11 +2475,11 @@ public final class ThreadPanelView: DSView {
         terminalResize.frame = NSRect(x: drawerX, y: drawerTop - gap, width: drawerWidth, height: gap)
         // The rows run on under the header and fade out toward the top (`fade`).
         // In an open Redesign thread the first row starts below the header band, measured from the timeline's top,
-        // the window's. Inset, the rows stop at the top row's hairline, this view's top, with no mask: the scroll
-        // view clips them.
+        // the window's. Inset, the rows run to the card's top behind the floating pills at full strength, with no
+        // band, rule or fade (the user, 2026-11-26), and a thread at rest starts `Space.s` below the pills' band.
         let column = ditherHeader && !isDraft && !isEmbedded
-        let timelineTop = inset ? 0 : -above
-        timeline.topClearance = inset ? (column ? RedesignTokens.Space.l : 0)
+        let timelineTop = inset ? -CardTopRow.rowHeight : -above
+        timeline.topClearance = inset ? (column ? CardTopRow.floatHeight + RedesignTokens.Space.s : CardTopRow.rowHeight)
             : column ? max(chatTop + above, DitherChrome.band) + RedesignTokens.Space.l : chatTop + above
         timeline.frame = NSRect(x: 0, y: timelineTop, width: chat, height: max(0, chatHeight - timelineTop))
         syncLoadingSkeleton()

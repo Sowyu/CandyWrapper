@@ -75,23 +75,20 @@ public final class DitherTabStripView: TopbarDragView {
     /// Off hides the tabs and + and keeps them, so they come back as they were; the accessory stays.
     public var showsTabs = true { didSet { if showsTabs != oldValue { needsLayout = true } } }
 
-    /// Redesign's inset panel: the strip is the cards' top row, `CardTopRow.rowHeight` tall, laid out by `CardTopRow`
-    /// across the thread card, which ends at `contentEnd`. Past it lies the right panel card's row, where the accessory
-    /// glides while the panel shows. A hairline runs under the thread card's part.
-    public var insetCard = false {
-        didSet { if insetCard != oldValue { hairline.isHidden = !insetCard; rowGround.isHidden = !insetCard; needsLayout = true } }
-    }
+    /// Redesign's inset panel: the strip lies over the thread card's top, `CardTopRow.floatHeight` tall, across the
+    /// card, which ends at `contentEnd`. It has no ground and no rule: the breadcrumb and the header pill float over the
+    /// page `CardTopRow.floatGap` in from the card's edges, and the thread's rows pass behind them at full strength
+    /// (the user, 2026-11-22 and 2026-11-26). Past `contentEnd` lies the right panel card's row, where the accessory
+    /// glides while the panel shows.
+    public var insetCard = false { didSet { if insetCard != oldValue { needsLayout = true } } }
     public var contentEnd: CGFloat = 0 { didSet { if contentEnd != oldValue { needsLayout = true } } }
-    /// Where a right panel sheet over the thread card begins: the row's ground, hairline and breadcrumb stop there, so
-    /// the sheet's own tab row shows. Nil without a sheet.
+    /// Where a right panel sheet over the thread card begins: the breadcrumb stops there, so the sheet's own tab row
+    /// shows. Nil without a sheet.
     public var sheetStart: CGFloat? { didSet { if sheetStart != oldValue { needsLayout = true } } }
-    private let hairline = CardHairlineView()
-    /// The row's solid ground over the picture, as Capy's panel row is plain; Blur keeps its picture showing.
-    private let rowGround = CardRowGroundView()
 
     /// The accessory's top left at rest, before `accessoryShift`.
     public func accessoryRest(_ size: CGSize) -> CGPoint {
-        insetCard ? CardTopRow(width: contentEnd, pill: size).pill.origin
+        insetCard ? CGPoint(x: contentEnd - CardTopRow.floatGap - size.width, y: CardTopRow.floatGap)
             : CGPoint(x: bounds.width - Self.accessoryRight - size.width, y: ((bounds.height - size.height) / 2).rounded())
     }
     private var views: [TabView] = []
@@ -106,10 +103,6 @@ public final class DitherTabStripView: TopbarDragView {
         TooltipController.attach(to: plus, text: "New thread in a new tab")
         plus.action = { [weak self] in self?.onNew?() }
         addSubview(plus)
-        hairline.isHidden = true
-        addSubview(hairline)
-        rowGround.isHidden = true
-        addSubview(rowGround, positioned: .below, relativeTo: nil)
         // A tab group, as VoiceOver knows NSTabView's: the tabs are its radio buttons.
         setAccessibilityElement(true)
         setAccessibilityRole(.tabGroup)
@@ -190,13 +183,14 @@ public final class DitherTabStripView: TopbarDragView {
         }
     }
 
-    /// The inset card's row: the breadcrumb or the tabs from the card's left, `CardTopRow.tabsInset` in, or clear of the
-    /// window's controls while the sidebar is hidden, and the accessory concentric in the card's top right corner. The
+    /// The inset card's top: the breadcrumb or the tabs `CardTopRow.floatGap` in from the card's top and left, or clear
+    /// of the window's controls while the sidebar is hidden, and the accessory the same gap in from its top right. The
     /// breadcrumb stops `leadingGap` and the tabs `Space.s` short of the accessory's resting place.
     private func layoutInsetRow() {
+        let gap = CardTopRow.floatGap
         let end = max(0, contentEnd)
-        let lead = max(CardTopRow.tabsInset, contentStart - 20 + CardTopRow.tabsInset)
-        var stop = end - CardTopRow.tabsInset, crumbStop = stop
+        let lead = max(gap, contentStart - 20 + gap)
+        var stop = end - gap, crumbStop = stop
         if let accessory = trailingAccessory, !accessory.isHidden {
             let size = accessory.intrinsicContentSize
             let rest = accessoryRest(size)
@@ -204,12 +198,11 @@ public final class DitherTabStripView: TopbarDragView {
             stop = rest.x - RedesignTokens.Space.s
             crumbStop = rest.x - Self.leadingGap
         }
-        let ground = min(end, sheetStart ?? end)
         if let sheetStart {
-            stop = min(stop, sheetStart - CardTopRow.tabsInset)
+            stop = min(stop, sheetStart - gap)
             crumbStop = min(crumbStop, sheetStart - Self.leadingGap)
         }
-        let y = ((bounds.height - Self.tabHeight) / 2).rounded()
+        let y = gap
         if let leading = leadingAccessory, !leading.isHidden {
             leading.frame = NSRect(x: lead, y: y, width: leading.fittingWidth(max: max(0, crumbStop - lead)), height: Self.tabHeight)
         }
@@ -226,14 +219,11 @@ public final class DitherTabStripView: TopbarDragView {
             v.frame = NSRect(x: x, y: y, width: max(Self.minTabWidth, width), height: Self.tabHeight)
             x += max(Self.minTabWidth, width) + Self.gap
         }
-        plus.frame = NSRect(x: x, y: ((bounds.height - 24) / 2).rounded(), width: 24, height: 24)
+        plus.frame = NSRect(x: x, y: y + (Self.tabHeight - 24) / 2, width: 24, height: 24)
         if drag != nil {
             drag?.rest = views.map(\.frame)
             layoutDrag()
         }
-        hairline.frame = NSRect(x: 0, y: bounds.height - 1, width: ground, height: 1)
-        rowGround.isHidden = ThemeRuntime.ditherBlur
-        rowGround.frame = NSRect(x: 0, y: 0, width: ground, height: bounds.height)
     }
 
     static let minTabWidth: CGFloat = 60
@@ -330,23 +320,6 @@ public final class DitherTabStripView: TopbarDragView {
         settle.duration = Self.slide.duration
         settle.timingFunction = Self.slide.timing
         layer.add(settle, forKey: "tab-sort")
-    }
-
-    /// The rule under the inset card's top row, in the card's rim color.
-    final class CardHairlineView: DSView {
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func updateLayer() { layer?.backgroundColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor }
-    }
-
-    /// The inset card's ground under its top row, its top corners the card's.
-    final class CardRowGroundView: DSView {
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func updateLayer() {
-            layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
-            layer?.cornerRadius = RedesignTokens.Radius.panel
-            layer?.cornerCurve = .continuous
-            layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        }
     }
 
     /// One tab: icon, title, and a close button.
