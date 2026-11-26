@@ -351,7 +351,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         // A new time format redraws the timestamps of the rows on screen (T3 re-renders them).
         ClientSettingsStore.shared.observe { [weak self] keys in
             if keys.contains("timestampFormat") { self?.reconfigureVisible() }
-            if keys.contains("chatWidth"), let self { self.laidOutWidth = -1; self.needsLayout = true }
+            if keys.contains("chatWidth") || keys.contains("htmlPreviewWidth"), let self { self.laidOutWidth = -1; self.needsLayout = true }
             if keys.contains("redesignReadingWidth") { self?.scheduleReadingWidth() }
             // Code blocks start wrapped or not by `wordWrap` (MarkdownView reads it as T3 does at mount), which changes
             // their heights: every row measures again.
@@ -664,12 +664,43 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     /// 22.75pt text lines (MessagesTimeline.tsx:1430-1445,1636-1644 at 3824).
     private func rowFrame(_ index: Int, lane: (x: CGFloat, width: CGFloat)) -> NSRect {
         let top = ThreadDesign.uses3814(dark: effectiveAppearance.isDark) ? tops[index] : TL.snap(tops[index])
-        return NSRect(x: TL.snap(lane.x), y: top, width: lane.width, height: heights[index])
+        let own = rowLane(items[index], lane)
+        return NSRect(x: TL.snap(own.x), y: top, width: own.width, height: heights[index])
+    }
+
+    /// `htmlPreviewWidth` (5258 chatCanvasLayout.ts:180-193, index.css `--html-preview-max-width`, #41663): an HTML
+    /// preview may run wider than the chat lane, centered on it while that fits and clear of the details card.
+    /// "chat" keeps it in the lane, "wide" lets it reach 72rem and "full" the whole canvas less its padding.
+    func htmlPreviewLane(_ lane: (x: CGFloat, width: CGFloat)) -> (x: CGFloat, width: CGFloat) {
+        Self.htmlPreviewLane(lane, setting: ClientSettingsStore.shared.current.string("htmlPreviewWidth"), canvasWidth: document.bounds.width,
+                             padding: viewportWidth >= 640 ? 48 : 12, cardLeft: detailsCardLeft)
+    }
+
+    static func htmlPreviewLane(_ lane: (x: CGFloat, width: CGFloat), setting: String, canvasWidth w: CGFloat, padding: CGFloat,
+                                cardLeft: CGFloat?) -> (x: CGFloat, width: CGFloat) {
+        let maximum: CGFloat
+        switch setting {
+        case "wide": maximum = 1152
+        case "full": maximum = .greatestFiniteMagnitude
+        default: return lane
+        }
+        // `laneRight`: the details card's left less its clearance, else the canvas less its padding.
+        let laneEnd = cardLeft.map { $0 - 32 } ?? w - padding
+        let width = min(maximum, laneEnd - padding)
+        guard width > lane.width else { return lane }
+        return (max(padding, min(lane.x + (lane.width - width) / 2, laneEnd - width)), width)
+    }
+
+    /// The lane a row lays out in: its HTML preview's when wider, else the chat's.
+    private func rowLane(_ item: TimelineItem, _ lane: (x: CGFloat, width: CGFloat)) -> (x: CGFloat, width: CGFloat) {
+        if case .htmlRender = item.row.kind { return htmlPreviewLane(lane) }
+        return lane
     }
 
     private func height(of item: TimelineItem) -> CGFloat {
-        if let m = measured[item.id], m.width == laneFrame.width, m.item == item { return m.height }
-        return Self.estimate(item, width: laneFrame.width)
+        let width = rowLane(item, laneFrame).width
+        if let m = measured[item.id], m.width == width, m.item == item { return m.height }
+        return Self.estimate(item, width: width)
     }
 
     /// `estimate`'s answer body for long text, from one pass over its bytes: lines of `perLine` points per character.
@@ -1010,12 +1041,12 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             for i in wanted {
                 let view = viewFor(i)
                 let item = items[i]
-                let h: CGFloat
-                if let m = measured[item.id], m.width == lane.width, m.item == item {
+                let h: CGFloat, width = rowLane(item, lane).width
+                if let m = measured[item.id], m.width == width, m.item == item {
                     h = m.height
                 } else {
-                    h = view.height(forWidth: lane.width)
-                    measured[item.id] = (lane.width, item, h)
+                    h = view.height(forWidth: width)
+                    measured[item.id] = (width, item, h)
                 }
                 if h != heights[i] { heights[i] = h; changed = true }
             }
@@ -1032,9 +1063,10 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
         // Rows that came into range on the last pass are measured before they are placed, or an
         // estimated height would overlap the next row.
         var late = false
-        for i in wanted where !isMeasured(items[i], lane.width) {
-            let h = viewFor(i).height(forWidth: lane.width)
-            measured[items[i].id] = (lane.width, items[i], h)
+        for i in wanted where !isMeasured(items[i], rowLane(items[i], lane).width) {
+            let width = rowLane(items[i], lane).width
+            let h = viewFor(i).height(forWidth: width)
+            measured[items[i].id] = (width, items[i], h)
             if h != heights[i] { heights[i] = h; late = true }
         }
         if late { recomputeTops() }
@@ -1048,7 +1080,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
 
     /// Configures row `i`'s view and returns its height at the lane width, cached in `measured`.
     private func measure(_ i: Int) -> CGFloat {
-        let item = items[i], width = laneFrame.width
+        let item = items[i], width = rowLane(item, laneFrame).width
         if let m = measured[item.id], m.width == width, m.item == item { return m.height }
         let h = viewFor(i).height(forWidth: width)
         measured[item.id] = (width, item, h)
@@ -1213,8 +1245,8 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     func scroll(toFraction f: CGFloat) {
         followsEnd = f >= 1
         // Measure everything first so the fraction means the same as in a browser that laid out all rows.
-        let lane = laneFrame.width
         for (i, item) in items.enumerated() {
+            let lane = rowLane(item, laneFrame).width
             if let m = measured[item.id], m.width == lane, m.item == item { heights[i] = m.height; continue }
             // Off-screen rows borrow a pooled view and give it back.
             let view = visible[item.id] != nil ? viewFor(i) : dequeue(Self.kind(item.row))
@@ -1283,7 +1315,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
             if view.frame != frame { problems.append("view \(id) at \(view.frame), row at \(frame)") }
             // Pending layout is fine; what a laid-out row draws past its height is not.
             view.layoutSubtreeIfNeeded()
-            let own = view.height(forWidth: lane.width)
+            let own = view.height(forWidth: rowLane(items[i], lane).width)
             if abs(own - heights[i]) > 0.01 { problems.append("view \(id) measures \(own), row has \(heights[i])") }
             for sub in view.subviews where !sub.isHidden && sub.frame.height > 0 && sub.frame.maxY > own + 0.5 {
                 problems.append("view \(id): \(type(of: sub)) ends at \(sub.frame.maxY), past \(own)")
