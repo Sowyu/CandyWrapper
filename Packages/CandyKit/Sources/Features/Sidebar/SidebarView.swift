@@ -23,6 +23,9 @@ public struct SidebarActions {
     public var openLinkedItems: (ThreadId) -> Void = { _ in }
     /// Right click on a thread row: the row view and the event, for the native menu.
     public var contextMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
+    /// Right click on a search result: the thread's menu for that thread alone, without Rename
+    /// (Sidebar.tsx `handleSearchResultContextMenu` at 5258, #31545).
+    public var searchResultMenu: (ThreadId, NSEvent, NSView) -> Void = { _, _, _ in }
     /// Dither's row hover group: pin, archive, and ⋯, which opens the thread menu under the given button.
     public var pin: (ThreadId) -> Void = { _ in }
     public var archive: (ThreadId) -> Void = { _ in }
@@ -335,6 +338,7 @@ public final class SidebarContentView: DSView {
         list.onShowAnyTime = { [weak self] in self?.setSettledRange(.any) }
         list.onSettledRange = { [weak self] anchor in self?.toggleSettledRangePicker(anchor) }
         list.onHighlightSearchResult = { [weak self] i in self?.setSearchHighlight(i, scroll: false) }
+        list.onSearchResultMenu = { [weak self] id, event, view in self?.actions.searchResultMenu(id, event, view) }
         list.onOpenSearchResult = { [weak self] id in self?.selectSearchResult(id) }
         filterButton.addSubview(filterMonogram)
         filterMonogram.isHidden = true
@@ -730,7 +734,8 @@ public final class SidebarContentView: DSView {
         }
         if flags.contains(.command) { toggleSelection(id); return }
         if flags.contains(.shift) { selectRange(to: id); return }
-        if mouse, (event?.clickCount ?? 1) >= 2 { startRename(id); return }
+        // Quick clicks keep counting across rows, so only the open row's second click renames (Sidebar.tsx:1632-1635 at 5258, #41258).
+        if mouse, (event?.clickCount ?? 1) >= 2, state.activeThreadId == id { startRename(id); return }
         clearSelection()
         selectionAnchor = id
         state.activeThreadId = id

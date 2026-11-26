@@ -247,6 +247,7 @@ final class SidebarSearchResultRowView: SidebarRowBase {
     private let excerpt = SearchExcerptView()
     private var moveTracking: NSTrackingArea?
     var onHover: (@MainActor (Int) -> Void)?
+    var onMenu: (@MainActor (ThreadId, NSEvent) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -313,6 +314,12 @@ final class SidebarSearchResultRowView: SidebarRowBase {
     override func mouseMoved(with event: NSEvent) {
         super.mouseMoved(with: event)
         if let r = result, !r.isHighlighted { onHover?(r.index) }
+    }
+
+    /// SidebarThreadRow.tsx:1889-1896 at 5258 (#31545): a right click opens the result's thread actions.
+    override func rightMouseDown(with event: NSEvent) {
+        guard let r = result, let onMenu else { return super.rightMouseDown(with: event) }
+        onMenu(r.id, event)
     }
 }
 

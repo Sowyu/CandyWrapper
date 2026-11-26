@@ -618,6 +618,12 @@ public enum ThreadActionMenu {
         /// Rewrite title can run here (the server has side chats); without it there is no title action.
         public var canRewriteTitle = false
         public var isRunning = false
+        /// The server marks unread against the latest run's completion, so a thread without one has no Mark unread
+        /// (threadActionMenu.logic.ts:114-115, 224-226 at 5258, #41365).
+        public var hasCompletedRun = true
+        /// False where no inline title editor sits behind the menu, like a sidebar search result
+        /// (threadActionMenu.logic.ts `canRename` at 5258, #31545).
+        public var canRename = true
         public var supportsSettlement = true
         public var supportsAutoSettleOptOut = true
         public var supportsSnooze = true
@@ -651,7 +657,7 @@ public enum ThreadActionMenu {
                                        + [.init("snooze:custom", "Custom…", separatorBefore: true)]))
             }
         }
-        items.append(.init("rename", "Rename thread", separatorBefore: true))
+        items.append(.init("rename", "Rename thread", disabled: !s.canRename, separatorBefore: true))
         // CandyWrapper's Rewrite title in place of T3's Regenerate title, which often kept the same title (the user,
         // 2026-11-21; docs/decisions.md). The server's regenerate command stays supported, only the item is gone.
         if s.supportsTitleRegeneration, s.canRewriteTitle {
@@ -659,7 +665,7 @@ public enum ThreadActionMenu {
             item.tooltip = ThreadActionMenu.rewriteTitleTooltip
             items.append(item)
         }
-        items.append(.init("mark-unread", "Mark unread"))
+        if s.hasCompletedRun, !s.isRunning { items.append(.init("mark-unread", "Mark unread")) }
         if s.canShareWithGuest { items.append(.init("share-guest", "Share with guest")) }
         if let filter = s.projectFilter {
             items.append(.init("filter-by-project", filter.isActive ? "Show all projects" : "Filter by \(filter.label)"))

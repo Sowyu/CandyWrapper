@@ -95,6 +95,7 @@ final class SidebarCommands {
             self.threads.acknowledgeWake(id, at: wake)
         }
         sidebar.actions.contextMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view) }
+        sidebar.actions.searchResultMenu = { [weak self] id, event, view in self?.showThreadMenu(id, event: event, view: view, fromSearch: true) }
         sidebar.actions.pin = { [weak self] in self?.pin($0) }
         sidebar.actions.archive = { [weak self] in self?.archive($0) }
         sidebar.actions.moreMenu = { [weak self] id, button in
@@ -792,9 +793,12 @@ final class SidebarCommands {
 
     /// `anchor` (in `view`) places the menu's top left there instead of at the pointer.
     /// Under Dither, `button` (the row's ⋯) places the menu under itself.
-    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, anchor: NSPoint? = nil, rename: (() -> Void)? = nil, from button: NSView? = nil) {
+    /// `fromSearch`: a search result is no selectable row and has no title editor, so the menu acts on its own
+    /// thread and Rename is off (Sidebar.tsx:2610-2633, 2687 at 5258, #31545).
+    func showThreadMenu(_ id: ThreadId, event: NSEvent, view: NSView, anchor: NSPoint? = nil, rename: (() -> Void)? = nil, from button: NSView? = nil,
+                        fromSearch: Bool = false) {
         guard let thread = shell(id), let sidebar else { return }
-        if rename == nil, button == nil, sidebar.selectedThreadIds.contains(id) {
+        if !fromSearch, rename == nil, button == nil, sidebar.selectedThreadIds.contains(id) {
             showSelectionMenu(event: event, view: view)
             return
         }
@@ -807,6 +811,7 @@ final class SidebarCommands {
             state.isSettled = row?.section == .settled
         }
         state.canShareWithGuest = guestShare?.canShare(thread.id.environmentId) ?? false
+        state.canRename = !fromSearch
         let items = ThreadActionMenu.removing(Self.unbuiltMenuItems, from: ThreadActionMenu.items(state))
         let choose: @MainActor (String) -> Void = { [weak self, weak sidebar] choice in
             if choice == "rename", let rename { rename(); return }
@@ -846,6 +851,7 @@ final class SidebarCommands {
         state.isRegeneratingTitle = thread.titleRegeneration != nil || deeperRenames[thread.id] != nil
         state.canRewriteTitle = deeperRenameModel(thread.id) != nil
         state.isRunning = !SidebarModel.runtimeCanArchive(presented.runtime)
+        state.hasCompletedRun = thread.latestRunCompletedAt.value != nil
         state.snoozePresets = presets
         if let env = thread.id.environmentId, let config = threads.composer.config(env) {
             state.canTurnIntoProject = ProjectCommands.canTurnIntoProject(
