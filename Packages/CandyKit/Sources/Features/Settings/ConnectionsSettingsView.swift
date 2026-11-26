@@ -296,6 +296,13 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
     }()
     /// The list was picked over the map.
     var showsList = false
+    /// The sidebar's server update notice opens the rows: only they carry each server's version and its update control.
+    public func showList() {
+        guard !showsList else { return }
+        viewSwitch.selectedIndex = 1
+        showsList = true
+        set(model)
+    }
     private let addButton = ButtonView("Add environment", icon: .plus, variant: .ghostMuted, size: .xs)
     /// `ServerUpdatesAction variant="ghost-muted"`, before "Add environment" (`flex items-center gap-1`).
     let updateAllButton = ButtonView("Update all", variant: .ghostMuted, size: .xs)

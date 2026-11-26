@@ -352,7 +352,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                  toasts: { [weak settings, weak threads] in settings?.visibleToasts ?? threads?.panel.toasts })
         environments.observe { [weak self] in self?.updates?.refresh() }
         everything.account = sidebar.accountRow
-        sidebar.updatePill.onShowServerUpdates = { [weak settings] in settings?.open(.connections) }
+        sidebar.updatePill.onShowServerUpdates = { [weak settings] in
+            settings?.connectionsPage.showList()
+            settings?.open(.connections)
+        }
         updates?.holdsServerUpdates = { [weak everything] in everything?.holdsServerUpdates ?? false }
         everything.onHoldChange = { [weak self] in self?.updates?.refresh() }
         threads.composer.configObservers.append { [weak everything] _ in everything?.providersChanged() }

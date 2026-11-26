@@ -38,6 +38,18 @@ struct EnvironmentsMapViewTests {
         return view
     }
 
+    /// The sidebar's server update notice opens Connections on the list, where the outdated row shows.
+    @Test func theServerUpdateNoticeOpensTheList() {
+        let page = ConnectionsSettingsView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
+        var model = ConnectionsPageModel()
+        model.map = Self.model("shared")
+        page.set(model)
+        #expect(page.mapView.superview != nil)
+        page.showList()
+        #expect(page.mapView.superview == nil)
+        #expect(page.viewSwitch.selectedIndex == 1)
+    }
+
     @Test func drawsEveryMachineAndLink() throws {
         let view = Self.make("shared")
         let layout = view.canvas.fleetLayout
