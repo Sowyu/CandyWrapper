@@ -228,6 +228,7 @@ final class WorkflowStepRowView: DSView {
         if !said.isHidden { said.frame = NSRect(x: 24, y: 48, width: w, height: said.height(forWidth: w)) }
     }
 
+    override var wantsUpdateLayer: Bool { false }
     override func draw(_ dirtyRect: NSRect) {
         // A ring in the step's tone, filled once it is done, and the rail down to the next step.
         Themed.color(\.border).setFill()
@@ -426,7 +427,7 @@ final class WorkflowQuestionCardView: DSView {
             for (b, note) in items {
                 let bw = b.fittingSize.width
                 // `max-w-60` beside the choice.
-                let itemW = note == nil ? bw : max(bw, 240)
+                let itemW = note.map { n in max(bw, min(240, ceil((n.text as NSString).size(withAttributes: [.font: n.font]).width) + 1)) } ?? bw
                 if cx > x, cx + itemW > x + w { cx = x; cy += rowH + 8; rowH = 0 }
                 set(b, NSRect(x: cx, y: cy, width: bw, height: 28))
                 var ih: CGFloat = 28
@@ -465,12 +466,16 @@ final class WorkflowQuestionCardView: DSView {
         return y + 10
     }
 
+    override var wantsUpdateLayer: Bool { false }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
         let r = DesignGeometry.radius(12, in: self)
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: r, yRadius: r)
-        Themed.color(\.warningSurface).setFill()
+        // Redesign: a card on the ground, its inset fill and rim; "Needs you" keeps the warning word.
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        (redesign ? RedesignTokens.Card.fill : Themed.color(\.warningSurface)).setFill()
         path.fill()
-        Themed.color(\.warning, 0.3).setStroke()
+        (redesign ? RedesignTokens.Card.border : Themed.color(\.warning, 0.3)).setStroke()
         path.lineWidth = 1
         path.stroke()
     }

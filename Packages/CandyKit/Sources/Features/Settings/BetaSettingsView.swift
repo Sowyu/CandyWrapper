@@ -126,26 +126,32 @@ public final class BetaSettingsView: SettingsPageBase {
     /// while workflows are on.
     private func workflowRows() -> (SettingsRowView, SettingsRowView) {
         let workflows = serverSwitch("workflows-beta", Self.workflowsDetail, key: "workflowsEnabled", reset: nil, label: "Workflows")
-        let field = NumberFieldView(value: 500, size: .sm)
-        field.range = 0 ... 10_000
-        // `w-24`.
+        // A plain `w-24` field: T3's `NumberField` here has no steppers, and commits on Enter or blur.
+        let field = InputView(placeholder: "", text: "", size: .sm)
         field.frame.size = NSSize(width: 96, height: 28)
         field.setAccessibilityLabel("Skipped runs kept")
         let kept = row("workflow-skipped-runs",
                        detail: "How many skipped runs each workflow keeps in its history. Older skipped runs are deleted; runs that did something are always kept.",
-                       control: SettingsControlGroup([field]))
+                       control: field)
         _ = bindServerRow(kept, keys: ["workflowSkippedRunsKept"], reset: "skipped runs kept")
-        field.onChange = { [weak self] value in
-            guard let self, value.rounded() == value, self.context.scope.isMixed(["workflowSkippedRunsKept"]) || value != self.server["workflowSkippedRunsKept"].doubleValue else { return }
-            self.context.patchServer(["workflowSkippedRunsKept": .number(value)])
+        field.onCommit = { [weak self, weak field] text in
+            guard let self else { return }
+            let mixed = self.context.scope.isMixed(["workflowSkippedRunsKept"])
+            if let n = Int(text.trimmingCharacters(in: .whitespaces)) {
+                let value = min(max(n, 0), 10_000)
+                if mixed || self.server["workflowSkippedRunsKept"].intValue != value {
+                    self.context.patchServer(["workflowSkippedRunsKept": .number(Double(value))])
+                }
+            }
+            field?.text = mixed ? "" : self.server["workflowSkippedRunsKept"].intValue.map(String.init) ?? "500"
         }
         binder.add { [weak self, weak workflows, weak kept, weak field] in
             guard let self, let workflows, let kept, let field else { return }
             workflows.isHidden = !self.context.scope.allStore("workflowsEnabled")
             kept.isHidden = workflows.isHidden || !self.server.bool("workflowsEnabled")
-            // ponytail: a mixed scope shows the first value, not T3's empty "Mixed" field; add a placeholder to
-            // NumberFieldView when someone edits several machines at once here.
-            if !field.isFirstResponderInside { field.value = self.server["workflowSkippedRunsKept"].doubleValue ?? 500 }
+            let mixed = self.context.scope.isMixed(["workflowSkippedRunsKept"])
+            field.placeholder = mixed ? "Mixed" : ""
+            if !field.state.focused { field.text = mixed ? "" : self.server["workflowSkippedRunsKept"].intValue.map(String.init) ?? "500" }
         }
         return (workflows, kept)
     }

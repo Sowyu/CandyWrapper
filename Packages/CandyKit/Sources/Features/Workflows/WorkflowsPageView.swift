@@ -88,7 +88,9 @@ public final class WorkflowsPageView: DSView {
         for v in [listColumn, feedScroll, loadingLabel, header, toasts] as [NSView] { addSubview(v) }
         toasts.layer?.zPosition = 3
         tabs.onChange = { [weak self] i in
-            guard let self, let i else { return }
+            // Clicking the pressed tab un-presses it; the list keeps its tab, as a Base UI group with one value does.
+            guard let self else { return }
+            guard let i else { self.rebuild(); return }
             self.pickedTab = WorkflowListTab.allCases[i]
             self.rebuild()
         }
@@ -230,7 +232,8 @@ public final class WorkflowsPageView: DSView {
         let w = bounds.width, h = bounds.height
         header.frame = NSRect(x: 0, y: 0, width: w, height: 52)
         toasts.frame = ToastViewport.frame(in: bounds, dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
-        let body = NSRect(x: 0, y: 52, width: w, height: max(0, h - 52))
+        // `border-b` under the header.
+        let body = NSRect(x: 0, y: 53, width: w, height: max(0, h - 53))
         loadingLabel.frame = NSRect(x: 24, y: body.minY + 24, width: max(0, w - 48), height: 20)
         if let empty {
             let size = empty.fittingSize
@@ -244,15 +247,18 @@ public final class WorkflowsPageView: DSView {
         layoutFeed()
     }
 
+    public override var wantsUpdateLayer: Bool { false }
     public override func draw(_ dirtyRect: NSRect) {
         Themed.color(\.background).setFill()
         bounds.fill()
-        if !listColumn.isHidden {
-            Themed.color(\.border).setFill()
-            NSRect(x: 288, y: 52, width: 1, height: bounds.height - 52).fill()
-        }
+        // Redesign draws no rule under a page's header (as on Pull Requests) and parts the columns with its rim.
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        (redesign ? RedesignTokens.Card.border : Themed.color(\.border)).setFill()
+        if !redesign { NSRect(x: 0, y: 52, width: bounds.width, height: 1).fill() }
+        if !listColumn.isHidden { NSRect(x: 288, y: 53, width: 1, height: bounds.height - 53).fill() }
     }
     public override var isFlipped: Bool { true }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 
     private func layoutList() {
         let w = listColumn.bounds.width
@@ -324,6 +330,7 @@ final class WorkflowChipView: DSView {
     override func layout() { super.layout(); label.frame = bounds }
     override var isFlipped: Bool { true }
 
+    override var wantsUpdateLayer: Bool { false }
     override func draw(_ dirtyRect: NSRect) {
         let tone = Self.tones[WorkflowRuns.chip(name).tone]
         let dark = effectiveAppearance.isDark
@@ -376,6 +383,7 @@ final class WorkflowStateWordView: DSView {
     }
     override var isFlipped: Bool { true }
 
+    override var wantsUpdateLayer: Bool { false }
     override func draw(_ dirtyRect: NSRect) {
         let mid = bounds.midY
         switch tone {
@@ -451,6 +459,7 @@ final class WorkflowRunRowView: DSView {
         now.frame = NSRect(x: 8, y: 46, width: max(0, w - tw - 6), height: 16)
     }
 
+    override var wantsUpdateLayer: Bool { false }
     override func draw(_ dirtyRect: NSRect) {
         guard current || hovered else { return }
         // `rounded-lg`, `bg-accent` or `hover:bg-accent/50`.
