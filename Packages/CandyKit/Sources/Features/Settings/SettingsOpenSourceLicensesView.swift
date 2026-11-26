@@ -31,8 +31,80 @@ public struct SettingsLicenseManifest: Decodable, Sendable {
     }
 }
 
+/// `LicenseHeaderAction` (OpenSourceLicenses.tsx:157-231): the notice count and a search button, which opens the
+/// search field. Esc clears and closes the search without closing Settings (#41647), and a blur with no text closes it.
+final class LicenseHeaderActionView: DSView {
+    let count = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    let open = ButtonView(nil, icon: .search, variant: .ghostMuted, size: .iconMicro)
+    // ponytail: the default h-8 group with a 16px glass; T3's is `size="sm"` with a size-3 glass, add an sm group if it shows
+    let field = InputGroupView(placeholder: "Search licenses", leading: .icon(.search))
+    var query: String { field.input.text }
+    var onQueryChange: (() -> Void)?
+    private(set) var isSearchOpen = false
+    private var wasFocused = false
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        open.iconSize = 12
+        open.setAccessibilityLabel("Search open-source licenses")
+        TooltipController.attach(to: open, text: "Search licenses", placement: PopupPlacement(side: .top))
+        open.action = { [weak self] in self?.setSearchOpen(true) }
+        field.input.setAccessibilityLabel("Search open-source licenses")
+        field.input.onChange = { [weak self] _ in self?.onQueryChange?() }
+        field.input.takesEscape = { [weak self] in
+            guard let self else { return false }
+            self.field.input.text = "" // fires onChange, which refilters
+            self.setSearchOpen(false)
+            return true
+        }
+        let restyle = field.input.onStateChange
+        field.input.onStateChange = { [weak self] state in
+            restyle?(state)
+            guard let self else { return }
+            if self.wasFocused, !state.focused, self.query.isEmpty { self.setSearchOpen(false) }
+            self.wasFocused = state.focused
+        }
+        count.lineHeight = 16
+        [count, open, field].forEach(addSubview)
+        setSearchOpen(false)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    /// `LicenseCount`: "{count} notices", or "{filtered} of {total}" while a search narrows the list.
+    func setCounts(filtered: Int, total: Int) {
+        count.text = filtered == total ? "\(total) notices" : "\(filtered) of \(total)"
+        needsLayout = true
+    }
+
+    func setSearchOpen(_ on: Bool) {
+        isSearchOpen = on
+        open.isHidden = on
+        field.isHidden = !on
+        if on { DispatchQueue.main.async { [weak self] in guard let self else { return }; self.window?.makeFirstResponder(self.field.input) } }
+        else if field.input.isFirstResponderInside { window?.makeFirstResponder(nil) }
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+    }
+
+    /// Closed: `flex items-center gap-1.5`, the count then the button. Open: `gap-2`, the count then the `w-44` field.
+    override var intrinsicContentSize: NSSize {
+        let c = ceil(count.intrinsicContentSize.width)
+        return NSSize(width: isSearchOpen ? c + 8 + 176 : c + 6 + 20, height: isSearchOpen ? 32 : 20)
+    }
+
+    override func layout() {
+        super.layout()
+        let c = ceil(count.intrinsicContentSize.width)
+        count.frame = NSRect(x: 0, y: (bounds.height - 16) / 2, width: c, height: 16)
+        open.frame = NSRect(x: c + 6, y: (bounds.height - 20) / 2, width: 20, height: 20)
+        field.frame = NSRect(x: c + 8, y: (bounds.height - 32) / 2, width: 176, height: 32)
+    }
+}
+
 public final class SettingsOpenSourceLicensesView: SettingsPageBase {
-    private let search = InputView(placeholder: "Search licenses…")
+    private let header = LicenseHeaderActionView()
+    private let section = SettingsSectionView(title: "Third-party notices", rows: [])
     private var entries: [SettingsLicenseManifest.Entry] = []
     private var expanded = Set<String>()
     private var loading: Task<Void, Never>?
@@ -40,8 +112,7 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
 
     public override init(context: SettingsPageContext) {
         super.init(context: context)
-        search.onChange = { [weak self] _ in self?.rebuild() }
-        search.escapeClears = true
+        header.onQueryChange = { [weak self] in self?.rebuild() }
         rebuild()
     }
     public override func viewDidMoveToWindow() {
@@ -49,6 +120,7 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
         if window == nil {
             loading?.cancel(); loading = nil; entries.removeAll(); expanded.removeAll()
             items = []; message = "Loading licenses…"
+            header.field.input.text = ""; header.setSearchOpen(false)
             return
         }
         load()
@@ -80,11 +152,10 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
         }
     }
     private func rebuild() {
-        let matches = entries.filter { $0.matches(search.text) }
-        let filter = SettingsRowView(title: "Open source licenses", detail: "\(matches.count) of \(entries.count) notices", control: search)
-        search.frame.size = NSSize(width: 240, height: 32)
-        var rows: [any SettingsGroupRow] = [filter]
-        if matches.isEmpty { rows.append(SettingsGroupNote(message)) }
+        let matches = entries.filter { $0.matches(header.query) }
+        header.setCounts(filtered: matches.count, total: entries.count)
+        var rows: [any SettingsGroupRow] = []
+        if matches.isEmpty { rows.append(SettingsGroupNote(entries.isEmpty ? message : "No licenses match that search.")) }
         for entry in matches {
             let key = "\(entry.kind):\(entry.name):\(entry.version ?? "")"
             let toggle = ButtonView(nil, icon: expanded.contains(key) ? .chevronDown : .chevronRight, variant: .ghostMuted, size: .iconXs)
@@ -112,7 +183,10 @@ public final class SettingsOpenSourceLicensesView: SettingsPageBase {
             if expanded.contains(key) { row.footer = SettingsLicenseNoticeView(entry.noticeText) }
             rows.append(row)
         }
-        items = [SettingsSectionView(title: "Notices for dependencies, assets, and optional tools used by CandyWrapper and T3 Code.", rows: rows)]
+        // One section for the page's life, so rebuilding the rows never moves the focused search field.
+        section.group.rows = rows
+        if (section.headerAction == nil) != entries.isEmpty { section.headerAction = entries.isEmpty ? nil : header }
+        if items.isEmpty { items = [section] }
         onHeightChange?()
     }
 }
