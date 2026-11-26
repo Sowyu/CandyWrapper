@@ -1579,6 +1579,8 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
             self?.cancelAdd()
             return true
         }
+        // Settings' Esc monitor runs before the field sees the key (#41686).
+        addInput.takesEscape = { [weak self] in self?.cancelAdd(); return self != nil }
         addConfirm.action = { [weak self] in self?.submitAdd() }
         addCancel.action = { [weak self] in self?.cancelAdd() }
         for v in [addInput, addConfirm, addCancel, errorText] as [NSView] { addSubview(v) }

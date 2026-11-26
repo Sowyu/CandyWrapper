@@ -60,6 +60,8 @@ public class FieldView: DSView {
     /// A search or filter field: Esc clears its text first, and only the next Esc reaches the dialog or page around it
     /// (5258 #41856, #42224 and the other 1.3 fixes).
     public var escapeClears = false
+    /// Settings asks this before Esc closes it: true when the field used the Esc, such as to discard a draft.
+    public final var takesEscape: (@MainActor () -> Bool)?
     /// `escapeClears` with text to clear: clears it, as typed input so `onChange` runs. True when it cleared.
     public func clearOnEscape() -> Bool {
         guard escapeClears, !editor.string.isEmpty, !editor.hasMarkedText() else { return false }
