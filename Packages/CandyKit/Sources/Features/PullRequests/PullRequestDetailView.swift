@@ -375,8 +375,11 @@ public final class PullRequestDetailView: DSView {
             inlineConfirm.disarm()
             code.reset()
             titleDraft = nil
-            condensed = false
-            condensedByTab = [:]
+            // The Summary's header comes back as its scroll left it, so restoring that scroll
+            // moves nothing (PullRequestDetailPanel.tsx:342, #42179).
+            let summaryCondensed = PullRequestSummaryView.memory[detail.url]?.condensed ?? false
+            condensedByTab = [.summary: summaryCondensed]
+            condensed = tab == .summary && summaryCondensed
             closeComposer()
             composer = nil
             stack = nil
@@ -1044,6 +1047,7 @@ public final class PullRequestDetailView: DSView {
         let (next, refund) = PullRequestWriteLogic.condensed(previous: condensed, scrollTop: top, foldHeight: foldHeight,
                                                               condensedRowHeight: Self.condensedRowHeight)
         condensedByTab[tab] = next
+        if tab == .summary { summary.rememberScroll(top); summary.rememberCondensed(next) }
         guard next != condensed else { return }
         let oldRule = tabRule.frame.minY
         condensed = next

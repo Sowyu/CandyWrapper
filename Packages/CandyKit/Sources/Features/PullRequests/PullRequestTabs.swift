@@ -80,6 +80,14 @@ final class StackScrollView: DSView {
         addSubview(scroll)
     }
     func reload() { needsLayout = true; document.needsLayout = true }
+    /// Puts the content back at `top`, clamped to what it can scroll (`holdScrollTop`, #42179).
+    func scroll(toTop top: CGFloat) {
+        layoutSubtreeIfNeeded()
+        let clip = scroll.scrollView.contentView
+        let maxY = max(0, document.frame.height - clip.bounds.height)
+        clip.scroll(to: NSPoint(x: 0, y: min(maxY, max(0, top))))
+        scroll.scrollView.reflectScrolledClipView(clip)
+    }
     /// Scrolls `item` near the top (`holdLinkedNodeInView`, #33989).
     func scroll(to item: NSView) {
         layoutSubtreeIfNeeded()
@@ -102,7 +110,7 @@ final class StackScrollView: DSView {
 /// The Summary tab (PullRequestSummaryTab.tsx): Reviewers and Labels rows, then the Description,
 /// Checks (closed) and Comments sections with sticky, collapsible headings.
 public final class PullRequestSummaryView: DSView {
-    private let stack = StackScrollView()
+    let stack = StackScrollView()
     private let meta = MetaRowsItem()
     private let descriptionSection = SectionItem(title: "Description")
     private let checks = SectionItem(title: "Checks", open: false)
@@ -110,13 +118,28 @@ public final class PullRequestSummaryView: DSView {
     private let markdown = PullRequestDescriptionItem()
     private let checkRows = ChecksListItem()
     private let commentList = CommentsItem()
-    private let orderButton = ButtonView("Newest first", icon: .arrowDownUp, variant: .ghostMuted, size: .xs)
+    let orderButton = ButtonView("Newest first", icon: .arrowDownUp, variant: .ghostMuted, size: .xs)
     /// "Filter", or "N hidden" (2994 PullRequestSummaryTab.tsx:874-904).
     private let filterButton = ButtonView("Filter", icon: .listFilter, variant: .ghostMuted, size: .xs).menuTrigger()
     private let commentTools = HStackAccessory()
     private var commentFilter = PullRequestDetailLogic.CommentFilter.load()
     private var newestFirst = true
     private var detail: PullRequestDetail?
+
+    /// What a pull request's Summary looked like when it was left, for this session only
+    /// (`summaryViewByScopeKey`, 5258 PullRequestSummaryTab.tsx:478-487, and
+    /// `summaryCondensedByScopeKey`, PullRequestDetailPanel.tsx:342, #42179). Keyed by the pull
+    /// request's URL, which names its host and repository.
+    struct Memory: Equatable { var newestFirst = true; var scrollTop: CGFloat = 0; var condensed = false }
+    static var memory: [String: Memory] = [:]
+    private func remember(_ change: (inout Memory) -> Void) {
+        guard let url = detail?.url else { return }
+        change(&Self.memory[url, default: Memory()])
+    }
+    /// The tab's scroll offset, recorded as the reader scrolls.
+    func rememberScroll(_ top: CGFloat) { remember { $0.scrollTop = top } }
+    func rememberCondensed(_ condensed: Bool) { remember { $0.condensed = condensed } }
+
     var onOpenURL: ((String) -> Void)?
     var scrollTarget: PullRequestScrollWatcher { stack.watcher }
     /// The reviewer and label pickers' triggers were pressed.
@@ -156,10 +179,9 @@ public final class PullRequestSummaryView: DSView {
         orderButton.iconSize = 12
         orderButton.action = { [weak self] in
             guard let self else { return }
-            self.newestFirst.toggle()
-            self.orderButton.title = self.newestFirst ? "Newest first" : "Oldest first"
-            self.commentTools.invalidateIntrinsicContentSize()
-            self.commentList.newestFirst = self.newestFirst
+            self.applyOrder(newestFirst: !self.newestFirst)
+            let order = self.newestFirst
+            self.remember { $0.newestFirst = order }
             self.stack.reload()
         }
         for s in [descriptionSection, checks, comments] { s.onToggle = { [weak self] in self?.stack.reload() } }
@@ -169,8 +191,18 @@ public final class PullRequestSummaryView: DSView {
         stack.document.insets = NSEdgeInsets(top: 0, left: 0, bottom: 56, right: 0)
     }
 
+    private func applyOrder(newestFirst: Bool) {
+        self.newestFirst = newestFirst
+        orderButton.title = newestFirst ? "Newest first" : "Oldest first"
+        commentTools.invalidateIntrinsicContentSize()
+        commentList.newestFirst = newestFirst
+    }
+
     func set(_ d: PullRequestDetail, activityPending: Bool, activityError: String?, nowMs: Int64) {
+        let arriving = detail?.url != d.url
+        let saved = Self.memory[d.url] ?? Memory()
         detail = d
+        if arriving { applyOrder(newestFirst: saved.newestFirst) }
         meta.set(d)
         markdown.set(d)
         checkRows.checks = d.checks
@@ -178,6 +210,8 @@ public final class PullRequestSummaryView: DSView {
         commentList.set(d, pending: activityPending, error: activityError, nowMs: nowMs, filter: commentFilter)
         updateFilterButton()
         stack.reload()
+        // Another pull request comes back where it was left, or at the top.
+        if arriving { stack.scroll(toTop: saved.scrollTop) }
     }
 
     private func updateFilterButton() {
