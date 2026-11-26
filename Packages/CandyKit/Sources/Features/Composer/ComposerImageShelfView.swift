@@ -461,6 +461,14 @@ public final class ComposerImageShelfView: DSView {
         }
 
         override func updateLayer() {
+            // Redesign's remove and retry are its solid resting control (the glass variant's Redesign look), not
+            // translucent black over the picture.
+            let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+            if remove.variant != (redesign ? .glass : .mediaClose) {
+                remove.variant = redesign ? .glass : .mediaClose
+                retry.variant = redesign ? .glass : .overlay
+                needsLayout = true
+            }
             layer?.cornerRadius = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
             layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
             layer?.borderColor = Themed.color(\.border, 0.8).cgColor(in: self)
@@ -483,6 +491,11 @@ public final class ComposerImageShelfView: DSView {
             // `absolute right-1 top-1` and `bottom-1 left-1`, inside the 1px border.
             remove.frame = NSRect(x: inner.maxX - 4 - 24, y: inner.minY + 4, width: 24, height: 24)
             retry.frame = NSRect(x: inner.minX + 4, y: inner.maxY - 4 - 24, width: 24, height: 24)
+            if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+                // Redesign keeps a tile's controls in one corner: retry sits beside remove at the top right.
+                let gap = RedesignTokens.Space.xs
+                retry.frame.origin = CGPoint(x: remove.isHidden ? remove.frame.minX : remove.frame.minX - gap - 24, y: remove.frame.minY)
+            }
         }
 
         // `cursor-zoom-in`: a click on the image opens the preview.

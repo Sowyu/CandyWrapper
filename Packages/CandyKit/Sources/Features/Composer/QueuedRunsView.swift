@@ -169,7 +169,12 @@ private final class ModernQueuedRowView: DSView {
     private let remove = bannerButton(nil, icon: .x, variant: .ghostMuted, size: .iconXs, tip: "Remove from queue")
     private let cancel = ButtonView("Cancel", variant: .ghost, size: .xs)
     private let status = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+    /// Redesign: the solid control bar behind the row's actions, so they never sit on the picture.
+    private let actionBar = DSView()
     private var message: ChatMessage?
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    /// Redesign's action bar: the 24pt controls with a 2pt inset all round.
+    private static let barInset: CGFloat = 2
     private var thumbnailIds: [String] = []
     private var thumbnails: [DSView] = []
     private var thumbnailTask: Task<Void, Never>?
@@ -187,7 +192,9 @@ private final class ModernQueuedRowView: DSView {
         outline.fillColor = nil; outline.lineWidth = 1; outline.lineDashPattern = [3, 3]
         outline.actions = ["path": NSNull(), "strokeColor": NSNull()]
         bubble.addSubview(text); bubble.addSubview(fold)
-        for view in [bubble, sender, timestamp, source, send, edit, remove, cancel, status] as [NSView] { addSubview(view) }
+        actionBar.isHidden = true
+        actionBar.layer?.borderWidth = 1
+        for view in [bubble, sender, timestamp, source, actionBar, send, edit, remove, cancel, status] as [NSView] { addSubview(view) }
         for button in [send, edit, remove, cancel] { button.smoothsFont = true }
         send.action = { [weak self] in guard let self else { return }; owner?.steer(index) }
         edit.action = { [weak self] in guard let self else { return }; owner?.edit(index) }
@@ -205,10 +212,18 @@ private final class ModernQueuedRowView: DSView {
         if imageIds != thumbnailIds {
             thumbnailTask?.cancel(); thumbnailIds = imageIds
             thumbnails.forEach { $0.removeFromSuperview() }; thumbnails = imageIds.map { _ in DSView() }
-            for tile in thumbnails {
+            let names = Dictionary(item.message?.attachments.compactMap { a in a["id"]?.stringValue.map { ($0, a["name"]?.stringValue ?? "Image") } } ?? [],
+                                   uniquingKeysWith: { a, _ in a })
+            for (tile, id) in zip(thumbnails, imageIds) {
                 tile.layer?.cornerRadius = 6; tile.layer?.masksToBounds = true; tile.layer?.borderWidth = 1; tile.layer?.contentsGravity = .resizeAspectFill
                 tile.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandThumbnail(_:))))
                 tile.setAccessibilityRole(.button)
+                tile.setAccessibilityLabel(names[id] ?? "Image")
+                tile.toolTip = names[id] ?? "Image"
+                // An image glyph until the picture loads, or if it never does, so the tile never reads as an empty square.
+                let glyph = IconView(name: .image, size: 14)
+                glyph.strokeColor = Themed.color(\.mutedForeground)
+                tile.addSubview(glyph)
                 bubble.addSubview(tile)
             }
             loadThumbnails()
@@ -230,8 +245,11 @@ private final class ModernQueuedRowView: DSView {
         sender.isHidden = sender.text.isEmpty
         send.isHidden = !canSend || editing; edit.isHidden = editing; remove.isHidden = editing; cancel.isHidden = !editing
         status.text = editing ? "Editing in the composer" : item.runId == nil ? "Saving" : ""
-        status.color = Themed.color(editing ? \.foreground : \.mutedForeground)
+        // Redesign keeps the whole action row muted; the accent outline marks the message being edited.
+        status.color = Themed.color(editing && !redesign ? \.foreground : \.mutedForeground)
         status.isHidden = status.text.isEmpty
+        cancel.variant = redesign ? .ghostMuted : .ghost
+        status.alignment = redesign ? .center : .left
         for button in [send, edit, remove] { button.isEnabled = !busy }
         edit.isEnabled = !busy && item.isEditable && !editBlocked
         self.editTip.text = editTip; sendTip.text = steerTip
@@ -254,11 +272,30 @@ private final class ModernQueuedRowView: DSView {
         let h: CGFloat = folded ? 38 + (open ? text.height(forWidth: max(1, w - 26)) + shelf + 8 : 0) : text.height(forWidth: max(1, w - 26)) + shelf + 18
         return NSSize(width: w, height: h)
     }
-    func height(forWidth width: CGFloat) -> CGFloat { bubbleSize(width).height + 4 + 24 + (sender.isHidden ? 0 : 20) }
+    /// The action row under the bubble: 24pt, or Redesign's bar around it.
+    private var actionRowHeight: CGFloat { redesign ? 24 + 2 * Self.barInset : 24 }
+    func height(forWidth width: CGFloat) -> CGFloat { bubbleSize(width).height + 4 + actionRowHeight + (sender.isHidden ? 0 : 20) }
 
     override func updateLayer() {
+        if redesign {
+            // Redesign: a solid surface behind the dashes so the picture never runs through the text, one dash color,
+            // and the accent only on the message being edited.
+            let dark = effectiveAppearance.isDark
+            outline.strokeColor = (editing ? Themed.color(\.primary) : guest ? Themed.color(\.guest)
+                : Themed.color(\.foreground, RedesignTokens.Surface.strongRim)).cgColor(in: self)
+            outline.fillColor = RedesignTokens.Surface.fill(in: self)
+            actionBar.layer?.backgroundColor = RedesignTokens.Surface.fill(in: self)
+            actionBar.layer?.borderColor = RedesignTokens.Surface.rim(dark: dark).cgColor
+            actionBar.layer?.cornerRadius = RedesignTokens.Radius.card
+            for tile in thumbnails {
+                tile.layer?.backgroundColor = RedesignTokens.Surface.insetFill(dark: dark).cgColor
+                tile.layer?.borderColor = RedesignTokens.Surface.rim(dark: dark).cgColor
+            }
+            return
+        }
         let color = editing ? Themed.color(\.primary, 0.6) : guest ? Themed.color(\.guest, 0.5) : Themed.color(\.mutedForeground, 0.4)
         outline.strokeColor = color.cgColor(in: self)
+        outline.fillColor = nil
         for tile in thumbnails { tile.layer?.backgroundColor = Themed.color(\.muted, 0.6).cgColor(in: self); tile.layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self) }
     }
     override func layout() {
@@ -275,15 +312,27 @@ private final class ModernQueuedRowView: DSView {
         for (i, tile) in thumbnails.enumerated() {
             tile.isHidden = folded && !open
             tile.frame = NSRect(x: 13 + CGFloat(i % columns) * 36, y: (folded ? 37 : 9) + CGFloat(i / columns) * 36, width: 32, height: 32)
+            if let glyph = tile.subviews.first {
+                glyph.frame = NSRect(x: 9, y: 9, width: 14, height: 14)
+                glyph.isHidden = !redesign || tile.layer?.contents != nil
+            }
         }
         if !thumbnails.isEmpty { shelfHeight = CGFloat((thumbnails.count + columns - 1) / columns) * 36 + 4 }
         text.frame = NSRect(x: 13, y: (folded ? 37 : 9) + shelfHeight, width: max(0, size.width - 26), height: max(0, size.height - (folded ? 46 : 18) - shelfHeight))
         sender.frame = NSRect(x: max(0, bounds.width - ceil(sender.textWidth) - 4), y: 0, width: ceil(sender.textWidth), height: 16)
-        let y = bubble.frame.maxY + 4
-        var right = bounds.width - 4
+        // Redesign's bar ends flush with the bubble's trailing edge; T3's row sits 4 in from it.
+        let inset = redesign ? Self.barInset : 0
+        let y = bubble.frame.maxY + 4 + inset
+        let barRight = bounds.width
+        var right = redesign ? barRight - inset : bounds.width - 4
         for view in [remove, edit, cancel, status, send] as [NSView] where !view.isHidden {
             let w = view === status ? ceil(status.textWidth) + 8 : view.intrinsicContentSize.width
             right -= w; view.frame = NSRect(x: right, y: y + (24 - (view === status ? 16 : 24)) / 2, width: w, height: view === status ? 16 : 24); right -= 2
+        }
+        actionBar.isHidden = !redesign || right >= barRight - inset - 2
+        if !actionBar.isHidden {
+            right += 2 - inset
+            actionBar.frame = NSRect(x: right, y: y - inset, width: barRight - right, height: 24 + 2 * inset)
         }
         timestamp.isHidden = !hovered || message == nil
         source.isHidden = !hovered || source.title.isEmpty
@@ -320,6 +369,7 @@ private final class ModernQueuedRowView: DSView {
                 let image = await ComposerImageIO.thumbnail(source, side: 64, cover: true)
                 guard !Task.isCancelled, let self, ids == thumbnailIds, thumbnails.indices.contains(i) else { return }
                 thumbnails[i].layer?.contents = image
+                if image != nil { thumbnails[i].subviews.first?.isHidden = true }
             }
         }
     }
