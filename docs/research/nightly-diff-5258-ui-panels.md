@@ -488,7 +488,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 721542cac7 | #39994 | fix(web): the issue comment composer lines up with the chat composer | issues | port (2.6) † |
 | 732c7126c1 | #41595 | fix(web): RTF previews show a bold, italic or underlined emoji as one character | files | n/a (QuickLook previews) † |
 | 7380740efe | #42499 | fix(web): pooled limit refill shows when it lands again | usage | ported 8f1d707d |
-| 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables) and STROKED (the 18 stroked and 24px symbols: video, documents, Java, TOML, diff, XML and the rest) |
+| 739bc7adb5 | #42493 | feat(web,mobile): Pierre icons for test files, Vitest, Rolldown and more | files | ported b36ec05c (the 9 filled t3-file-icon-* symbols and tables) and 57524d5b (the 18 stroked and 24px symbols: video, documents, Java, TOML, diff, XML and the rest) |
 | 73bb8ece1f | #41228 | fix(web): accept TIFF files containing standard IFD tag type 13 (SubIFDs) | files | n/a (QuickLook previews) † |
 | 75443857dc | #42085 | fix(web): Settings text typed before Navigation: Back is saved | shell | port (10.2) † |
 | 77c230e456 | #41511 | fix(web): notebook previews show errors saved without a traceback | files | n/a (QuickLook previews, diff read 2026-11-25) |
