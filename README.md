@@ -19,15 +19,19 @@ I try to maintain it as long as I use T3 Code.
 
 ## Why I made it
 
-The official desktop app runs on Electron. On the same Mac with the same data, CandyWrapper:
+I have T3 Code open all day, and the official Electron app used too much memory and drained my battery. On my Mac mini M2 Pro it woke the CPU 71.4 times a second while I was just reading a thread. So I wrote CandyWrapper, a native macOS client for T3 Code in Swift and AppKit.
 
-- uses 16x less CPU while an agent streams a reply
-- needs 89% less memory with a thread open, 39 MB instead of 381 MB
-- wakes the CPU over 1,000x less often when idle
-- uses 4x less energy while a reply streams
-- is a 9x smaller download, 17.4 MB instead of 163 MB
+These are the differences I care about most, measured on that Mac mini:
 
-I measured every one of these. The full table and how I measured are in [The numbers](#the-numbers).
+- A streaming turn uses 2.10% CPU, against 18.5% in the official app.
+- Energy Impact during that turn is 11.3, against 144.1.
+- A small open thread takes 51.0 MB of memory, against 348 MB.
+- At idle it wakes the CPU 0.41 times a second, against 71.4.
+- The download is 23.7 MB, against 246.0 MB.
+
+Typing is where CandyWrapper loses. A keypress takes 49.9 ms to put a letter on screen, and the official app takes 45.0 ms. I think 4.9 ms is a fair price for the rest, and I'd like to close that gap, but I haven't yet.
+
+[The numbers](#the-numbers) has the setup and the full table.
 
 ## Install
 
@@ -39,20 +43,29 @@ You only do this once. I sign CandyWrapper with a personal Apple developer certi
 
 ### If you have 1.14.14 or older
 
-Download the newest DMG from [Releases](https://github.com/Sowyu/CandyWrapper/releases) and install it by hand, once. The app's own updater can't do this step for you.
+Install the newest DMG by hand once. The Mac that built the releases was returned, and the update signing key went with it. Newer versions use a new key that 1.14.14 and older don't trust.
 
-The Mac I built releases on was returned, and the key that signs updates went with it. Newer versions are signed with a new key, and 1.14.14 and older only trust the old one, so they refuse the update. After one manual install the app updates itself again. Your settings, drafts and paired machines stay as they are.
+After one manual install the app updates itself again. Your settings, drafts and paired machines stay.
 
-Two things to expect:
+macOS may say that 1.14.14 or older contains malware and move it to the Trash. It doesn't contain malware. The old certificate was revoked, and installing the newest version fixes it.
 
-- macOS may refuse to open 1.14.14 or older, say it contains malware, and move it to the Trash. It doesn't. The certificate those versions were signed with was revoked when I made a new one. Installing the newest version fixes it.
-- The first time the new version opens, macOS asks once per saved machine whether CandyWrapper may use "T3 Code environment token" in your keychain. Click Always Allow. The new certificate has a different name, so macOS asks again for items the old app saved. Deny deletes nothing, it only leaves that machine disconnected until you allow it.
+The first time the new version opens, macOS asks once per saved machine whether CandyWrapper may use "T3 Code environment token" in the keychain. Click Always Allow. Deny deletes nothing, and it only leaves that machine disconnected until you allow it.
 
 ## Connecting
 
 If T3 Code's server already runs on your Mac, CandyWrapper uses it. If not, it starts one from your installed T3 runtime and stops it again when you're idle.
 
-To reach another machine, open Settings, then Connections, then Add environment, and paste its pairing link. Sign in to T3 Connect at the bottom of Settings to see the environments on your account.
+To reach another machine, open Settings, go to Connections, click Add environment and paste its pairing link. Sign in to T3 Connect at the bottom of Settings to see the environments on your account.
+
+## Redesign
+
+Redesign is CandyWrapper's own look. It's experimental and off by default, so the app normally looks like T3 Code Nightly. Turn it on in Settings > Redesign.
+
+It draws a picture behind the chat in dots. You can use your own picture, the desktop picture, a blurred version, or Flower. You pick the dot size, the ink colors and how much the background dims behind text.
+
+Flower is a dotted lotus over drifting accent dots. It blooms when a thread opens, and it stops animating when the window is in the background or Reduce Motion is on.
+
+![Redesign with the Flower background, a thread with a Python snippet](docs/readme/redesign-thread-dark.png)
 
 ## More screenshots
 
@@ -64,23 +77,27 @@ To reach another machine, open Settings, then Connections, then Add environment,
 
 ## The numbers
 
-I ran both apps one after the other on a Mac mini M4 on 2026-10-17, against the same T3 server data. The official app was 0.1.1-nightly.20261017.3234 and CandyWrapper was commit 1a844cb, version 1.5.0. Only each app's own processes count. Both use the same T3 server, so the server is left out.
+I ran both apps one after the other on 2026-11-25, on a Mac mini M2 Pro with 32 GB, macOS 27.2.1 and one 1080p display at 60 Hz, against copies of the same T3 server data with 50 threads. The official app was T3 Code Nightly 0.1.13-nightly.20261125.5258 and CandyWrapper was version 1.18.3, commit 3844946. I counted only each app's own processes and left out the 5258 server that both of them ran.
 
 | What I measured | T3 Code desktop | CandyWrapper | Difference |
 |---|---|---|---|
-| CPU while a turn streams | 15.4% | 0.92% | 16x less |
-| Energy Impact while a turn streams | 46.5 | 9.7 | 4x less |
-| Memory with a small thread open | 381 MB | 39.3 MB | 89% less |
-| Memory with a 2,000-message thread and 50 threads | 397 MB | 46 MB | 88% less |
-| CPU at idle | 2.23% | 0.00% | over 99% less |
-| CPU wakeups a second at idle | 73.1 | 0.05 | over 1,000x fewer |
-| Launch to a ready sidebar | 2.10 s | 0.23 s | 8x faster, see below |
-| Slow frames scrolling 2,000 messages | 0 of 724 | 11 of 1,426 | CandyWrapper is worse |
-| Keypress to letter on screen | 39.7 ms | 35.0 ms | 4.7 ms faster |
-| Download | 163.5 MB | 17.4 MB | 9x smaller |
-| App on disk | 370 MB | 30.7 MB | 12x smaller |
+| CPU while a turn streams | 18.5% | 2.10% | 8x less |
+| Energy Impact while a turn streams | 144.1 | 11.3 | 12x less |
+| Memory with a small thread open | 348 MB | 51.0 MB | 85% less |
+| Memory with a 2,000-message thread and 50 threads | 353 MB | 60.7 MB | 82% less |
+| CPU at idle | 2.34% | 0.01% | over 99% less |
+| CPU wakeups a second at idle | 71.4 | 0.41 | 174x fewer |
+| Launch to a ready sidebar | 1.20 s | 0.33 s | 3x faster, see below |
+| Slow frames scrolling 2,000 messages | 0 of 715 | 0 of 707 | the same |
+| Keypress to letter on screen | 45.0 ms | 49.9 ms | CandyWrapper is 4.9 ms slower |
+| Download | 246.0 MB | 23.7 MB | 10x smaller |
+| App on disk | 563 MB | 41.9 MB | 13x smaller |
 
-Both launch times are relaunches. The official app's time includes starting its own server, while CandyWrapper's server was already running. The first launch of a new CandyWrapper build took 0.71 s, and the official app's first launch on the copied data took 4.64 s while it upgraded the database. Every ratio is rounded down, and [docs/benchmarks.md](docs/benchmarks.md) has the method and the raw numbers.
+Both launch times are relaunches. The official app's time includes starting its own server, and CandyWrapper's server was already running. First launches took 3.84 s for the official app and 0.44 s for CandyWrapper.
+
+The keypress gap is under one 60 Hz frame. I think the composer's restyle on each keystroke sometimes misses a frame, and I haven't traced it yet.
+
+The streaming turns used Claude Haiku 5.5. Every ratio is rounded down, and [docs/benchmarks.md](docs/benchmarks.md) has the method and the raw numbers. Earlier versions of this README had numbers from a Mac mini M4, so don't compare them with these.
 
 ## Building it yourself
 
