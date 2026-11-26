@@ -29,6 +29,7 @@ public final class DiffPanelView: DSView {
             list.annotations = []; reviewDraft = nil; reviewStart = nil; reviewDraftAnchor = nil; editingReviewId = nil
             hasDiff = false; hideTestsToggle.isHidden = true; shownFull = nil
             hiddenTestsLabel.isHidden = true; showTestsButton.isHidden = true
+            if case .testsHidden = redesignState { redesignState = .none; syncRedesignState() }
             shownSection = nil
             gitSource = nil
             list.loadDiffFiles = nil
@@ -760,7 +761,7 @@ public final class DiffPanelView: DSView {
         showTestsButton.isHidden = !onlyHiddenTests
         message.isHidden = true
         errorLine.isHidden = true
-        redesignState = .none
+        redesignState = onlyHiddenTests ? .testsHidden(testCount) : .none
         syncRedesignState()
         // ponytail: a truncated source shows its partial patch; T3 loads each file's patch on demand
         // (useReviewFilePatches) when the server sends complete file stats. Port it if large branches bite.
@@ -834,10 +835,19 @@ public final class DiffPanelView: DSView {
     func syncRedesignState() {
         let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         let state = redesign ? redesignState : .none
-        if redesign, state != .none { message.isHidden = true; errorLine.isHidden = true }
+        if case .testsHidden = redesignState {
+            // T3's line and inline button in the default themes; Redesign's state view says it instead.
+            hiddenTestsLabel.isHidden = redesign
+            showTestsButton.isHidden = redesign
+        } else if redesign, state != .none { message.isHidden = true; errorLine.isHidden = true }
         else if !redesign, redesignState != .none { message.isHidden = false; errorLine.isHidden = errorLine.text.isEmpty }
         stateSkeleton.isHidden = state != .loading
         switch state {
+        case .testsHidden(let count):
+            stateView.redesign = StateCopy(title: "\(count) test \(count == 1 ? "file" : "files") hidden",
+                                           detail: "Only test files changed in this selection.", icon: .fileDiff)
+            stateView.action = StateAction("Show test files", icon: .eye) { [weak self] in self?.showTestsButton.action?() }
+            stateView.isHidden = false
         case .empty(let copy), .failed(let copy):
             stateView.redesign = copy
             stateView.action = state.isFailure ? StateAction("Retry", icon: .refreshCw) { [weak self] in self?.retry() } : nil
@@ -1123,6 +1133,8 @@ enum DiffPanelState: Equatable {
     case none, loading
     case empty(StateCopy)
     case failed(StateCopy)
+    /// Hiding test files left no file: Redesign says so with "Show test files" as its action.
+    case testsHidden(Int)
 
     var isFailure: Bool { if case .failed = self { return true }; return false }
 
