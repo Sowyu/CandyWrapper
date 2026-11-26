@@ -132,6 +132,7 @@ final class ProjectIconPickerBody: DSView {
         }
         search.setAccessibilityLabel("Search Lucide icons")
         search.onChange = { [weak self] _ in self?.rebuildGrid() }
+        search.escapeClears = true  // #41856
         lettersInput.text = letters
         lettersInput.onChange = { [weak self] text in self?.letters = text; self?.refresh() }
         pasteInput.setAccessibilityLabel("Custom emoji")

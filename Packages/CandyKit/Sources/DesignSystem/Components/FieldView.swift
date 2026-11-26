@@ -57,6 +57,15 @@ public class FieldView: DSView {
     public final var onStateChange: (@MainActor (State) -> Void)?
     /// Return in a single-line field, which then keeps focus. Without it Return ends editing.
     public final var onSubmit: (@MainActor () -> Void)?
+    /// A search or filter field: Esc clears its text first, and only the next Esc reaches the dialog or page around it
+    /// (5258 #41856, #42224 and the other 1.3 fixes).
+    public var escapeClears = false
+    /// `escapeClears` with text to clear: clears it, as typed input so `onChange` runs. True when it cleared.
+    public func clearOnEscape() -> Bool {
+        guard escapeClears, !editor.string.isEmpty, !editor.hasMarkedText() else { return false }
+        replaceText(in: NSRange(location: 0, length: (editor.string as NSString).length), with: "", caret: 0)
+        return true
+    }
     /// An input method is composing (`isComposing`): Enter belongs to it.
     public var hasMarkedText: Bool { editor.hasMarkedText() }
     /// The caret's UTF-16 offset, nil while a range is selected.
@@ -319,7 +328,8 @@ final class FieldEditor: NSTextView, NSTextViewDelegate {
     func textViewDidChangeSelection(_ notification: Notification) { field?.onSelectionChange?() }
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        field?.onCommand?(commandSelector) ?? false
+        if field?.onCommand?(commandSelector) == true { return true }
+        return commandSelector == #selector(NSResponder.cancelOperation(_:)) && field?.clearOnEscape() == true
     }
 
     /// Laid-out size of the text.

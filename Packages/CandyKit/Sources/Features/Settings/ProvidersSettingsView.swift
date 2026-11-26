@@ -1552,6 +1552,7 @@ final class ProviderModelsView: DSView, SettingsGroupRow {
         filter.setAccessibilityLabel("Filter models")
         filter.isHidden = models.count <= 8
         filter.onChange = { [weak self] _ in self?.rebuild(); self?.onHeightChange?() }
+        filter.escapeClears = true
         addSubview(filter)
         let builtIn = models.filter { !$0.isCustom }
         bulk.title = !builtIn.isEmpty && builtIn.allSatisfy { hidden.contains($0.slug) } ? "Enable all" : "Disable all"
