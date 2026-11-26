@@ -94,4 +94,26 @@ struct ThreadTriageOutboxTests {
         #expect(defaults.data(forKey: ThreadTriageOutbox.defaultsKey) == nil)
         #expect(ThreadTriageOutbox.load(defaults).entries.isEmpty)
     }
+
+    /// `cancelQueued` asks the server only while the shell is live (threadTriageOutbox.ts:279-301 at 5258). A socket that
+    /// reconnected but whose shell has not caught up is not live, so an undo there stays on this device.
+    @Test func theShellIsLiveOnlyOnceItCaughtUpOnThisConnection() {
+        var shell = ShellLiveness()
+        #expect(!shell.isLive(connectedGeneration: 1))
+        shell.subscribed(1)
+        #expect(!shell.isLive(connectedGeneration: 1))
+        shell.received(.threadUpdated(sequence: 4, location: nil, thread: Self.idle), waitsForCompletion: false)
+        #expect(shell.isLive(connectedGeneration: 1))
+        // Reconnected: the socket is up on generation 2, the shell has not resynced.
+        #expect(!shell.isLive(connectedGeneration: 2))
+        shell.subscribed(2)
+        #expect(!shell.isLive(connectedGeneration: 2))
+        // With a completion marker only `synchronized` makes it live; unknown items never do.
+        shell.received(.threadUpdated(sequence: 5, location: nil, thread: Self.idle), waitsForCompletion: true)
+        shell.received(.unknown(kind: "x", sequence: 6), waitsForCompletion: false)
+        #expect(!shell.isLive(connectedGeneration: 2))
+        shell.received(.synchronized, waitsForCompletion: true)
+        #expect(shell.isLive(connectedGeneration: 2))
+        #expect(!shell.isLive(connectedGeneration: nil))
+    }
 }

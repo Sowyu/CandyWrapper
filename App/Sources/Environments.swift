@@ -785,13 +785,20 @@ final class Environments {
         }
     }
 
-    /// Un-settle or Wake. A waiting change of that kind is removed first; offline that is the whole undo, and true
-    /// means nothing needs sending (`cancelQueued`, threadTriageOutbox.ts:248-298 at 5258).
+    /// Un-settle or Wake. A waiting change of that kind is removed first; while the shell is not live that is the whole
+    /// undo, and true means nothing needs sending (`cancelQueued`, threadTriageOutbox.ts:262-302 at 5258). A socket that
+    /// reconnected but whose shell has not caught up counts as not live, as in T3.
     func cancelWaitingTriage(_ threadId: ThreadId, type: String) -> Bool {
         guard let env = threadId.environmentId,
               triage.cancel(environmentId: env, threadId: threadId.localId.rawValue, type: type) else { return false }
         triageChanged(env)
-        return entries[env]?.state?.phase != .connected
+        return !shellIsLive(env)
+    }
+
+    /// `shellStatusAtom(environmentId) === "live"`: connected, and the shell caught up on this connection.
+    private func shellIsLive(_ env: String) -> Bool {
+        guard let state = entries[env]?.state, state.phase == .connected, let session = entries[env]?.session else { return false }
+        return session.liveness.isLive(connectedGeneration: state.generation)
     }
 
     /// The thread's waiting change, if any, is out of date once a newer decision reached the server.
