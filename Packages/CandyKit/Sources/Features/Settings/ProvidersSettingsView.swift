@@ -238,22 +238,24 @@ public enum ProvidersLogic {
                                  Field(key: "serverPassword", title: "Server password", detail: "Stored separately on the host.", placeholder: "Optional",
                                        secret: true, redacted: true)]
         case "antigravity":
-            // `visibleWhen` (#40494, settings.ts:888-947, ProviderSettingsForm.tsx:309-325): a field hides only while
-            // it is empty and the sign-in method, unset meaning its first option, does not use it.
-            let method = config?["authMethod"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? "oauth-personal"
-            let uses: [String: [String]] = ["apiKey": ["gemini-api-key", "agent-platform"],
-                                            "gcpProject": ["oauth-business", "agent-platform"], "gcpLocation": ["oauth-business", "agent-platform"]]
-            let configured = { (key: String) in
-                guard let value = config?[key] else { return false }
-                return value != .null && value.stringValue != ""
-            }
-            return [
+            let fields = [
             Field(key: "authMethod", title: "Sign-in method", detail: "Google account and Gemini Enterprise use your existing plan. Gemini API key and Agent Platform charge per use to your key or Google Cloud project.", placeholder: "", options: [("oauth-personal", "Google account"), ("oauth-business", "Gemini Enterprise"), ("gemini-api-key", "Gemini API key"), ("agent-platform", "Agent Platform (Vertex AI)")], defaultValue: "oauth-personal"),
             Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored separately on the host.", placeholder: "Optional", secret: true, redacted: true),
             Field(key: "gcpProject", title: "GCP project", detail: "Required for Gemini Enterprise. Agent Platform uses it when no API key is set.", placeholder: "my-project-id"),
             Field(key: "gcpLocation", title: "GCP location", detail: "Region for Gemini Enterprise or Agent Platform.", placeholder: "us-central1"),
             binary("Automatic", "Custom ACP executable. Leave empty to select automatically.")]
-                .filter { f in uses[f.key].map { $0.contains(method) || configured(f.key) } ?? true }
+            // `visibleWhen` (#40494, settings.ts:888-947, ProviderSettingsForm.tsx:309-325): a field hides only while
+            // it is empty and the sign-in method, unset meaning its first option, does not use it.
+            // Without a config every field is listed, as `deriveProviderSettingsFields` does without a value.
+            guard let config else { return fields }
+            let method = config["authMethod"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? "oauth-personal"
+            let uses: [String: [String]] = ["apiKey": ["gemini-api-key", "agent-platform"],
+                                            "gcpProject": ["oauth-business", "agent-platform"], "gcpLocation": ["oauth-business", "agent-platform"]]
+            let configured = { (key: String) in
+                guard let value = config[key] else { return false }
+                return value != .null && value.stringValue != ""
+            }
+            return fields.filter { f in uses[f.key].map { $0.contains(method) || configured(f.key) } ?? true }
         case "acpRegistry":
             let local = config?["source"]?.stringValue == "local"
             return [Field(key: "source", title: "ACP source", detail: "", placeholder: "", options: [("registry", "ACP Registry"), ("local", "Local command")], defaultValue: "registry"),
@@ -959,7 +961,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         // A server from before idle compaction modes reads no per-instance override and would keep compacting
         // after "Never" (settings.ts:1328-1375), so the row waits for one that does.
         let readsModes = context.configs[env.id].map { ServerSettingsValues($0.settings.raw).readsIdleCompactionModes } ?? false
-        var fields: [ProvidersLogic.Field] = managedCodex ? [] : ProvidersLogic.fields(row.driver, config: row.instance["config"])
+        var fields: [ProvidersLogic.Field] = managedCodex ? [] : ProvidersLogic.fields(row.driver, config: row.instance["config"] ?? .object([:]))
         fields.removeAll { $0.key == "idleCompaction" && !readsModes }
         if !DesignGeometry.usesClassic(self) {
             for i in fields.indices where fields[i].key == "idleCompaction" {
