@@ -1327,7 +1327,9 @@ final class Scratch<T>: @unchecked Sendable, RandomAccessCollection, MutableColl
             fatalError("LotusArt scratch: mmap of \(size) bytes failed")
         }
         buffer = UnsafeMutableBufferPointer(start: raw.bindMemory(to: T.self, capacity: count), count: count)
-        buffer.initialize(repeating: value)
+        // Fresh anonymous pages read as zero, so a plain value whose bytes are all zero is already there. Writing it
+        // again touched every page twice, about a sixth of a frame's render.
+        if !(_isPOD(T.self) && withUnsafeBytes(of: value, { $0.allSatisfy { $0 == 0 } })) { buffer.initialize(repeating: value) }
     }
 
     deinit { munmap(UnsafeMutableRawPointer(buffer.baseAddress), size) }
