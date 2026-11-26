@@ -53,6 +53,17 @@ struct McpSignInTests {
         #expect(condition())
     }
 
+    /// A notice expands only when its row cuts the text off (#40076): the line reports `scrollWidth > clientWidth`.
+    @Test func aLineKnowsWhenItsLabelIsCutOff() {
+        let line = WorkLineView(frame: NSRect(x: 0, y: 0, width: 600, height: 24))
+        line.configure(icon: .zap, text: "Short notice", style: .plain, time: nil, expanded: false, now: Date())
+        line.layoutSubtreeIfNeeded()
+        #expect(!line.labelCutOff)
+        line.configure(icon: .zap, text: String(repeating: "A notice that runs past the row ", count: 6), style: .plain, time: nil, expanded: false, now: Date())
+        line.layoutSubtreeIfNeeded()
+        #expect(line.labelCutOff)
+    }
+
     @Test func signInSitsAfterTheLabel() {
         let line = WorkLineView(frame: NSRect(x: 0, y: 0, width: 600, height: 24))
         line.configure(icon: .circleAlert, text: "linear needs you to sign in", style: .plain, time: nil, expanded: false, now: Date())

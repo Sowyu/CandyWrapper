@@ -193,6 +193,9 @@ final class WorkLineView: DSView {
         needsLayout = true
     }
 
+    /// The label's text runs past its frame (`scrollWidth > clientWidth`).
+    var labelCutOff: Bool { ceil(label.textWidth) + 1 > label.frame.width + 0.5 }
+
     /// nil hides it, false offers Sign in, true says Signed in.
     func setSignIn(_ state: Bool?, server: String, _ action: (@MainActor () -> Void)?) {
         if state == false, signIn == nil {
@@ -412,15 +415,26 @@ final class WorkRowView: WorkRowBase {
     }
 
     /// The row opens: an inspector to show, or a thought with text (`canExpandProjectedItem`, :5552-5561).
+    /// A system notice with a message: its details repeat the row, so it expands only when the row cuts its text
+    /// off, and it shows no timestamp, so hovering never moves Sign in (TimelineWorkEntryRow.tsx:311-324, 517-519,
+    /// 645-648 at 5258, #40076).
+    private func isNotice(_ i: Int) -> Bool {
+        guard let item = entries[i].entry.projectedItem?.item else { return false }
+        return item.type == .systemNotice && item.string("message") != nil
+    }
+    private var noticeCutOff: Set<Int> = []
+
     private func expandable(_ i: Int) -> Bool {
         let e = entries[i].entry
         if Self.failedError(e) != nil { return false }
+        if isNotice(i), !noticeCutOff.contains(i) { return false }
         return !entries[i].detail.isEmpty || (e.itemType == .reasoning && !(e.detail?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true))
     }
 
     override func configure(_ item: TimelineItem) {
         // The same row reconfigured in place: an entry's chevron turns instead of snapping.
         let sameRow = self.item?.id == item.id
+        if !sameRow { noticeCutOff = [] }
         super.configure(item)
         guard case .work(let grouped, let isGroup, let displayLabel) = item.row.kind else { return }
         isGroupBody = isGroup
@@ -500,8 +514,8 @@ final class WorkRowView: WorkRowBase {
                 model?.onMcpSignIn?(notice.threadId, providerThread, server)
             } })
             if pinnedTime.count <= i { pinnedTime.append(false) }
-            pinnedTime[i] = severe
-            l.showsTime = hoveredEntry == i || severe
+            pinnedTime[i] = severe && !isNotice(i)
+            l.showsTime = (hoveredEntry == i && !isNotice(i)) || pinnedTime[i]
             while details.count <= i {
                 let d = WorkDetailView()
                 addSubview(d)
@@ -574,7 +588,9 @@ final class WorkRowView: WorkRowBase {
         let entry = y.flatMap { y in spans.prefix(entries.count).firstIndex { $0.contains(y) } }
         guard entry != hoveredEntry else { return }
         hoveredEntry = entry
-        for (i, l) in lines.enumerated() { l.showsTime = i == entry || (i < pinnedTime.count && pinnedTime[i]) }
+        for (i, l) in lines.enumerated() {
+            l.showsTime = (i == entry && !(i < entries.count && isNotice(i))) || (i < pinnedTime.count && pinnedTime[i])
+        }
     }
 
     private var rowPad: CGFloat { isGroupBody ? 0 : 2 }
@@ -615,6 +631,15 @@ final class WorkRowView: WorkRowBase {
             }
             y += rowPad
             lines[i].frame = NSRect(x: 2, y: y, width: bounds.width - 4, height: 24)
+            if isNotice(i) {
+                lines[i].layoutSubtreeIfNeeded()
+                let cut = lines[i].labelCutOff
+                if cut != noticeCutOff.contains(i) {
+                    if cut { noticeCutOff.insert(i) } else { noticeCutOff.remove(i) }
+                    lines[i].expandable = expandable(i)
+                    lines[i].layoutSubtreeIfNeeded()
+                }
+            }
             y += 24
             if let f = failure(i) {
                 let fh = f.height(forWidth: bounds.width - 4)
