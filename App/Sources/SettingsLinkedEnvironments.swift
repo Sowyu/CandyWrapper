@@ -135,7 +135,8 @@ extension SettingsController {
     func forgetPeerLink(_ hostId: String, _ peerId: String) {
         guard case .links(let links)? = peerLinks[hostId], let link = links.first(where: { $0.environmentId == peerId }) else { return }
         let key = "\(hostId)/\(peerId)"
-        let message = "Forget \(link.label)? Agents here stop working there. Revoke \"T3 Code · …\" in \(link.label)'s Sharing & access to end the session there too."
+        // #41005 (LinkedEnvironmentsSettings.tsx:659-686): unlinking also ends the link's session there when it answers.
+        let message = "Forget \(link.label)? Agents here stop working there, and their session on \(link.label) ends too if it answers."
         let copy = ConfirmCopy.resolve(message)
         confirm(copy.title, copy.description ?? "") { [weak self] in
             guard let self else { return }
@@ -143,7 +144,11 @@ extension SettingsController {
             self.refreshPage()
             Task {
                 do {
-                    _ = try await self.environments.request(hostId, "peerLinks.unlink", .object(["environmentId": .string(peerId)]))
+                    let reply = try await self.environments.request(hostId, "peerLinks.unlink", .object(["environmentId": .string(peerId)]))
+                    if let result = try? reply.decode(as: PeerLinkRemoveResult.self), result.removed, result.endedThere != true {
+                        self.toast("\(link.label) did not answer",
+                                   "Revoke \"T3 Code · …\" in \(link.label)'s Sharing & access to end the session there too.", .warning)
+                    }
                 } catch {
                     self.toast("Could not forget the link", PeerLinkDialog.message(error, fallback: "Could not forget the link."), .error)
                 }
