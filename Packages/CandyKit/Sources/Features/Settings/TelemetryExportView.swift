@@ -40,6 +40,9 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
     private var drafts: [String: String] = [:]
     /// The latest check per field: the URL it checked and the result, nil while it runs.
     private var checks: [String: (url: String, result: OtlpEndpointCheckResult?)] = [:]
+    /// The attempt each field's latest check belongs to, so only that attempt's reply lands.
+    private var attempts: [String: Int] = [:]
+    private var checkAttempt = 0
     private var saving = false
     private var message: String?
     private var started = false
@@ -109,14 +112,17 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
     private func check(_ key: String, _ signal: String, _ url: String) {
         guard OtlpEndpointCheckResult.isHttpURL(url), canCheck, let request = context.request else { return }
         checks[key] = (url, nil)
+        checkAttempt += 1
+        attempts[key] = checkAttempt
+        let attempt = checkAttempt
         apply()
         let env = environmentId
         Task { @MainActor [weak self] in
             let result: OtlpEndpointCheckResult?
             do { result = OtlpEndpointCheckResult(json: try await request(env, "server.checkOtlpEndpoint", OtlpEndpointCheckResult.input(signal: signal, url: url))) }
             catch { result = nil }
-            // A newer check for the same field replaces this one.
-            guard let self, let current = self.checks[key], current.url == url, current.result == nil else { return }
+            // A newer check for the same field replaces this one, even for the same URL (#39067, TelemetryExportSettings.tsx:144-161).
+            guard let self, self.attempts[key] == attempt else { return }
             self.checks[key] = result.map { (url, $0) }
             self.apply()
         }
@@ -177,7 +183,8 @@ final class TelemetryExportView: DSView, SettingsGroupRow {
             f.dot.tone = switch st?.tone { case .checking?: .warning; case .success?: .success; case .failure?: .destructive; case .off?, nil: .off }
             f.showsStatus = canCheck || override != nil
             f.showsCheck = canCheck
-            f.test.isEnabled = canEdit && OtlpEndpointCheckResult.isHttpURL(url) && !(checks[s.key].map { $0.result == nil } ?? false)
+            // A corrected URL can be tested while a check of the old one runs (#39067, TelemetryExportSettings.tsx:262-267).
+            f.test.isEnabled = canEdit && OtlpEndpointCheckResult.isHttpURL(url) && !(checks[s.key].map { $0.url == url && $0.result == nil } ?? false)
             let r = running[s.key] ?? ""
             f.running = saved[s.key] != r || override?.variable != nil ? "Running: \(r.isEmpty ? "Disabled" : r)" : nil
             f.runningVariable = override?.variable
