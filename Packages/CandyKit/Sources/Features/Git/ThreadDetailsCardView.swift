@@ -482,6 +482,9 @@ public final class DiffTotalsView: DSView {
     private let minus = LabelView()
     public var insertions = 0 { didSet { update() } }
     public var deletions = 0 { didSet { update() } }
+    /// A zero count in the muted color, as the Changes row does; a repository row keeps both tones
+    /// (ThreadRepositorySections.tsx:131-136).
+    public var mutesZero = true { didSet { needsDisplay = true } }
     /// Moves the digits down by this much: mono digits ride high in their line, so Redesign's band nudges them onto the
     /// tab titles' midline.
     public var glyphOffset: CGFloat = 0 { didSet { needsLayout = true } }
@@ -524,8 +527,8 @@ public final class DiffTotalsView: DSView {
     public override func updateLayer() {
         updateMetrics()
         let classic = DesignGeometry.usesClassic(self)
-        plus.color = Themed.color(classic ? \.diffAddition : insertions == 0 ? \.mutedForeground : \.diffAdditionForeground)
-        minus.color = Themed.color(classic ? \.diffDeletion : deletions == 0 ? \.mutedForeground : \.diffDeletionForeground)
+        plus.color = Themed.color(classic ? \.diffAddition : insertions == 0 && mutesZero ? \.mutedForeground : \.diffAdditionForeground)
+        minus.color = Themed.color(classic ? \.diffDeletion : deletions == 0 && mutesZero ? \.mutedForeground : \.diffDeletionForeground)
     }
 }
 
@@ -1054,6 +1057,7 @@ final class RepositoryCountsView: DSView {
         totals.insertions = insertions ?? 0
         totals.deletions = deletions ?? 0
         totals.isHidden = insertions == nil
+        totals.mutesZero = false
         addSubview(number)
         addSubview(totals)
     }

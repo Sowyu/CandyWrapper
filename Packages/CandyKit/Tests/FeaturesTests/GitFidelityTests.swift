@@ -2,6 +2,7 @@ import AppKit
 import Testing
 import DesignSystem
 import T3Protocol
+import T3Store
 @testable import Features
 
 /// The branch toolbar under the draft composer, the thread details card, the git actions menu and the commit
@@ -47,6 +48,20 @@ struct GitFidelityTests {
             card.totals.deletions = Int(n["minus"]!)!
             // The 4928 card shows the working tree's base label (GitActionsControl.tsx:1143, #30085).
             card.changesBase = "Uncommitted"
+            card.layoutSubtreeIfNeeded()
+            return [card]
+        case "repositories":
+            // A plain folder that tracks repositories (5258 ThreadRepositorySections.tsx, #42919).
+            let card = ThreadDetailsCardView(frame: NSRect(origin: origin, size: size))
+            card.runContext.icons = [EnvironmentMachineIcon.definition("mac-mini"), IconName.folder.definition]
+            card.runContext.text = n["env"]!
+            card.isRepo = false
+            card.tracksFolders = true
+            func summary(_ branch: String, _ plus: Int, _ minus: Int) -> ThreadRepositories.Summary {
+                .init(branch: branch, isRepository: true, changedFiles: 1, insertions: plus, deletions: minus, pullRequestNumber: nil)
+            }
+            card.repositories = .init(visible: [.init(key: "/w/repo-a", name: "repo-a", summary: summary("main", 2, 0)),
+                                                .init(key: "/w/repo-b", name: "repo-b", summary: summary("feature/demo", 14, 3))])
             card.layoutSubtreeIfNeeded()
             return [card]
         case "menu":
