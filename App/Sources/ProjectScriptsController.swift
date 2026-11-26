@@ -76,19 +76,20 @@ final class ProjectScriptsController {
 
     /// `useT3ProjectFileState` (hooks/useT3ProjectFileScripts.ts:31-53): `t3.json` at the workspace root; a missing,
     /// truncated or invalid file offers nothing.
-    // ponytail: read once per workspace while it is open; T3's file query refreshes on its cache policy. Re-read on focus if edits to t3.json go unseen
-    private func loadProjectFile(_ env: String, cwd: String) {
+    /// `reread` reads the file again while the scripts read before stay offered (`onActionsMenuOpen`, 5258
+    /// ProjectScriptsControl.tsx and useT3ProjectFileScripts.ts, #42707).
+    private func loadProjectFile(_ env: String, cwd: String, reread: Bool = false) {
         let key = env + "\u{0}" + cwd
-        guard fileScripts?.key != key else { return }
+        guard reread || fileScripts?.key != key else { return }
         // A workspace read in the last 5 minutes isn't read again on a thread switch: T3's file query
         // atom stays cached that long after its last reader goes (client-runtime state/runtime.ts:543).
         let now = ContinuousClock.now
         recentFiles = recentFiles.filter { now - $0.value.at < Self.fileReuse }
-        if let hit = recentFiles[key] {
+        if !reread, let hit = recentFiles[key] {
             fileScripts = (key, hit.scripts)
             return
         }
-        fileScripts = (key, [])
+        if !reread || fileScripts?.key != key { fileScripts = (key, []) }
         fileTask?.cancel()
         fileTask = Task { [weak self] in
             guard let read = self?.readFile else { return }
@@ -98,7 +99,7 @@ final class ProjectScriptsController {
             guard !Task.isCancelled, let self, self.fileScripts?.key == key else { return }
             let scripts = reply.flatMap { $0.truncated ? nil : T3ProjectFile.parse($0.contents) }?.scripts ?? []
             self.recentFiles[key] = (ContinuousClock.now, scripts)
-            guard !scripts.isEmpty else { return }
+            guard !scripts.isEmpty || reread else { return }
             self.fileScripts = (key, scripts)
             self.refresh()
         }
@@ -132,6 +133,10 @@ final class ProjectScriptsController {
     }
 
     private func menuItems() -> [MenuItem] {
+        // The actions menu reads t3.json again each time it opens (#42707); what it finds shows on the next open.
+        if let threadId, let env = threadId.environmentId, let project = project(threadId) {
+            loadProjectFile(env, cwd: thread(threadId)?.worktreePath ?? project.workspaceRoot, reread: true)
+        }
         let context = KeybindingContext([:])
         var items = scripts.map { script -> MenuItem in
             var item = MenuItem(ProjectScripts.menuLabel(script), icon: ProjectScriptIcon.name(script.icon),
