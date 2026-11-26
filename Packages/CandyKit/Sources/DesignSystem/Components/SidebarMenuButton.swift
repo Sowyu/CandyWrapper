@@ -77,6 +77,12 @@ public final class SidebarMenuButtonView: ControlView {
         return size == .icon ? NSSize(width: 32, height: 32) : NSSize(width: NSView.noIntrinsicMetric, height: m.height)
     }
 
+    /// The width the icon and title need with the inline padding, for a row that hugs its button.
+    public var fittingWidth: CGFloat {
+        let m = size.metrics
+        return m.padding * 2 + (icon != nil || iconDefinition != nil ? 16 + 8 : 0) + ceil(label.textWidth)
+    }
+
     // MARK: Layout
 
     public override func layout() {

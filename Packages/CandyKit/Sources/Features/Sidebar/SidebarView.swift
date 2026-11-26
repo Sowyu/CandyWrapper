@@ -1283,6 +1283,10 @@ public final class SidebarContentView: DSView {
             let start = isOnUtilityPage ? 8 : fx
             let flex: CGFloat = 1 + (isOnUtilityPage ? 1 : 0) + (noticeInRow ? 1 : 0)
             pillRoom = max(32, (w - 8 - start - (flex - 1) * 4) / flex) + 4
+            // Redesign: Back keeps only its own width, so the capsule's status isn't cut to a word or two.
+            if capy, isOnUtilityPage, !noticeInRow {
+                pillRoom = max(32, w - 8 - 8 - backButton.fittingWidth - 4) + 4
+            }
         }
         let rowEnd = w - 8 - pillRoom
         // Back and the notice are both `flex-1 min-w-0`, so they split the row.
