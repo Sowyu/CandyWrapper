@@ -78,7 +78,10 @@ public final class RedesignSettingsView: SettingsPageBase {
         // Capy's layout (the user, 2026-11-21: "also make it a toggle").
         let inset = clientSwitch("redesign-inset-panel", "Show the thread as one rounded card inset from the window, with its title and controls in a row at its top. Off runs the thread to the window's edges under floating pills.",
                                  key: "redesignInsetPanel", reset: "inset panel", title: "Inset panel")
-        gated = [inset] + look + [stacked, account, rows]
+        // The user, 2026-11-26: the quiet Compact toggle by default, the old split button kept under Legacy.
+        let legacyCompact = clientSwitch("redesign-legacy-compact-send", "Brings back the wide Compact and send button, with a menu to send with full history, in place of the Compact toggle.",
+                                         key: "redesignLegacyCompactSend", reset: "compact and send button", title: "Compact and send button")
+        gated = [inset] + look + [stacked, account, rows, legacyCompact]
         binder.add { [weak self] in
             guard let self else { return }
             let off = library.isRedesignOn ? nil : Self.offReason
@@ -104,6 +107,7 @@ public final class RedesignSettingsView: SettingsPageBase {
             section("redesign-look", "Look", look + [transparency]),
             section("redesign-model-picker", "Model picker", [stacked, account]),
             section("redesign-sidebar", "Sidebar", [rows]),
+            section("redesign-legacy", "Legacy", [legacyCompact]),
         ]
         themeObserver = library.observe { [weak self] in self?.refresh() }
         binder.refresh()

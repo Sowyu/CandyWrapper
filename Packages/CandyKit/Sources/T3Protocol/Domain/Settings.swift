@@ -82,6 +82,7 @@ public struct ClientSettings: Equatable, Sendable {
         "redesignSidebarRows": SettingSpec(.literals(["two", "one"]), .string("two")),  // CandyWrapper only: Redesign's sidebar thread rows on two lines or one
         "redesignStackedPicker":SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's docked model picker as one column; off shows a details pane
         "redesignPickerAccount": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's account and limits card in the model picker
+        "redesignLegacyCompactSend": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign's old Compact and send split button in place of the Compact toggle
         "redesignPickerPaneWidth": SettingSpec(.nullableNumber(120...800), .null),  // CandyWrapper only: the width dragged on Redesign's model details pane; null is the default
         "appIcon": SettingSpec(.literals(["sticker", "pink", "grape", "mint", "lemon", "orange", "classic"]), .string("sticker")),  // CandyWrapper only: the Dock icon (AppIconChoice)
         "appIconAppearance": SettingSpec(.literals(["auto", "light", "dark"]), .string("auto")),  // CandyWrapper only: the Dock icon's light or dark variant (AppIconChoice)

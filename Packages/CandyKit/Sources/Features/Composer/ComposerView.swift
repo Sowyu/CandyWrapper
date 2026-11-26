@@ -316,9 +316,16 @@ public final class ComposerView: DSView {
     public let attach = ButtonView(nil, icon: .paperclip, variant: .ghost, size: .iconSm)
     let primary = ComposerPrimaryButton()
     let compactPill = ComposerCompactPill()
-    /// Dither: T3's first compact-before-send control (655dfbe8, ComposerPrimaryActions.tsx before 0647c481) instead
-    /// of the chip: a "Compact and send" button with a menu to send with full history.
+    /// Redesign with Settings > Redesign > Legacy > Compact and send button on: T3's first compact-before-send control
+    /// (655dfbe8, ComposerPrimaryActions.tsx before 0647c481) instead of the chip, a "Compact and send" button with a
+    /// menu to send with full history. Off, the default (the user, 2026-11-26), Redesign shows 5258's Compact toggle
+    /// beside the round send button like the default themes (ComposerPrimaryActions.tsx:385-399, 503-556).
     private let compactSend = MessageActionPill()
+    static var legacyCompactSend: Bool { legacyCompactSendOverride ?? ClientSettingsStore.shared.current.bool("redesignLegacyCompactSend") }
+    /// Tests set the switch per task, so suites running side by side don't share it.
+    @TaskLocal nonisolated static var legacyCompactSendOverride: Bool?
+    private var legacyCompactObserver: Int?
+    isolated deinit { legacyCompactObserver.map { ClientSettingsStore.shared.removeObserver($0) } }
     private let compactSendMenu = MessageActionPill().menuTrigger()
     let questionPill = MessageActionPill()
     /// "Previous" (`Button outline sm`), or the chevron (`outline icon-sm`) when compact.
@@ -439,6 +446,9 @@ public final class ComposerView: DSView {
         compactSend.action = { [weak self] in self?.sendCompacting(true) }
         compactSendMenu.action = { [weak self] in self?.showCompactSendMenu() }
         for v in [compactSend, compactSendMenu] { v.isHidden = true; addSubview(v) }
+        legacyCompactObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("redesignLegacyCompactSend") { self?.needsLayout = true }
+        }
         questionPill.action = { [weak self] in self?.onQuestionAdvance?() }
         previousCompact.iconSize = 14
         previousCompact.setAccessibilityLabel("Previous question")
@@ -1119,6 +1129,7 @@ public final class ComposerView: DSView {
             actionsLeft = primary.frame.minX
         }
         let splitCompact = showsCompactPill && primary.face == .send && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+            && Self.legacyCompactSend
         compactSend.isHidden = !splitCompact
         compactSendMenu.isHidden = !splitCompact
         if splitCompact {

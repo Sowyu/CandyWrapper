@@ -4,33 +4,32 @@ import DesignSystem
 import T3Protocol
 @testable import Features
 
-/// Dither shows T3's first compact-before-send control, a "Compact and send" button with a send-options menu, in
-/// place of the round send button and the Compact chip.
+/// Redesign shows the round send button with the Compact toggle. With Settings > Redesign > Legacy > Compact and send
+/// button on, it shows T3's first compact-before-send control instead: a "Compact and send" button with a
+/// send-options menu in place of the round send button and the toggle.
 @MainActor
 struct DitherCompactSendTests {
     /// It applies the global `ThemeRuntime` and restores it in `defer`; keep the body synchronous on
     /// the main actor so no other test runs while the Dither theme is on.
     @Test func ditherSplitsCompactAndSend() {
-        var input = ThemeRuntimeInput()
-        input.ditherDark = true
-        input.ditherLight = true
-        ThemeRuntime.apply(input)
-        defer { ThemeRuntime.apply(ThemeRuntimeInput()) }
-        let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 640, height: 150))
-        composer.text = "hello"
-        composer.compactBeforeSendTokens = 128_000
-        composer.layoutSubtreeIfNeeded()
-        let pills = composer.subviews.compactMap { $0 as? MessageActionPill }.filter { !$0.isHidden }
-        #expect(pills.contains { $0.title == "Compact and send" })
-        #expect(composer.compactPill.isHidden)
+        withLegacy {
+            let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 640, height: 150))
+            composer.text = "hello"
+            composer.compactBeforeSendTokens = 128_000
+            composer.layoutSubtreeIfNeeded()
+            let pills = composer.subviews.compactMap { $0 as? MessageActionPill }.filter { !$0.isHidden }
+            // Inside `withValue` the macros can't take a trailing-closure predicate, so the checks run first.
+            let split = pills.contains { $0.title == "Compact and send" }
+            #expect(split)
+            #expect(composer.compactPill.isHidden)
+        }
     }
 
     @Test func typingEnablesBothHalvesWithoutAnotherLayout() throws {
-        var input = ThemeRuntimeInput()
-        input.ditherDark = true
-        input.ditherLight = true
-        ThemeRuntime.apply(input)
-        defer { ThemeRuntime.apply(ThemeRuntimeInput()) }
+        try withLegacy { try typingEnablesBothHalves() }
+    }
+
+    private func typingEnablesBothHalves() throws {
         let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 640, height: 150))
         composer.compactBeforeSendTokens = 423_400
         composer.layoutSubtreeIfNeeded()
@@ -202,16 +201,54 @@ struct DitherCompactSendTests {
     }
 
     private func withComposer(_ body: (ComposerView, MessageActionPill, MessageActionPill) throws -> Void) throws {
+        try withLegacy {
+            let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 640, height: 150))
+            composer.compactBeforeSendTokens = 423_400
+            composer.layoutSubtreeIfNeeded()
+            let halves = composer.subviews.compactMap { $0 as? MessageActionPill }.filter { !$0.isHidden }
+            let sendHalf = halves.first { $0.title == "Compact and send" }, menuHalf = halves.first { $0.half == .trailing }
+            let send = try #require(sendHalf)
+            let menu = try #require(menuHalf)
+            try body(composer, send, menu)
+        }
+    }
+
+    /// Redesign with Settings > Redesign > Legacy > Compact and send button on, or `legacy` as given.
+    private func withLegacy(_ legacy: Bool = true, _ body: () throws -> Void) rethrows {
         var input = ThemeRuntimeInput()
         input.ditherDark = true; input.ditherLight = true
         ThemeRuntime.apply(input)
         defer { ThemeRuntime.apply(ThemeRuntimeInput()) }
-        let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 640, height: 150))
-        composer.compactBeforeSendTokens = 423_400
-        composer.layoutSubtreeIfNeeded()
-        let halves = composer.subviews.compactMap { $0 as? MessageActionPill }.filter { !$0.isHidden }
-        let send = try #require(halves.first { $0.title == "Compact and send" })
-        let menu = try #require(halves.first { $0.half == .trailing })
-        try body(composer, send, menu)
+        try ComposerView.$legacyCompactSendOverride.withValue(legacy) { try body() }
+    }
+
+    /// Off, the default, Redesign shows 5258's round send button with the Compact toggle; on brings the split back.
+    @Test func legacySwitchPicksTheControl() {
+        for legacy in [false, true] {
+            withLegacy(legacy) {
+                let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 640, height: 150))
+                composer.text = "hello"
+                composer.compactBeforeSendTokens = 412_000
+                composer.layoutSubtreeIfNeeded()
+                let split = composer.subviews.compactMap { $0 as? MessageActionPill }.filter { !$0.isHidden && $0.title == "Compact and send" }
+                #expect(split.isEmpty == !legacy)
+                #expect(composer.compactPill.isHidden == legacy)
+                #expect(composer.primary.isHidden == legacy)
+            }
+        }
+    }
+
+    @Test func compactToggleLabelFollowsTheState() {
+        withLegacy(false) {
+            let composer = ComposerView(frame: NSRect(x: 0, y: 0, width: 640, height: 150))
+            composer.text = "hello"
+            composer.compactBeforeSendTokens = 412_000
+            composer.layoutSubtreeIfNeeded()
+            #expect(composer.compactPill.label == "Compact 412k")
+            #expect(composer.primary.accessibilityLabel() == "Compact and send")
+            composer.keepFullHistory = true
+            composer.layoutSubtreeIfNeeded()
+            #expect(composer.compactPill.label == "Keep 412k")
+        }
     }
 }

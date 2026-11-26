@@ -48,7 +48,7 @@ struct RedesignBaselineTests {
                 try Self.compare(reference, ours, name: base)
             }
             let panelSize = NSSize(width: 844, height: 780)
-            for mode in ["empty", "typing", "queued", "queued-attachments", "approval", "question", "attachments"] {
+            for mode in ["empty", "typing", "queued", "queued-attachments", "approval", "question", "attachments", "compact", "compact-legacy"] {
                 let panel = ComposerFidelityTests.panel(width: 844, dark: dark)
                 panel.timeline.context.now = { Self.now }
                 if mode == "empty" {
@@ -107,7 +107,16 @@ struct RedesignBaselineTests {
                     let tiles = panel.composer.convert(panel.composer.imageShelf.frame, from: panel.composer.imageShelf.superview)
                     #expect(panel.composer.bounds.contains(tiles), "the tiles sit inside the composer card")
                 }
-                try capture("composer-" + mode, panel, panelSize)
+                if mode.hasPrefix("compact") {
+                    // A long thread's next send compacts first: the Compact toggle beside the round send button, or the
+                    // old split button with Settings > Redesign > Legacy on.
+                    panel.composer.text = "Continue with the refactor"
+                    panel.composer.compactBeforeSendTokens = 412_000
+                }
+                try ComposerView.$legacyCompactSendOverride.withValue(mode == "compact-legacy") {
+                    panel.needsLayout = true; panel.composer.needsLayout = true
+                    try capture("composer-" + mode, panel, panelSize)
+                }
                 if mode == "approval" { #expect(!panel.approvalPanel.isHidden) }
                 if mode == "question" { #expect(!panel.questionPanel.isHidden) }
                 if mode == "queued" { #expect(panel.queue.superview != nil && !panel.queue.isHidden) }
@@ -419,7 +428,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 160)
+        #expect(count == 164)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

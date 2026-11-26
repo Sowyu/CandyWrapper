@@ -12,6 +12,8 @@ final class ComposerCompactPill: ControlView {
     var keepFullHistory = false { didSet { if keepFullHistory != oldValue { restyle() } } }
 
     private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
+    /// What the toggle reads: "Compact 412k" or "Keep 412k".
+    var label: String { "\(word.text) \(count.text)" }
 
     static let height: CGFloat = 28
     private let icon = IconView(name: .minimize2, size: 14, strokeColor: Themed.color(\.warning))
@@ -87,6 +89,18 @@ final class ComposerCompactPill: ControlView {
             box.radius = 8; box.border = nil
             box.fill = hovered ? Themed.color(\.accent) : !keepFullHistory ? Themed.color(\.accent, 0.6) : nil
         }
+        let dark = effectiveAppearance.isDark
+        if ThemeRuntime.isDither(dark: dark) {
+            // Redesign: a quiet control. Pressed while the next send compacts, the hover fill otherwise; the word in
+            // the text color (a step down while keeping full history), the glyph and the count muted.
+            let on = !keepFullHistory
+            word.color = Themed.color(\.foreground, on || hovered ? 1 : RedesignTokens.Text.quiet)
+            count.color = Themed.color(\.mutedForeground)
+            icon.strokeColor = count.color
+            box = BoxStyle()
+            box.radius = RedesignTokens.Radius.control
+            box.fill = on ? RedesignTokens.State.fill(RedesignTokens.State.selected, dark: dark) : RedesignTokens.State.fill(state, dark: dark)
+        }
         decoration.boxStyle = box
         // Two lines (ComposerPrimaryActions.tsx:389-396).
         tip.text = keepFullHistory
@@ -100,6 +114,8 @@ final class ComposerCompactPill: ControlView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        // Redesign draws its own look, so a theme change restyles.
+        restyle()
         decoration.setNeedsDisplay()
     }
 
