@@ -69,8 +69,8 @@ public actor RPCConnection {
     /// close it can see would wedge every call and stream for good: a peer that half-closes in the
     /// middle of a frame, or a network that drops packets, leaves URLSession's `receive()` waiting
     /// forever. So while a unary call or a stream's first answer is outstanding, or the owner set
-    /// `watched` because a turn is running, `livenessInterval` without any inbound frame sends a
-    /// Ping, and three intervals without any frame (T3's 15 s) close the socket, which makes the
+    /// `watched` because a turn is running, `livenessInterval` without any inbound frame sends two
+    /// Pings (see `round`), and three intervals without any frame (T3's 15 s) close the socket, which makes the
     /// supervisor reconnect. A server busy for less than that never trips it. Nothing runs while
     /// nothing is owed or watched.
     private let livenessInterval: Duration
@@ -79,7 +79,15 @@ public actor RPCConnection {
     /// The last frame or frame part, or the open. Unlike `lastInbound`, a reply becoming owed doesn't move it.
     private var lastFrameAt: ContinuousClock.Instant
     private var watchdog: Task<Void, Never>?
-    private(set) var pingOutstanding = false
+    /// The watchdog's ordering check: the streams that existed when it pinged, and how many Pongs it still needs.
+    /// 5258 servers also write `{"_tag":"Pong"}` every 20 s on their own (apps/server/src/socketHeartbeat.ts:7-10,
+    /// ws.ts:3952), and a ping carries no id, so one Pong can't prove the server read the ping. The watchdog sends
+    /// two pings and takes the barrier only after two Pongs: one may be a heartbeat, the other answers its first ping.
+    // ponytail: assumes at most one heartbeat per round, which breaks only if the server takes 20 s to answer a
+    // ping; give pings an id if T3 ever adds one.
+    private struct PingRound { var streams: [RPCRequestID]; var pongsLeft: Int }
+    private var round: PingRound?
+    var pingOutstanding: Bool { round != nil }
     /// Set while the owner expects traffic, like a running turn. See `livenessInterval`.
     private var watched = false
     private var watchGeneration = 0
@@ -337,14 +345,12 @@ public actor RPCConnection {
         inboundFrames += 1
         lastInbound = clock.now()
         lastFrameAt = lastInbound
-        pingOutstanding = false
     }
 
     private func handle(_ messages: [RPCServerMessage]) {
         inboundFrames += 1
         lastInbound = clock.now()
         lastFrameAt = lastInbound
-        pingOutstanding = false
         defer { if watchdog != nil, !needsWatchdog { watchdog?.cancel(); watchdog = nil } }
         for message in messages {
             switch message {
@@ -372,10 +378,17 @@ public actor RPCConnection {
             case .clientProtocolError(let e):
                 failPending(.protocolError(e))
             case .pong:
-                // The server answered in order, so every stream subscribed before is being served.
-                // A quiet one (a terminal, a status feed) owes nothing more. One that owes a snapshot still
-                // waits for it (audit TR-2).
-                for state in streams.values where !state.snapshotFirst { state.answered = true }
+                // Any Pong, a heartbeat too, proves the socket is alive, which is all `ping(timeout:)` asks.
+                // Once the round has its Pongs the server answered in order, so every stream subscribed before
+                // the round is being served. A quiet one (a terminal, a status feed) owes nothing more. One that
+                // owes a snapshot still waits for it (audit TR-2).
+                if var r = round {
+                    r.pongsLeft -= 1
+                    round = r.pongsLeft > 0 ? r : nil
+                    if r.pongsLeft <= 0 {
+                        for id in r.streams { if let state = streams[id], !state.snapshotFirst { state.answered = true } }
+                    }
+                }
                 let waiters = pongWaiters.values
                 pongWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -395,7 +408,6 @@ public actor RPCConnection {
         guard watchdog == nil, closedWith == nil else { return }
         // The silence counts from when a reply became owed, not from the last frame of an idle hour.
         lastInbound = clock.now()
-        pingOutstanding = false
         let interval = livenessInterval
         let clock = clock
         watchdog = Task { [weak self] in
@@ -407,7 +419,7 @@ public actor RPCConnection {
     }
 
     /// One watchdog step; false ends the watchdog. Pings only after a quiet interval, so a socket
-    /// that keeps delivering frames costs nothing, and a slow call on a live socket costs one Ping
+    /// that keeps delivering frames costs nothing, and a slow call on a live socket costs two Pings
     /// per interval.
     private func livenessTick() -> Bool {
         guard closedWith == nil, needsWatchdog else { watchdog = nil; return false }
@@ -417,8 +429,10 @@ public actor RPCConnection {
             shutDown(.transport(.pingTimedOut))
             return false
         }
-        if quiet >= livenessInterval, !pingOutstanding {
-            pingOutstanding = true
+        if quiet >= livenessInterval, round == nil {
+            // Pings from `ping(timeout:)` already in flight answer ahead of this round's.
+            round = PingRound(streams: Array(streams.keys), pongsLeft: 2 + pongWaiters.count)
+            write(.ping)
             write(.ping)
         }
         return true

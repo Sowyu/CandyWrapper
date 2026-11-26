@@ -171,18 +171,23 @@ public enum KeepalivePolicy: Sendable, Equatable {
 /// durable subscriptions alive across sessions.
 ///
 /// Liveness: the T3 server never closes a quiet socket. Effect's RpcServer only answers Ping
-/// (RpcServer.ts:806) and never pings, apps/server/src/ws.ts sets no idle timeout, and Node's
-/// `ws` server has none by default. So a direct connection needs no keepalive traffic, and the
+/// (RpcServer.ts:806), apps/server/src/ws.ts sets no idle timeout, and Node's `ws` server has
+/// none by default. So a direct connection needs no keepalive traffic from the client, and the
 /// supervisor runs no timers while idle. A dead peer shows up through the events that cause
 /// one: NWPathMonitor path changes, system wake, app activation (each runs a `server.probe`
-/// with T3's timeouts), and the kernel failing the TCP socket. That keeps idle wakeups at zero.
-/// Effect's 5 s ping would cost 0.2 wakeups per second for nothing on a direct route.
+/// with T3's timeouts), and the kernel failing the TCP socket. Servers from Nightly 5258 on write
+/// `{"_tag":"Pong"}` every 20 s on every socket (apps/server/src/socketHeartbeat.ts:7-10,
+/// ws.ts:3952), which the client cannot turn off. Each one wakes only the socket read task, which
+/// decodes it and stamps the connection's last-frame time: no timer, no store, no view. So idle cost
+/// is zero on older servers and one socket read per 20 s on 5258. Effect's 5 s ping would cost
+/// 0.2 wakeups per second for nothing on a direct route.
 /// While the owner expects traffic (`setExpectingTraffic`, a running turn) and the app is
 /// active, the connection checks a quiet socket as T3 does, so a turn that stops streaming
 /// because the network died shows "reconnecting" within 15 to 20 s instead of looking live.
 /// Relay routes (T3 Connect via Cloudflare tunnels) can sit behind proxies that drop idle
 /// sockets after about 100 s, so pass `.ping(interval: .seconds(80))` there; it pings only
-/// while the app is active.
+/// while the app is active, and skips a ping when a frame arrived within the interval, so a
+/// 5258 server's heartbeat keeps the route open with no ping from the client.
 public actor ConnectionSupervisor {
     public struct Dependencies: Sendable {
         /// Opens one session: descriptor check, ticket, socket. One attempt, no retry.
@@ -826,6 +831,8 @@ public actor ConnectionSupervisor {
                 do {
                     // 10% tolerance lets the system coalesce this with other wakeups.
                     try await Task.sleep(for: interval, tolerance: interval / 10)
+                    // Any frame proves the socket and keeps the proxy's idle clock reset, as a Pong would.
+                    if await connection.quietFor < interval { continue }
                     try await connection.ping(timeout: interval)
                 } catch is CancellationError {
                     return

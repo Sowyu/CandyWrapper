@@ -264,8 +264,9 @@ struct RPCConnectionTests {
         })
     }
 
-    /// Delivers a Pong and waits until the connection has taken it.
+    /// Answers the watchdog's two pings and waits until the connection has taken both Pongs.
     func pong(_ c: RPCConnection, _ socket: FakeSocket) async {
+        socket.deliver(.pong)
         socket.deliver(.pong)
         #expect(await eventually { !(await c.pingOutstanding) })
     }
@@ -276,12 +277,12 @@ struct RPCConnectionTests {
         #expect(await eventually { socket.sent.count == 1 })
         // Nothing comes back: one quiet interval sends a Ping, three without any frame close.
         await tick(c, clock)
-        #expect(await eventually { pings(socket) == 1 })
+        #expect(await eventually { pings(socket) == 2 })
         await tick(c, clock)
         #expect(await !c.isClosed)
         await tick(c, clock)
         #expect(await c.isClosed)
-        #expect(pings(socket) == 1)
+        #expect(pings(socket) == 2)
         guard case .failure(let e as RPCClientError) = await call.result, e == .transport(.pingTimedOut) else {
             Issue.record("expected the call to fail with pingTimedOut"); return
         }
@@ -294,7 +295,7 @@ struct RPCConnectionTests {
         // Answer two pings, then the call.
         for n in 1...2 {
             await tick(c, clock)
-            #expect(await eventually { pings(socket) == n })
+            #expect(await eventually { pings(socket) == 2 * n })
             await pong(c, socket)
         }
         #expect(await !c.isClosed)
@@ -304,7 +305,7 @@ struct RPCConnectionTests {
         #expect(await !c.watchdogRunning)
         clock.advance(by: Self.interval * 10)
         #expect(clock.waiting == 0)
-        #expect(pings(socket) == 2)
+        #expect(pings(socket) == 4)
         #expect(await !c.isClosed)
     }
 
@@ -314,14 +315,14 @@ struct RPCConnectionTests {
         let consumer = Task { for try await _ in stream {} }
         #expect(await eventually { socket.sent.count == 1 })
         await tick(c, clock)
-        #expect(await eventually { pings(socket) == 1 })
+        #expect(await eventually { pings(socket) == 2 })
         // The Pong answers the subscription, so the watchdog stops with it.
         await pong(c, socket)
         #expect(await !c.watchdogRunning)
         #expect(await !c.isClosed)
         consumer.cancel()
         #expect(await eventually { socket.sent.last == .interrupt(.string("1")) })
-        #expect(pings(socket) == 1)
+        #expect(pings(socket) == 2)
     }
 
     /// Audit TR-2: a Pong doesn't answer a stream that owes its snapshot, so a host lost after it still closes.
@@ -331,7 +332,7 @@ struct RPCConnectionTests {
         let consumer = Task { for try await _ in stream {} }
         #expect(await eventually { socket.sent.count == 1 })
         await tick(c, clock)
-        #expect(await eventually { pings(socket) == 1 })
+        #expect(await eventually { pings(socket) == 2 })
         await pong(c, socket)
         #expect(await c.watchdogRunning)
         clock.advance(by: Self.interval * 4)
@@ -380,7 +381,7 @@ struct RPCConnectionTests {
         await c.setWatched(true)
         for n in 1...2 {
             await tick(c, clock)
-            #expect(await eventually { pings(socket) == n })
+            #expect(await eventually { pings(socket) == 2 * n })
             await pong(c, socket)
         }
         #expect(await !c.isClosed)
@@ -388,7 +389,7 @@ struct RPCConnectionTests {
         // The next tick sees nothing watched or owed and ends the watchdog without a Ping.
         await tick(c, clock)
         #expect(await !c.watchdogRunning)
-        #expect(pings(socket) == 2)
+        #expect(pings(socket) == 4)
     }
 
     @Test func aStaleWatchToggleChangesNothing() async throws {
@@ -403,10 +404,44 @@ struct RPCConnectionTests {
         let (c, socket, clock) = await makeWatchedConnection()
         await c.setWatched(true)
         await tick(c, clock)
-        #expect(await eventually { pings(socket) == 1 })
+        #expect(await eventually { pings(socket) == 2 })
         await tick(c, clock)
         await tick(c, clock)
         #expect(await c.isClosed)
         #expect(await c.waitUntilClosed() == .transport(.pingTimedOut))
+    }
+
+    /// B4: a 5258 server's 20 s heartbeat Pong (socketHeartbeat.ts:7-10) is not the answer to the watchdog's ping, so
+    /// it doesn't mark a quiet stream served, and a stream subscribed after the ping waits for a round of its own.
+    @Test func aHeartbeatPongIsNotTheAnswerToAPing() async throws {
+        let (c, socket, clock) = await makeWatchedConnection()
+        // With nothing owed a heartbeat changes nothing.
+        socket.deliver(.pong)
+        #expect(await eventually { await c.inboundFrames == 1 })
+        #expect(await !c.watchdogRunning)
+        #expect(await !c.pingOutstanding)
+        let stream = await c.stream("terminal.subscribe")
+        let consumer = Task { for try await _ in stream {} }
+        #expect(await eventually { socket.sent.count == 1 })
+        await tick(c, clock)
+        #expect(await eventually { pings(socket) == 2 })
+        // A heartbeat lands before the server read the pings: the round still owes one Pong.
+        socket.deliver(.pong)
+        #expect(await eventually { await c.inboundFrames == 2 })
+        #expect(await c.pingOutstanding)
+        #expect(await c.watchdogRunning)
+        let later = await c.stream("subscribeVcsStatus")
+        let laterConsumer = Task { for try await _ in later {} }
+        #expect(await eventually { socket.sent.count == 4 })
+        socket.deliver(.pong)
+        #expect(await eventually { await !c.pingOutstanding })
+        // The terminal is served; the later stream still owes its answer, so the watchdog keeps running.
+        #expect(await c.watchdogRunning)
+        await tick(c, clock)
+        #expect(await eventually { pings(socket) == 4 })
+        await pong(c, socket)
+        #expect(await !c.watchdogRunning)
+        consumer.cancel()
+        laterConsumer.cancel()
     }
 }

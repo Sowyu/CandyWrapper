@@ -80,9 +80,10 @@ struct TransportResponsivenessAuditTests {
         clock.advance(by: .seconds(5))
         #expect(await eventually(seconds: 3) { socket.sent.contains(.ping) })
         socket.deliver(.pong)
+        socket.deliver(.pong)
         // The host now disappears without a TCP close. Config never sent its snapshot,
         // so the watchdog keeps running and the virtual deadlines close the connection.
-        #expect(await eventually(seconds: 3) { socket.sent.filter { $0 == .ping }.count == 1 })
+        #expect(await eventually(seconds: 3) { socket.sent.filter { $0 == .ping }.count == 2 })
         #expect(await eventually(seconds: 3) { await !connection.pingOutstanding && clock.waiting == 1 })
         clock.advance(by: .seconds(60))
         #expect(await eventually(seconds: 3) { await connection.isClosed }, "A pending initial snapshot still needs loading recovery after Pong")
