@@ -68,6 +68,10 @@ enum MarkdownStyle {
     static var muted: NSColor { Themed.color(\.contrastMutedForeground) }
     /// T3's info blue; Redesign's accent, since a link is emphasis there and info is a status.
     static let link = Themed.color(redesign: \.primary, stock: \.infoForeground)
+    /// An unknown TeX command: Words' fixed `#c00` in T3's themes, Redesign's own destructive ink there.
+    static let mathError = NSColor(name: nil) { appearance in
+        ThemeRuntime.isDither(dark: appearance.isDark) ? Themed.color(\.destructive) : NSColor(cgColor: MathLayout.wordsError)!
+    }
 
     static func font(_ size: CGFloat, weight: NSFont.Weight = .regular, italic: Bool = false) -> NSFont {
         let font = DSFont.ui(size, weight: weight)
@@ -561,7 +565,7 @@ public final class MarkdownLayout: @unchecked Sendable {
         reusedTextBoxes = builder.boxes.hits
         rootBlocks = document.blocks
         rootEnds = builder.rootEnds
-        items = flow.items
+        items = MarkdownMathStyle.numberInlineScrolls(flow.items)
         controls = flow.controls
         for item in items {
             switch item {
@@ -911,7 +915,10 @@ private struct Builder {
         }
         let index = mathIndex
         mathIndex += 1
-        let (above, below) = MarkdownMathStyle.content(layout, parent: font, lineHeight: body.lineHeight)
+        // The SVG is `display:block; margin:1em auto` in its em (index.css:2352-2354), so no line box: the block is the
+        // formula's own box plus an em above and below.
+        let em = size * MathRenderer.scale
+        let above = em + layout.height, below = layout.depth + em
         let pad = MarkdownMathStyle.padX, padY = MarkdownMathStyle.padY
         // A `\tag` sits at the right edge; the formula stays centered, so the content reserves the tag's width on both sides.
         let tagRoom = layout.tag.map { $0.width + 0.5 * size * MathRenderer.scale } ?? 0

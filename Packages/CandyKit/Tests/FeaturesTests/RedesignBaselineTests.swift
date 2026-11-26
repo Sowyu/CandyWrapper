@@ -104,6 +104,13 @@ struct RedesignBaselineTests {
                 panel.layoutSubtreeIfNeeded(); panel.timeline.scroll(toFraction: fraction)
                 try capture("thread-" + name, panel, panelSize)
             }
+            // Math in Redesign's inks on its canvas: inline and display formulas, a matrix, cases and bad TeX in the error ink.
+            let math = MarkdownView(frame: .zero)
+            math.document = MarkdownDocument(parsing: ThreadPreview.mathReply, math: true)
+            let mathCanvas = MarkdownFidelityTests.Canvas(frame: .zero)
+            mathCanvas.addSubview(math)
+            math.frame = NSRect(x: 16, y: 16, width: 640, height: math.height(forWidth: 640))
+            try capture("markdown-math", mathCanvas, NSSize(width: 672, height: math.frame.height + 32))
             // The right panel card with its tab row beside the header pill, both under the window's tab band, as the app
             // lays them out: the pill in the band's strip, the thread below the band.
             let cardThread = ComposerFidelityTests.panel(width: 1200, dark: dark)
@@ -321,7 +328,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 134)
+        #expect(count == 136)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

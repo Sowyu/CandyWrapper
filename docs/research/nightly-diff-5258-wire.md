@@ -428,7 +428,7 @@ CandyWrapper's stream and event decoders stay tolerant in this range.
 | 6f49071a3d | #40745 | fix: a failed checkpoint capture keeps Edit from here for conversation rewind | read (subject and stat): rewind keeps Edit from here after a failed checkpoint capture; UI |
 | 11224f63d2 | #40703 | fix(client-runtime): a new thread's first message and a queued send-now or steer survive a dropped socket | cited |
 | 4ac5e6e791 | #40682 | fix(client-runtime): typing a bare Windows drive lists its folders | skimmed: server, CLI or desktop only |
-| 0fb6ac6e65 | #27866 | perf(web): Markdown renders with Words as static islands under one shared tooltip; remark leaves the web app | skimmed: presentation logic with no wire change; for the UI agent of that area |
+| 0fb6ac6e65 | #27866 | perf(web): Markdown renders with Words as static islands under one shared tooltip; remark leaves the web app | skimmed: no wire change; math now draws as SVG, ported in nightly-5258-fidelity.md "Math" |
 | c5fa33b27e | #40670 | fix(server,cursor): preserve inline handoff when a failed Cursor turn drops its prompt | cited |
 | 15d945faef | #40637 | fix(server): reveal no longer opens Explorer's default folder for a missing file | cited |
 | 5028eb10a4 | #40634 | perf(shared): Windows command lookups reuse PATH listings across requests | skimmed: server, CLI or desktop only |

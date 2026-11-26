@@ -819,7 +819,8 @@ extension MarkdownBlock {
         case .table(let t): return ([t.header] + t.rows).map { $0.map(runs).joined(separator: ", ") }.joined(separator: "\n")
         case .rule: return ""
         case .image(let alt, _): return alt.isEmpty ? "image" : alt
-        case .math(let math): return math.copySource
+        // 5258's formula is an SVG with role img labelled with its TeX (wordsHast.ts:873-892).
+        case .math(let math): return math.tex.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     }
 }
@@ -849,7 +850,7 @@ public struct MarkdownMath: Sendable, Equatable, Hashable {
 
     public init(tex: String, display: Bool) { self.tex = tex; self.display = display }
 
-    /// What copying the formula puts on the pasteboard, as T3's `data-markdown-copy` (MarkdownMath.tsx:15-16, 27).
+    /// What copying the formula puts on the pasteboard, as T3's `data-markdown-copy` (wordsHast.ts:873-892 at 5258).
     public var copySource: String {
         let t = tex.trimmingCharacters(in: .whitespacesAndNewlines)
         return display ? "\\[\n\(t)\n\\]" : "\\(\(t)\\)"

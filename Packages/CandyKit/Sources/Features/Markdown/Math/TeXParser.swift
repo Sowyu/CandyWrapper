@@ -44,6 +44,8 @@ indirect enum MathNode: Sendable {
     case tag(String)
     case phantom([MathNode], width: Bool, height: Bool)
     case boxed([MathNode])
+    /// A command Words doesn't know, drawn as its name in upright text in the error ink.
+    case unknown(String)
 }
 
 /// Parses the TeX subset that stage 1 typesets into `MathNode`s. Anything else throws, and the formula shows its source.
@@ -127,7 +129,8 @@ struct TeXParser {
             let t = peek
             if until.contains(t) { return out }
             switch t {
-            case .eof: throw Unsupported(reason: "unclosed group")
+            // Words' `$m.parseList` stops at the end of the source, so an unclosed group closes itself.
+            case .eof: return out
             case .end: throw Unsupported(reason: "unbalanced }")
             case .align, .command("\\"), .command("cr"):
                 throw Unsupported(reason: "& or \\\\ outside an environment")
@@ -206,7 +209,10 @@ struct TeXParser {
             let inner = try list(variant: variant, until: [.end])
             _ = next()
             return inner
-        case .eof, .end, .align, .sup, .sub:
+        case .eof, .end:
+            // Words' `$m.arg` reads an empty list there: `\frac{a}` has an empty denominator.
+            return []
+        case .align, .sup, .sub:
             throw Unsupported(reason: "missing argument")
         default:
             return try atom(variant: variant)
@@ -234,7 +240,7 @@ struct TeXParser {
         var out = "", level = 0
         while true {
             switch next() {
-            case .eof: throw Unsupported(reason: "unclosed text")
+            case .eof: return out
             case .begin: level += 1; out += "{"
             case .end:
                 if level == 0 { return out }
@@ -483,7 +489,8 @@ struct TeXParser {
         case "begin": return [try environment(variant: variant)]
         case "limits", "nolimits": throw Unsupported(reason: "\\\(name) after a non-operator")
         default:
-            throw Unsupported(reason: "\\\(name)")
+            // Words draws a command it doesn't know as its name in red (math.wat `$m.parseList`, `$m.outColor`).
+            return [.unknown("\\" + name)]
         }
     }
 
@@ -660,7 +667,7 @@ enum Symbols {
                    ("backslash", "\\"), ("surd", "\u{221A}"), ("flat", "\u{266D}"), ("natural", "\u{266E}"), ("sharp", "\u{266F}"),
                    ("clubsuit", "\u{2663}"), ("diamondsuit", "\u{2662}"), ("heartsuit", "\u{2661}"), ("spadesuit", "\u{2660}"),
                    ("S", "\u{A7}"), ("P", "\u{B6}"), ("checkmark", "\u{2713}"), ("degree", "\u{B0}"), ("vdots", "\u{22EE}"),
-                   ("#", "#"), ("$", "$"), ("%", "%"), ("&", "&"), ("_", "_"), ("vert", "|"), ("|", "\u{2225}"), ("Vert", "\u{2225}"),
+                   ("#", "#"), ("$", "$"), ("%", "%"), ("&", "&"), ("_", "_"), ("vert", "|"), ("|", "\u{2016}"), ("Vert", "\u{2016}"),
                    ("imath", "\u{1D6A4}"), ("jmath", "\u{1D6A5}"), ("circledR", "\u{AE}"), ("copyright", "\u{A9}"), ("dag", "\u{2020}"),
                    ("ddag", "\u{2021}"), ("mho", "\u{2127}"), ("eth", "\u{F0}"), ("complement", "\u{2201}"), ("blacksquare", "\u{25A0}"),
                    ("lozenge", "\u{25CA}"), ("star", "\u{22C6}")])

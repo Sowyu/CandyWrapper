@@ -1,9 +1,9 @@
 import AppKit
 import DesignSystem
 
-/// How T3 places a formula in a message (MarkdownMath.tsx:20-58, index.css `.chat-markdown-math-display`):
-/// an inline formula is an `inline-block align-middle` box with `px-0.5 py-0.75` around KaTeX's line box, and a display
-/// formula a centered block with the same padding, `my-[0.65rem]`, that scrolls sideways when wider than the column.
+/// How T3 places a formula in a message (wordsHast.ts:858-892 and index.css:2348-2355 at 5258): an inline formula is
+/// an `inline-block align-middle` box with `px-0.5 py-0.75` around its SVG, and a display formula a centered block with
+/// the same padding that scrolls sideways when wider than the column.
 enum MarkdownMathStyle {
     static let padX: CGFloat = 2
     static let padY: CGFloat = 3
@@ -12,6 +12,19 @@ enum MarkdownMathStyle {
 
     /// Display formulas scroll with ids past every code block's, sharing the code blocks' scroll state and bar.
     static func scrollID(_ index: Int) -> Int { 1_000_000 + index }
+    /// Inline formulas scroll with ids from here, numbered in item order once the layout is done (`numberInlineScrolls`).
+    static let inlineScrollBase = 2_000_000
+    static func isInlineScroll(_ id: Int) -> Bool { id >= inlineScrollBase }
+
+    /// Gives each inline formula's scroller its own id, counting from `inlineScrollBase` in item order.
+    static func numberInlineScrolls(_ items: [MarkdownLayout.Item]) -> [MarkdownLayout.Item] {
+        var next = inlineScrollBase
+        return items.map {
+            guard case .scroll(let id, let viewport, let width) = $0, isInlineScroll(id) else { return $0 }
+            defer { next += 1 }
+            return .scroll(codeIndex: next, viewport: viewport, contentWidth: width)
+        }
+    }
 
     /// The wrapper's line box: the message's own line (its font at its line height, as the block inherits
     /// `.chat-markdown`'s line-height), grown where the formula reaches past it. Measured on T3 3669: every small inline
@@ -36,16 +49,20 @@ enum MarkdownMathStyle {
         }
     }
 
-    /// Each formula's draw item. A formula wider than the column is clipped to its placeholder (`max-w-full overflow-x-auto`).
-    // ponytail: clipped, where T3 scrolls it sideways; give inline formulas scroll ids if long inline formulas show up
+    /// Each formula's draw item. A formula wider than the column scrolls sideways inside its placeholder
+    /// (`max-w-full overflow-x-auto`). T3 styles no scrollbar there, so macOS shows its overlay bar only while scrolling;
+    /// CandyWrapper draws none and reserves no lane.
     static func items(_ inline: MarkdownStyle.Inline, in textBox: MarkdownTextBox, parent: NSFont, color: NSColor) -> [MarkdownLayout.Item] {
         var out: [MarkdownLayout.Item] = []
         for f in inline.formulas {
             guard let span = textBox.spans(f.range).first else { continue }
             let e = Self.inline(f.layout, parent: parent, lineHeight: textBox.lineHeight)
-            let wide = f.layout.width + 2 * padX > span.x1 - span.x0 + 0.5
-            out.append(.math(f.layout, CGPoint(x: span.x0 + padX, y: span.baseline + e.baseline), color,
-                             clip: wide ? CGRect(x: span.x0, y: span.baseline - e.above, width: span.x1 - span.x0, height: e.above + e.below) : nil))
+            let contentWidth = f.layout.width + 2 * padX
+            let wide = contentWidth > span.x1 - span.x0 + 0.5
+            let item = MarkdownLayout.Item.math(f.layout, CGPoint(x: span.x0 + padX, y: span.baseline + e.baseline), color, clip: nil)
+            guard wide else { out.append(item); continue }
+            let viewport = CGRect(x: span.x0, y: span.baseline - e.above, width: span.x1 - span.x0, height: e.above + e.below)
+            out += [.scroll(codeIndex: inlineScrollBase, viewport: viewport, contentWidth: contentWidth), item, .endClip]
         }
         return out
     }

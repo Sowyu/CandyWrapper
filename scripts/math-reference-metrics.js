@@ -12,28 +12,14 @@
     return y;
   };
   const result = {scale, units:'CSS px', wrapper:{width:rect.width,height:rect.height}, capture:{x:clip.x,y:clip.y,width:clip.width,height:clip.height}, background:getComputedStyle(document.body).backgroundColor};
-  const html = wrapper.querySelector('.katex-html');
-  if (html) {
-    const y = baseline(html);
-    // Each top-level KaTeX base has a strut that encodes its TeX height and depth.
-    // Include the separate tag strut if a future corpus includes an equation tag.
-    const struts = [...html.querySelectorAll(':scope > .base > .strut, :scope > .tag > .strut')];
-    if (!struts.length) throw Error('Missing KaTeX struts');
-    const dimensions = struts.map(s => {
-      const css = getComputedStyle(s);
-      const depth = -(parseFloat(css.verticalAlign) || 0);
-      return {height:parseFloat(css.height)-depth,depth};
-    });
-    const bases = [...html.querySelectorAll(':scope > .base')].map(b => b.getBoundingClientRect());
-    const contentWidth = Math.max(...bases.map(b=>b.right))-Math.min(...bases.map(b=>b.left));
-    const fonts = [...document.fonts].filter(f => f.status === 'loaded' && f.family.startsWith('KaTeX_')).map(f => `${f.family}:${f.style}:${f.weight}`).sort();
-    if (!fonts.length) throw Error('KaTeX fonts did not load');
-    result.formula = {width:html.getBoundingClientRect().width, contentWidth, height:Math.max(...dimensions.map(d=>d.height)), depth:Math.max(...dimensions.map(d=>d.depth)), baselineY:y-clip.y, baselinePixelY:(y-clip.y)*scale};
-    if (!Object.values(result.formula).every(Number.isFinite)) throw Error('Invalid formula metrics');
-    result.loadedKatexFonts = fonts;
-  } else {
-    result.fallbackBaselineY = baseline(wrapper.querySelector('.whitespace-pre-wrap'))-clip.y;
-  }
+  const svg = wrapper.querySelector(':scope > svg');
+  if (!svg) throw Error('Missing formula SVG');
+  // Words' viewBox is in thousandths of the SVG's em, with y = 0 on the baseline.
+  const box = svg.getBoundingClientRect(), em = parseFloat(getComputedStyle(svg).fontSize), vb = svg.viewBox.baseVal;
+  const y = box.top - vb.y / 1000 * em;
+  result.formula = {width:box.width, height:-vb.y / 1000 * em, depth:(vb.height + vb.y) / 1000 * em, em, baselineY:y-clip.y, baselinePixelY:(y-clip.y)*scale};
+  if (!Object.values(result.formula).every(Number.isFinite)) throw Error('Invalid formula metrics');
+  if (!document.fonts.check(`${em}px "STIX Two Math"`)) throw Error('STIX Two Math is missing');
   const paragraph = root.querySelector('p');
   if (paragraph) {
     result.textBaselineY = baseline(paragraph)-clip.y;

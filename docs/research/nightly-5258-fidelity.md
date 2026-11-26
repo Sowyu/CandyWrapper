@@ -42,3 +42,38 @@ Every other PNG, including the ones recaptured from 5258 during the port, came o
 The 4% ceiling dates from the 3824 reference (`8de8b79e`), where the command fit on one line and the case measured 3.22%. At 4928 the command wraps to two lines of monospace text, which doubles the glyph edges that the two rasterizers draw differently.
 
 A 5258 recapture would not change this. For a command approval 5258 draws the same markup as 4928: `c4d0e05d96` (#42535) only adds the push hooks branch to `TimelinePendingApprovalRow.tsx`. The 5258 reference sandbox has no pending approval, because it expired when 5258 first started, so a recapture also needs a real turn. I made neither. Passing the case needs a decision from the user: a 5% ceiling for `approval`, or a shorter command in the fixture.
+
+## Math
+
+Written 2026-11-26 (task math-5258). #27866 (`0fb6ac6e65`) moved chat Markdown to Words, `@pierre/words` 0.2.2-t3.4 from T3's fork (`apps/web/deps/pierre-words-0.2.2-t3.4-7c04b7f1.tgz`, Apache 2.0). Words typesets TeX itself, in WebAssembly, and KaTeX is gone from chat. Only Mermaid labels still use KaTeX (`MermaidDiagram.tsx:47-67`), so `MermaidDiagrams.swift:269` stays as it is. `f9f34aab78` (#41361) only guards Words' start-up, and no later commit in the range touches math.
+
+What 5258 draws:
+
+- Each formula is an `<svg role="img" aria-label="<TeX>">` of `<text>` glyphs, `<rect>` rules and `<path>` shapes (`wordsHast.ts:323-369` keeps only those).
+- The font is the system's STIX Two Math (`font-family: 'STIX Two Math','Cambria Math','Latin Modern Math',math,serif`), at 1.21em (`index.css:2352-2354`). Letters are Unicode math italics, not KaTeX's Computer Modern.
+- Layout is Appendix G with STIX Two Math's MATH constants and its glyph metrics rounded to tens of units (Words' `src/math.wat`, `tables/math-metrics.txt`).
+- Display big operators are the text glyph scaled 1.3, integrals 1.8. Radicals are a stroked polyline, and tall parentheses, brackets, braces, bars and angles are Words' own paths.
+- Inline math is an `inline-block align-middle` span and display math a `block` span with `margin: 1em auto` on the SVG. Both scroll sideways with `max-w-full overflow-x-auto` (`wordsHast.ts:863-871`).
+- Copying is unchanged: `\(tex\)` and `\[\ntex\n\]\n\n` from `data-markdown-copy` (`wordsHast.ts:877-889`).
+- An unknown command draws in red (`#c00`), and an unclosed group closes itself. A formula Words can't lay out shows as code.
+
+CandyWrapper's port, in `Features/Markdown/Math`:
+
+1. `scripts/gen-math-spec` renders the corpus through that Words build, and the 156 math PNGs are recaptured from it.
+2. `MathFont` uses the system STIX Two Math, so the bundled Latin Modern Math (717 KB, GUST license) and its notice are gone.
+3. `MathTypesetter` follows Words for glyph metrics, script shifts, limits, big operators, radicals, `\left…\right` and delimiter shapes, and `\text` runs. `MathProbeTests.parity` with `CW_MATH_PARITY=1` compares every glyph and rule with Words' SVG. After the port, 36 of the 39 cases matched to within 0.005em, and all 39 after three fixes from `math.wat`. Grid rows take `$m.grid`'s struts (0.84em above, 0.36em below, no 1.2 stretch for `cases`), and a `\\[dim]` adds to the row's depth, never less than 0. A braced group, `\mathbb{R}` too, is a list in `$m.atomBox`, so its exponent hangs off the box. Glyph accents are the spacing forms from `math.txt` (ˆ U+02C6, not U+0302), centred box on box, and `\vec` is Words' stroked arrow. The probe pairs glyphs one by one, so for the cases where Words draws a word as one `<text>` (`lim`, `det`, `mod`, `\text`) it checks the box.
+4. Glyphs draw with Core Text and font smoothing on device rows at quarter-pixel x, as Skia draws Blink's SVG text.
+5. VoiceOver reads a display formula as its TeX, as T3's `aria-label` gives it.
+
+`MathFidelityTests` against the 5258 references: 33 of 152 cases over their ceilings with the 4928 port, 1 after this one. `10-inline-sum` light at 1x differed by 9.81% against 9.00%.
+
+Two causes, found by comparing the ink of each glyph column in the reference and the render:
+
+1. The references are clipped from the page at y values with a fraction (`15-energy` at 1416.640625), and the PNG starts at the nearest device row. Blink rounds each formula's baseline to a page device row, so a reference's baseline lands on row 27 or 28 depending on that fraction, while the test drew every formula at 27.5. `round(capture.y)` as the PNG's first row predicts the measured row of every inline case. The test now places the view at the capture's fraction of a device pixel (`metrics.json` has `capture.y`), and the formula snaps its baseline to a device row instead of half a point.
+2. Filled outlines carry 15 to 18% less ink than Chromium's glyphs at 1x. Skia draws SVG text through Core Text at the device size with font smoothing, so math does the same, with each glyph's y on a device row and its x on a quarter pixel.
+
+What didn't help: snapping the SVG box and scaling to its snapped size as `SVGRootPainter` does (mean 3.01%), Core Text without smoothing (no gain over outlines), subpixel quantizing by Core Text (3.08%), and smoothing off for light ink in dark mode (2.51%).
+
+The same comparison found display formulas drawn 1em high, as the block left out the SVG's `margin: 1em auto`. The loose ceilings hid it. After all three fixes the mean is 2.09% where it was 4.09%, `10-inline-sum` light at 1x is 1.02%, and no ceiling changed. Dark still differs more than light (7.11% for `10-inline-sum` at 1x): Core Text spreads light ink on dark more than Skia's mask does, and no Core Graphics setting closes that.
+
+An inline formula wider than the column scrolls sideways, as T3's `overflow-x-auto` wrapper does. T3 styles no scrollbar there, so macOS shows its overlay bar only during a scroll. CandyWrapper draws none and reserves no lane, so a resting formula costs nothing.

@@ -3,9 +3,9 @@ import Testing
 import DesignSystem
 @testable import Features
 
-/// Formulas in MarkdownView against T3's KaTeX 0.16.47 output with T3's stylesheet in Chromium, at 1x and 2x
-/// (spec from scripts/gen-math-spec, references in design/component-reference/math). The fonts differ (Latin Modern
-/// Math against KaTeX's Computer Modern), so the ceilings allow for glyph edges; boxes and positions must match.
+/// Formulas in MarkdownView against T3 5258's Words SVG with T3's stylesheet in Chromium, at 1x and 2x (spec from
+/// scripts/gen-math-spec, references in design/component-reference/math). Both draw STIX Two Math, so what differs is
+/// rasterizing; `MathProbeTests.parity` checks the positions to a thousandth of an em.
 /// Writes ref, ours and diff PNGs plus `Fidelity.root`/report-math.html.
 @MainActor @Suite(.fidelity)
 struct MathFidelityTests {
@@ -91,8 +91,7 @@ struct MathFidelityTests {
     static func markdown(_ c: [String: Any]) -> String? {
         let name = c["name"] as! String, tex = c["tex"] as! String
         if let p = paragraphs[name] { return p }
-        // The fallback is CandyWrapper's code style by the user's choice, not T3's plain text; MathFallbackTests covers it.
-        guard name != "39-fallback" else { return nil }
+        // 39-fallback (`\frac{a}{`) is a fraction with an empty denominator at 5258, which closes the group itself.
         return c["display"] as? Bool == true ? "$$\(tex)$$" : "$\(tex)$"
     }
 
@@ -101,6 +100,7 @@ struct MathFidelityTests {
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.repo.appendingPathComponent("design/component-reference/math.json"))) as! [String: Any]
         let dir = Fidelity.root.appendingPathComponent("math")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let metrics = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("metrics.json"))) as! [String: [String: Any]]
         var rows = "", cases: [(String, Double)] = []
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String
@@ -115,7 +115,12 @@ struct MathFidelityTests {
                     let height = view.height(forWidth: width)
                     let canvas = MarkdownFidelityTests.Canvas(frame: .zero)
                     canvas.addSubview(view)
-                    view.frame = NSRect(x: 8, y: 8, width: width, height: height)
+                    // Each reference is clipped from the page at its case's y, which has a fraction, and the PNG starts
+                    // at the nearest device row. Blink snaps the formula to the page's device rows, so the view sits at
+                    // the same fraction of a device pixel here.
+                    let cy = ((metrics[file]?["capture"] as? [String: Double])?["y"] ?? 0) * Double(scale)
+                    let phase = CGFloat(cy - cy.rounded()) / CGFloat(scale)
+                    view.frame = NSRect(x: 8, y: 8 + phase, width: width, height: height)
                     let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(ref.pixelsWide) / CGFloat(scale), height: CGFloat(ref.pixelsHigh) / CGFloat(scale)),
                                               scale: CGFloat(scale), dark: theme == "dark")
                     let (share, diff) = MarkdownFidelityTests.compare(ref, ours)
@@ -133,7 +138,7 @@ struct MathFidelityTests {
         }
         print(String(format: "FIDELITY Math: %d cases, mean differing %.2f%%", cases.count, cases.map(\.1).reduce(0, +) / Double(max(cases.count, 1)) * 100))
         let html = "<!doctype html><meta charset=utf-8><title>Math fidelity</title><style>body{font:13px -apple-system}td{vertical-align:top}</style>"
-            + "<p>KaTeX in Chromium, ours, diff.</p><table>\(rows)</table>"
+            + "<p>Words in Chromium, ours, diff.</p><table>\(rows)</table>"
         try html.write(to: Fidelity.root.appendingPathComponent("report-math.html"), atomically: true, encoding: .utf8)
         Self.ceilings.check("math", cases)
     }
