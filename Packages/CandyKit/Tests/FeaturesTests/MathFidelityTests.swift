@@ -91,8 +91,7 @@ struct MathFidelityTests {
     static func markdown(_ c: [String: Any]) -> String? {
         let name = c["name"] as! String, tex = c["tex"] as! String
         if let p = paragraphs[name] { return p }
-        // The fallback is CandyWrapper's code style by the user's choice, not T3's plain text; MathFallbackTests covers it.
-        guard name != "39-fallback" else { return nil }
+        // 39-fallback (`\frac{a}{`) is a fraction with an empty denominator at 5258, which closes the group itself.
         return c["display"] as? Bool == true ? "$$\(tex)$$" : "$\(tex)$"
     }
 

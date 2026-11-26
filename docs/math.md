@@ -29,7 +29,7 @@ Copying a selection puts each formula's TeX on the pasteboard as `\(…\)` or `\
 - Spacing commands and `\hspace` in em, ex, pt and mu, plus `\phantom` and `\boxed`.
 - `\color` and `\textcolor` with CSS names or hex, `\cancel`, `\bcancel` and `\xcancel`, `\xrightarrow` and its kin, `\hline` and `|` in `array`, and `\tag` in display math.
 
-A formula stage 1 can't typeset shows its TeX as inline code. That is the user's choice, and 5258's Words also shows a formula it can't lay out as code. Words draws an unknown command in red inside the formula, and closes an unclosed group itself, so `\frac{a}{` is a fraction with an empty denominator there and code here.
+A formula stage 1 can't typeset shows its TeX as inline code. That is the user's choice, and 5258's Words also shows a formula it can't lay out as code. Like Words, an unknown command draws as its name in upright text in red (`#c00` in T3's themes, Redesign's destructive ink in Redesign), and an unclosed group or a missing argument closes itself, so `\frac{a}{` is a fraction with an empty denominator. Words draws the unknown command gray (`#888`) while its block still streams. CandyWrapper always draws it red.
 
 ## Next
 

@@ -46,12 +46,25 @@ struct MathTypesetterTests {
     @Test func unsupportedFallsBack() {
         for tex in [
             "\\color{notacolor}{x}", "\\begin{matrix} a \\\\ \\hline b \\end{matrix}", "{x \\tag{1}}", "\\begin{array}{cx} a \\end{array}",
-            "\\href{a}{b}", "\\unknowncommand", "a \\\\ b", "{x", "x}", "\\left( x", "\\begin{foo} x \\end{foo}", "x^^2", "x__2", "a & b",
-            "\\frac{a}{", "\\sqrt[", "\\begin{matrix} a", "\\text{unclosed", "\\not\\alpha", "", "   ",
+            "a \\\\ b", "x}", "\\left( x", "\\begin{foo} x \\end{foo}", "x^^2", "x__2", "a & b", "\\not\\alpha", "", "   ",
         ] {
             #expect(MathRenderer.layout(tex, display: false, textSize: 14) == nil, "\(tex)")
             #expect(MathRenderer.layout(tex, display: true, textSize: 14) == nil, "\(tex)")
         }
+    }
+
+    /// Words draws an unknown command's name in red and closes what the source leaves open (math.wat `$m.parseList`,
+    /// `$m.arg`), so these typeset.
+    @Test func badTeXDrawsAsWordsDoes() throws {
+        for tex in ["\\unknowncommand", "\\href{a}{b}", "\\frac{a}{", "{x", "\\text{unclosed", "\\sqrt["] {
+            #expect(MathRenderer.layout(tex, display: false, textSize: 14) != nil, "\(tex)")
+        }
+        let unknown = try #require(MathRenderer.layout("x + \\foo", display: false, textSize: 14))
+        #expect(unknown.glyphs.filter(\.error).count == 4)
+        #expect(unknown.glyphs.filter { !$0.error }.count == 2)
+        // `\frac{a}{`: a fraction with an empty denominator, as in the 39-fallback reference.
+        let frac = try #require(MathRenderer.layout("\\frac{a}{", display: false, textSize: 14))
+        #expect(frac.glyphs.count == 1 && frac.rules.count == 1)
     }
 
     /// KaTeX takes `\tag` only in display math, at the top level.
@@ -99,10 +112,10 @@ struct MathTypesetterTests {
     }
 
     @Test func inlineFallbackIsCode() {
-        let unsupported = Self.inline("see $\\foo{x}$ here")
+        let unsupported = Self.inline("see $x^^2$ here")
         #expect(unsupported.formulas.isEmpty)
         let text = unsupported.string.string as NSString
-        #expect(unsupported.code.map { text.substring(with: $0) } == ["\\(\\foo{x}\\)"])
+        #expect(unsupported.code.map { text.substring(with: $0) } == ["\\(x^^2\\)"])
 
         let supported = Self.inline("see $x^2$ here")
         #expect(supported.formulas.count == 1)
@@ -117,10 +130,10 @@ struct MathTypesetterTests {
     }
 
     @Test func displayFallbackIsCode() {
-        let fallback = MarkdownLayout(document: MarkdownDocument(parsing: "$$\\foo{x}$$", math: true), width: 480)
+        let fallback = MarkdownLayout(document: MarkdownDocument(parsing: "$$x^^2$$", math: true), width: 480)
         #expect(Self.mathItems(fallback) == 0)
         let texts = fallback.items.compactMap { if case .text(let box, _) = $0 { box.text } else { nil } }
-        #expect(texts.contains { $0.contains("\\[") && $0.contains("\\foo{x}") })
+        #expect(texts.contains { $0.contains("\\[") && $0.contains("x^^2") })
 
         let display = MarkdownLayout(document: MarkdownDocument(parsing: "$$x^2$$", math: true), width: 480)
         #expect(Self.mathItems(display) == 1)

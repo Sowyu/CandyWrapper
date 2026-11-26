@@ -78,6 +78,4 @@ The same comparison found display formulas drawn 1em high, as the block left out
 
 Left:
 
-- An unknown command shows the formula as code, where Words draws the command in red.
-- `\frac{a}{` shows as code, where Words draws a fraction with an empty denominator.
 - An inline formula wider than the column is clipped, where T3 scrolls it.

@@ -68,6 +68,10 @@ enum MarkdownStyle {
     static var muted: NSColor { Themed.color(\.contrastMutedForeground) }
     /// T3's info blue; Redesign's accent, since a link is emphasis there and info is a status.
     static let link = Themed.color(redesign: \.primary, stock: \.infoForeground)
+    /// An unknown TeX command: Words' fixed `#c00` in T3's themes, Redesign's own destructive ink there.
+    static let mathError = NSColor(name: nil) { appearance in
+        ThemeRuntime.isDither(dark: appearance.isDark) ? Themed.color(\.destructive) : NSColor(cgColor: MathLayout.wordsError)!
+    }
 
     static func font(_ size: CGFloat, weight: NSFont.Weight = .regular, italic: Bool = false) -> NSFont {
         let font = DSFont.ui(size, weight: weight)

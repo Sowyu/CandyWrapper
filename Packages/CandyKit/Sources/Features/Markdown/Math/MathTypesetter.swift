@@ -4,7 +4,8 @@ import CoreText
 /// A typeset formula: glyphs, rules and strokes around a baseline at the origin, y up. Width, height above the baseline
 /// and depth below it follow KaTeX's box model. Parts with no color of their own take the text color.
 final class MathLayout: @unchecked Sendable {
-    struct Glyph { let glyph: CGGlyph; let size: CGFloat; let position: CGPoint; var color: CGColor? = nil }
+    /// `error`: part of a command Words doesn't know, drawn in the error ink over any `\color`.
+    struct Glyph { let glyph: CGGlyph; let size: CGFloat; let position: CGPoint; var color: CGColor? = nil; var error = false }
     /// A drawn shape: Words draws radicals and grown delimiters as paths. `stroke` nil fills it.
     struct Shape { let path: CGPath; var stroke: CGFloat? = nil; var color: CGColor? = nil }
     let width: CGFloat
@@ -37,7 +38,10 @@ final class MathLayout: @unchecked Sendable {
     /// Draws with the baseline's left end at `origin`, in a flipped (y down) context. Blink puts the formula's baseline on a
     /// device row and Skia draws each glyph on a device row at a quarter-pixel x, so both snap here; rules and shapes move
     /// with the baseline.
-    func draw(in ctx: CGContext, at origin: CGPoint, color: CGColor) {
+    /// Words' fill for an unknown command (`#c00`, math.wat `$m.outColor`), the same in light and dark.
+    static let wordsError = CGColor(srgbRed: 0.8, green: 0, blue: 0, alpha: 1)
+
+    func draw(in ctx: CGContext, at origin: CGPoint, color: CGColor, error: CGColor = MathLayout.wordsError) {
         guard let font = MathFont.shared else { return }
         let origin = Self.snapped(origin, in: ctx)
         ctx.saveGState()
@@ -59,7 +63,7 @@ final class MathLayout: @unchecked Sendable {
         ctx.textMatrix = .identity
         for g in glyphs {
             var glyph = g.glyph
-            ctx.setFillColor(g.color ?? color)
+            ctx.setFillColor(g.error ? error : g.color ?? color)
             CTFontDrawGlyphs(font.font(size: g.size), &glyph, [Self.snapped(g.position, in: ctx, quarterX: true)], 1, ctx)
         }
         ctx.restoreGState()
@@ -101,7 +105,7 @@ struct MathBox {
     var glyph: CGGlyph?
 
     mutating func add(_ b: MathBox, x: CGFloat, y: CGFloat) {
-        glyphs += b.glyphs.map { .init(glyph: $0.glyph, size: $0.size, position: CGPoint(x: $0.position.x + x, y: $0.position.y + y), color: $0.color) }
+        glyphs += b.glyphs.map { .init(glyph: $0.glyph, size: $0.size, position: CGPoint(x: $0.position.x + x, y: $0.position.y + y), color: $0.color, error: $0.error) }
         ruleColors += Array(repeating: nil, count: max(0, rules.count - ruleColors.count))
         ruleColors += (0..<b.rules.count).map { $0 < b.ruleColors.count ? b.ruleColors[$0] : nil }
         rules += b.rules.map { $0.offsetBy(dx: x, dy: y) }
@@ -319,6 +323,10 @@ struct MathTypesetter {
             return (cls, try stack(list(base, style), over: over, under: under, brace: brace, style))
         case .text(let s, let variant):
             return (.ord, try text(s, variant, style))
+        case .unknown(let name):
+            var box = try text(name, .roman, style)
+            box.glyphs = box.glyphs.map { var g = $0; g.error = true; return g }
+            return (.ord, box)
         case .array(let rows, let columns, let kind, let gaps, let hlines):
             return (.ord, try array(rows, columns: columns, kind: kind, gaps: gaps, hlines: hlines, style))
         case .phantom(let body, let w, let h):
