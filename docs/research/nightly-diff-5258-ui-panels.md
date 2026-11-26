@@ -374,7 +374,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 000ba180be | #41025 | fix(web): keep the conversation when a pairing tab closes | connections | left (linked thread view, thread port; CW has no pairing tab in the right panel) |
 | 009ae578d0 | #42727 | fix(web): long thread titles no longer break dropped thread attachment names | shell | port (10.6) † |
 | 01794015f8 | #40998 | fix(web): prioritize visible saved notebook outputs | files | n/a (QuickLook previews, diff read 2026-11-25) |
-| 02c5270a11 | #39328 | fix(web): keep SSH connection checks pending until they finish | connections | ported (next commit): a check keeps every member host pending |
+| 02c5270a11 | #39328 | fix(web): keep SSH connection checks pending until they finish | connections | ported 5690b1b6: a check keeps every member host pending |
 | 036751b6f5 | #41856 | fix(web): Esc in project icon search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 0591d32888 | #39179 | feat(issues): connect more than one Linear account | issues | ported 31648718 |
 | 0702c6fdca | #39856 | fix(web): Open on GitHub in a thread's PR panel honors 'Open links in' | pull requests | ported 7835705c |
@@ -507,7 +507,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 803f21f6a5 | #39213 | test: pull request Code tab keeps a hidden test file open through collapse all | pull requests | n/a (test only) † |
 | 80cf4f7945 | #39260 | fix(web): the terminal button reopens the drawer after its last terminal closed | terminal | already (closing the last terminal resets the drawer; no server listing to go stale), test in 47d4ad86 |
 | 8238dc2652 | #39648 | fix(web,mobile): make comment and review author lines headings | pull requests | port (2.6) † |
-| 830c11ccc2 | #41686 | fix(web): Esc while adding or editing a custom model no longer closes Settings | settings | ported (next commit) for the add row; CW has no custom model edit form |
+| 830c11ccc2 | #41686 | fix(web): Esc while adding or editing a custom model no longer closes Settings | settings | ported 66bacda5 for the add row; CW has no custom model edit form |
 | 83990ad9a2 | #42272 | fix(server): notebook attachments show a progress bar's last frame | files | n/a (QuickLook previews) † |
 | 849d19447f | #42129 | fix(web): Esc clears the Voice model search without closing Settings | settings | n/a (CW's Voice page is a notice) |
 | 86272b11f0 | #42419 | fix(web): keybindings search ignores modified Esc and keeps focus on a held Esc | settings | ported in part: a held Esc never closes Settings (AppRouteModalView.swift:84); a modified Esc still clears the search (S) |
@@ -516,7 +516,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 898c22f990 | #39639 | fix(scheduled-tasks): clearing a task's thread no longer keeps the old one | scheduled tasks | n/a (wire B1) † |
 | 8b70e73371 | #42215 | fix(web): an unfinished PR inline comment survives a refresh that changes the diff | pull requests | ported da18c3b2 (the draft drop) and 9e30cb36 |
 | 8b8ec75b01 | #41937 | fix(web): copied startup error details no longer end in a broken character | shell | n/a (web boot error) † |
-| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | logic ported affd5423, dialog in the next commit |
+| 8e8ff9b243 | #39426 | feat: link several environments at once | connections | logic ported affd5423, dialog 534c313c |
 | 8ee2a8a9a0 | #40437 | fix(web): RTF previews no longer join text across section and column breaks | files | n/a (QuickLook previews) † |
 | 8f34bb193a | #42470 | fix(web): ArrowUp in a menu search field moves to the last item | shell | already (MenuView move(-1) with nothing highlighted takes the last item), diff read 2026-11-25 |
 | 8f5fd287a4 | #42837 | fix(web,mobile): Usage says "1 session", not "1 sessions" | usage | ported 8f1d707d |
@@ -536,7 +536,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 9a87dbb99a | #41194 | fix(web): chat file tooltips open beside the link instead of sliding in from the corner | files | port (3.4) † |
 | 9b8ab94b24 | #41603 | fix(i18n): hyphenate German compounds built on multi-word terms | other | n/a (translation strings) † |
 | 9c8f6427ab | #42276 | fix(web): a cached image no longer flashes at full size in the file preview | files | port (3.5) † |
-| 9ca304dabe | #42449 | fix(web): Enter connects in the text generator wizard | connections | ported (next commit): Enter in the wizard fields connects |
+| 9ca304dabe | #42449 | fix(web): Enter connects in the text generator wizard | connections | ported 5690b1b6: Enter in the wizard fields connects |
 | 9d0dd0f9c6 | #41790 | fix(web): Esc while resizing a spreadsheet column or row cancels without closing the sheet | files | n/a (QuickLook previews) † |
 | 9d3195b49d | #42000 | fix(web): IME keys no longer cancel or send a diff comment | pull requests | port (1.3) † |
 | 9d78db0af8 | #39937 | fix(web): pull requests linked from an issue open beside it on the Issues page | pull requests | port (2.6) † |
@@ -569,7 +569,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | b4345bf904 | #41702 | fix(web): terminal copy shortcuts no longer type escape codes when nothing is selected | terminal | already (SwiftTerm disables Copy without a selection and drops Cmd keys), diff read 2026-11-25 |
 | b479ce21ed | #21667 | fix(client-runtime): stop sessions on incompatible server configuration | other | n/a (server only, wire) † |
 | b4a5a4927f | #42915 | fix(web): reading position survives a panel resize right after a thread opens | shell | port (thread note 1.10) † |
-| b51399fb38 | #42093 | fix(web): a held Esc or a search of spaces no longer closes Settings | settings | ported (next commit): spaces clear first; held Esc already ignored |
+| b51399fb38 | #42093 | fix(web): a held Esc or a search of spaces no longer closes Settings | settings | ported 66bacda5: spaces clear first; held Esc already ignored |
 | b5481adcd8 | #32841 | fix(web,mobile): scheduled tasks from Settings start from the project's default branch | scheduled tasks | ported 54702697 |
 | b568fcbaa6 | #40023 | feat(issues): a project can list issues from several Linear teams | issues | ported 31648718 |
 | b61af8a5d2 | #42863 | fix(web,mobile): mixed add/delete review selections no longer show backwards line ranges | pull requests | ported c3aa76c5 |
@@ -582,7 +582,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | bd3e495b5f | #42442 | fix(web): mod+f opens find in read-only source previews | files | port (3.3) † |
 | c14e9f9717 | #42810 | fix(server): preserve split terminal control sequences across scrollback clears | terminal | n/a (server only) † |
 | c198f73b37 | #40776 | fix(web): a click outside the project action editor no longer discards the draft | settings | ported 5dc3ddd9 |
-| c39c21f870 | #42361 | fix(web): Esc in a font family field closes Settings when no edit is pending | settings | ported (next commit): Esc discards a typed family, else closes Settings |
+| c39c21f870 | #42361 | fix(web): Esc in a font family field closes Settings when no edit is pending | settings | ported 66bacda5: Esc discards a typed family, else closes Settings |
 | c43e073123 | #39319 | fix(web): Arrow and page keys scroll the pull request pane after a click or when it opens | pull requests | port (2.6) † |
 | c478fde9fe | #42791 | fix(web): bad workflow pane links no longer pick the first tab or crash | workflows | port (8.6): CW has no run pane yet † |
 | c5dc20f9f5 | #37191 | fix(client): new threads from a grouped repository start in its root checkout | shell | ported 0e916fe4 |
