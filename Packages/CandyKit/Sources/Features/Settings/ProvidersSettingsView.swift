@@ -232,12 +232,23 @@ public enum ProvidersLogic {
                                        placeholder: "http://127.0.0.1:4096"),
                                  Field(key: "serverPassword", title: "Server password", detail: "Stored separately on the host.", placeholder: "Optional",
                                        secret: true, redacted: true)]
-        case "antigravity": return [
-            Field(key: "authMethod", title: "Sign-in method", detail: "Google accounts use your subscription; API keys and Agent Platform bill usage.", placeholder: "", options: [("oauth-personal", "Google account"), ("oauth-business", "Gemini Enterprise"), ("gemini-api-key", "Gemini API key"), ("agent-platform", "Agent Platform (Vertex AI)")], defaultValue: "oauth-personal"),
+        case "antigravity":
+            // `visibleWhen` (#40494, settings.ts:888-947, ProviderSettingsForm.tsx:309-325): a field hides only while
+            // it is empty and the sign-in method, unset meaning its first option, does not use it.
+            let method = config?["authMethod"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 } ?? "oauth-personal"
+            let uses: [String: [String]] = ["apiKey": ["gemini-api-key", "agent-platform"],
+                                            "gcpProject": ["oauth-business", "agent-platform"], "gcpLocation": ["oauth-business", "agent-platform"]]
+            let configured = { (key: String) in
+                guard let value = config?[key] else { return false }
+                return value != .null && value.stringValue != ""
+            }
+            return [
+            Field(key: "authMethod", title: "Sign-in method", detail: "Google account and Gemini Enterprise use your existing plan. Gemini API key and Agent Platform charge per use to your key or Google Cloud project.", placeholder: "", options: [("oauth-personal", "Google account"), ("oauth-business", "Gemini Enterprise"), ("gemini-api-key", "Gemini API key"), ("agent-platform", "Agent Platform (Vertex AI)")], defaultValue: "oauth-personal"),
             Field(key: "apiKey", title: "API key", detail: "Gemini or Vertex AI express key. Stored separately on the host.", placeholder: "Optional", secret: true, redacted: true),
             Field(key: "gcpProject", title: "GCP project", detail: "Required for Gemini Enterprise. Agent Platform uses it when no API key is set.", placeholder: "my-project-id"),
             Field(key: "gcpLocation", title: "GCP location", detail: "Region for Gemini Enterprise or Agent Platform.", placeholder: "us-central1"),
             binary("Automatic", "Custom ACP executable. Leave empty to select automatically.")]
+                .filter { f in uses[f.key].map { $0.contains(method) || configured(f.key) } ?? true }
         case "acpRegistry":
             let local = config?["source"]?.stringValue == "local"
             return [Field(key: "source", title: "ACP source", detail: "", placeholder: "", options: [("registry", "ACP Registry"), ("local", "Local command")], defaultValue: "registry"),

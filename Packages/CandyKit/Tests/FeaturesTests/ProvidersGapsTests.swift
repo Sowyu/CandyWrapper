@@ -43,6 +43,16 @@ struct ProvidersGapsTests {
         #expect(ProvidersLogic.statusKey(p) == "warning")
     }
 
+    /// #40494: Antigravity lists only the fields its sign-in method uses, plus any field that still holds a value.
+    @Test func antigravityFieldsFollowTheSignInMethod() {
+        let keys = { (config: JSONValue?) in ProvidersLogic.fields("antigravity", config: config).map(\.key) }
+        #expect(keys(.object([:])) == ["authMethod", "binaryPath"])
+        #expect(keys(.object(["authMethod": .string("gemini-api-key")])) == ["authMethod", "apiKey", "binaryPath"])
+        #expect(keys(.object(["authMethod": .string("agent-platform")])) == ["authMethod", "apiKey", "gcpProject", "gcpLocation", "binaryPath"])
+        #expect(keys(.object(["authMethod": .string("oauth-business")])) == ["authMethod", "gcpProject", "gcpLocation", "binaryPath"])
+        #expect(keys(.object(["gcpLocation": .string("eu")])) == ["authMethod", "gcpLocation", "binaryPath"])
+    }
+
     @Test func viewportMathFollowsT3() {
         // `resolveResponsiveBrowserViewportSize` for an 800 by 600 panel: minus the rails and the toolbar.
         #expect(BrowserViewport.toggleOn(defaultViewport: BrowserViewport.fill, panel: CGSize(width: 800, height: 600), zoom: 1)
