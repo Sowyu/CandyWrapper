@@ -878,6 +878,18 @@ public enum SidebarModel {
         return relative.isEmpty ? canonical : "\(canonical)::\(relative)"
     }
 
+    /// `isRepositoryRootProject` (projectGrouping.ts at 5258): the workspace root is its repository's top level.
+    public static func isRepositoryRootProject(_ project: ProjectShell) -> Bool {
+        guard let root = project.repositoryIdentity?.rootPath?.trimmingCharacters(in: .whitespacesAndNewlines), !root.isEmpty else { return false }
+        let path = normalizeProjectPath(project.workspaceRoot), base = normalizeProjectPath(root)
+        return !path.isEmpty && path == base
+    }
+
+    /// `selectGroupDefaultProject`: a group's default checkout for new threads, its repository root, else its first member.
+    public static func selectGroupDefaultProject(_ projects: [ProjectShell]) -> ProjectShell? {
+        projects.first(where: isRepositoryRootProject) ?? projects.first
+    }
+
     /// Port of `deriveProjectGroupLabel` (client-runtime projectGrouping.ts:201-248 at 4928).
     public static func deriveProjectGroupLabel(groupKey: String, representative: ProjectShell, members: [ProjectShell]) -> String {
         func unique(_ values: [String?]) -> [String] {
@@ -967,7 +979,11 @@ public enum SidebarModel {
         }
         return groupOrder.map { key in
             let group = members[key]!
-            let representative = preferredEnvironmentId.flatMap { env in group.first { $0.id.environmentId == env } } ?? group[0]
+            // The repository root checkout represents the group, so a new thread from it starts there (#37191,
+            // projectGrouping.ts `selectGroupDefaultProject` at 5258). A root elsewhere is not worth leaving the
+            // current environment for.
+            let representative = preferredEnvironmentId.flatMap { env in selectGroupDefaultProject(group.filter { $0.id.environmentId == env }) }
+                ?? selectGroupDefaultProject(group)!
             return ProjectGroup(
                 key: key,
                 label: group.count > 1
