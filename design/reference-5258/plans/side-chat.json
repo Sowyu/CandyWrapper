@@ -1,0 +1,55 @@
+{
+ "base": "http://127.0.0.1:47398",
+ "width": 1100,
+ "height": 780,
+ "scale": 2,
+ "themes": [
+  "dark",
+  "light"
+ ],
+ "states": [
+  {
+   "name": "62-side-chat-panel",
+   "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/66f82559-8a0b-4b6e-ae38-a2c7adaaf684",
+   "actions": [
+    {
+     "js": "['t3code:diff-panel-state:v1','t3code:right-panel-state:v2','t3code:terminal-state:v1','t3code:composer-drafts:v1'].forEach(k=>localStorage.removeItem(k))",
+     "log": false
+    },
+    {
+     "path": "/51525408-a5b5-4053-aa88-c35b6354f8b8/66f82559-8a0b-4b6e-ae38-a2c7adaaf684"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "key": "Escape"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "js": "(()=>{const r=[];const s=document.querySelector('[data-slot=sidebar][data-side=left]');if(s&&s.dataset.state==='collapsed'){document.querySelector('[data-sidebar=trigger]')?.click();r.push('sidebar')}const d=document.querySelector('[aria-label=\"Toggle thread details panel\"][data-popup-open]');if(d){d.click();r.push('details')}return r.join(',')})()",
+     "log": true
+    },
+    {
+     "wait": 1300
+    },
+    {
+     "key": "b",
+     "meta": true,
+     "alt": true
+    },
+    {
+     "wait": 1200
+    },
+    {
+     "click": "text=Side chat"
+    },
+    {
+     "wait": 1500
+    }
+   ]
+  }
+ ]
+}

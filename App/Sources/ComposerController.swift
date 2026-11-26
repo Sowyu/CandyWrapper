@@ -4028,17 +4028,23 @@ extension ComposerController {
     private var menuThreads: [ComposerMenus.ThreadCandidate] {
         guard let env = targetEnvironmentId else { return [] }
         let linked = composerLinkedNames
+        // composerThreadItems.ts:49-54 at 5258 (#38323): this thread's own side chats, once they have a message, since
+        // closing an unused one deletes it.
+        let parent: String? = if case .thread(let id) = target { id.localId.rawValue } else { nil }
+        func ownSideChat(_ t: ThreadShell, owner: String) -> Bool {
+            t.lineage.sideChat == true && owner == env && parent != nil && t.lineage.parentThreadId?.rawValue == parent && t.latestUserMessageAt != nil
+        }
         var candidates = (sidebar?.snapshot?.threads ?? []).compactMap { t -> ComposerMenus.ThreadCandidate? in
             guard let owner = t.id.environmentId, owner == env || linked[owner] != nil else { return nil }
             return .init(id: t.id.rawValue, title: t.title, updatedAt: t.updatedAt.raw, archived: t.archivedAt != nil,
-                         machine: owner == env ? nil : linked[owner], isSubagent: !t.lineage.isListed)
+                         machine: owner == env ? nil : linked[owner], isSubagent: !t.lineage.isListed, isOwnSideChat: ownSideChat(t, owner: owner))
         }
         let known = Set(candidates.map(\.id))
         if let matches = menuState.threadMatches, matches.environment == env {
             candidates += matches.threads.filter { !known.contains($0.thread.id.scoped(to: $0.environmentId).rawValue) }.map { m in
                 .init(id: m.thread.id.scoped(to: m.environmentId).rawValue, title: m.thread.title, updatedAt: m.thread.updatedAt.raw,
                       archived: m.thread.archivedAt != nil, machine: m.environmentId == env ? nil : linked[m.environmentId],
-                      isSubagent: !m.thread.lineage.isListed)
+                      isSubagent: !m.thread.lineage.isListed, isOwnSideChat: ownSideChat(m.thread, owner: m.environmentId))
             }
         }
         return candidates
@@ -4947,6 +4953,29 @@ extension ComposerController {
         composer.insertAtCaret(references.joined(separator: " ") + " ")
         composer.focus()
         return true
+    }
+
+    /// A side chat's "Add to chat" (SideThreadPane.tsx:99-108 at 5258, #38323): the side chat's thread record joins
+    /// this thread's draft, its reference appended to the end of the prompt (`addThreadContexts` with
+    /// `insertAtCaret: false`, composerDraftStore.ts:4216-4256; `inlineContextReferenceReplacement`,
+    /// composerContextReferences.ts:44-57). Nothing moves the caret or the focus.
+    func addSideChatContext(_ id: ThreadId, title: String) {
+        guard case .thread(let parent) = target, let env = parent.environmentId, id.environmentId == env else { return }
+        let local = id.localId.rawValue
+        let record = ComposerContext.threadRecord(threadId: local, title: title, environmentId: env)
+        // The composer shows the draft unless a queued edit or an open question holds it; then only the saved draft changes.
+        let showsDraft = queuedEdit == nil && questionRequestId == nil
+        if showsDraft { flushPrompt() }
+        let text = prompts[parent.rawValue] ?? ""
+        guard let contextId = record["contextId"]?.stringValue, !ComposerContext.referencedIds(text).contains(contextId) else { return }
+        menuState.records[contextId] = record
+        let lead = text.last.map { !$0.isWhitespace } ?? false ? " " : ""
+        prompts[parent.rawValue] = text + lead + ComposerContext.reference(ComposerContext.threadReference(threadId: local, title: title)) + " "
+        if showsDraft {
+            composer.text = prompts[parent.rawValue] ?? ""
+            pickers.prompt = composer.text
+        }
+        scheduleSave()
     }
 
     /// "Add to chat" from a terminal (`addTerminalContext`, ChatComposer.tsx:6502-6533): a new

@@ -46,7 +46,6 @@ final class SideChatController {
         /// The side chat's composer chords and F6, run while focus is in its pane.
         let shortcuts = Shortcuts()
         var projection: ThreadProjection?
-        var bringingBack = false
         var deleting = false
         init(id: ThreadId) {
             self.id = id
@@ -211,7 +210,7 @@ final class SideChatController {
         s.pane.content = s.chat
         s.pane.onClose = { [weak self] in self?.panel.mutatePanel { $0.close("side-chat:" + local.rawValue) } }
         s.pane.onDelete = { [weak self] in self?.confirmDelete(id) }
-        s.pane.onBringBack = { [weak self] in self?.bringBack(id) }
+        s.pane.onAddToChat = { [weak self] in self?.addToChat(id) }
         let chatComposer = ComposerController(panel: s.chat, sidebar: sidebar, environments: environments, embeddedIn: composer)
         s.composer = chatComposer
         chatComposer.showThread(id)
@@ -240,7 +239,7 @@ final class SideChatController {
         syncPane()
     }
 
-    /// The pane's header and model controls from the side chat's and its parent's shells (SideChatPane.tsx:61-68).
+    /// The pane's header and model controls from the side chat's and its parent's shells (SideThreadPane.tsx:99 at 5258).
     private func syncPane() {
         guard let s = shown, let env = s.id.environmentId else { return }
         let sideChat = shell(s.id)
@@ -249,32 +248,16 @@ final class SideChatController {
         // and the parent's title, which opens nothing since the parent is the view around it.
         s.contextDivider.parentTitle = parent?.title ?? "Parent thread"
         let canOperate = environments.canOperate(env)
-        let mergeRun = s.projection.flatMap(ThreadRelationships.latestMergeBackRun)
-        let parentActive = parent.map { [.preparing, .queued, .starting, .running, .waiting].contains($0.activityRunStatus ?? $0.status) } ?? false
-        let blocked: String? = !canOperate ? "This connection cannot change threads."
-            : parentActive ? "Available when the main thread is idle."
-            : mergeRun == nil ? "Available after a finished reply." : nil
-        s.pane.apply(.init(title: sideChat?.title, bringBackBlockedReason: blocked, bringingBack: s.bringingBack,
+        s.pane.apply(.init(title: sideChat?.title, canAddToChat: sideChat?.latestUserMessageAt != nil,
                            canDelete: canOperate && sideChat != nil, deleting: s.deleting,
                            deleted: sideChat == nil && sidebar?.snapshot != nil))
     }
 
-    /// `bringBack` (SideChatPane.tsx:70-92): `thread.merge_back` of the latest finished run into the parent.
-    private func bringBack(_ id: ThreadId) {
-        guard let s = shown, s.id == id, !s.bringingBack, let parent = parentId(),
-              let run = s.projection.flatMap(ThreadRelationships.latestMergeBackRun)?.id else { return }
-        s.bringingBack = true
-        syncPane()
-        Task { [weak self] in
-            do {
-                _ = try await self?.environments.dispatch(parent, ThreadRelationshipCommands.mergeBack(source: id.localId, target: parent.localId, runId: run))
-                self?.toast("Brought back", message: "The main thread gets this side chat with your next message there.", kind: .success)
-            } catch {
-                self?.toast("Could not bring back the side chat", error)
-            }
-            s.bringingBack = false
-            self?.syncPane()
-        }
+    /// `addToChat` (SideThreadPane.tsx:99-108 at 5258, #38323): the side chat as a thread reference in the main thread's
+    /// draft. It replaced Bring back's `thread.merge_back`.
+    private func addToChat(_ id: ThreadId) {
+        guard let s = shown, s.id == id, let sideChat = shell(id), sideChat.latestUserMessageAt != nil else { return }
+        composer?.addSideChatContext(id, title: sideChat.title)
     }
 
     /// `deleteSideChat` (SideChatPane.tsx:94-129): confirms when `confirmThreadDelete` is on, deletes, closes the tab.

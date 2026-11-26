@@ -6,7 +6,7 @@ import T3Store
 @testable import Features
 
 /// The side chat tab and its pane's header against T3's 4928 full-window capture of a side chat before its first
-/// question (design/reference-4928/62-side-chat-panel, SideChatPane.tsx:131-171, RightPanelTabs.tsx:738-760). The body
+/// question (design/reference-5258/62-side-chat-panel, SideChatPane.tsx:131-171, RightPanelTabs.tsx:738-760). The body
 /// below the header is the embedded thread panel, covered by the thread's own suites. Coordinates are CSS points.
 @MainActor @Suite(.fidelity)
 struct SideChatFidelityTests {
@@ -37,14 +37,14 @@ struct SideChatFidelityTests {
         var cases: [(String, Double)] = []
         for theme in ["light", "dark"] {
             let rect = crop.rect
-            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("design/reference-4928/62-side-chat-panel.\(theme).png"))))
+            let full = try #require(NSBitmapImageRep(data: Data(contentsOf: SidebarFidelityTests.repo.appendingPathComponent("design/reference-5258/62-side-chat-panel.\(theme).png"))))
             let ref = NSBitmapImageRep(cgImage: full.cgImage!.cropping(to: CGRect(x: rect.minX * 2, y: rect.minY * 2, width: rect.width * 2, height: rect.height * 2))!)
             let canvas = SidebarSearchFidelityTests.Canvas(frame: NSRect(origin: .zero, size: rect.size))
             // The whole panel, 484 wide from the window's right edge, placed so the crop shows.
             let panel = RightPanelView(frame: NSRect(x: 616 - rect.minX, y: -rect.minY, width: 484, height: 780))
             let pane = SideChatPaneView(threadId: "side")
-            // Before its first reply Bring back is `aria-disabled` (SideChatPane.tsx:61-68).
-            pane.apply(.init(bringBackBlockedReason: "Available after a finished reply."))
+            // Before its first message Add to chat is `aria-disabled` (SideThreadPane.tsx:99 at 5258).
+            pane.apply(.init())
             panel.sideChatHost.show(pane)
             panel.apply(RightPanelState(isOpen: true, activeSurfaceId: "side-chat:side", surfaces: [.sideChat("side")]))
             canvas.addSubview(panel)
@@ -72,7 +72,7 @@ struct SideChatFidelityTests {
                 let size = NSSize(width: CGFloat(ref.pixelsWide) / 2, height: CGFloat(ref.pixelsHigh) / 2)
                 let canvas = SidebarSearchFidelityTests.Canvas(frame: NSRect(origin: .zero, size: size))
                 let pane = SideChatPaneView(threadId: "side")
-                pane.apply(.init(title: native["title"], bringBackBlockedReason: native["blocked"], deleted: native["deleted"] == "yes"))
+                pane.apply(.init(title: native["title"], canAddToChat: native["blocked"] == nil, deleted: native["deleted"] == "yes"))
                 // The harness pads each case by 8pt.
                 pane.frame = canvas.bounds.insetBy(dx: 8, dy: 8)
                 canvas.addSubview(pane)
