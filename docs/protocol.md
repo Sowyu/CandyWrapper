@@ -2,7 +2,7 @@
 
 Contract for the native macOS client of T3 Code. It must be wire-compatible with the official T3 server.
 
-- Server version recorded and verified: `0.0.46-nightly.20261009.2861` (tag `v0.0.46-nightly.20261009.2861`, commit 3b6af0bd1). The tag is also in `T3_VERSION`.
+- Server version recorded and verified: `0.0.46-nightly.20261009.2861` (tag `v0.0.46-nightly.20261009.2861`, commit 3b6af0bd1). The Nightly sections at the end record each later catch-up, and `T3_VERSION` names the current pin.
 - Sources: the T3 repo at tag above (cited as repo-relative `path:line`), the research notes in `docs/research/` (A to D), and three live recordings in `fixtures/transcripts/` (cited as `01-basic`, `02-turn`, `03-turn2` with the frame time `t`).
 - **UNVERIFIED** marks a claim that no source line or recording confirmed. Section 12 lists them all.
 - `.repos/effect-smol/...` paths are inside the T3 repo checkout (Effect 4.0.1 vendored reference source).
