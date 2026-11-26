@@ -374,6 +374,7 @@ public actor T3ConnectAuthorizer {
             // Large frames arrive in parts on 4928 servers; older ones ignore it (rpc/session.ts:250).
             URLQueryItem(name: "frameParts", value: "1"),
         ]
+        if let caps = T3Protocol.clientCapabilitiesQueryItem { c.queryItems?.append(URLQueryItem(name: caps.name, value: caps.value)) }
         guard let url = c.url else { throw DPoPError.invalidURL(wsBaseUrl) }
         return url
     }
