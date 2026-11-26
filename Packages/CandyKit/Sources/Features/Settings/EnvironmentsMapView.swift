@@ -877,6 +877,9 @@ struct FleetSceneRenderer {
         (alpha == 1 ? color : color.withAlphaComponent(color.alphaComponent * alpha)).cgColor(in: canvas)
     }
 
+    /// Names and labels: T3's 600, which Redesign's chrome draws at 500 (`RedesignTokens.Weight`).
+    var heavy: NSFont.Weight { RedesignTokens.Weight.chrome(.semibold, dark: canvas.effectiveAppearance.isDark) }
+
     func text(_ s: String, _ rect: CGRect, size: CGFloat = 11, weight: NSFont.Weight = .regular, color: NSColor,
               align: NSTextAlignment = .left, lines: Int = 1) {
         let style = NSMutableParagraphStyle()
@@ -1216,8 +1219,8 @@ struct FleetSceneRenderer {
         let range = canvas.stackRange(stack)
         if let group = stack.group {
             let title = EnvironmentsMapText.foldGroup(group)
-            let tw = min(textRect.width - 30, (title as NSString).size(withAttributes: [.font: DSFont.ui(12, weight: .semibold)]).width)
-            text(title, CGRect(x: textRect.minX, y: textRect.midY - 16, width: tw, height: 16), size: 12, weight: .semibold, color: paint.foreground)
+            let tw = min(textRect.width - 30, (title as NSString).size(withAttributes: [.font: DSFont.ui(12, weight: heavy)]).width)
+            text(title, CGRect(x: textRect.minX, y: textRect.midY - 16, width: tw, height: 16), size: 12, weight: heavy, color: paint.foreground)
             let count = "\(stack.memberIds.count)"
             let cw = (count as NSString).size(withAttributes: [.font: DSFont.ui(11)]).width + 12
             let chip = CGRect(x: textRect.minX + tw + 6, y: textRect.midY - 16, width: cw, height: 16)
@@ -1225,7 +1228,7 @@ struct FleetSceneRenderer {
             text(count, chip, color: paint.muted, align: .center)
             text(range, CGRect(x: textRect.minX, y: textRect.midY, width: textRect.width, height: 16), color: paint.muted)
         } else {
-            text(range, CGRect(x: textRect.minX, y: textRect.midY - 16, width: textRect.width, height: 16), size: 12, weight: .semibold, color: paint.foreground)
+            text(range, CGRect(x: textRect.minX, y: textRect.midY - 16, width: textRect.width, height: 16), size: 12, weight: heavy, color: paint.foreground)
             var x = textRect.minX
             if stack.sources.count == 1 {
                 accessMeter(stack.sources[0].access, at: CGPoint(x: x, y: textRect.midY + 2), color: paint.foreground.withAlphaComponent(0.7))
@@ -1243,8 +1246,8 @@ struct FleetSceneRenderer {
             cg.restoreGState()
             fleetDrawIcon(IconName.triangleAlert.definition, in: CGRect(x: r.minX + 9, y: r.midY - 6, width: 12, height: 12), color: c(paint.warning), context: cg)
             let label = stack.reachable == 0 ? "None reachable" : "\(stack.reachable) reachable"
-            let lw = (label as NSString).size(withAttributes: [.font: DSFont.ui(11, weight: .semibold)]).width
-            text(label, CGRect(x: r.minX + 27, y: r.minY, width: lw + 1, height: r.height), weight: .semibold, color: Themed.color(\.warningForeground))
+            let lw = (label as NSString).size(withAttributes: [.font: DSFont.ui(11, weight: heavy)]).width
+            text(label, CGRect(x: r.minX + 27, y: r.minY, width: lw + 1, height: r.height), weight: heavy, color: Themed.color(\.warningForeground))
             let bar = CGRect(x: r.minX + 27 + lw + 6, y: r.midY - 2, width: max(0, r.maxX - 10 - (r.minX + 27 + lw + 6)), height: 4)
             box(bar, radius: 2, fill: paint.warning.withAlphaComponent(0.25), stroke: nil)
             box(CGRect(x: bar.minX, y: bar.minY, width: bar.width * CGFloat(stack.reachable) / CGFloat(max(1, stack.memberIds.count)), height: 4),
@@ -1264,7 +1267,7 @@ struct FleetSceneRenderer {
         case .client:
             box(r, radius: r.height / 2, fill: paint.card, stroke: paint.foreground.withAlphaComponent(0.25))
             fleetDrawIcon(EnvironmentsMapIcons.appWindow, in: CGRect(x: r.minX + 14, y: r.midY - 8, width: 16, height: 16), color: c(paint.muted), context: cg)
-            text(node.label, CGRect(x: r.minX + 38, y: r.minY, width: r.width - 38 - 14, height: r.height), size: 12, weight: .semibold, color: paint.foreground)
+            text(node.label, CGRect(x: r.minX + 38, y: r.minY, width: r.width - 38 - 14, height: r.height), size: 12, weight: heavy, color: paint.foreground)
         case .target:
             let incoming = graph.links.filter { $0.to == node.id }
             let focused = incoming.filter { lit?.edges.contains($0.id) == true }
@@ -1301,7 +1304,7 @@ struct FleetSceneRenderer {
         case .connect where r.height >= 32:
             box(r, radius: paint.cardRadius, fill: paint.card.withAlphaComponent(0.6), stroke: paint.foreground.withAlphaComponent(0.3), dash: [3, 2])
             fleetDrawIcon(IconName.cloud.definition, in: CGRect(x: r.minX + 10, y: r.midY - 8, width: 16, height: 16), color: c(paint.muted), context: cg)
-            text(node.label, CGRect(x: r.minX + 34, y: r.midY - 16, width: r.width - 44, height: 16), size: 12, weight: .semibold, color: paint.foreground)
+            text(node.label, CGRect(x: r.minX + 34, y: r.midY - 16, width: r.width - 44, height: 16), size: 12, weight: heavy, color: paint.foreground)
             text("Not added · \(EnvironmentsMapText.connectAvailability(node.availability))", CGRect(x: r.minX + 34, y: r.midY, width: r.width - 44, height: 16), color: paint.muted)
         default:
             if r.height < 32 {
@@ -1330,7 +1333,7 @@ struct FleetSceneRenderer {
             let alpha: CGFloat = dimmed ? 0.7 : 1
             let nameHeight: CGFloat = twoLines ? 32 : 16
             let top = r.midY - (nameHeight + 16) / 2
-            text(node.label, CGRect(x: textX, y: top, width: w, height: nameHeight), size: 12, weight: .semibold,
+            text(node.label, CGRect(x: textX, y: top, width: w, height: nameHeight), size: 12, weight: heavy,
                  color: Themed.color(\.cardForeground).withAlphaComponent(alpha), lines: twoLines ? 2 : 1)
             text(status, CGRect(x: textX, y: top + nameHeight, width: w, height: 16), color: statusColor.withAlphaComponent(alpha))
         }

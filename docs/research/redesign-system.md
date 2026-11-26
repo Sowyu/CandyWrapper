@@ -29,7 +29,7 @@ Exceptions, each deliberate:
 
 ## Type
 
-The UI font at 400 and 500. Body text is 14, row titles and the thread title 13, meta text and captions 12, and labels in a pill 12. The thread title in the band is the project at 13 in the muted color, a slash, and the title at 13 and 500 in the text color. Size and color carry the hierarchy. Nothing in Redesign is drawn at 600 or heavier.
+The UI font at 400 and 500. Body text is 14, row titles and the thread title 13, meta text and captions 12, and labels in a pill 12. The thread title in the band is the project at 13 in the muted color, a slash, and the title at 13 and 500 in the text color. Size and color carry the hierarchy. Redesign's chrome is never drawn at 600 or heavier: `LabelView` and `TextBlockView` draw T3's 600 and 700 at 500 under Redesign, custom drawing goes through `RedesignTokens.Weight.chrome`, and RedesignTokenGuardTests fails on a heavier weight that bypasses both. Message content keeps its own weights, so Markdown headings, bold and table headers, the prompt's rich text, code and math draw as T3 draws them: the thread the user shaped (`thread-markdown-top` in design/redesign-baseline) has semibold headings, and they are what the reply says, not the app's hierarchy.
 
 ## Shadows
 

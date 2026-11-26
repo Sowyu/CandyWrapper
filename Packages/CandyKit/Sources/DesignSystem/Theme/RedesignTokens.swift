@@ -158,6 +158,23 @@ public enum RedesignTokens {
         }
     }
 
+    /// Type weights. Redesign's chrome draws at 400 and 500, and size and color carry the hierarchy. Message content
+    /// (Markdown, the prompt's rich text, code and math) keeps its own weights. `LabelView` and `TextBlockView` apply
+    /// this to their fonts; custom drawing calls it. RedesignTokenGuardTests fails on a heavier literal elsewhere.
+    public enum Weight {
+        public static let heaviest = NSFont.Weight.medium
+        /// `stock` as Redesign chrome draws it in `dark`: 600 and heavier come back at 500.
+        public nonisolated static func chrome(_ stock: NSFont.Weight, dark: Bool) -> NSFont.Weight {
+            ThemeRuntime.isDither(dark: dark) && stock.rawValue > heaviest.rawValue ? heaviest : stock
+        }
+        /// A `FontRuntime` font as Redesign chrome draws it in `dark`. Other fonts pass through.
+        public nonisolated static func chrome(_ font: NSFont, dark: Bool) -> NSFont {
+            guard ThemeRuntime.isDither(dark: dark), let r = FontRuntime.recipe(for: font),
+                  r.weight.rawValue > heaviest.rawValue else { return font }
+            return FontRuntime.font(r.role, size: r.size, weight: heaviest)
+        }
+    }
+
     /// Segmented controls in light. T3's track (`bg-input/40`) and selection (`bg-input/72`) are greys of the control
     /// outline color, which in light gave a #cfcfcd track under a #a3a3a1 selection, the "muddy grey" in the picker.
     /// Light draws a quiet track in the text color and lifts the selection as a white card with the rim and the
