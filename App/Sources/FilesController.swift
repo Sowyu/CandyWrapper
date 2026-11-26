@@ -110,6 +110,15 @@ final class FilesController {
                 return data
             }
             surface.onExplorerChange = { [weak self] _ in self?.panel.filesPanel.treeView.selectedPath = self?.activeFilePath }
+            surface.onContentChange = { [weak self] in self?.renderOpenIn() }
+            surface.openIn.primary.action = { [weak self] in
+                guard let self, let target = self.openInTarget else { return }
+                self.openIn?.openFileHeader(target, editor: nil)
+            }
+            surface.openIn.chevron.action = { [weak self, weak surface] in
+                guard let self, let surface, let target = self.openInTarget else { return }
+                self.openIn?.showFileHeaderMenu(target, from: surface.openIn)
+            }
             surface.onNeedsReload = { [weak self] in
                 if self?.panel.panelState.active?.attachment != nil { self?.showActiveAttachment(force: true) } else { self?.showActiveFile(force: true) }
             }
@@ -414,6 +423,41 @@ final class FilesController {
         loadDirectories([""])
         let query = files.searchField.input.text
         if !query.trimmingCharacters(in: .whitespaces).isEmpty { searchTree(query) }
+    }
+
+    // MARK: Open in
+
+    /// Fills the file header's picker; set once at launch.
+    weak var openIn: OpenInController? {
+        didSet {
+            openIn?.onRender = { [weak self] in self?.renderOpenIn() }
+            renderOpenIn()
+        }
+    }
+
+    /// What the file header's picker opens: the file or folder's absolute path (FilePreviewPanel.tsx:1494-1499) and
+    /// what the file manager does with it (`fileManagerActionForPath`, :1316-1320). Attachments have no path.
+    private var openInTarget: OpenInController.FileTarget? {
+        guard case .file(let path, _, _)? = panel.panelState.active, panel.panelState.active?.attachment == nil,
+              let ws = workspace, let surface = panel.lazyFileSurface.loaded else { return nil }
+        let absolute = path.isEmpty ? ws.cwd : FileLinks.isAbsolutePath(path) ? path : ws.cwd + "/" + path
+        let isFolder: Bool
+        let settled: Bool
+        switch surface.content {
+        case .directory: (isFolder, settled) = (true, true)
+        case .loading: (isFolder, settled) = (false, false)
+        default: (isFolder, settled) = (false, true)
+        }
+        let canReveal = serverConfig?(ws.environmentId)?.revealsInFileManager == true
+        return .init(environmentId: ws.environmentId, path: absolute, isFile: !isFolder,
+                     fileManager: OpenInEditors.fileManagerAction(isFolder: isFolder, isSettled: settled, canReveal: canReveal))
+    }
+
+    private func renderOpenIn() {
+        guard let surface = panel.lazyFileSurface.loaded else { return }
+        let target = openInTarget
+        surface.showsOpenIn = target.map { openIn?.showsFileHeader($0) ?? false } ?? false
+        if let target, surface.showsOpenIn { openIn?.renderFileHeader(surface.openIn, target) }
     }
 
     // MARK: Workspace mutations

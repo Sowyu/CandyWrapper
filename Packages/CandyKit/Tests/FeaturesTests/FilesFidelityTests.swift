@@ -41,8 +41,14 @@ struct FilesFidelityTests {
             model.setChildren([ProjectEntry(path: "scratch/edit.swift", isDirectory: false), ProjectEntry(path: "scratch/notes.md", isDirectory: false)], of: "scratch")
             files.model = model
             return files
-        case "file-header":
+        case "file-header", "file-header-open-in":
             let surface = FileSurfaceView(frame: frame)
+            if name == "file-header-open-in" {
+                // The compact picker with Zed preferred (5258 OpenInPicker.tsx:254-300).
+                surface.showsOpenIn = true
+                surface.openIn.primary.icon = .brandZed
+                surface.openIn.iconColor = Themed.color(\.contrastForeground)
+            }
             surface.projectName = "demo-repo"
             surface.explorerOpen = true
             surface.show(path: "src/answer.ts", revealLine: nil)

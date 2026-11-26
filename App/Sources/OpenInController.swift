@@ -44,7 +44,8 @@ final class OpenInController {
     /// the first host the server advertises, else it has no SSH route.
     /// The SSH user rides along: the saved target's, else the alias's `user@` part, else the advertised one.
     private enum RemoteOpen: Equatable { case localExec, links(host: String, username: String?), unavailable }
-    private var remote: RemoteOpen {
+    private var remote: RemoteOpen { remote(environmentId) }
+    private func remote(_ environmentId: String?) -> RemoteOpen {
         guard let environmentId, environmentId != environments.primaryId else { return .localExec }
         if let saved = environments.saved.first(where: { $0.environmentId == environmentId }), let alias = saved.sshAlias, !alias.isEmpty {
             let destination = OpenInEditors.sshDestination(alias: alias, username: saved.sshTarget?.username)
@@ -58,13 +59,15 @@ final class OpenInController {
     private var remoteHost: (host: String, username: String?)? { if case .links(let host, let username) = remote { (host, username) } else { nil } }
     /// `primaryServerAvailableEditorsAtom` locally; in remote mode the remote-capable ones (`useRemoteCapableEditors`,
     /// the primary's probe standing in for the desktop's), VS Code when none.
-    private var available: [String] {
+    private var available: [String] { available(remote) }
+    private func available(_ remote: RemoteOpen) -> [String] {
         let local = environments.primaryId.flatMap { composer.config($0)?.availableEditors } ?? []
         guard remote != .localExec else { return local }
         let capable = local.filter { OpenInEditors.remoteURL(editor: $0, host: "host", path: "/") != nil }
         return capable.isEmpty ? ["vscode"] : capable
     }
-    private var preferred: String? {
+    private var preferred: String? { preferred(available) }
+    private func preferred(_ available: [String]) -> String? {
         OpenInEditors.preferred(available: available, last: UserDefaults.standard.string(forKey: OpenInEditors.lastEditorKey))
     }
     /// `shouldShowOpenInPicker` (OpenInPicker.logic.ts:5-22): the primary environment, or a remote one in link or
@@ -84,7 +87,11 @@ final class OpenInController {
         }
     }
 
+    /// Every render: the file header's picker follows the preferred editor too.
+    var onRender: (() -> Void)?
+
     func render() {
+        onRender?()
         guard let card = lazyCard.loaded else { return }
         card.showsOpenIn = isShown
         guard isShown else { return }
@@ -150,6 +157,91 @@ final class OpenInController {
         if remote == .unavailable { items = [MenuItem("No SSH route to \(environmentLabel)", disabled: true)] }
         MenuPopupView.show(items, from: split.secondary, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none),
                            minimumWidth: split.bounds.width, anchorRect: split.convert(split.bounds, to: split.secondary))
+    }
+
+    // MARK: File header
+
+    /// The file header's picker target, from `FilesController`.
+    struct FileTarget: Equatable {
+        var environmentId: String
+        var path: String
+        var isFile: Bool
+        var fileManager: OpenInEditors.FileManagerAction
+    }
+
+    /// FilePreviewPanel.tsx:1605-1608: the primary environment, or one that opens through SSH links or has no route.
+    /// CW's only local environment is the primary, so every file with a path shows it.
+    func showsFileHeader(_ target: FileTarget) -> Bool { true }
+
+    /// The compact toolbar picker (OpenInPicker.tsx:254-300): the preferred editor's icon at 14pt (`size-3.5`), no
+    /// icon when there is none; disabled without an editor, without an SSH route, or on the file manager while it
+    /// cannot act on the path yet.
+    func renderFileHeader(_ picker: FileOpenInPicker, _ target: FileTarget) {
+        let route = remote(target.environmentId)
+        let editor = preferred(available(route))
+        let part = picker.primary
+        part.icon = editor.map(Self.icon)
+        picker.iconColor = editor == nil ? nil : Themed.color(\.contrastForeground)
+        picker.image = editor.flatMap(OpenInEditors.image)
+        part.isEnabled = editor != nil && route != .unavailable && !(editor == "file-manager" && target.fileManager == .unavailable)
+    }
+
+    /// `openInEditor` with the file's path (OpenInPicker.tsx:116-148): a file manager reveal for a settled file, a
+    /// remote link with `isFile`, and "Opened in X" for VoiceOver once it opened.
+    func openFileHeader(_ target: FileTarget, editor editorId: String?) {
+        let route = remote(target.environmentId)
+        guard let editor = editorId ?? preferred(available(route)), route != .unavailable else { return }
+        if editor == "file-manager", target.fileManager == .unavailable { return }
+        let label = OpenInEditors.label(editor)
+        if case .links(let host, let username) = route {
+            guard let url = OpenInEditors.remoteURL(editor: editor, host: host, username: username, path: target.path, isFile: target.isFile),
+                  NSWorkspace.shared.open(url) else { return }
+            UserDefaults.standard.set(true, forKey: OpenInEditors.remoteHintSeenKey)
+            UserDefaults.standard.set(editor, forKey: OpenInEditors.lastEditorKey)
+            render()
+            Self.announce("Opened in \(label)")
+            return
+        }
+        UserDefaults.standard.set(editor, forKey: OpenInEditors.lastEditorKey)
+        render()
+        let input = OpenInEditors.launchInput(cwd: target.path, editor: editor, reveal: editor == "file-manager" && target.fileManager == .reveal)
+        Task { [environments] in
+            if (try? await environments.request(target.environmentId, "shell.openInEditor", input)) != nil { Self.announce("Opened in \(label)") }
+        }
+    }
+
+    /// The chevron's menu in the toolbar presentation (OpenInPicker.tsx:180-224): picking an editor makes it the
+    /// preferred one, the preferred one carries the shortcut, then the one-time SSH hint or the route notes.
+    func showFileHeaderMenu(_ target: FileTarget, from picker: FileOpenInPicker) {
+        let route = remote(target.environmentId)
+        let editors = available(route)
+        let current = preferred(editors)
+        let shortcut = ActiveKeymap.label(for: "editor.openFavorite")
+        let label = environments.label(target.environmentId) ?? "this machine"
+        let options = OpenInEditors.options(available: editors)
+        var items = options.map { option in
+            var item = MenuItem(option.label, icon: Self.icon(option.id), shortcut: option.id == current ? shortcut : nil,
+                                disabled: route == .unavailable) { [weak self] in
+                UserDefaults.standard.set(option.id, forKey: OpenInEditors.lastEditorKey)
+                self?.render()
+            }
+            item.image = OpenInEditors.image(option.id)
+            item.iconColor = Themed.color(\.foreground)
+            return item
+        }
+        if items.isEmpty { items = [MenuItem("No installed editors found", disabled: true)] }
+        if case .links = route, !UserDefaults.standard.bool(forKey: OpenInEditors.remoteHintSeenKey) {
+            items.append(MenuItem("Opens over SSH. Needs your key on \(label)", disabled: true))
+        }
+        if route == .unavailable { items = [MenuItem("No SSH route to \(label)", disabled: true)] }
+        else if case .links = route, options.isEmpty { items = [MenuItem("Open from a computer to edit on \(label)", disabled: true)] }
+        MenuPopupView.show(items, from: picker.chevron, placement: PopupPlacement(side: .bottom, align: .end, sideOffset: 4, fallbackAxisSide: .none))
+    }
+
+    private static func announce(_ text: String) {
+        guard let window = NSApp.mainWindow else { return }
+        NSAccessibility.post(element: window, notification: .announcementRequested,
+                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
     func openFile(_ meta: FileLinkMeta) {
