@@ -8,6 +8,19 @@ import T3Store
 @MainActor
 struct PanelCompletionTests {
     static let patch = "diff --git a/a.swift b/a.swift\n--- a/a.swift\n+++ b/a.swift\n@@ -1,2 +1,2 @@\n-old\n+new\n stable\n"
+    /// 5258 reviewCommentContext.test.ts (b61af8a5d2 #42863): numbers that run backwards give a line count.
+    @Test func mixedSelectionRunningBackwardsCountsLines() throws {
+        let patch = ["diff --git a/notes.txt b/notes.txt", "--- a/notes.txt", "+++ b/notes.txt", "@@ -1,3 +1,6 @@",
+                     "+added A", "+added B", "+added C", " line 1", " line 2", " line 3", "@@ -8,4 +11,3 @@",
+                     " line 8", " line 9", " line 10", "-line 11"].joined(separator: "\n") + "\n"
+        let diff = UnifiedDiff(patch)
+        let start = try #require(diff.lines.indices.first { diff.text(diff.lines[$0]) == "line 10" })
+        let end = try #require(diff.lines.indices.first { diff.text(diff.lines[$0]) == "line 11" })
+        let record = try #require(DiffReviewContext.record(diff: diff, path: "notes.txt", start: start, end: end, text: "Check", section: "s", title: "T", id: "r"))
+        #expect(record["rangeLabel"] == .string("2 lines"))
+        #expect(record["diff"] == .string("@@ -10,2 +13,1 @@\n line 10\n-line 11"))
+    }
+
     @Test func cardsFollowComposerRecordsAndIgnoreDifferentCode() throws {
         let diff = UnifiedDiff(Self.patch)
         let record = try #require(DiffReviewContext.record(diff: diff, path: "a.swift", start: 0, end: 0, text: "Why?", section: "diff", title: "Diff", id: "review"))
