@@ -493,8 +493,16 @@ public final class ComposerView: DSView {
     /// outline `⇥ Tab` after it. Tab in the empty prompt takes it, Escape calls `onDismissSuggestion`.
     public var promptSuggestion: String? { didSet { if promptSuggestion != oldValue { refresh() } } }
     public var onDismissSuggestion: (() -> Void)?
-    private var suggestionKbd: KbdView?
+    private var suggestionKbd: PromptSuggestionHintButton?
     private var suggestionOffered = false
+
+    /// A click on the hint takes the suggestion only into an empty prompt, so a late click never prepends it to text
+    /// typed since (`promptSuggestionToAccept`, usePromptSuggestion.ts:55-57 at 5258, #40841).
+    func acceptSuggestionFromHint() {
+        guard suggestionOffered, let suggestion = promptSuggestion, editor.string.isEmpty else { return }
+        window?.makeFirstResponder(editor)
+        editor.insertText(suggestion, replacementRange: editor.selectedRange())
+    }
 
     /// `ml-2 inline-flex align-[1px]` after the placeholder's last word, or on the next line when it doesn't fit.
     private func layoutSuggestionKbd() {
@@ -564,8 +572,8 @@ public final class ComposerView: DSView {
         if offersSuggestion != suggestionOffered {
             suggestionOffered = offersSuggestion
             if offersSuggestion, suggestionKbd == nil {
-                let kbd = KbdView("⇥ Tab")
-                kbd.outline = true
+                let kbd = PromptSuggestionHintButton()
+                kbd.action = { [weak self] in self?.acceptSuggestionFromHint() }
                 addSubview(kbd, positioned: .above, relativeTo: placeholder)
                 suggestionKbd = kbd
             }
