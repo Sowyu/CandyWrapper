@@ -345,12 +345,24 @@ public final class EnvironmentsMapCanvasView: DSView {
 
     /// The height the canvas wants at `width` (:147, `fleetCanvasHeight`).
     func wantedHeight(_ width: CGFloat) -> CGFloat {
+        let rest = restingHeight(width)
+        // `data-glide:transition-[height]` (:1010): a glide eases the canvas from the height it had to the new one,
+        // and its last frame is the resting height exactly.
+        guard let from = glide?.fromHeight, from != rest else { return rest }
+        return (from + (rest - from) * CGFloat(glideProgress)).rounded()
+    }
+
+    /// The height the canvas settles at.
+    func restingHeight(_ width: CGFloat) -> CGFloat {
         // A view kept while a stack opened keeps the height it chose (:676-679).
         if let h = state.heldHeight, state.held != nil { return CGFloat(h) }
         let w = fleetLayoutWidth(Double(width))
         let l = w == layoutWidth ? fleetLayout : layoutFleetGraph(graph, stacks, canvasWidth: w > 0 ? w : nil)
         return CGFloat(fleetCanvasHeight(width: l.width, height: l.height, canvasWidth: Double(width), bounds: 180...840))
     }
+
+    /// Called on each glide frame that moves the canvas height, and once when it settles, so the page lays out again.
+    var onHeightGlide: (() -> Void)?
 
     var fit: FleetViewTransform { fitFleetLayout(width: fleetLayout.width, height: fleetLayout.height, viewport: bounds.size) }
     /// Where the view rests: set by hand, or the fit.
@@ -360,7 +372,7 @@ public final class EnvironmentsMapCanvasView: DSView {
 
     /// A glide in progress: the view it left, and a stack whose tray and lifted cards fade. Nil at rest, so the map
     /// runs no display link while it sits still, and the last frame draws the resting view exactly.
-    struct Glide { var start: CFTimeInterval; var from: FleetViewTransform; var stack: String? }
+    struct Glide { var start: CFTimeInterval; var from: FleetViewTransform; var stack: String?; var fromHeight: CGFloat? = nil }
     private(set) var glide: Glide?
     private var glideLink: CADisplayLink?
     static let glideDuration: CFTimeInterval = 0.2
@@ -398,9 +410,11 @@ public final class EnvironmentsMapCanvasView: DSView {
     /// Runs `change` and glides from the view on screen to the one it leaves, unless motion is reduced.
     func gliding(stack: String? = nil, _ change: () -> Void) {
         let from = shown
+        let fromHeight = bounds.height > 0 ? bounds.height : nil
         change()
-        guard !reducedMotion(), from != view || stack != nil else { return }
-        glide = Glide(start: now(), from: from, stack: stack)
+        let heightMoves = fromHeight.map { $0 != restingHeight(bounds.width) } ?? false
+        guard !reducedMotion(), from != view || stack != nil || heightMoves else { return }
+        glide = Glide(start: now(), from: from, stack: stack, fromHeight: heightMoves ? fromHeight : nil)
         if glideLink == nil {
             let link = displayLink(target: self, selector: #selector(glideFrame))
             link.add(to: .main, forMode: .common)
@@ -410,15 +424,18 @@ public final class EnvironmentsMapCanvasView: DSView {
     }
 
     @objc func glideFrame() {
-        if glide == nil || now() - glide!.start >= Self.glideDuration { endGlide() }
+        if glide == nil || now() - glide!.start >= Self.glideDuration { endGlide(); return }
+        if glide?.fromHeight != nil { onHeightGlide?() }
         needsDisplay = true
     }
 
     func endGlide() {
+        let movedHeight = glide?.fromHeight != nil
         glide = nil
         glideLink?.invalidate()
         glideLink = nil
         needsDisplay = true
+        if movedHeight { onHeightGlide?() }
     }
 
     public override func viewDidMoveToWindow() {

@@ -65,4 +65,32 @@ struct EnvironmentsMapGlideTests {
         let now = canvas.toView(after)
         #expect(abs(now.minX - before.minX) < 0.5 && abs(now.minY - before.minY) < 0.5)
     }
+
+    /// `data-glide:transition-[height]` (:1010): opening a stack eases the canvas to its new height, the last frame is
+    /// the resting height exactly, and nothing runs after.
+    @Test func canvasHeightGlidesToItsRestingHeight() throws {
+        let view = EnvironmentsMapViewTests.make("default")
+        let canvas = view.canvas
+        var clock = 50.0
+        canvas.now = { clock }
+        canvas.reducedMotion = { false }
+        var ticks = 0
+        let page = canvas.onHeightGlide
+        canvas.onHeightGlide = { ticks += 1; page?() }
+        let stack = try #require(canvas.stacks.first { !$0.expanded })
+        let before = canvas.bounds.height
+        canvas.toggleStack(stack.id)
+        let rest = canvas.restingHeight(canvas.bounds.width)
+        try #require(rest != before)
+        #expect(canvas.wantedHeight(canvas.bounds.width) == before)
+        clock += 0.1
+        canvas.glideFrame()
+        let mid = canvas.wantedHeight(canvas.bounds.width)
+        #expect(mid != before && mid != rest && (mid - before) * (rest - mid) > 0)
+        clock += 0.15
+        canvas.glideFrame()
+        #expect(canvas.glide == nil)
+        #expect(canvas.wantedHeight(canvas.bounds.width) == rest)
+        #expect(ticks == 2)
+    }
 }
