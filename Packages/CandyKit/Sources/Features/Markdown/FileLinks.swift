@@ -12,6 +12,8 @@ public struct FileLinkMeta: Sendable, Equatable {
     public var basename: String
     public var line: Int?
     public var column: Int?
+    /// The last line of a range such as `:42-64` or `#L42-L64` (`FilePathPosition.endLine`). Editors open at `line`.
+    public var endLine: Int?
 
     public init(filePath: String, targetPath: String, workspaceRelativePath: String?, basename: String, line: Int?, column: Int?) {
         self.filePath = filePath; self.targetPath = targetPath; self.workspaceRelativePath = workspaceRelativePath
@@ -134,7 +136,10 @@ public enum FileLinks {
     /// `resolveMarkdownFileLinkMeta` for a link destination.
     public static func resolveLink(_ href: String, cwd: String?) -> FileLinkMeta? {
         guard let target = parseLink(href) else { return nil }
-        return resolve(format(target.path, target.line, target.column), cwd: cwd)
+        var meta = resolve(format(target.path, target.line, target.column), cwd: cwd)
+        // The chip shows a range as `L42–64`, and find in thread matches that label (#39308).
+        if target.line != nil { meta?.endLine = endLine(href) }
+        return meta
     }
 
     /// `isMarkdownFileLinkLabel` (markdownLinks.ts): the label already names the file, so T3 shows only the chip.
@@ -186,12 +191,13 @@ public enum FileLinks {
         return out
     }
 
-    /// `fileLinkLabel` (fileLinks.ts): basename, the disambiguating parents, then `L12:C3`.
+    /// `fileLinkLabel` (fileLinks.ts:182-199): basename, the disambiguating parents, then `L12:C3` or `L42–64`.
     public static func label(_ meta: FileLinkMeta, suffixes: [String: String]) -> String {
         var parts = [meta.basename]
         if let suffix = suffixes[meta.filePath.replacingOccurrences(of: "\\", with: "/")] { parts.append(suffix) }
-        if let line = meta.line { parts.append("L\(line)" + (meta.column.map { ":C\($0)" } ?? "")) }
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+        if let line = meta.line { parts.append("L\(line)" + (meta.endLine.map { "–\($0)" } ?? meta.column.map { ":C\($0)" } ?? "")) }
+        // macOS stores many names in NFD; the label composes them (fileLinks.ts:182-199, #39610).
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ").precomposedStringWithCanonicalMapping
     }
 
     // MARK: Resolution

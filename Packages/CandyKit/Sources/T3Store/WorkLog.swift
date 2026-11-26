@@ -703,9 +703,8 @@ public enum WorkLog {
         var seen = Set<String>()
         let paths = readRawPaths(entry).compactMap { path -> String? in
             let trimmed = path.jsTrimmed.replacingOccurrences(of: "\\", with: "/")
-            guard let root = workspaceRoot, !root.isEmpty, !trimmed.hasPrefix("/"),
-                trimmed.wholeMatch(of: /[a-zA-Z]:(?:[\/\\].*)?/) == nil
-            else { return trimmed }
+            // Home paths stay as written (#39146).
+            guard let root = workspaceRoot, !root.isEmpty, !isHostPath(trimmed) else { return trimmed }
             let base = root.replacingOccurrences(of: "\\", with: "/").replacing(/\/+$/, with: "")
             return base + "/" + trimmed.replacing(/^\.\//, with: "").replacing(/^\/+/, with: "")
         }.filter { !$0.isEmpty && seen.insert($0).inserted }

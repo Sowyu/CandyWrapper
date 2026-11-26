@@ -507,9 +507,11 @@ final class ThreadController {
               let env = files.workspaceEnvironmentId else { open(meta); return }
         let threadProject = sidebar?.snapshot?.threads.first { $0.id == openThreadId }?.projectId
         let roots = (sidebar?.snapshot?.projects ?? []).filter { $0.id.environmentId == env && $0.id != threadProject }.map(\.workspaceRoot)
+        let revision = files.openRevision, thread = openThreadId
         Task { [weak self] in
             let found = await self?.files.citedFile(meta, otherRoots: roots)
-            guard let self, claimed == self.fileLookupSequence else { return }
+            // A later link, a file opened meanwhile or another thread wins (#39130).
+            guard let self, claimed == self.fileLookupSequence, revision == self.files.openRevision, thread == self.openThreadId else { return }
             open(found ?? meta)
         }
     }
