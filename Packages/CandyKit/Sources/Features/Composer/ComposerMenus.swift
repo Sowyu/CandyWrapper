@@ -393,9 +393,13 @@ public enum ComposerMenus {
         public var id: String, title: String, updatedAt: String, archived: Bool
         public var machine: String?
         public var isSubagent: Bool
-        public init(id: String, title: String, updatedAt: String, archived: Bool, machine: String? = nil, isSubagent: Bool = false) {
+        /// A side chat of the composer's own thread with a message in it (`isOwnSideChat`, composerThreadItems.ts:49-54
+        /// at 5258, #38323): offered although side chats are otherwise unlisted, and described "Side chat".
+        public var isOwnSideChat: Bool
+        public init(id: String, title: String, updatedAt: String, archived: Bool, machine: String? = nil, isSubagent: Bool = false,
+                    isOwnSideChat: Bool = false) {
             self.id = id; self.title = title; self.updatedAt = updatedAt; self.archived = archived
-            self.machine = machine; self.isSubagent = isSubagent
+            self.machine = machine; self.isSubagent = isSubagent; self.isOwnSideChat = isOwnSideChat
         }
     }
 
@@ -405,10 +409,11 @@ public enum ComposerMenus {
     public static func threadItems(query: String, threads: [ThreadCandidate], excluding: String?, browse: Bool = false) -> [ComposerMenuItem] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty || browse else { return [] }
-        return threads.filter { $0.id != excluding && !$0.archived && !$0.isSubagent && (q.isEmpty || $0.title.lowercased().contains(q)) }
+        return threads.filter { $0.id != excluding && !$0.archived && (!$0.isSubagent || $0.isOwnSideChat) && (q.isEmpty || $0.title.lowercased().contains(q)) }
             .sorted { $0.updatedAt > $1.updatedAt }
             .prefix(threadResultLimit)
-            .map { ComposerMenuItem(id: "thread:\($0.id)", kind: .thread(id: $0.id, title: $0.title), label: $0.title, description: $0.machine.map { "Thread on \($0)" } ?? "Thread") }
+            .map { ComposerMenuItem(id: "thread:\($0.id)", kind: .thread(id: $0.id, title: $0.title), label: $0.title,
+                                    description: $0.isOwnSideChat ? "Side chat" : $0.machine.map { "Thread on \($0)" } ?? "Thread") }
     }
 
     public struct EnvironmentCandidate: Sendable {

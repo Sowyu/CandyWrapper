@@ -86,6 +86,17 @@ struct ComposerMenusTests {
         #expect(items.first.map(ComposerMenus.replacement)?.contains("thread_b") == true)
     }
 
+    /// composerThreadItems.ts:49-82 at 5258 (#38323): the composer's own side chat is offered as "Side chat"; other
+    /// side chats and subagents stay out.
+    @Test func ownSideChatIsOfferedAsSideChat() {
+        let threads: [ComposerMenus.ThreadCandidate] = [
+            .init(id: "here:side", title: "Deploy question", updatedAt: "2", archived: false, isSubagent: true, isOwnSideChat: true),
+            .init(id: "here:other", title: "Deploy other side chat", updatedAt: "3", archived: false, isSubagent: true),
+        ]
+        let items = ComposerMenus.threadItems(query: "deploy", threads: threads, excluding: "here:main")
+        #expect(items.map(\.id) == ["thread:here:side"] && items.first?.description == "Side chat")
+    }
+
     @Test func copyThreadWritesAnEnvironmentAwareChipWhilePRsCopyURLs() throws {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }

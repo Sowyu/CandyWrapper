@@ -22,7 +22,7 @@ public final class SideChatHostView: DSView {
     }
 }
 
-/// A side chat tab (SideChatPane.tsx:131-193): a 36pt header with the title, Bring back, Delete and Close
+/// A side chat tab (SideThreadPane.tsx:160-200 at 5258): a 36pt header with the title, Add to chat, Delete and Close
 /// (`h-9 border-b pr-1 pl-3 gap-1`) over the side chat's own chat, or "This side chat was deleted.".
 public final class SideChatPaneView: DSView {
     public static let headerHeight: CGFloat = 36
@@ -30,27 +30,27 @@ public final class SideChatPaneView: DSView {
     public struct State: Equatable {
         /// The side chat's shell title; nil before its shell arrives.
         public var title: String?
-        /// `bringBackBlockedReason` (:61-68), nil when Bring back works.
-        public var bringBackBlockedReason: String?
-        public var bringingBack = false
+        /// `canAddToChat` (SideThreadPane.tsx:99 at 5258, #38323): the side chat has a message. Closing an unused side
+        /// chat deletes it, which would leave the link unreadable.
+        public var canAddToChat = false
         public var canDelete = true
         public var deleting = false
         /// The shell is gone and the snapshot is loaded (:174-176).
         public var deleted = false
-        public init(title: String? = nil, bringBackBlockedReason: String? = nil, bringingBack: Bool = false,
+        public init(title: String? = nil, canAddToChat: Bool = false,
                     canDelete: Bool = true, deleting: Bool = false, deleted: Bool = false) {
-            self.title = title; self.bringBackBlockedReason = bringBackBlockedReason; self.bringingBack = bringingBack
+            self.title = title; self.canAddToChat = canAddToChat
             self.canDelete = canDelete; self.deleting = deleting; self.deleted = deleted
         }
     }
 
     public let threadId: ThreadId
-    public var onBringBack: (() -> Void)?
+    public var onAddToChat: (() -> Void)?
     public var onDelete: (() -> Void)?
     public var onClose: (() -> Void)?
 
     let titleLabel = LabelView("Side chat", font: DSFont.ui(12, weight: .medium))
-    let bringBack = ButtonView("Bring back", variant: .ghost, size: .xs)
+    let addToChat = ButtonView("Add to chat", variant: .ghost, size: .xs)
     let delete = ButtonView(nil, icon: .trash2, variant: .ghost, size: .iconXs)
     let close = ButtonView(nil, icon: .x, variant: .ghost, size: .iconXs)
     private let deletedLabel = LabelView("This side chat was deleted.", font: DSFont.ui(12))
@@ -73,9 +73,9 @@ public final class SideChatPaneView: DSView {
         deletedLabel.lineHeight = 16
         deletedLabel.color = Themed.color(\.mutedForeground)
         deletedLabel.isHidden = true
-        bringBack.action = { [weak self] in
-            guard let self, self.state.bringBackBlockedReason == nil, !self.state.bringingBack else { return }
-            self.onBringBack?()
+        addToChat.action = { [weak self] in
+            guard let self, self.state.canAddToChat else { return }
+            self.onAddToChat?()
         }
         delete.action = { [weak self] in self?.onDelete?() }
         close.action = { [weak self] in self?.onClose?() }
@@ -83,7 +83,7 @@ public final class SideChatPaneView: DSView {
         close.setAccessibilityLabel("Close side chat")
         border.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(border)
-        [titleLabel, bringBack, delete, close, deletedLabel].forEach(addSubview)
+        [titleLabel, addToChat, delete, close, deletedLabel].forEach(addSubview)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Side chat")
@@ -96,9 +96,8 @@ public final class SideChatPaneView: DSView {
         self.state = state
         titleLabel.text = state.title ?? "Side chat"
         // `aria-disabled`: still hoverable with its tooltip, at 64% (button.tsx:9).
-        let blocked = state.bringBackBlockedReason != nil || state.bringingBack
-        bringBack.alphaValue = blocked ? 0.64 : 1
-        bringBack.setTooltip(state.bringBackBlockedReason ?? "Adds this side chat to the main thread's next message.")
+        addToChat.alphaValue = state.canAddToChat ? 1 : 0.64
+        addToChat.setTooltip(state.canAddToChat ? "Adds this side chat to the main thread's next message." : "Available after the first message.")
         delete.isEnabled = state.canDelete && !state.deleting && !state.deleted
         deletedLabel.isHidden = !state.deleted
         content?.isHidden = state.deleted
@@ -113,9 +112,9 @@ public final class SideChatPaneView: DSView {
         close.frame = NSRect(x: x, y: (h - 1 - 24) / 2, width: 24, height: 24)
         x -= 4 + 24
         delete.frame = NSRect(x: x, y: (h - 1 - 24) / 2, width: 24, height: 24)
-        let bw = bringBack.intrinsicContentSize.width
+        let bw = addToChat.intrinsicContentSize.width
         x -= 4 + bw
-        bringBack.frame = NSRect(x: x, y: (h - 1 - 24) / 2, width: bw, height: 24)
+        addToChat.frame = NSRect(x: x, y: (h - 1 - 24) / 2, width: bw, height: 24)
         titleLabel.frame = NSRect(x: 12, y: (h - 1 - 16) / 2, width: max(0, x - 4 - 12), height: 16)
         border.frame = CGRect(x: 0, y: h - 1, width: bounds.width, height: 1)
         deletedLabel.frame = NSRect(x: 12, y: h + 12, width: max(0, bounds.width - 24), height: 16)
@@ -145,7 +144,7 @@ public final class SideChatPaneView: DSView {
     }
 
     func clearHover() {
-        for button in [bringBack, delete, close] where button.state.hovered || button.state.active {
+        for button in [addToChat, delete, close] where button.state.hovered || button.state.active {
             var state = button.state
             state.hovered = false
             state.active = false

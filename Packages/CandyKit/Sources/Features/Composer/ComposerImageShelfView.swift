@@ -376,6 +376,10 @@ public final class ComposerImageShelfView: DSView {
         private func revealRemove() { HoverReveal.fade([remove], visible: !isSnapShot || hover?.hovered == true || focusWithin) }
         private(set) var id = ""
         let image = AsyncImageView()
+        /// A file's name, wrapped in the tile (ComposerAttachmentStrip.tsx:715):
+        /// `flex items-center justify-center px-1 text-center text-3xs text-secondary-label`,
+        /// centered and clipped by the tile's `overflow-hidden`.
+        let nameBlock = TextBlockView()
         private var details: SnapShotAttachmentDetailsView?
         private let progressStrip = DSView()
         private let progress = LabelView("", font: DSFont.ui(10), color: Themed.color(\.foreground))
@@ -390,6 +394,12 @@ public final class ComposerImageShelfView: DSView {
             layer?.borderWidth = 1
             image.cacheable = true
             addSubview(image)
+            nameBlock.font = DSFont.ui(10)
+            nameBlock.lineHeight = 14
+            nameBlock.alignment = .center
+            nameBlock.color = Themed.color(\.secondaryLabel)
+            nameBlock.isHidden = true
+            addSubview(nameBlock)
             progress.alignment = .center
             progress.lineHeight = 14
             progressStrip.addSubview(progress)
@@ -415,14 +425,15 @@ public final class ComposerImageShelfView: DSView {
             }
             remove.isHidden = !tile.removable
             if let url = tile.fileURL {
+                nameBlock.isHidden = true
                 image.set(key: url.path, fallbackText: tile.name) { side in await ComposerImageIO.thumbnail(url, side: side, cover: true, measurementKey: url.path) }
                 image.onContextMenu = { event, view in
                     MediaAttachmentContextMenu.show(name: tile.name, load: { side in await ComposerImageIO.thumbnail(url, side: side, cover: false) }, event: event, view: view)
                 }
             } else {
-                // `px-1 text-center text-3xs text-secondary-label`.
-                // ponytail: one truncated line where T3 wraps the name in the tile; a wrapping label if long names show up
-                image.set(key: "name:" + tile.id, fallbackText: tile.name, loader: nil)
+                image.set(key: "name:" + tile.id, fallbackText: "", loader: nil)
+                nameBlock.text = tile.name
+                nameBlock.isHidden = false
                 image.onContextMenu = nil
             }
             if isSnapShot != (tile.source != nil) {
@@ -461,6 +472,11 @@ public final class ComposerImageShelfView: DSView {
             // Everything sits in the padding box, inside the 1px border.
             let inner = bounds.insetBy(dx: 1, dy: 1)
             image.frame = inner
+            if !nameBlock.isHidden {
+                let width = max(0, inner.width - 8)
+                let height = nameBlock.height(forWidth: width)
+                nameBlock.frame = NSRect(x: inner.minX + 4, y: inner.minY + ((inner.height - height) / 2).rounded(), width: width, height: height)
+            }
             details?.frame = NSRect(x: inner.minX, y: inner.maxY - 66, width: inner.width, height: 66)
             progressStrip.frame = NSRect(x: inner.minX, y: inner.maxY - 14, width: inner.width, height: 14)
             progress.frame = NSRect(x: 4, y: 0, width: inner.width - 8, height: 14)

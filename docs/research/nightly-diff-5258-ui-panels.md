@@ -480,7 +480,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 69d8f4217f | #41809 | feat: auto-merge a stack through GitHub's includeStack | pull requests | ported c0e8fcea |
 | 6bb4e3d9d6 | #42873 | fix(web): comment timestamps follow 'Open links in' | connections | ported 7835705c |
 | 6c0621f78a | #42301 | fix(web): branch picker shows the right name for remotes containing slashes | git | ported 32cc3467 |
-| 6f49071a3d | #40745 | fix: a failed checkpoint capture keeps Edit from here for conversation rewind | shell | left: CW rewinds only to `ready` checkpoints (ThreadPromptRewind.swift:6), so it lacks 4928's `missing` rule too; port with `deriveRevertTurnCountByUserMessageId` and repository scopes (M, composer lane) |
+| 6f49071a3d | #40745 | fix: a failed checkpoint capture keeps Edit from here for conversation rewind | shell | ported 075fb7c1 (composer lane): any checkpoint but a stale one pins the conversation, and "Revert files too" is disabled unless the target is ready. CW has no repository scopes, so their rule stays out |
 | 6f644f6e91 | #40036 | feat: link a machine through another environment that already links to it | connections | ported e94f2201 |
 | 6f8282c2c8 | #41837 | fix(web): an IME Escape no longer blurs the file editor | files | holds: the input method takes an IME Esc before the editor |
 | 6f94a06384 | #23346 | fix(vcs): explain checkout failures caused by local changes | git | ported 32cc3467 |

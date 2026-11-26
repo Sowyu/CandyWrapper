@@ -83,8 +83,17 @@ struct ThreadLeftoversTests {
         #expect(command["scopeId"]?.stringValue == "scope")
         message.runId = RunId("run-one")
         #expect(ThreadPromptRewind.checkpoint(before: message, in: p)?.id.rawValue == "baseline")
+        // #40745: a missing or failed capture still rewinds the conversation, never the files; a stale one does neither.
+        p.checkpoints[0].status = "error"
+        #expect(ThreadPromptRewind.checkpoint(before: message, in: p)?.id.rawValue == "baseline")
+        #expect(!ThreadPromptRewind.restoresFiles(p.checkpoints[0]))
         p.checkpoints[0].status = "missing"
+        #expect(ThreadPromptRewind.checkpoint(before: message, in: p)?.id.rawValue == "baseline")
+        p.checkpoints[0].status = "stale"
         #expect(ThreadPromptRewind.checkpoint(before: message, in: p) == nil)
+        p.checkpoints[0].status = "ready"
+        p.checkpoints[1].status = "error"
+        #expect(ThreadPromptRewind.checkpoint(before: message, in: p)?.id.rawValue == "baseline", "the run's own capture failed")
 
     }
     @Test func findPaintDoesNotReconfigureRows() throws {

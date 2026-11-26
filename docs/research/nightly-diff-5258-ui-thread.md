@@ -213,6 +213,8 @@ The "Tab" kbd hint after a prompt suggestion is now a `button` with `aria-label`
 - Ported (port-composer): #40316 and #40767 in 357ba3b8, #40924 in 9ff295a2, #41814 in 31975590 (the edit picks under its own key, `followsThreadSelection` decodes, `queued-run.edit` carries `modelSelection`).
 - Correction (port-composer): CW's queued edit has never had T3's 4928 baseline for attachments or replies. It edits text only, `queued-run.edit` goes without `attachments`, so the server keeps them, and a reply stays an inline reference in the edit's text. So #40763 has nothing to fix here: a reply can only change by editing that text. Attachments in queued edits, the 4928 baseline plus #40945, ported in 4ed68104, c363ed65, ab65ea34 and 5f5259d5. The reply shown above the composer while editing is 29a57ed6.
 - Commits: 87554a7b86 #40945, d572ce9afe #41814, d834a4e117 #40763, c3a330d834 #40767, c385377544 #40316, 9de4ec1bfa #40924.
+- On screen (port-composer, 2026-11-25): `scripts/queue-attachment.swift` queues a message with an image and a file on a sandbox server and holds it. Its edit showed both tiles, removed the file, restored both on Cancel and kept only the image on Save, in default and Redesign, light and dark. File names now wrap in their tile, and ending an edit no longer leaves "Loading messages..." in the timeline (88433c36).
+- Undo window (port-composer): T3's undo notice expires 5 s after it shows (showThreadUndoNotice.ts:168-177), and CandyWrapper's does too. A waiting settle shows the notice as soon as its send fails as unavailable, which is at once without a socket, in both. A card's "Pending" opens no tooltip under the pointer, as T3's status slot is `pointer-events-none` on row hover (14f7e217); the slim row's time slot keeps it.
 
 ### 2.4 Paste and drop (medium, default look: no)
 
@@ -240,7 +242,7 @@ Dropped text is parsed like pasted text, so Markdown and newlines match (#31098,
 - A provider that needs an update shows a "Provider settings" link only when the install channel can update in Settings (#39966, ModelPickerContent.tsx:218).
 - CW: `Features/Composer/ComposerEffortGlyph.swift` and `Features/Composer/ComposerMenus.swift`. Typeahead and slug search are unchecked.
 - Commits: 2ced06ef4a #42041, 1acfd37c17 #40798, a891304c84 #30810, 9f9ebf61fb #40136, 39480b5c88 #27333, cf94598281 #39966.
-- Ported (port-composer) in 8e80f42f: #42041, #40798, and in 3318bb01: #30810, #40136, #27333's client half. #39966 ported with the notice itself in df3c4e1d. The "Provider settings" link sits on its own line, and docked layouts show no notice.
+- Ported (port-composer) in 8e80f42f: #42041, #40798, and in 3318bb01: #30810, #40136, #27333's client half. #39966 ported with the notice itself in df3c4e1d. Since 130121cf "Provider settings" flows after the notice's last word, and Redesign's docked pickers show the notice under their own column.
 
 ### 2.7 The @ menu and the thread link picker (small, default look: no)
 
@@ -445,14 +447,14 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | e9b227b021 | #42183 | fix(web): typing / or $ in the composer no longer waits for the suggestion menu to render | composer | n/a (React render timing) |
 | ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | ported 8a847157 |
 | 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | n/a here: CW has no Background work dialog (`BackgroundWorkDetails.tsx`); its banner and Redesign's waiting menu link the subagents directly. Port with the dialog |
-| d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | left: needs the pass restored after a relaunch with its update ids; the capsule is in b9a35ab6. Medium |
+| d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | left: needs the update pass saved across a relaunch with each server's handed-off version, then a server that came back on an older version reported as rolled back (updateEverythingRun.tsx `followHandedOffServers`, client-runtime state/server.ts). CW saves only the result toast. Shares the work of #41964. M, about 1.5 h with #41964 |
 | 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported aabe9d21, reference recaptured from 5258 in the next commit with the popup's titlebar inset and centering |
 | 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | ported 49dff54e |
 | 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | ported d9f298a4 (unit tested and seen on screen from a synthetic test build in dark and Redesign) |
 | 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | ported 75700d91 |
 | 2ced06ef4a | #42041 | fix(web): model picker search finds a model by its ID | composer | ported 8e80f42f |
 | a891304c84 | #30810 | fix(web): keep Codex Ultra off the effort bar scale | composer | ported 3318bb01 |
-| 66259ff051 | #41964 | fix(web): a failed server update restored after the app relaunches can retry | sidebar | left: needs the pass restored after a relaunch (`followHandedOffServers`); the capsule is in b9a35ab6. Medium |
+| 66259ff051 | #41964 | fix(web): a failed server update restored after the app relaunches can retry | sidebar | left: needs the same saved pass as #33002, then `resolveRestoredRetry` (updateEverything.logic.ts:536-558 at 5258) to rebuild a restored failed row's retry from the server as it is now. M, with #33002 |
 | 74c6d21c7a | #41672 | fix(web): the update dialog says why a server was skipped | sidebar | ported b4ba8432 |
 | a6c69be8df | #41927 | fix(web,mobile): a parent parked on subagents no longer reads as Thinking | thread | ported 86c5baba (the server half, #38869, is not a client change) |
 | ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | ported f2fef30d and 816b0031 + eec3b345 (the starting row before the server has a run, from the unconfirmed optimistic send and the composer's selected instance; unit tested, not seen on screen) |
@@ -520,7 +522,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 3b3f8808f4 | #40672 | fix(web): wait for image uploads before sending | composer | ported 9499e23d |
 | c1fbdf6cdb | #40686 | fix(web): pasting text copied from Word inserts the text instead of an image | composer | ported 8337eb04 |
 | 0fb6ac6e65 | #27866 | perf(web): Markdown renders with Words as static islands under one shared tooltip; remark leaves the web app | thread | n/a (markdown render speed) |
-| 3f08098c99 | #40654 | fix(web): wrapped prompt suggestion no longer overlaps the composer toolbar | composer | left (2.2: wrapped suggestion overlap, not checked on screen) |
+| 3f08098c99 | #40654 | fix(web): wrapped prompt suggestion no longer overlaps the composer toolbar | composer | ported 54027380: a wrapped suggestion grows the composer. Not seen on screen, since typing a long suggestion needs a real reply; covered by `aWrappedSuggestionGrowsTheComposer` |
 | a9447cedbd | #33221 | fix(web): Cite button appears as fast after a double-click as after a drag | thread | ported 552ca433 (CW already showed Cite at once; a multi-click now anchors it under the selection) |
 | 76b421864b | #40628 | fix(web): Ctrl+click in the composer no longer outlines the whole line | composer | n/a (web editor selection) |
 | 10586f9e31 | #40594 | feat: read feature flags from one T3CODE_FEATURE_FLAGS service | other | n/a (feature flags, wire A9) |
@@ -544,7 +546,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 39480b5c88 | #27333 | fix(opencode): custom models can go back to the default reasoning level | composer | ported 3318bb01 (client half: t3:default names no effort; the rest is the server's) |
 | 73e6472545 | #24583 | fix(client-runtime): recover thread messages after a failed resume | thread | already for the resume (ThreadSession.applyWire drops the cursor on a failed apply, the next subscribe takes a snapshot); the composer sync line's error is left, composer area |
 | aa6fe390db | #40042 | fix(web): dismissing a local thread error no longer suppresses repeat errors | thread | ported d6a22d31 |
-| bac0508e08 | #38895 | feat(web): thread chips show the sidebar's thread card on hover | thread | ported 98cec9f9 for sent messages and 3c2642b5 for the composer; left: clicking a composer chip opens nothing, small |
+| bac0508e08 | #38895 | feat(web): thread chips show the sidebar's thread card on hover | thread | ported 32609bf7 for sent messages, 3c2642b5 for the composer, and 7678606a for clicking a composer chip, which opens the thread, or reads a linked machine's thread read-only like a message's chip |
 | e8b28328da | #29681 | feat(web): duplicate browser tabs from the context menu | other | n/a (browser tabs, other agent) |
 | b9879ede83 | #33286 | feat(web): copy a chat table as HTML | thread | ported dd1cfae1 (unaligned columns say left: Foundation reports no "none" alignment) |
 | 26d81d88c1 | #40076 | fix(web): timeline row actions stay put on hover, and notices expand only when cut off | thread | ported 239ed38d (the row's chevron and click follow the cut-off check; not seen on screen) |
@@ -568,12 +570,12 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 9294a9801e | #39837 | fix(acp,web): stop showing "Running Ran" for commandless ACP tool calls | thread | ported 86c5baba |
 | 0bc9b57b93 | #31257 | feat: secret cards get a show/hide toggle and multi-value fields | thread | ported 6ca2bd09 (multi-value fields were already in from the wire port) |
 | d5a084c440 | #39636 | fix(web): the provider update pill no longer recounts dismissed updates | sidebar | ported 17cb1d6a |
-| 019e55bad5 | #39569 | fix(composer): keep screenshots preparing after an unanswered question closes | composer | left (2.1: screenshot preparing after a question closes, not checked) |
+| 019e55bad5 | #39569 | fix(composer): keep screenshots preparing after an unanswered question closes | composer | left: needs a check of what CW does with a question's preparing screenshot when the question closes unanswered, then the move back into the draft (questionAttachments.ts, useComposerAttachmentIntake.ts, preparingComposerImages.ts at 5258; CW's question uploads are ComposerController.swift:3659-3890). M, about 45 min |
 | 732c03f410 | #39557 | fix(web): fold accents in thread link picker search | composer | ported 6fa875f4 |
 | 22936ae669 | #39552 | fix(web): ignore superseded microphone refreshes in voice setup | composer | n/a (web mic setup) |
 | 29b42d409c | #39351 | fix(web): show status for grouped sidebar issues | sidebar | ported 1512d514 (every linked issue read, `aggregateState`) |
 | 3a60d0996a | #38869 | fix(server): background subagents can delegate after their parent's turn ends | thread | ported 5aa812be (the client half: a subagent card after the turn's reply adds no turn time; the server half needs no client change) |
-| bb1a66a3a4 | #38323 | feat(web): reference a side chat from its main thread with Add to chat and @ | thread | left: the @ menu and Add to chat do not offer a side chat from its main thread yet (composerThreadItems.ts, SideChatPane.tsx), small to medium |
+| bb1a66a3a4 | #38323 | feat(web): reference a side chat from its main thread with Add to chat and @ | thread | ported 43750727: Add to chat replaces Bring back in the side chat tab, and the @ menu offers the thread's own side chats as "Side chat". References recaptured from 5258 |
 | 5872b0a488 | #37419 | fix(web): a later thread error with the same text shows its banner again | thread | ported d6a22d31 (source is the shell's latest run and its end time, not the failure item; ponytail marker) |
 | dcf158c591 | #39415 | feat(server): setting and managed policy to turn off the preview tunnel | other | n/a (preview tunnel, wire A10) |
 | 420d1b5900 | #39393 | feat(desktop): forward another environment's ports to this machine | palette | n/a (desktop IPC, wire A19) |

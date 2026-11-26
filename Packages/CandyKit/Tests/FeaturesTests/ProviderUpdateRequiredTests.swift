@@ -52,4 +52,44 @@ import T3Protocol
         #expect(view.naturalSize.height > plain.naturalSize.height)
         #expect(notice[0].frame.maxY <= view.bounds.height + 0.5)
     }
+
+    /// "Provider settings" flows after the notice's last word (ModelPickerContent.tsx:252-271 at 5258, `{" "}<InlineButton>`),
+    /// and starts a new line only when that line has no room for it.
+    @MainActor @Test func providerSettingsFlowsAfterTheText() {
+        let short = ProviderUpdateNoticeView("Needs v9.", onSettings: {})
+        short.frame = NSRect(x: 0, y: 0, width: 300, height: short.height(forWidth: 300))
+        short.layoutSubtreeIfNeeded()
+        let link = short.link!
+        #expect(abs(link.frame.minY - short.text.frame.minY) < 0.5 && link.frame.minX > short.text.frame.minX + 20)
+        #expect(short.height(forWidth: 300) == 1 + 8 + short.text.frame.height + 8)
+        let full = ProviderUpdateNoticeView("Using Claude Synthetic Next requires Claude Code v3.2.0 or newer, so update it first", onSettings: {})
+        // A width where the last line is nearly full: the link moves down a line.
+        let w: CGFloat = 200
+        full.frame = NSRect(x: 0, y: 0, width: w, height: full.height(forWidth: w))
+        full.layoutSubtreeIfNeeded()
+        let origin = full.linkOrigin(textWidth: w - 24)!
+        if origin.y > 0 {
+            #expect(full.link!.frame.minX == 12 && full.link!.frame.minY >= full.text.frame.maxY - 0.5)
+        } else {
+            #expect(full.link!.frame.maxX <= w - 12 + 0.5)
+        }
+        #expect(full.link!.frame.maxY <= full.bounds.height - 8 + 0.5)
+    }
+
+    /// Redesign's docked layouts show the notice too, under their own column.
+    @MainActor @Test(arguments: [true, false]) func dockedPickerShowsTheNotice(_ stacked: Bool) {
+        RedesignPickerHoverTests.withPicker(stacked: stacked, account: false) {
+            var providers = PickersPreview.providers
+            let i = providers.firstIndex { $0.driver == "claudeAgent" }!
+            providers[i].updateRequiredModels = [.init(slug: "x", name: "Synthetic", minVersion: "9.0.0")]
+            let view = ModelPickerView(catalog: ProviderCatalog(providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
+            view.docked = true
+            view.onManage = { _ in }
+            view.frame.size = view.naturalSize
+            view.layoutSubtreeIfNeeded()
+            let notice = view.subviews.compactMap { $0 as? ProviderUpdateNoticeView }
+            #expect(notice.count == 1)
+            #expect(notice.first.map { $0.frame.maxY <= view.bounds.height + 0.5 && $0.frame.maxX <= view.bounds.width + 0.5 && $0.frame.width > 200 } == true)
+        }
+    }
 }

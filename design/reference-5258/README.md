@@ -5,6 +5,7 @@ Source: the official T3 Code web client **0.1.13-nightly.20261125.5258**, served
 | File | State | Test |
 |---|---|---|
 | 02-sidebar-populated | The markdown thread open, sidebar at its natural scroll | `FeaturesTests/SidebarFidelityTests.wholeSidebar` |
+| 62-side-chat-panel | A new side chat open beside "Run Shell Commands" (`plans/side-chat.json`, the 4928 plan's state on port 47398): Add to chat in place of Bring back | `FeaturesTests/SideChatFidelityTests.sideChatPanel` |
 
 ## The sandbox
 

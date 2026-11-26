@@ -792,8 +792,17 @@ public final class ComposerView: DSView {
         onCaretChange?(true)
     }
 
+    /// The placeholder shares the editor's grid cell (`grid grid-cols-[minmax(0,1fr)]`, `col-start-1 row-start-1`,
+    /// ComposerPromptEditorTiptap.tsx:1924-1980 at 5258, #40654), so a wrapped suggestion makes the box taller instead
+    /// of running into the toolbar. Capy keeps its placeholder on one line.
+    private var placeholderHeight: CGFloat {
+        guard !capy, editor.string.isEmpty, !placeholder.text.isEmpty else { return 0 }
+        let width = bounds.width - 2 * (Self.inset + Self.pad)
+        return width > 0 ? ceil(placeholder.height(forWidth: width)) : 0
+    }
+
     private func relayoutHeight() {
-        let minimum = editorMinimum
+        let minimum = max(editorMinimum, placeholderHeight)
         let height = min(Self.editorMax, max(minimum, editor.contentHeight))
         // Most keystrokes keep the height; the text view grows itself, so only a new height
         // needs the composer (and its footer measuring) laid out again.

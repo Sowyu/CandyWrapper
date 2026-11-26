@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-import DesignSystem
+@testable import DesignSystem
 import T3Protocol
 import T3Store
 @testable import Features
@@ -100,6 +100,32 @@ struct SidebarActionWiringTests {
         row.configure(.row(model))
         row.layoutSubtreeIfNeeded()
         #expect(row.hitTest(NSPoint(x: 64, y: 65)) === row)
+    }
+
+    /// SidebarThreadRow.tsx:1604-1621 at 5258: a card's status slot turns `pointer-events-none` while the row is hovered,
+    /// so its "Pending" opens no tooltip; the slim row's time slot keeps "Waiting to sync with its environment".
+    @Test func pendingTooltipOnlyWhereT3TakesThePointer() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        ThemeRuntime.apply(.init())
+        let snapshot = SidebarPreview.richSnapshot()
+        var state = SidebarListState()
+        state.pendingSync = Set(snapshot.threads.map(\.id))
+        let rows = SidebarListBuilder.items(snapshot: snapshot, state: state, nowMs: 0).compactMap { if case .row(let r) = $0 { r } else { nil } }
+        func pendingTips(_ view: NSView) -> [String?] {
+            view.subviews.flatMap { sub -> [String?] in
+                ((sub as? LabelView).flatMap { $0.text == "Pending" && !$0.isHidden ? [$0.currentTooltip] : nil } ?? []) + pendingTips(sub)
+            }
+        }
+        let cardModel = try #require(rows.first { $0.variant == .card && $0.isPendingSync && $0.topStatus != .woke })
+        let card = SidebarCardRowView(frame: NSRect(x: 0, y: 0, width: 240, height: SidebarItem.row(cardModel).height))
+        card.configure(.row(cardModel))
+        #expect(pendingTips(card).allSatisfy { $0 == nil || $0 == "" })
+        if let slimModel = rows.first(where: { $0.variant != .card && $0.isPendingSync }) {
+            let slim = SidebarSlimRowView(frame: NSRect(x: 0, y: 0, width: 240, height: SidebarItem.row(slimModel).height))
+            slim.configure(.row(slimModel))
+            #expect(pendingTips(slim).contains("Waiting to sync with its environment"))
+        }
     }
 
     /// A card without a meta line is 64pt tall, and its highlight once kept the 78pt of a full card, so the

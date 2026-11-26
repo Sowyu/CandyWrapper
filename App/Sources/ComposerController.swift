@@ -4028,17 +4028,23 @@ extension ComposerController {
     private var menuThreads: [ComposerMenus.ThreadCandidate] {
         guard let env = targetEnvironmentId else { return [] }
         let linked = composerLinkedNames
+        // composerThreadItems.ts:49-54 at 5258 (#38323): this thread's own side chats, once they have a message, since
+        // closing an unused one deletes it.
+        let parent: String? = if case .thread(let id) = target { id.localId.rawValue } else { nil }
+        func ownSideChat(_ t: ThreadShell, owner: String) -> Bool {
+            t.lineage.sideChat == true && owner == env && parent != nil && t.lineage.parentThreadId?.rawValue == parent && t.latestUserMessageAt != nil
+        }
         var candidates = (sidebar?.snapshot?.threads ?? []).compactMap { t -> ComposerMenus.ThreadCandidate? in
             guard let owner = t.id.environmentId, owner == env || linked[owner] != nil else { return nil }
             return .init(id: t.id.rawValue, title: t.title, updatedAt: t.updatedAt.raw, archived: t.archivedAt != nil,
-                         machine: owner == env ? nil : linked[owner], isSubagent: !t.lineage.isListed)
+                         machine: owner == env ? nil : linked[owner], isSubagent: !t.lineage.isListed, isOwnSideChat: ownSideChat(t, owner: owner))
         }
         let known = Set(candidates.map(\.id))
         if let matches = menuState.threadMatches, matches.environment == env {
             candidates += matches.threads.filter { !known.contains($0.thread.id.scoped(to: $0.environmentId).rawValue) }.map { m in
                 .init(id: m.thread.id.scoped(to: m.environmentId).rawValue, title: m.thread.title, updatedAt: m.thread.updatedAt.raw,
                       archived: m.thread.archivedAt != nil, machine: m.environmentId == env ? nil : linked[m.environmentId],
-                      isSubagent: !m.thread.lineage.isListed)
+                      isSubagent: !m.thread.lineage.isListed, isOwnSideChat: ownSideChat(m.thread, owner: m.environmentId))
             }
         }
         return candidates
@@ -4544,7 +4550,20 @@ extension ComposerController {
                 SkillDetailsView.show(skill: skill, from: self.composer, onViewInstructions: open)
                 return true
             }
-            guard case .context(_, let contextId, _) = token.kind else { return false }
+            guard case .context(let kind, let contextId, _) = token.kind else { return false }
+            // `ThreadContextChip` is a `Link` to the thread (ThreadContextChip.tsx:40-68 at 5258); a thread on a machine
+            // the open thread's environment links to reads there read-only, like a message's chip (MarkdownThreadLink.tsx:84-115).
+            if kind == "thread", let record = self.menuState.records[contextId],
+               let owner = record["environmentId"]?.stringValue, let local = record["threadId"]?.stringValue {
+                let via = self.openThreadId?.environmentId
+                if let via, owner != via, let label = self.panel.model.linkedEnvironmentLabel?(owner) {
+                    self.panel.model.onOpenLinkedThread?(LinkedThreadSurfaceTarget(
+                        viaEnvironmentId: via, environmentId: owner, threadId: local, label: label, title: record["title"]?.stringValue))
+                } else {
+                    self.panel.model.onOpenThread?(ThreadId("t3-thread://v2/\(owner)/\(local)"))
+                }
+                return true
+            }
             if let queued = self.queuedAttachment(contextId: contextId), let id = queued["id"]?.stringValue {
                 if queued["type"]?.stringValue == "image" { self.expandQueuedImage(id) } else { self.openSentAttachment(queued, download: false) }
                 return true
@@ -4622,9 +4641,13 @@ extension ComposerController {
     fileprivate func attachmentsTargetChanged() {
         if panel.stashMenuOpen { setStashMenu(false) }
         let key = draftKey ?? ""
-        var phase: ComposerActivityRowView.Phase?
-        if case .thread = target { phase = .loading }
-        updateSyncPhase(phase, key: key)
+        // Only a new target waits for its store's status. Ending a queued edit reloads the same thread's prompt, and its
+        // store sends no new status, so a reset here left "Loading messages..." up for good.
+        if key != syncStatus.key {
+            var phase: ComposerActivityRowView.Phase?
+            if case .thread = target { phase = .loading }
+            updateSyncPhase(phase, key: key)
+        }
         syncAttachmentViews()
     }
 
@@ -4930,6 +4953,29 @@ extension ComposerController {
         composer.insertAtCaret(references.joined(separator: " ") + " ")
         composer.focus()
         return true
+    }
+
+    /// A side chat's "Add to chat" (SideThreadPane.tsx:99-108 at 5258, #38323): the side chat's thread record joins
+    /// this thread's draft, its reference appended to the end of the prompt (`addThreadContexts` with
+    /// `insertAtCaret: false`, composerDraftStore.ts:4216-4256; `inlineContextReferenceReplacement`,
+    /// composerContextReferences.ts:44-57). Nothing moves the caret or the focus.
+    func addSideChatContext(_ id: ThreadId, title: String) {
+        guard case .thread(let parent) = target, let env = parent.environmentId, id.environmentId == env else { return }
+        let local = id.localId.rawValue
+        let record = ComposerContext.threadRecord(threadId: local, title: title, environmentId: env)
+        // The composer shows the draft unless a queued edit or an open question holds it; then only the saved draft changes.
+        let showsDraft = queuedEdit == nil && questionRequestId == nil
+        if showsDraft { flushPrompt() }
+        let text = prompts[parent.rawValue] ?? ""
+        guard let contextId = record["contextId"]?.stringValue, !ComposerContext.referencedIds(text).contains(contextId) else { return }
+        menuState.records[contextId] = record
+        let lead = text.last.map { !$0.isWhitespace } ?? false ? " " : ""
+        prompts[parent.rawValue] = text + lead + ComposerContext.reference(ComposerContext.threadReference(threadId: local, title: title)) + " "
+        if showsDraft {
+            composer.text = prompts[parent.rawValue] ?? ""
+            pickers.prompt = composer.text
+        }
+        scheduleSave()
     }
 
     /// "Add to chat" from a terminal (`addTerminalContext`, ChatComposer.tsx:6502-6533): a new
@@ -6333,17 +6379,20 @@ extension ComposerController {
             toast(.warning, "Wait for attachments to finish preparing before rewinding."); return
         }
         guard let checkpoint = ThreadPromptRewind.checkpoint(before: message, in: projection) else {
-            toast(.warning, "No ready checkpoint is available before this message."); return
+            toast(.warning, "No checkpoint is available before this message."); return
         }
-        // ChatOverlayHosts.tsx:212-225 (7116325f03). The files sentence goes with the button it names.
-        let revertsFiles = projection.thread.worktreePath != nil
+        // `RevertConfirmHost` (ChatOverlayHosts.tsx:209-297 at 5258): "Revert files too" is always there, disabled
+        // outside an isolated worktree or when the target's snapshot is missing or failed (#40745), which still
+        // rewinds the conversation. CW has no task-folder repositories, so the "repositories" wording never applies.
+        let revertsFiles = projection.thread.worktreePath != nil && ThreadPromptRewind.restoresFiles(checkpoint)
         let description = "Rewind chat to before this message. Your prompt and attachments return to the composer."
-            + (revertsFiles ? " \u{201C}Revert files too\u{201D} also undoes your own edits." : "")
+            + " \u{201C}Revert files too\u{201D} also undoes your own edits."
         let dialog = DialogView(kind: .alertDialog, title: "Edit from here?", message: description)
         let cancel = ButtonView("Cancel", variant: .outline)
         let keep = ButtonView("Revert and keep changes")
         let files = ButtonView("Revert files too", variant: .destructiveOutline)
-        dialog.footerButtons = revertsFiles ? [cancel, files, keep] : [cancel, keep]
+        files.isEnabled = revertsFiles
+        dialog.footerButtons = [cancel, files, keep]
         let host = ModalHost.present(dialog, in: window)
         cancel.action = { [weak host] in host?.close() }
         let perform: (Bool) -> Void = { [weak self, weak host] restoreFiles in

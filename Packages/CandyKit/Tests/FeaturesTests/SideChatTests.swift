@@ -41,26 +41,27 @@ struct SideChatTests {
         // `h-9 pr-1 pl-3 gap-1`: close and delete are 24pt icon-xs buttons at the right.
         #expect(pane.close.frame == NSRect(x: 482 - 4 - 24, y: 5.5, width: 24, height: 24))
         #expect(pane.delete.frame.maxX == pane.close.frame.minX - 4)
-        #expect(pane.bringBack.frame.maxX == pane.delete.frame.minX - 4)
+        #expect(pane.addToChat.frame.maxX == pane.delete.frame.minX - 4)
         #expect(pane.titleLabel.frame.minX == 12 && pane.titleLabel.text == "Side chat")
-        pane.apply(.init(title: "Why is the sky blue", bringBackBlockedReason: "Available after a finished reply."))
+        // SideThreadPane.tsx:99, 166-180 at 5258 (#38323): Add to chat waits for the side chat's first message.
+        pane.apply(.init(title: "Why is the sky blue"))
         #expect(pane.titleLabel.text == "Why is the sky blue")
-        #expect(pane.bringBack.alphaValue == 0.64 && pane.bringBack.currentTooltip == "Available after a finished reply.")
-        pane.apply(.init(title: "x"))
-        #expect(pane.bringBack.alphaValue == 1 && pane.bringBack.currentTooltip == "Adds this side chat to the main thread's next message.")
+        #expect(pane.addToChat.alphaValue == 0.64 && pane.addToChat.currentTooltip == "Available after the first message.")
+        pane.apply(.init(title: "x", canAddToChat: true))
+        #expect(pane.addToChat.alphaValue == 1 && pane.addToChat.currentTooltip == "Adds this side chat to the main thread's next message.")
         pane.apply(.init(deleted: true))
         #expect(!pane.delete.isEnabled)
     }
 
-    @Test func blockedBringBackDoesNothing() {
+    @Test func addToChatWaitsForAMessage() {
         let pane = SideChatPaneView(threadId: "side")
         var calls = 0
-        pane.onBringBack = { calls += 1 }
-        pane.apply(.init(bringBackBlockedReason: "Available when the main thread is idle."))
-        pane.bringBack.action?()
-        #expect(calls == 0)
+        pane.onAddToChat = { calls += 1 }
         pane.apply(.init())
-        pane.bringBack.action?()
+        pane.addToChat.action?()
+        #expect(calls == 0)
+        pane.apply(.init(canAddToChat: true))
+        pane.addToChat.action?()
         #expect(calls == 1)
     }
 
@@ -83,7 +84,7 @@ struct SideChatTests {
         let pane = SideChatPaneView(threadId: "side")
         host.show(pane)
         host.layoutSubtreeIfNeeded()
-        let button = [pane.bringBack, pane.delete, pane.close][index]
+        let button = [pane.addToChat, pane.delete, pane.close][index]
         let resting = try pixels(button)
         var hovered = button.state
         hovered.hovered = true

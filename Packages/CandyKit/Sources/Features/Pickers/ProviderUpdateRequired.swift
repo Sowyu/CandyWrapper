@@ -64,8 +64,8 @@ import DesignSystem
 import T3Store
 
 /// One notice under the picker's list (ModelPickerContent.tsx:252-271): `shrink-0 border-t border-border/70 px-3 py-2
-/// text-xs leading-snug text-muted-foreground`, then "Provider settings" when the update can run from Settings.
-/// ponytail: the link takes its own line instead of flowing after the text's last word; measure the last line if that shows
+/// text-xs leading-snug text-muted-foreground`, then " " and the "Provider settings" `InlineButton` when the update can run
+/// from Settings. The button flows after the text's last word, or starts the next line when it does not fit there.
 final class ProviderUpdateNoticeView: DSView {
     let text: TextBlockView
     let link: ButtonView?
@@ -87,7 +87,17 @@ final class ProviderUpdateNoticeView: DSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     func height(forWidth w: CGFloat) -> CGFloat {
-        1 + 8 + text.layout(forWidth: max(1, w - 24)).height + (link == nil ? 0 : 16.5) + 8
+        1 + 8 + text.layout(forWidth: max(1, w - 24)).height + (linkOrigin(textWidth: max(1, w - 24)).map { $0.y > 0 ? 16.5 : 0 } ?? 0) + 8
+    }
+
+    /// Where the link starts, relative to the text's top left: after the last line's end and a space when it fits,
+    /// else at the start of a new line (`y` > 0 means one line further down than the text's last line).
+    func linkOrigin(textWidth w: CGFloat) -> CGPoint? {
+        guard let link else { return nil }
+        let length = (text.text as NSString).length
+        guard length > 0, let last = text.runRects(NSRange(location: length - 1, length: 1), width: w).last else { return CGPoint(x: 0, y: 16.5) }
+        let x = last.rect.maxX + TextLine(NSAttributedString(string: " ", attributes: [.font: text.font])).width
+        return x + link.fittingSize.width <= w ? CGPoint(x: x, y: 0) : CGPoint(x: 0, y: 16.5)
     }
 
     override func layout() {
@@ -98,9 +108,9 @@ final class ProviderUpdateNoticeView: DSView {
         border.backgroundColor = (dither ? Themed.color(\.contrastForeground, 0.08) : Themed.color(\.border, 0.7)).cgColor(in: self)
         let h = text.layout(forWidth: max(1, bounds.width - 24)).height
         text.frame = NSRect(x: 12, y: 9, width: bounds.width - 24, height: h)
-        if let link {
-            let w = link.fittingSize.width
-            link.frame = NSRect(x: 12, y: 9 + h, width: w, height: 16.5)
+        if let link, let origin = linkOrigin(textWidth: bounds.width - 24) {
+            // `y` is 0 on the text's last line and 16.5 below it.
+            link.frame = NSRect(x: 12 + origin.x, y: 9 + h - 16.5 + origin.y, width: link.fittingSize.width, height: 16.5)
         }
     }
 
