@@ -84,12 +84,39 @@ public final class BetaSettingsView: SettingsPageBase {
             guard let self, let suggestions else { return }
             suggestions.isHidden = !self.context.scope.allStore("promptSuggestionsEnabled")
         }
+        let feedback = agentFeedbackRow()
         // #33131 removed the Legacy features section: plan mode and the context window indicator.
-        items = [section("beta", "Beta", [folders, multiline, guest, linked, suggestions]), candySection()]
+        items = [section("beta", "Beta", [folders, multiline, guest, linked, suggestions, feedback]), candySection()]
         binder.refresh()
     }
 
     isolated deinit { unsubscribe.forEach { $0() } }
+
+    static let agentFeedbackModes: [(value: String, label: String, detail: String)] = [
+        ("off", "Off", "Agents send no feedback to the T3 team."),
+        ("on-request", "When I ask", "When you ask, agents show you a short report about T3 Code and send it to the T3 team if you approve."),
+        ("auto", "Automatic", "Agents also report T3 Code problems they hit on their own, such as a T3 tool that failed."),
+    ]
+
+    /// `AgentFeedbackRow` (5258 LabsSettingsPanel.tsx:398-468): only when every connected machine in scope has
+    /// `agentFeedback`, never at a project scope. The server sends reports through its analytics service
+    /// (FeedbackStore.ts:208), which servers CandyWrapper starts keep off, so the settings controller drops the
+    /// capability for those and the row stays hidden there (docs/decisions.md, 2026-11-25).
+    private func agentFeedbackRow() -> SettingsRowView {
+        let modes = Self.agentFeedbackModes
+        let (row, select) = serverSelect("agent-feedback", nil, key: "agentFeedback", options: modes.map { ($0.value, $0.label) },
+                                         width: 160, reset: nil, label: "Agent feedback",
+                                         current: { $0["agentFeedback"].objectValue?["mode"]?.stringValue ?? "off" })
+        select.onChange = { [weak self] i in self?.context.patchServer(["agentFeedback": .object(["mode": .string(modes[i].value)])]) }
+        binder.add { [weak self, weak row] in
+            guard let self, let row else { return }
+            row.isHidden = self.context.scope.isProjectScope || !self.context.scope.allSupport("agentFeedback")
+            let mode = self.server["agentFeedback"].objectValue?["mode"]?.stringValue ?? "off"
+            row.detail = self.context.scope.isMixed(["agentFeedback"]) ? "The selected machines use different agent feedback modes."
+                : modes.first { $0.value == mode }?.detail ?? modes[0].detail
+        }
+        return row
+    }
 
     private func candySection() -> SettingsSectionView {
         let rows = Self.candyToggles.map { toggle in

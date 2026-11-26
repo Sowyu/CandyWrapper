@@ -96,7 +96,7 @@ public enum DitherSettingsSection: String, CaseIterable, Sendable {
         case .general: return [
             .init(.general, scope: true, [G("behavior", "Composer and chat", rows: ["language", "time-format", "response-streaming", "skills-in-slash-menu",
                                                                                "composer-rich-text", "send-shortcut",
-                                                                               "follow-up-behavior"])]),
+                                                                               "follow-up-behavior", "side-thread-open-target"])]),
             .init(.general, [G("behavior", "Diffs and panels", rows: ["hide-whitespace-changes", "default-diff-file-state", "diff-layout",
                                                                       "proactive-panels"]),
                              G("confirmations", nil, rows: ["unpin-confirmation", "archive-confirmation", "delete-confirmation",

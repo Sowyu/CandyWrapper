@@ -98,6 +98,8 @@ public final class ConcernSettingsView: SettingsPageBase {
         case .chat: return [
             .init(.general, [G("behavior", "Composer", rows: ["composer-rich-text", "send-shortcut", "skills-in-slash-menu"])]),
             .init(.general, [G("behavior", "Follow-ups", rows: ["follow-up-behavior"])]),
+            // 5258 SettingsPanels.tsx:1416 (#39515).
+            .init(.general, [G("behavior", "Subagents and side chats", rows: ["side-thread-open-target"])]),
             // 4928 ChatSettingsPanel's Activity section (SettingsPanels.tsx:1396-1398).
             .init(.general, [G("behavior", "Activity", rows: ["tool-call-visibility"])]),
             // Its Screen reader section (SettingsPanels.tsx:1400-1403); CandyWrapper has the window title row only.

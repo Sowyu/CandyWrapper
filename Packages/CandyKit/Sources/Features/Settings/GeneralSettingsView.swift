@@ -319,6 +319,15 @@ public final class GeneralSettingsView: SettingsPageBase {
                 ? "Press ⌘ + Enter for single-line prompts or ⌘ + Shift + Enter for multiline prompts to do the opposite for one message."
                 : "Press ⌘\(shortcut == "mod-enter" ? " + Shift" : "") + Enter to do the opposite for one message.")
         }
+        // 5258 SettingsPanels.tsx:1416-1470 (#39515): the Chat page's "Subagents and side chats" section.
+        let sideThread = clientSelect("side-thread-open-target", nil, key: "sideThreadOpenTarget",
+                                      options: [("panel", "Side panel"), ("main", "Main view")], width: nil,
+                                      reset: "where subagents and side chats open", hideIndicator: false)
+        binder.add { [weak self, weak sideThread] in
+            guard let self else { return }
+            sideThread?.detail = "Where a click opens a subagent, a side chat, or a thread on a linked environment. ⌘-click or middle-click opens it in the "
+                + (self.client.string("sideThreadOpenTarget") == "main" ? "side panel" : "main view") + " instead."
+        }
         let updates = serverSwitch("provider-update-checks", DesignGeometry.usesClassic(self)
             ? "Check installed provider CLIs for newer available versions."
             : "Check installed provider CLIs for newer available versions and fetch model catalog updates. When off, new models may not appear.",
@@ -356,7 +365,7 @@ public final class GeneralSettingsView: SettingsPageBase {
                                        key: "screenReaderWindowTitle", reset: "screen reader window title", label: "Screen reader window title",
                                        title: "Screen reader window title")
         return section("behavior", "Behavior", [notifications, inApp, language, time, streaming, whitespace, fileState, layout, proactive, skills, rich]
-                       + [send, followUp, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar, haptics, railTicks, tooltips])
+                       + [send, followUp, sideThread, toolCalls, windowTitle, updates, continueRow, backgroundActivityRow(), menuBar, haptics, railTicks, tooltips])
     }
 
     /// A select over a boolean client key.
