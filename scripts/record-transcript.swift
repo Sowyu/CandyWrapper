@@ -2,7 +2,7 @@
 //
 // Usage: swift record.swift <baseURL> <tokenFile> <outFile> <scenario> [pairingToken]
 //   tokenFile   bearer token cache for this (sandbox) server; created on first pairing.
-//   scenario    basic | turn | turn2 | threads | composer | requests | queue | git | settings | issues | side-chat
+//   scenario    basic | turn | turn2 | threads | composer | requests | queue | git | settings | issues | side-chat | nightly5258
 // Secrets (access token, ws ticket, pairing token) and the account email are
 // redacted when the transcript is written.
 import Foundation
@@ -652,6 +652,46 @@ case "git":
     try await request("vcs.listRefs", ["cwd": repo, "query": "feat", "limit": 100])
     try await request("server.discoverSourceControl")
     await pause(4)
+
+case "nightly5258":
+    // Nightly 5258 fields in one short session: one tiny haiku turn on a git repo (provider session startup and
+    // turn capabilities), the refresh's refsDigest, the workspace and workflow reads, and a 22 s pause so the
+    // server's 20 s heartbeat Pong (apps/server/src/socketHeartbeat.ts) lands with no ping outstanding.
+    let repo = ProcessInfo.processInfo.environment["DEMO_REPO"]!
+    try await request("server.getConfig")
+    try await request("server.getSettings")
+    try await request("orchestration.subscribeShell", ["requestCompletionMarker": true])
+    await pause(0.5)
+    let projectId = uuid()
+    try await request("projects.mutate", ["type": "project.create", "commandId": uuid(), "projectId": projectId,
+                                         "title": "demo-repo", "workspaceRoot": repo])
+    await pause(1)
+    try await request("vcs.refreshStatus", ["cwd": repo])
+    try await request("workspace.listFolders", ["projectId": projectId])
+    try await request("workspace.scanFolders", ["workspaceRoot": repo])
+    try await request("workflows.counts", [:])
+    try await request("peerLinks.names")
+    let threadId = uuid()
+    try await request("orchestration.dispatchCommand", [
+        "type": "thread.create", "createdBy": "user", "creationSource": "web", "commandId": uuid(),
+        "threadId": threadId, "projectId": projectId, "title": "New thread",
+        "modelSelection": ["instanceId": "claudeAgent", "model": "claude-haiku-5-5"],
+        "runtimeMode": "full-access", "interactionMode": "default", "branch": NSNull(), "worktreePath": NSNull(),
+    ])
+    await pause(0.5)
+    try await request("orchestration.subscribeThread", ["threadId": threadId, "requestCompletionMarker": true,
+                                                        "acceptBoundedSnapshot": true, "acceptCompactTurnItems": true])
+    await pause(0.5)
+    try await request("orchestration.dispatchCommand", [
+        "type": "message.dispatch", "createdBy": "user", "creationSource": "web", "commandId": uuid(),
+        "threadId": threadId, "messageId": uuid(), "text": "Reply with one word: hi",
+        "attachments": [] as [Any], "titleSeed": "hi", "dispatchMode": ["type": "start_immediately"],
+    ])
+    _ = await waitFor("turn completion", timeout: 180, { e in
+        (e["type"] as? String) == "run.updated" && ["completed", "failed", "interrupted"].contains(payload(e)["status"] as? String ?? "")
+    })
+    try await request("vcs.refreshStatus", ["cwd": repo])
+    await pause(22)
 
 case "settings":
     // The WP7.7b settings pages' reads: config (settings, providers, capabilities), source control discovery,

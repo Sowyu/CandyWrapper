@@ -117,4 +117,42 @@ struct Nightly5258WireTests {
         #expect(notice.mcpSignInServer == "linear")
         #expect(McpSignInRPC.startInput(threadId: "t1", providerThreadId: "pt1", server: "linear")["server"] == .string("linear"))
     }
+
+    /// The recorded 5258 session (fixtures/transcripts/27-nightly-5258.jsonl, sandbox 5258, one haiku turn): config,
+    /// shell and thread frames decode with this build, the refresh carries `refsDigest`, the provider session reports
+    /// `supportsNativeResume`, and a heartbeat Pong arrives at about 20 s with no ping sent.
+    @Test func recorded5258SessionDecodes() throws {
+        var configSeen = false, threadSeen = false, digests: [String] = [], pongs = 0, nativeResume: Bool?, phases = Set<String>()
+        let frames = try WireTests.load("27-nightly-5258")
+        #expect(!frames.contains { $0.dir == "send" && String(decoding: $0.bodyData, as: UTF8.self).contains(#""_tag":"Ping""#) })
+        for frame in frames where frame.dir == "recv" && frame.kind == "ws" {
+            for message in try RPCFrame.decodeServer(frame.bodyData) { if case .pong = message { pongs += 1 } }
+            let value = try JSONDecoder().decode(JSONValue.self, from: frame.bodyData)
+            let id = value["requestId"]?.stringValue
+            if id == "1", let config = value["exit"]?["value"] {
+                _ = try config.decode(as: ServerProviderConfig.self)
+                configSeen = true
+            }
+            if id == "5" || id == "13", let digest = value["exit"]?["value"]?["refsDigest"]?.stringValue { digests.append(digest) }
+            if id == "6" { #expect(try value["exit"]?["value"]?.decode(as: WorkspaceListFoldersResult.self).folders == []) }
+            if id == "8" { #expect(try value["values"]?[0]?.decode(as: WorkflowCounts.self).total == 0) }
+            for item in value["values"]?.arrayValue ?? [] {
+                if id == "3", case .snapshot(let shell, _) = try item.decode(as: ShellStreamItem.self) {
+                    #expect(shell.threads.allSatisfy { $0.lineage.isListed })
+                }
+                guard id == "11" else { continue }
+                let decoded = try item.decode(as: ThreadStreamItem.self)
+                if case .unknownEvent(_, let type) = decoded { Issue.record("unknown 5258 event \(type)") }
+                if let projection = item["projection"] { _ = try projection.decode(as: ThreadProjection.self); threadSeen = true }
+                let session = item["event"]?["payload"]
+                if let flag = session?["capabilities"]?["turns"]?["supportsNativeResume"]?.boolValue { nativeResume = flag }
+                if let phase = session?["startupPhase"]?.stringValue { phases.insert(phase) }
+            }
+        }
+        #expect(configSeen && threadSeen)
+        #expect(digests.count == 2)
+        #expect(nativeResume == true)
+        #expect(phases.isSubset(of: ["plugins", "mcp", "hooks", "skills", "resume", "connecting"]) && !phases.isEmpty)
+        #expect(pongs == 1)
+    }
 }
