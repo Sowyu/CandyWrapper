@@ -84,4 +84,40 @@ struct QueuedEditAttachmentsTests {
         #expect(edit.originalAttachments == [Self.image, Self.file])
         #expect(!edits.isSaving(Self.thread))
     }
+
+    static func staged(_ status: ComposerFileRow.Status, uploaded: String? = "up-1") -> ComposerAttachment {
+        ComposerAttachment(id: "new", kind: .file, name: "added.txt", mimeType: "text/plain", sizeBytes: 3,
+                           fileURL: URL(fileURLWithPath: "/tmp/added.txt"), status: status, attachmentId: uploaded, environmentId: "env")
+    }
+
+    @Test func addedAttachmentsFollowTheKeptOnesWithTheirRecords() throws {
+        let edits = Self.editing(text: "hi")
+        let edit = try #require(edits.edit(Self.thread))
+        let added = Self.staged(.ready)
+        let payload = try #require(QueuedRunEdits.savePayload(edit, staged: [added], promptRecords: []))
+        #expect(payload.attachments.compactMap { $0["id"]?.stringValue } == ["img-1", "file-1", "up-1"])
+        #expect(payload.records.compactMap { $0["contextId"]?.stringValue } == ["image_a", "file_b", added.contextId])
+    }
+
+    @Test func aSaveWaitsOnUnfinishedOrFailedUploads() throws {
+        let edit = try #require(Self.editing(text: "hi").edit(Self.thread))
+        #expect(QueuedRunEdits.savePayload(edit, staged: [Self.staged(.uploading(0.5))], promptRecords: []) == nil)
+        #expect(QueuedRunEdits.savePayload(edit, staged: [Self.staged(.failed("Upload failed"))], promptRecords: []) == nil)
+        #expect(QueuedRunEdits.savePayload(edit, staged: [Self.staged(.ready, uploaded: nil)], promptRecords: []) == nil)
+    }
+
+    @Test func aSaveWhoseEditWasCancelledWhileItsUploadsRanSendsNothing() throws {
+        var edits = Self.editing(text: "hi")
+        let started = edits.startSave(Self.thread)
+        let claim = try #require(started)
+        #expect(edits.isOpen(claim))
+        edits.end(Self.thread)
+        #expect(!edits.isOpen(claim))
+        // A new edit of the same run is a different edit.
+        edits.begin(thread: Self.thread, run: Self.run, text: "again")
+        #expect(!edits.isOpen(claim))
+        let finished = edits.finishSave(claim, succeeded: false)
+        #expect(!finished)
+        #expect(edits.edit(Self.thread)?.text == "again")
+    }
 }

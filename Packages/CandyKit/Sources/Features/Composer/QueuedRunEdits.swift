@@ -147,6 +147,8 @@ public struct QueuedRunEdits {
     }
     public mutating func cancelReply(_ thread: ThreadId) { edits[thread]?.reply = nil }
     public mutating func end(_ thread: ThreadId) { edits[thread] = nil }
+    /// The claimed edit is still the open one: a cancel or a newer edit while its uploads ran means the save sends nothing.
+    public func isOpen(_ claim: Edit) -> Bool { edits[claim.threadId]?.id == claim.id }
     public mutating func startSave(_ thread: ThreadId) -> Edit? {
         guard saves[thread] == nil, let edit = edits[thread] else { return nil }
         saves[thread] = edit.id

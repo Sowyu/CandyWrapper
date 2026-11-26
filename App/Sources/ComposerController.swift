@@ -1671,7 +1671,10 @@ final class ComposerController {
         if let edit = queuedEdit {
             queuedEdits.update(edit.threadId, text: text)
             // Deleting a queued file's last chip removes it, an undo brings it back. Parsed only when chips are bound.
-            if edit.hasBoundChips, queuedEdits.reconcile(edit.threadId, referenced: Set(ComposerContext.referencedIds(text))) { refresh() }
+            let staged = draftAttachments[edit.pickerKey]
+            pruneUnreferencedFiles(text, key: edit.pickerKey)
+            let reconciled = edit.hasBoundChips && queuedEdits.reconcile(edit.threadId, referenced: Set(ComposerContext.referencedIds(text)))
+            if reconciled || staged != draftAttachments[edit.pickerKey] { refresh() }
             return
         }
         guard let key = draftKey else { return }
@@ -2285,7 +2288,9 @@ final class ComposerController {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // An edit with only attachments left still saves (useQueuedRunEdit.ts:475-481 at 5258).
         if let edit = queuedEdit {
-            if !trimmed.isEmpty || !edit.existingAttachments.isEmpty { saveEdit(edit, text: trimmed, steer: mode == .steer) }
+            if !trimmed.isEmpty || !edit.existingAttachments.isEmpty || !(draftAttachments[edit.pickerKey] ?? []).isEmpty {
+                saveEdit(edit, text: trimmed, steer: mode == .steer)
+            }
             return
         }
         let attachments = currentAttachments
@@ -3417,6 +3422,7 @@ final class ComposerController {
     private func endEdit() {
         guard let edit = queuedEdit else { return }
         queuedEdits.end(edit.threadId)
+        discardStagedAttachments(edit.pickerKey)
         pickers.store.didSend(edit.pickerKey)
         stopQueuedEditWatch(edit.threadId)
         loadPrompt()
@@ -3461,11 +3467,27 @@ final class ComposerController {
         let pick = pickers.store.pickedSelection(edit.pickerKey)
         let modelChanged = pick.map { p in edit.originalModel.map { !ComposerSelectionStore.pickMatchesThread(p, $0) } ?? true } ?? false
         pickers.store.didSend(edit.pickerKey)
-        let recovery = ComposerFeedback.recoverQueuedEdit(edited: edit.text, original: edit.originalText,
+        // The message's attachments left with the run, so their chips leave the recovered text; what the edit added
+        // and its removals count as edits (queuedMessageEdit.ts:106-150 at 5258).
+        let staged = draftAttachments.removeValue(forKey: edit.pickerKey) ?? []
+        let boundChips = edit.attachmentContextIds.values.joined()
+        let recovered = boundChips.reduce(edit.text) { Self.removingReferences(to: $1, in: $0) }
+        let original = boundChips.reduce(edit.originalText) { Self.removingReferences(to: $1, in: $0) }
+        let recovery = ComposerFeedback.recoverQueuedEdit(edited: recovered, original: original,
                                                           threadPrompt: replyTargets[key] == nil ? saved : "reply",
-                                                          modelChanged: modelChanged || edit.replyChanged)
+                                                          modelChanged: modelChanged || edit.replyChanged || !staged.isEmpty
+                                                              || !edit.removedAttachments.isEmpty)
+        // The added attachments move with the text when nothing is still uploading under the edit's key.
+        let settled = staged.allSatisfy { if case .uploading = $0.status { false } else { true } }
+        if recovery == .kept, settled, !staged.isEmpty, draftAttachments[key]?.isEmpty ?? true {
+            draftAttachments[key] = staged
+            persistDraftAttachments()
+        } else if !staged.isEmpty {
+            draftAttachments[edit.pickerKey] = staged
+            discardStagedAttachments(edit.pickerKey)
+        }
         if recovery == .kept {
-            prompts[key] = edit.text
+            prompts[key] = recovered
             // The edit's reply moves to the thread's draft with its text (`moveComposerContent`).
             if let reply = edit.reply { replyTargets[key] = reply }
             if modelChanged, let pick { pickers.store.setExplicitSelection(key, pick) }
@@ -3492,48 +3514,78 @@ final class ComposerController {
         ]
         // The attachments replace the message's: the kept ones, then the new (useQueuedRunEdit.ts:150-196 at 5258).
         let promptRecords = ComposerContext.messageContext(prompt: text, records: contextRecords(for: text))?["records"]?.arrayValue ?? []
-        guard let payload = QueuedRunEdits.savePayload(claim, staged: [], promptRecords: promptRecords) else {
-            _ = queuedEdits.finishSave(claim, succeeded: false)
-            if let key = draftKey { threadErrors.set(key, "Retry or remove failed uploads before saving.") }
-            refresh()
-            return
-        }
-        if text.isEmpty { text = ComposerAttachmentRules.attachmentOnlyPrompt }
+        let hasAttachments = !claim.existingAttachments.isEmpty || !(draftAttachments[edit.pickerKey] ?? []).isEmpty
+        if text.isEmpty, hasAttachments { text = ComposerAttachmentRules.attachmentOnlyPrompt }
         fields["text"] = .string(text)
-        fields["attachments"] = .array(payload.attachments)
-        if !payload.records.isEmpty { fields["context"] = .object(["version": .number(1), "records": .array(payload.records)]) }
         // The model goes along unless the message follows the thread and the edit made no pick (useQueuedRunEdit.ts:505-508 at 5258).
         if !edit.followsThreadSelection || pickers.store.drafts[edit.pickerKey]?.explicit == true,
            pickers.draftKey == edit.pickerKey, let selection = pickers.current.modelSelection {
             fields["modelSelection"] = ThreadSession.encode(selection)
         }
-        let command = JSONValue.object(fields)
         queueBusy = true
         refresh()
         let supervisor = shell.supervisor
-        let key = draftKey
+        let key = draftKey, baseFields = fields
         Task { [weak self] in
-            do {
-                _ = try await supervisor.request("orchestration.dispatchCommand", payload: command)
+            guard let self else { return }
+            // New uploads finish first (`awaitAttachmentUploads`, useQueuedRunEdit.ts:136-141).
+            let staged = await settledStagedUploads(edit.pickerKey)
+            let failSave = { [weak self] (message: String?) in
                 guard let self else { return }
+                queueBusy = false
+                _ = queuedEdits.finishSave(claim, succeeded: false)
+                if let message, let key { threadErrors.set(key, message) }
+                if let runs = queuedEditRuns[edit.threadId] { settleQueuedEdit(edit.threadId, runs: runs) }
+                refresh()
+            }
+            // Cancelled while its uploads ran: nothing goes out, and the cancel already released them.
+            guard queuedEdits.isOpen(claim) else { return failSave(nil) }
+            guard let payload = QueuedRunEdits.savePayload(claim, staged: staged, promptRecords: promptRecords) else {
+                return failSave("Retry or remove failed uploads before saving.")
+            }
+            var fields = baseFields
+            fields["attachments"] = .array(payload.attachments)
+            if !payload.records.isEmpty { fields["context"] = .object(["version": .number(1), "records": .array(payload.records)]) }
+            do {
+                _ = try await supervisor.request("orchestration.dispatchCommand", payload: .object(fields))
                 if let key { threadErrors.set(key, nil) }
                 queueBusy = false
+                // The server claimed the new uploads; the timeline shows the local copies until it serves its own.
+                for a in staged { if let id = a.attachmentId { sentFiles[id] = a.fileURL } }
+                if draftAttachments[edit.pickerKey]?.map(\.id) == staged.map(\.id) { draftAttachments[edit.pickerKey] = nil }
                 if queuedEdits.finishSave(claim, succeeded: true) {
                     pickers.store.didSend(edit.pickerKey)
                     stopQueuedEditWatch(edit.threadId)
+                    discardStagedAttachments(edit.pickerKey)
                     if target == .thread(edit.threadId) { loadPrompt(); updateReplyBanner() }
                 }
                 if steer, target == .thread(edit.threadId), panel.queue.state.activeRunId != nil { promoteToSteer(edit.runId) }
                 refresh()
             } catch {
-                if let self {
-                    queueBusy = false
-                    _ = queuedEdits.finishSave(claim, succeeded: false)
-                    if let runs = queuedEditRuns[edit.threadId] { settleQueuedEdit(edit.threadId, runs: runs) }
-                    refresh()
-                }
+                failSave(nil)
                 if let rpc = error as? RPCClientError, rpc.isTransport { return }
-                self?.report(.queuedEditSave, key: key)
+                report(.queuedEditSave, key: key)
+            }
+        }
+    }
+
+    /// Waits until each upload staged under `key` lands or fails, then returns them as they are.
+    private func settledStagedUploads(_ key: String) async -> [ComposerAttachment] {
+        for a in draftAttachments[key] ?? [] {
+            if case .uploading = a.status, let task = attachmentTasks[a.id] { await task.value }
+        }
+        return draftAttachments[key] ?? []
+    }
+
+    /// Drops what an edit staged and deletes the pending uploads (`discardQueuedEditDraft`, queuedMessageEdit.ts:93-104
+    /// at 5258). A preparing image's result is thrown away when it lands, and a late upload finds no row to join.
+    private func discardStagedAttachments(_ key: String) {
+        preparingGenerations[key, default: 0] += 1
+        preparingImages[key] = nil
+        for a in draftAttachments.removeValue(forKey: key) ?? [] {
+            release(a)
+            if a.kind == .image, a.fileURL.deletingLastPathComponent().standardizedFileURL == Self.attachmentWorkDirectory.standardizedFileURL {
+                try? FileManager.default.removeItem(at: a.fileURL)
             }
         }
     }
@@ -4548,7 +4600,16 @@ extension ComposerController {
         syncStashViews()
     }
 
-    var currentAttachments: [ComposerAttachment] { draftKey.flatMap { draftAttachments[$0] } ?? [] }
+    var currentAttachments: [ComposerAttachment] { attachmentKey.flatMap { draftAttachments[$0] } ?? [] }
+
+    /// Where new attachments go: an open queued edit's own key, else the draft's (`attachmentDraftTarget`,
+    /// useQueuedRunEdit.ts:239-240 at 5258). The edit's never persist, since the edit ends with the app.
+    private var attachmentKey: String? { queuedEdit?.pickerKey ?? draftKey }
+
+    /// The attachments a key holds, counting an edited queued message's kept ones (`existingAttachmentCount`).
+    private func attachmentCount(_ key: String) -> Int {
+        (draftAttachments[key]?.count ?? 0) + (queuedEdit?.pickerKey == key ? queuedEdit?.existingAttachments.count ?? 0 : 0)
+    }
 
     /// The composer shows another thread or draft.
     fileprivate func attachmentsTargetChanged() {
@@ -4603,7 +4664,7 @@ extension ComposerController {
     private func persistDraftAttachments() {
         var records: [DraftAttachmentRecord] = []
         let directory = Self.draftCopyDirectory
-        for key in draftAttachments.keys.sorted() {
+        for key in draftAttachments.keys.sorted() where !key.contains("#queued-edit:") {
             guard var attachments = draftAttachments[key] else { continue }
             var copied = false
             for i in attachments.indices {
@@ -4689,7 +4750,7 @@ extension ComposerController {
         }
         change(&draftAttachments[key]![i])
         persistDraftAttachments()
-        if key == draftKey { refresh() }
+        if key == attachmentKey { refresh() }
     }
 
     /// The paperclip: a question's answer takes the files while one is open, else the draft does.
@@ -4746,7 +4807,7 @@ extension ComposerController {
     var snapShotDestination: (key: String, environment: String, question: String?)? {
         switch target {
         case .thread(let id):
-            if let env = id.environmentId { return (id.rawValue, env, snapShotQuestionKey) }
+            if let env = id.environmentId { return (queuedEdit?.pickerKey ?? id.rawValue, env, snapShotQuestionKey) }
         case .draft(let s):
             guard let env = ThreadId(s.threadId).environmentId else { break }
             if sessions.values.contains(where: { $0.draftId == s.draftId }) { return (s.draftId, env, nil) }
@@ -4766,12 +4827,12 @@ extension ComposerController {
 
     /// The capture's draft or thread comes forward after delivery, so its tile is on screen.
     func showSnapShotTarget(_ key: String) {
-        guard draftKey != key else { return }
+        guard draftKey != key, attachmentKey != key else { return }
         if sessions.values.contains(where: { $0.draftId == key }) { sidebar?.actions.openDraft(key) } else { openThread?(ThreadId(key)) }
     }
 
     func snapShotFrame(id: String, key: String) -> CGRect? {
-        guard draftKey == key, let window = composer.window else { return nil }
+        guard attachmentKey == key, let window = composer.window else { return nil }
         window.contentView?.layoutSubtreeIfNeeded()
         let shelf = composer.imageShelf
         guard let index = shelf.tiles.firstIndex(where: { $0.id == id }), shelf.subviews.indices.contains(index) else { return nil }
@@ -4782,7 +4843,7 @@ extension ComposerController {
     /// Preserve the draft selected at capture start even if navigation changes during ScreenCaptureKit.
     func attachSnapShot(_ data: Data, source: JSONValue? = nil, destination: (key: String, environment: String, question: String?)) async throws -> String {
         let key = destination.key, env = destination.environment
-        let composerFull = { (self.draftAttachments[key]?.count ?? 0) + (self.preparingImages[key] ?? 0) >= ComposerAttachmentRules.maxAttachments }
+        let composerFull = { self.attachmentCount(key) + (self.preparingImages[key] ?? 0) >= ComposerAttachmentRules.maxAttachments }
         guard destination.question != nil || !composerFull() else { throw CancellationError() }
         preparingImages[key, default: 0] += 1
         defer { preparingImages[key, default: 1] -= 1; resumeSendAfterPreparing(key) }
@@ -4820,7 +4881,7 @@ extension ComposerController {
             return file.id
         }
         // A question that closed during the capture hands it back to the composer, under the composer's cap.
-        if destination.question != nil, (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) > ComposerAttachmentRules.maxAttachments {
+        if destination.question != nil, attachmentCount(key) + (preparingImages[key] ?? 0) > ComposerAttachmentRules.maxAttachments {
             try? FileManager.default.removeItem(at: prepared.url)
             throw CancellationError()
         }
@@ -4932,7 +4993,7 @@ extension ComposerController {
     /// `importContextFragment` (useComposerContextImport.ts:292-458): pasted records join the draft
     /// under ids that can't collide with its own, and pasted attachment chips bring their bytes.
     fileprivate func importPastedContext(_ fragment: ComposerContextImport.Fragment) -> [String: String] {
-        guard let key = draftKey, let env = targetEnvironmentId else { return [:] }
+        guard let key = attachmentKey, let env = targetEnvironmentId else { return [:] }
         var existing = menuState.records
         for a in currentAttachments { existing[a.contextId] = a.clipboardRecord }
         let attached = Set(currentAttachments.map(\.fileURL))
@@ -4994,12 +5055,12 @@ extension ComposerController {
             }
             // The draft these bytes belong to may have been sent or switched away from meanwhile, and a
             // chip the user deleted while they downloaded stays out of the draft (#23447, :197-210).
-            guard draftKey == key, ComposerContext.referencedIds(composer.text).contains(attachment.contextId) else {
+            guard attachmentKey == key, ComposerContext.referencedIds(composer.text).contains(attachment.contextId) else {
                 try? FileManager.default.removeItem(at: copy)
                 return
             }
             // This import is still counted in `preparingImages`.
-            guard (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 1) - 1 < ComposerAttachmentRules.maxAttachments else {
+            guard attachmentCount(key) + (preparingImages[key] ?? 1) - 1 < ComposerAttachmentRules.maxAttachments else {
                 try? FileManager.default.removeItem(at: copy)
                 return fail("The attachment limit has been reached.")
             }
@@ -5035,7 +5096,7 @@ extension ComposerController {
     }
 
     fileprivate func addFiles(_ files: [ComposerIncomingFile], pastedText: Bool = false) {
-        guard !files.isEmpty, let key = draftKey, let env = targetEnvironmentId else { return }
+        guard !files.isEmpty, let key = attachmentKey, let errorKey = draftKey, let env = targetEnvironmentId else { return }
         if questionRequestId != nil {
             guard let requestId = questionRequestId, let questionKey = activeQuestionKey, supportsQuestionAttachments,
                   panel.lazyQuestionPanel.loaded?.session?.progress.activeQuestion?.allowsCustomAnswer == true, !responding.contains(requestId) else {
@@ -5046,7 +5107,7 @@ extension ComposerController {
             return
         }
         let imagesGetChips = !ComposerContext.stripReferences(composer.text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        var reserved = (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0)
+        var reserved = attachmentCount(key) + (preparingImages[key] ?? 0)
         let limit = ComposerAttachmentRules.stagingLimit(capabilityKnown: capabilities[env] != nil, maxUploadBytes: capabilities[env]?.uploadLimit)
         var images: [ComposerIncomingFile] = [], accepted: [ComposerAttachment] = []
         var reattached: [String] = []
@@ -5064,7 +5125,7 @@ extension ComposerController {
                     let separator = composer.text.isEmpty || composer.text.last?.isWhitespace == true ? "" : " "
                     composer.text += separator + ComposerInlineTokens.fileLink(folder.url.path) + " "
                 }
-                prompts[key] = composer.text; scheduleSave()
+                if queuedEdit == nil { prompts[key] = composer.text; scheduleSave() } else { remember(composer.text) }
             }
             focusComposer()
         }
@@ -5104,7 +5165,7 @@ extension ComposerController {
             }
             reserved += 1
         }
-        threadErrors.set(key, error)
+        threadErrors.set(errorKey, error)
         for id in reattached { startUpload(id, key: key) }
         if !accepted.isEmpty {
             draftAttachments[key, default: []] += accepted
@@ -5159,7 +5220,7 @@ extension ComposerController {
             preparingImages[key, default: images.count] -= images.count
             draftAttachments[key, default: []] += prepared
             if let mark {
-                if key == draftKey, !prepared.isEmpty {
+                if key == attachmentKey, !prepared.isEmpty {
                     joiningPreparedImages = true
                     defer { joiningPreparedImages = false }
                     composer.insert(prepared.map(\.reference).joined(separator: " ") + " ", at: mark)
@@ -5169,7 +5230,7 @@ extension ComposerController {
             }
             for a in prepared { startUpload(a.id, key: key) }
             // Only failures are reported here, so a later error is never cleared by this one.
-            if let failure { threadErrors.set(key, failure) }
+            if let failure { threadErrors.set(errorKey, failure) }
             refresh()
             resumeSendAfterPreparing(key)
         }
@@ -5178,12 +5239,12 @@ extension ComposerController {
     /// `foldPastedText` (ChatComposer.tsx:6033-6110): a large paste becomes `pasted-text.txt`, uploaded
     /// like any file, with a chip where the text would have gone. Question answers keep their text.
     fileprivate func foldPastedText(_ text: String, bypass: Bool) -> Bool {
-        guard questionRequestId == nil, let key = draftKey, let env = targetEnvironmentId else { return false }
+        guard questionRequestId == nil, let key = attachmentKey, let env = targetEnvironmentId else { return false }
         let wouldExceed = ComposerAttachmentRules.pasteWouldExceedLimit(promptLength: composer.text.utf16.count,
                                                                         selectedLength: composer.selectedPromptLength, textLength: text.utf16.count)
         guard ComposerAttachmentRules.foldsPastedText(text, bypass: bypass, wouldExceedLimit: wouldExceed) else { return false }
         let limit = ComposerAttachmentRules.stagingLimit(capabilityKnown: capabilities[env] != nil, maxUploadBytes: capabilities[env]?.uploadLimit)
-        let hasSlot = (draftAttachments[key]?.count ?? 0) + (preparingImages[key] ?? 0) < ComposerAttachmentRules.maxAttachments
+        let hasSlot = attachmentCount(key) + (preparingImages[key] ?? 0) < ComposerAttachmentRules.maxAttachments
         guard hasSlot, let limit else {
             if !wouldExceed { return false }
             toast(.error, "Pasted text is too large for this message", "Remove some text or an attachment, then paste again.")
@@ -5364,7 +5425,7 @@ extension ComposerController {
 
     /// `retryAttachmentUpload`.
     private func retryAttachment(_ id: String) {
-        guard let key = draftKey, let a = draftAttachments[key]?.first(where: { $0.id == id }), !a.needsReattach else { return }
+        guard let key = attachmentKey, let a = draftAttachments[key]?.first(where: { $0.id == id }), !a.needsReattach else { return }
         if unverifiedUploads.contains(id) {
             restoredUploads[id] = nil
             verifyRestoredUpload(id, key: key)
@@ -5388,7 +5449,7 @@ extension ComposerController {
     /// `removeComposerImage`: asks first when the text still mentions the image, then removes it
     /// with every chip that points at it.
     private func removeImage(_ id: String) {
-        guard let key = draftKey, let image = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
+        guard let key = attachmentKey, let image = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
         let remove = { [weak self] in
             guard let self, let image = draftAttachments[key]?.first(where: { $0.id == id }) else { return }
             release(image)
@@ -5397,7 +5458,7 @@ extension ComposerController {
                 try? FileManager.default.removeItem(at: image.fileURL)
             }
             persistDraftAttachments()
-            if key == draftKey, ComposerContext.referencedIds(composer.text).contains(image.contextId) {
+            if key == attachmentKey, ComposerContext.referencedIds(composer.text).contains(image.contextId) {
                 composer.text = Self.removingReferences(to: image.contextId, in: composer.text)
                 remember(composer.text)
             }
