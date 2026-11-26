@@ -520,7 +520,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | bac0508e08 | #38895 | feat(web): thread chips show the sidebar's thread card on hover | thread | ported 32609bf7 for chips in sent messages; the composer's chips and their "On another machine" line are the composer agent's (Features/Composer) |
 | e8b28328da | #29681 | feat(web): duplicate browser tabs from the context menu | other | n/a (browser tabs, other agent) |
 | b9879ede83 | #33286 | feat(web): copy a chat table as HTML | thread | ported dd1cfae1 (unaligned columns say left: Foundation reports no "none" alignment) |
-| 26d81d88c1 | #40076 | fix(web): timeline row actions stay put on hover, and notices expand only when cut off | thread | left: notices expand only when cut off. Small |
+| 26d81d88c1 | #40076 | fix(web): timeline row actions stay put on hover, and notices expand only when cut off | thread | ported 239ed38d (the row's chevron and click follow the cut-off check; not seen on screen) |
 | e28b2819ee | #39610 | fix(shared): compose NFD file names in link chips and the @ menu | composer | port (2.7) |
 | 9ab7da2a3e | #34646 | fix(web): screen readers can read expanded tool output | thread | n/a (web screen reader markup) |
 | af99412e9d | #24603 | fix(web): keep file path tooltips open for selection | thread | n/a (web tooltip hover) |
