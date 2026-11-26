@@ -1150,22 +1150,28 @@ final class ThreadController {
         // `thread.previous`, `thread.next`, `thread.jump.N` walk the sidebar's rows; ignored on repeat.
         shortcuts.on(["thread.previous", "thread.next"] + Keymap.threadJumpCommands) { [weak self] call in
             guard let self, !call.isRepeat, let sidebar = self.sidebar, sidebar.window != nil else { return false }
-            let ids = sidebar.orderedThreadIds
-            let target: ThreadId?
+            let (rows, active) = sidebar.orderedRowTargets
+            let target: SidebarContentView.RowTarget?
             if let index = Keymap.jumpIndex(call.command, prefix: "thread.jump.") {
-                target = index < ids.count ? ids[index] : nil
+                target = index < rows.count ? rows[index] : nil
             } else {
-                target = Self.adjacentThread(ids, current: self.openThreadId, previous: call.command == "thread.previous")
+                target = Self.adjacentThread(rows, current: active, previous: call.command == "thread.previous")
             }
-            guard let target else { return false }
-            sidebar.navigated(to: target)
-            self.open(target)
+            switch target {
+            case .thread(let id):
+                sidebar.navigated(to: id)
+                self.open(id)
+            case .draft(let id):
+                sidebar.actions.openDraft(id)
+            case nil:
+                return false
+            }
             return true
         }
     }
 
     /// `resolveAdjacentThreadId` (Sidebar.logic.ts:873-898).
-    static func adjacentThread(_ ids: [ThreadId], current: ThreadId?, previous: Bool) -> ThreadId? {
+    static func adjacentThread<Row: Equatable>(_ ids: [Row], current: Row?, previous: Bool) -> Row? {
         guard !ids.isEmpty else { return nil }
         guard let current else { return previous ? ids.last : ids.first }
         guard let index = ids.firstIndex(of: current) else { return nil }
