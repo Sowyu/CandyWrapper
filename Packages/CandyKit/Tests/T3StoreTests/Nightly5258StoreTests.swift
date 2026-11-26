@@ -20,6 +20,37 @@ import T3Protocol
 
     /// B3: a card with `fields` answers `values` keyed by name, once every field has a value; one without answers
     /// `secret` as before. Cases from T3's secretRequest.test.ts:31-68.
+    /// secretRequest.test.ts:78-118 at 5258: the card's "Open {host}" link.
+    @Test func secretRequestLinkFindsTheOneLink() {
+        let cases: [(String, String?)] = [
+            ("Open this link and sign in: https://a.dev/x?s=1. Then paste the code.", "https://a.dev/x?s=1"),
+            ("Open [https://a.dev/x?s=1](https://a.dev/x?s=1) and sign in.", "https://a.dev/x?s=1"),
+            ("Sign in [here](https://a.dev/login?state=abc(def)).", "https://a.dev/login?state=abc(def)"),
+            ("Sign in at https://a.dev/login?state=abc(def).", "https://a.dev/login?state=abc(def)"),
+            ("(Sign in at https://a.dev/login.)", "https://a.dev/login"),
+            ("Open **https://a.dev/x?s=1** and sign in.", "https://a.dev/x?s=1"),
+            ("Open https://a.dev/x?state=u7o_ and sign in.", "https://a.dev/x?state=u7o_"),
+            ("**Sign in at https://a.dev/device**", "https://a.dev/device"),
+            ("_Open https://a.dev/device_.", "https://a.dev/device"),
+            ("_https://a.dev/x?state=u7o_&client_id=cli_", "https://a.dev/x?state=u7o_&client_id=cli"),
+            ("Use client_id acme at https://a.dev/x?state=u7o_", "https://a.dev/x?state=u7o_"),
+            ("_Sign in_ at https://a.dev/x?state=u7o_", "https://a.dev/x?state=u7o_"),
+            ("_Required_: Open https://a.dev/x?state=u7o_", "https://a.dev/x?state=u7o_"),
+            ("(**https://a.dev/login**)", "https://a.dev/login"),
+            ("Open ***https://a.dev/device***", "https://a.dev/device"),
+            ("Open **_https://a.dev/device_**", "https://a.dev/device"),
+            ("Open [https://a.dev/x?s=u7o_](https://a.dev/x?s=u7o_) and sign in.", "https://a.dev/x?s=u7o_"),
+            ("Open `https://a.dev/x?s=1.` and sign in.", "https://a.dev/x?s=1."),
+            ("Open https://a.dev/x?s=1, then if needed https://a.dev/x?s=1 again.", "https://a.dev/x?s=1"),
+            ("Open https://a.dev or https://b.dev.", nil),
+            ("Open https://a.dev (also written https://a.dev/).", "https://a.dev/"),
+            ("Paste the code the CLI printed.", nil),
+        ]
+        for (reason, href) in cases { #expect(SecretRequests.link(url: nil, reason: reason)?.href == href, "\(reason)") }
+        #expect(SecretRequests.link(url: "https://auth.acme.dev/a", reason: "See https://docs.acme.dev")?.host == "auth.acme.dev")
+        #expect(SecretRequests.link(url: "javascript:alert(1)", reason: "") == nil)
+    }
+
     @Test func multiFieldSecretRequestsAnswerValues() throws {
         let item = turnItem(#"{"id":"item","threadId":"thread","type":"secret_request","label":"Login","reason":"","delivery":"file","secretStatus":"pending","fields":[{"name":"email","label":"Email","secret":false},{"name":"password","label":"Password"}]}"#)
         let fields = try #require(item.secretRequestFields)

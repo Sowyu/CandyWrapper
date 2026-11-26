@@ -10,7 +10,8 @@ import T3Store
 /// A 5258 card with `fields` shows one labelled input per field, masked unless `secret: false`, and moves Save
 /// next to Decline (SecretRequestCard.tsx:233-300, 305-380). Every masked input has 5258's show/hide eye
 /// (`SecretRequestField`, :303-372, #31257, #42309). Redesign draws the card as its card on the ground
-/// (`RedesignTokens.Card`), like code blocks and tables, with no shadow.
+/// (`RedesignTokens.Card`), like code blocks and tables, with no shadow. A request with a page shows an outline
+/// "Open {host}" button under the reason, then the request's own `url` in mono (SecretRequestCard.tsx:216-234).
 final class SecretRequestRowView: TimelineRowView {
     /// One input of the card. Text sits only in the AppKit field.
     @MainActor private final class Entry {
@@ -49,6 +50,9 @@ final class SecretRequestRowView: TimelineRowView {
     private let reason = TextBlockView("", font: TL.font(14), lineHeight: 20, color: TL.c(\.mutedForeground))
     private var entries: [Entry] = []
     private var multiple = false
+    private let openPage = ButtonView("", variant: .outline, size: .sm)
+    private let pageURL = TextBlockView("", font: DSFont.mono(12), lineHeight: 16, color: TL.c(\.mutedForeground))
+    private var pageHref: String?
     private let save = ButtonView("Save securely", variant: .default, size: .default)
     private let errorLabel = TextBlockView("", font: TL.font(12), lineHeight: 16, color: TL.c(\.destructive))
     private let shield = IconView(name: .shieldCheck, size: 14)
@@ -72,7 +76,12 @@ final class SecretRequestRowView: TimelineRowView {
         title.lineHeight = 20
         privacy.lineHeight = 16
         lineLabel.lineHeight = 24
-        for v in [title, reason, save, errorLabel, shield, privacy, decline, lineIcon, lineLabel] as [NSView] { addSubview(v) }
+        for v in [title, reason, openPage, pageURL, save, errorLabel, shield, privacy, decline, lineIcon, lineLabel] as [NSView] { addSubview(v) }
+        openPage.trailingIcon = .externalLink
+        openPage.action = { [weak self] in
+            // An `<a target="_blank">`: always the system browser, never the in-app one.
+            if let href = self?.pageHref, let url = URL(string: href) { NSWorkspace.shared.open(url) }
+        }
         errorLabel.isHidden = true
         save.action = { [weak self] in self?.send(save: true) }
         decline.action = { [weak self] in self?.send(save: false) }
@@ -92,6 +101,12 @@ final class SecretRequestRowView: TimelineRowView {
         let why = (p.item.string("reason") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         reason.text = why
         reason.isHidden = why.isEmpty
+        let url = p.item.secretRequestURL
+        let link = SecretRequests.link(url: url, reason: p.item.string("reason") ?? "")
+        pageHref = link?.href
+        openPage.title = link.map { "Open \($0.host)" } ?? ""
+        // A link found in the reason is already shown there.
+        pageURL.text = link != nil ? url ?? "" : ""
         let fields = p.item.secretRequestFields
         multiple = fields != nil
         let inputs = SecretRequests.inputs(label: label, placeholder: p.item.string("placeholder"), fields: fields)
@@ -104,6 +119,8 @@ final class SecretRequestRowView: TimelineRowView {
         let pending = display == .pending
         for v in [card, title, save, shield, privacy, decline] as [NSView] { v.isHidden = !pending }
         for e in entries { e.view.isHidden = !pending; e.label.isHidden = !pending || !multiple }
+        openPage.isHidden = !pending || link == nil
+        pageURL.isHidden = openPage.isHidden || pageURL.text.isEmpty
         if !pending { reason.isHidden = true; errorLabel.isHidden = true }
         lineIcon.isHidden = pending
         lineLabel.isHidden = pending
@@ -193,11 +210,15 @@ final class SecretRequestRowView: TimelineRowView {
 
     private func reasonHeight(_ inner: CGFloat) -> CGFloat { reason.isHidden ? 0 : 4 + reason.height(forWidth: inner) }
     private func errorHeight(_ inner: CGFloat) -> CGFloat { error == nil ? 0 : 12 + errorLabel.height(forWidth: inner) }
+    /// `flex flex-col items-start gap-1.5` after the form's `gap-3`: the 28pt button, then the URL.
+    private func linkHeight(_ inner: CGFloat) -> CGFloat {
+        openPage.isHidden ? 0 : 12 + 28 + (pageURL.isHidden ? 0 : 6 + pageURL.height(forWidth: inner))
+    }
 
     override func height(forWidth width: CGFloat) -> CGFloat {
         guard display == .pending else { return 2 + 24 + 2 + 8 }
         let inner = max(0, width - 2 - 32)
-        return 1 + 16 + 20 + reasonHeight(inner) + 12 + inputsHeight + errorHeight(inner) + 12 + (multiple ? 32 : 24) + 16 + 1 + 8
+        return 1 + 16 + 20 + reasonHeight(inner) + linkHeight(inner) + 12 + inputsHeight + errorHeight(inner) + 12 + (multiple ? 32 : 24) + 16 + 1 + 8
     }
 
     override func layout() {
@@ -218,6 +239,16 @@ final class SecretRequestRowView: TimelineRowView {
             let h = reason.height(forWidth: inner)
             reason.frame = NSRect(x: x, y: y + 4, width: inner, height: h)
             y += 4 + h
+        }
+        if !openPage.isHidden {
+            let w = min(inner, openPage.intrinsicContentSize.width)
+            openPage.frame = NSRect(x: x, y: y + 12, width: w, height: 28)
+            y += 12 + 28
+            if !pageURL.isHidden {
+                let h = pageURL.height(forWidth: inner)
+                pageURL.frame = NSRect(x: x, y: y + 6, width: inner, height: h)
+                y += 6 + h
+            }
         }
         y += 12
         let sw = save.intrinsicContentSize.width

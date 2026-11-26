@@ -27,6 +27,73 @@ public enum SecretRequests {
         guard let fields else { return [Input(key: "", label: label, placeholder: placeholder ?? defaultPlaceholder, secret: true)] }
         return fields.map { Input(key: $0.name, label: $0.label, placeholder: $0.placeholder ?? "", secret: $0.secret != false) }
     }
+    /// `secretRequestPageUrl` (5258 packages/contracts/src/secretRequest.ts:7-15): only an http(s) page with a host,
+    /// so an agent cannot make the card open another scheme. `href` follows the URL standard's spelling for what
+    /// tells two pages apart here: lowercase scheme and host, and "/" for an empty path.
+    // ponytail: no IDNA or percent-encoding pass; add one if a card shows a host that differs from the web's.
+    public static func pageURL(_ value: String) -> (href: String, host: String)? {
+        guard var parts = URLComponents(string: value), let scheme = parts.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let host = parts.host?.lowercased(), !host.isEmpty else { return nil }
+        parts.scheme = scheme; parts.host = host
+        if parts.percentEncodedPath.isEmpty { parts.percentEncodedPath = "/" }
+        guard let href = parts.string else { return nil }
+        return (href, parts.port.map { "\(host):\($0)" } ?? host)
+    }
+
+    /// `secretRequestLink` (5258 client-runtime/src/secretRequest.ts:116-120): the request's `url`, else the one
+    /// distinct link in its reason, for the card's "Open {host}" button.
+    public static func link(url: String?, reason: String) -> (href: String, host: String)? {
+        guard let raw = url ?? reasonLink(reason) else { return nil }
+        return pageURL(raw)
+    }
+
+    // Backticks, <angle brackets> and markdown link targets keep their exact text; a bare link drops trailing
+    // sentence punctuation (`REASON_LINK`, secretRequest.ts:71-72).
+    nonisolated(unsafe) private static let reasonLinkPattern = try! NSRegularExpression(
+        pattern: #"`(https?://[^`\s]+)`|<(https?://[^>\s]+)>|\]\((https?://(?:[^()\s]|\([^()\s]*\))+)\)|(https?://[^\s<>"'`\[\]]+)"#,
+        options: [.caseInsensitive])
+
+    /// `reasonLink` (:98-113): the one distinct http(s) link in `reason`. Two spellings of one page count once.
+    static func reasonLink(_ reason: String) -> String? {
+        let ns = reason as NSString
+        let raw = reasonLinkPattern.matches(in: reason, range: NSRange(location: 0, length: ns.length)).map { match -> String in
+            for group in 1...3 where match.range(at: group).location != NSNotFound { return ns.substring(with: match.range(at: group)) }
+            let before = ns.substring(to: match.range.location)
+            var link = trimPunctuation(ns.substring(with: match.range(at: 4)))
+            while true {
+                let next = trimEmphasis(link, before: before)
+                if next == link { break }
+                link = next
+            }
+            return link
+        }
+        var seen: [String] = []
+        for link in raw { let key = pageURL(link)?.href ?? link; if !seen.contains(key) { seen.append(key) } }
+        return seen.count == 1 ? seen[0] : nil
+    }
+
+    /// `trimPunctuation` (:74-82): a `)` stays when the link opened a matching `(`.
+    static func trimPunctuation(_ link: String) -> String {
+        var chars = Array(link)
+        while let last = chars.last, ".,;:!?)".contains(last) {
+            if last == ")", chars.filter({ $0 == "(" }).count > chars.filter({ $0 == ")" }).count - 1 { break }
+            chars.removeLast()
+        }
+        return String(chars)
+    }
+
+    /// `trimEmphasis` (:85-96): drops a closing `*` or `_` run only when the same run opened emphasis before the link
+    /// and is still open.
+    static func trimEmphasis(_ link: String, before: String) -> String {
+        guard let run = link.firstMatch(of: /(\*{1,3}|_{1,3})$/)?.1 else { return link }
+        let escaped = NSRegularExpression.escapedPattern(for: String(run))
+        guard let opener = try? NSRegularExpression(pattern: "(?:^|[\\s(*_])\(escaped)(?=\\S|$)"),
+              let last = opener.matches(in: before, range: NSRange(location: 0, length: (before as NSString).length)).last else { return link }
+        let rest = (before as NSString).substring(from: last.range.location + last.range.length)
+        let closed = rest.range(of: "\\S\(escaped)(?:[\\s.,;:!?)]|$)", options: .regularExpression) != nil
+        return closed ? link : trimPunctuation(String(link.dropLast(run.count)))
+    }
+
     public static let defaultPlaceholder = "Paste the secret"
     public static let genericFailure = "Could not answer the request. Try again."
 
