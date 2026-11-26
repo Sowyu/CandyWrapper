@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var routeHistory: RouteHistory?
     private var terminationSignal: DispatchSourceSignal?
     private var notifications: ThreadNotificationCoordinator?
+    private var unrestrictedApprover: UnrestrictedAutoApprover?
     private var quitHold: QuitHoldController?
     private var slowRPCObserver: NSObjectProtocol?
     private var slowRPCToast: Int?
@@ -359,6 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         installShortcuts(window: window, layout: layout, sidebar: sidebar, environments: environments, threads: threads,
                          commands: commands, settings: settings)
         installNotifications(window: window, environments: environments, threads: threads, commands: commands, settings: settings)
+        if !Self.isPreview { installUnrestrictedApprovals(environments: environments, threads: threads, settings: settings) }
         // T3's desktop keeps running threads streaming (RunningThreadKeepAlive.tsx); a preview never connects.
         if !Self.isPreview {
             let keepAlive = RunningThreadKeepAlive(environments: environments)
@@ -464,6 +466,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.chooseNotificationMode = { [weak coordinator] mode in await coordinator?.choose(mode) }
         shortcuts?.onKeyDown = { [weak coordinator] in coordinator?.noteUserGesture() }
         notifications = coordinator
+    }
+
+    /// CandyWrapper approving Claude Code's safety checks under Unrestricted (`UnrestrictedAutoApprove`), for every
+    /// thread of every connected environment, driven by their live shells. The first approval of a run shows a toast.
+    private func installUnrestrictedApprovals(environments: Environments, threads: ThreadController, settings: SettingsController) {
+        let approver = UnrestrictedAutoApprover()
+        approver.cachedSettings = { [weak threads] env in threads?.composer.allConfigs[env]?.settings.raw }
+        approver.fetchSettings = { [weak environments] env in
+            guard let environments else { throw CancellationError() }
+            return try await environments.request(env, "server.getSettings", .object([:]))
+        }
+        approver.fetchProjection = { [weak environments] env, local in
+            guard let environments else { throw CancellationError() }
+            return try await environments.request(env, "orchestration.getThreadProjection", .object(["threadId": .string(local.rawValue)]))
+        }
+        approver.respond = { [weak environments] env, payload in
+            guard let environments else { return .failed("closed") }
+            do {
+                _ = try await environments.request(env, "orchestration.dispatchCommand", payload)
+                return .answered
+            } catch {
+                let typed = (error as? RPCClientError)?.typedError
+                if UnrestrictedAutoApprove.isAlreadySettled(tag: typed?.tag, cause: typed?.fields["cause"]?.stringValue) { return .alreadySettled }
+                return .failed("\(error)")
+            }
+        }
+        var toasted = false
+        approver.onAnswered = { [weak threads, weak settings] env, thread, _ in
+            if let open = threads?.openThreadId, open.environmentId == env, open.localId == thread.id { threads?.panel.model.unrestrictedApprovalsChanged() }
+            guard !toasted, let toasts = settings?.visibleToasts ?? threads?.panel.toasts else { return }
+            toasted = true
+            toasts.show(ToastView(title: UnrestrictedAutoApprove.toastTitle, message: UnrestrictedAutoApprove.toastMessage(thread: thread.title), kind: .warning))
+        }
+        threads.panel.model.answeredForUnrestricted = { [weak threads] requestId in
+            guard let open = threads?.openThreadId, let env = open.environmentId else { return false }
+            return UnrestrictedApprovalRecord.shared.contains(environmentId: env, threadId: open.localId.rawValue, requestId: requestId)
+        }
+        let previous = environments.onLiveShell
+        environments.onLiveShell = { [weak approver] id, snapshot in
+            previous?(id, snapshot)
+            approver?.shellChanged(id, snapshot)
+        }
+        unrestrictedApprover = approver
     }
 
     /// Hold-to-quit on Cmd+Q in the main window (`makeQuitShortcutHandler`, DesktopWindow.ts:642-679) and its overlay.
