@@ -425,7 +425,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 356dff3352 | #40783 | fix(web): RTF previews respect hidden character formatting | files | n/a (QuickLook previews) † |
 | 3571f28cca | #40816 | fix(web): Usage Limits no longer shows a stale scrollbar | usage | n/a (web scrollbar) † |
 | 369b46900c | #42480 | fix(web): Enter saves the default viewport size and skipped runs kept | settings | port (1.8) † |
-| 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | ported COMMIT (short commit id below 36rem, the hidden-tests link from 42rem, the only-hidden-tests state), diff read 2026-11-25 |
+| 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | ported 4b07f98d (short commit id below 36rem, the hidden-tests link from 42rem, the only-hidden-tests state), diff read 2026-11-25 |
 | 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | left: workspace HTML previews keep their page across agent commands (S, browser preview) |
 | 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | port (8.3) |
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
@@ -639,7 +639,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f60c747568 | #39815 | fix(web): open PDF attachments no longer reload while the agent works | files | port (3.5) † |
 | f811978eef | #42395 | fix(web): Esc in Theme Editor color filter clears the filter without closing the editor | settings | ported cb5edfe1 |
 | f82de6567c | #41775 | fix(web): restoring a saved model mapping clears its typed prices | settings | port (1.8) † |
-| f89883c568 | #39875 | fix(web): a long commit name no longer runs under the PR code tab's icons | pull requests | ported COMMIT (the commit menu gives way before the counts), diff read 2026-11-25 |
+| f89883c568 | #39875 | fix(web): a long commit name no longer runs under the PR code tab's icons | pull requests | ported 4b07f98d (the commit menu gives way before the counts), diff read 2026-11-25 |
 | f8f4a0b057 | #29261 | feat: Verilog, SystemVerilog, and VHDL code is syntax highlighted | composer | ported 17a38daa (CW's own highlighter gets two profiles), diff read 2026-11-25 |
 | f9f34aab78 | #41361 | fix(web): start without WebAssembly by initialising Words in a guard | shell | n/a (web only) † |
 | fa2ee196b5 | #41539 | fix(web): archived threads settings stay responsive with thousands of threads | settings | ported c82cac6d |
