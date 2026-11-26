@@ -1,8 +1,9 @@
 """Writes design/component-reference/sidebar-folder-rows.json for scripts/component-reference: the boring sidebar's
 two-line folder thread rows (#26463, Labs "Two-line folder rows"), at rest.
 
-Class strings are copied from apps/web/src/components/sidebar/SidebarThreadRow.tsx:1010-1112, 1266-1330 and
-1327-1460, ThreadStatusIndicators.tsx:773-805 and ui/middle-truncate.tsx at the tag in T3_VERSION. Rows sit in a
+Class strings are copied from apps/web/src/components/sidebar/SidebarThreadRow.tsx:1276-1320 at
+v0.1.13-nightly.20261125.5258, where the meta line starts with the environment (#40736), and the machine icon is
+lucide `server`, EnvironmentMachineIcon.tsx:43. Rows sit in a
 `data-app-sidebar` box with `bg-sidebar` and 8px padding, as in a SidebarGroup.
 Usage: /usr/bin/python3 -I scripts/gen-sidebar-folder-rows-spec.py
 """
@@ -35,18 +36,17 @@ def row(title, meta):
             + f'{TIME}</div>{meta}</div></li>')
 
 META = ('<div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-secondary-label text-xs">'
-        '<span role="img" class="inline-flex items-center justify-center">' + lucide("folder-git-2", "size-3.5 shrink-0 text-icon-muted") + '</span>'
-        '<span class="flex min-w-0 flex-1"><span class="inline-flex min-w-0 max-w-full overflow-hidden whitespace-nowrap">'
-        '<span class="min-w-0 truncate">feature/two-line-rows</span></span></span>'
+        + lucide("server", "size-3.5 shrink-0 text-icon-muted") +
+        '<span class="min-w-0 flex-1 truncate">Studio server</span>'
         '<span aria-hidden="true" class="pointer-events-none ml-auto inline-flex shrink-0 items-center gap-1"></span></div>')
 
 cases = [
     {"name": "two-line", "html": BOX.format(row("Port the two-line rows", META)), "wrapperStyle": "display:block",
-     "native": {"title": "Port the two-line rows", "branch": "feature/two-line-rows"}},
+     "native": {"title": "Port the two-line rows", "environment": "Studio server"}},
     {"name": "two-line.no-meta", "html": BOX.format(row("Scratch idea", "")), "wrapperStyle": "display:block",
      "native": {"title": "Scratch idea"}},
 ]
-out = {"component": "sidebar-folder-rows", "sourceVersion": "v0.1.11-nightly.20261119.4928", "states": ["rest"],
+out = {"component": "sidebar-folder-rows", "sourceVersion": "v0.1.13-nightly.20261125.5258", "states": ["rest"],
        "themes": ["light", "dark"], "cases": cases}
 with open(os.path.join(ROOT, "design/component-reference/sidebar-folder-rows.json"), "w") as f:
     json.dump(out, f, indent=1, ensure_ascii=False)

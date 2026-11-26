@@ -22,8 +22,6 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var projectTitle: String?
     /// The project's icon inputs (chosen icon, icon file).
     public var projectIcon: ProjectIconSource? = nil
-    public var branch: String?
-    public var hasWorktree: Bool
     public var status: SidebarThreadStatus
     public var topStatus: SidebarTopStatus?
     /// `thread.goal?.status === "active"` relabels Working as "Goal".
@@ -52,13 +50,11 @@ public struct SidebarRowModel: Equatable, Sendable {
     public var workingStartedMs: Int64?
     /// The drivers the thread ran on, distinct and most recent first: the current one, then `providerInstanceHistory`.
     public var providers: [String]
-    /// `EnvironmentMachineKind` of a thread on another environment, nil on the primary one (Sidebar.tsx:1370-1375, 2196-2205).
-    public var environmentMachine: String? = nil
-    /// A scratch-project thread's machine label on line 3, when projects span environments and the
-    /// thread has no branch (`scratchMachineLabelFor`, Sidebar.tsx:1375, 2167-2180).
-    public var scratchMachineLabel: String? = nil
-    /// The machine kind drawn before `scratchMachineLabel`.
-    public var scratchMachine: String? = nil
+    /// The thread's environment label, which starts the meta line on every row that has one, primary or not
+    /// (`environmentLabelById`, T3 5258 Sidebar.tsx:3384, SidebarThreadRow.tsx:1281-1290, #40736).
+    public var environmentLabel: String? = nil
+    /// `EnvironmentMachineKind` drawn before `environmentLabel`, `server` when unknown (Sidebar.tsx:3385-3387).
+    public var environmentMachine = "server"
     /// `canSnooze`: the snooze button shows only where the server would accept it (Sidebar.tsx:1540-1545).
     public var canSnooze = true
     /// Terminals of this thread running a subprocess (`useThreadRunningTerminalIds`); above 0 shows
@@ -80,10 +76,10 @@ public struct SidebarRowModel: Equatable, Sendable {
     var timeAnchorMs: Int64?
     var snoozeWakeMs: Int64?
 
-    /// SidebarThreadRow.tsx:1268-1276 (T3 4928): omit an otherwise empty metadata line. The remote machine icon
-    /// alone doesn't make one; it moves to the title line (#26803).
+    /// `metaLineEmpty` (T3 5258 SidebarThreadRow.tsx:1278-1283): omit an otherwise empty metadata line, whose
+    /// providers then move to the title line.
     var hasMetaLine: Bool {
-        branch != nil || scratchMachineLabel != nil || pullRequestBadge != nil || issueBadge != nil || terminalProcessCount > 0 || timeInMeta
+        environmentLabel != nil || pullRequestBadge != nil || issueBadge != nil || terminalProcessCount > 0 || timeInMeta
     }
 
     /// The status slot text as T3 renders it, for tests and accessibility.
@@ -192,12 +188,6 @@ public struct SidebarEnvironments: Equatable, Sendable {
     }
 
     public func machine(_ environmentId: String) -> String { machines[environmentId] ?? "server" }
-
-    /// The machine glyph for a thread row, nil for the primary environment and unscoped ids.
-    public func rowMachine(_ id: ThreadId) -> String? {
-        guard let env = id.environmentId, env != primaryId else { return nil }
-        return machine(env)
-    }
 
     /// `projectGroupsSpanEnvironments` (sidebarProjectGrouping.ts:29-41): badges show only then.
     public static func span(_ groups: [SidebarModel.ProjectGroup]) -> Bool {
@@ -447,8 +437,6 @@ public enum SidebarListBuilder {
         var scopedGroup: SidebarModel.ProjectGroup?
         var scopedIds: Set<ProjectId>?
         var shelves: SidebarModel.Shelves
-        /// `projectGroupsSpanEnvironments`: scratch rows name their machine only then.
-        var spansEnvironments = false
         /// The projects and threads Dither's section order reads.
         var projects: [ProjectShell]
         var threadShells: [ThreadShell]
@@ -476,7 +464,6 @@ public enum SidebarListBuilder {
             unscopedOlderCut = snapshot.olderSettled
             let groups = SidebarModel.buildProjectGroups(snapshot.projects, grouping: state.grouping, preferredEnvironmentId: state.environments.primaryId)
             self.groups = groups
-            spansEnvironments = SidebarEnvironments.span(groups)
             for group in groups { for id in group.memberProjectIds { groupByProject[id] = group } }
             for p in snapshot.projects { projectById[p.id] = p }
             let scoped = state.scopeGroups(groups)
@@ -757,16 +744,10 @@ public enum SidebarListBuilder {
         return items
     }
 
-    /// A thread row's model with the context's project lookups, and the machine on scratch rows.
+    /// A thread row's model with the context's project lookups.
     static func rowModel(_ t: SidebarThread, section: SidebarSection, ctx: Context, state: SidebarListState, nowMs: Int64) -> SidebarRowModel {
-        var model = rowModel(t, section: section, project: ctx.projectById[t.shell.projectId],
-                             group: ctx.groupByProject[t.shell.projectId], state: state, nowMs: nowMs)
-        if ctx.spansEnvironments, t.shell.branch == nil, let env = t.id.environmentId,
-           let project = ctx.projectById[t.shell.projectId], isScratch(project, state: state) {
-            model.scratchMachineLabel = state.environments.labels[env]
-            model.scratchMachine = state.environments.machine(env)
-        }
-        return model
+        rowModel(t, section: section, project: ctx.projectById[t.shell.projectId],
+                 group: ctx.groupByProject[t.shell.projectId], state: state, nowMs: nowMs)
     }
 
     /// `isScratchProject`: the project sits at its environment's scratch folder.
@@ -796,7 +777,6 @@ public enum SidebarListBuilder {
         var model = SidebarRowModel(
             id: shell.id, variant: variant, action: action, section: section, title: shell.title,
             projectLabel: group?.label ?? project?.title, projectTitle: project?.title, projectIcon: project.map(ProjectIconSource.init),
-            branch: shell.branch, hasWorktree: !(shell.worktreePath ?? "").isEmpty,
             status: status,
             topStatus: SidebarModel.resolveSidebarV2TopStatus(status: status, isUnread: isUnread, isWoke: isWoke),
             isGoal: shell.goal?.status == .active,
@@ -809,7 +789,8 @@ public enum SidebarListBuilder {
             snoozeLabel: wake.map { snoozeWakeLabel(wakeMs: $0, nowMs: nowMs) },
             workingStartedMs: working,
             providers: providerStack(history: (shell.providerInstanceHistory ?? []).map(\.rawValue), current: shell.runtimeInstanceId),
-            environmentMachine: state.environments.rowMachine(shell.id),
+            environmentLabel: shell.id.environmentId.flatMap { state.environments.labels[$0] },
+            environmentMachine: shell.id.environmentId.map(state.environments.machine) ?? "server",
             canSnooze: SidebarModel.canSnooze(t, nowMs: nowMs),
             terminalProcessCount: state.terminalProcesses[shell.id] ?? 0,
             pullRequestBadge: SidebarPullRequestBadge(shell),

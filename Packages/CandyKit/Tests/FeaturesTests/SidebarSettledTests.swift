@@ -80,7 +80,6 @@ struct SidebarSettledTests {
         // Not in a section, so the row leads with its project's avatar, and the time sits in the meta line.
         #expect(a1.variant == .card && !a1.inProjectSection && a1.recedes && a1.timeInMeta)
         #expect(a1.projectTitle == "demo-repo")
-        #expect(a1.branch == "main")
         #expect(a1.timeLabel == "settled 30m ago")
         #expect(rows.first { $0.id == "b2" }?.timeLabel == "settled 1d ago")
         // Without settledAt the row shows its last activity, without the word.

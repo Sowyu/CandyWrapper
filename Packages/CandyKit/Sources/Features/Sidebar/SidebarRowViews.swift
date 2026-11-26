@@ -617,14 +617,11 @@ final class SidebarCardRowView: SidebarRowBase {
     private var rollingDuration: RollingTextView?
     private var rollingFor: String?
     private let title = LabelView()
-    private let branchIcon = IconView(name: .folderGit2, size: 12)
-    private let branch = LabelView()
-    private var middleBranch: MiddleTruncateView?
-    /// A scratch thread's machine on line 3 (`size-3 text-muted-foreground/40`).
-    private let scratchMachine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
+    /// The meta line's environment label (`min-w-0 flex-1 truncate`, T3 5258 SidebarThreadRow.tsx:1290).
+    private let environment = LabelView()
+    /// The machine before it (`EnvironmentMachineIcon size-3.5 shrink-0 text-icon-muted`, :1285-1289).
+    private let environmentGlyph = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     private let provider = ProviderStackView()
-    /// A remote thread's machine (`size-3.5`, `text-sidebar-muted-foreground/70`, Sidebar.tsx:2196-2205).
-    private let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
     let terminal = TerminalStatusGlyph()
     let prBadge = PullRequestBadgeView()
     let issueBadge = SidebarIssueBadgeView()
@@ -649,7 +646,7 @@ final class SidebarCardRowView: SidebarRowBase {
         layer?.addSublayer(surface)
         addSubview(workingGrid)
         workingGrid.isHidden = true
-        for v in [monogram, capyIcon, project, pin, statusIcon, statusLabel, duration, title, branchIcon, branch, scratchMachine, provider, machine, terminal, prBadge, issueBadge] as [NSView] { addSubview(v) }
+        for v in [monogram, capyIcon, project, pin, statusIcon, statusLabel, duration, title, environment, environmentGlyph, provider, terminal, prBadge, issueBadge] as [NSView] { addSubview(v) }
         issueBadge.action = { [weak self] in if case .row(let r)? = self?.item { self?.actions.linkedItems(r.id) } }
         prBadge.onClick = { [weak self] in if case .row(let r)? = self?.item { self?.actions.pullRequest(r.id) } }
         prBadge.onOpenURL = { [weak self] url in if case .row(let r)? = self?.item { self?.actions.pullRequestURL(r.id, url) } }
@@ -657,7 +654,7 @@ final class SidebarCardRowView: SidebarRowBase {
         statusLabel.font = SB.font(12, .medium); statusLabel.lineHeight = 16
         duration.font = SB.tabular(12, .medium); duration.lineHeight = 16
         title.lineHeight = 20
-        branch.font = SB.font(12); branch.lineHeight = 16
+        environment.font = SB.font(12); environment.lineHeight = 16
         settleButton.padding = 6
         addSubview(snoozeButton)
         addSubview(settleButton)
@@ -791,40 +788,19 @@ final class SidebarCardRowView: SidebarRowBase {
         if r.isRegeneratingTitle, r.titleTyping == nil { title.color = SB.c(\.mutedForeground) }
         SidebarTitleGlimmer.sync(&glimmer, over: title, active: r.isRegeneratingTitle && r.titleTyping == nil)
         TitleTypingOverlay.sync(&typing, over: title, phase: r.titleTyping)
-        let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
-        branch.text = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
+        environment.text = r.environmentLabel ?? ""
         // Dither sections (after Capy): the time joins the meta line, and the status slot keeps only the status.
         if capyRow && (r.inProjectSection || r.timeInMeta) {
-            branch.text = [branch.text, r.timeLabel].filter { !$0.isEmpty }.joined(separator: " · ")
+            environment.text = [environment.text, r.timeLabel].filter { !$0.isEmpty }.joined(separator: " · ")
             if r.topStatus == nil { duration.text = "" }
         }
-        branch.color = capyRow || !DesignGeometry.usesClassic(self) ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.4)
-        branch.font = SB.font(capyRow ? 11 : 12)
-        if !DesignGeometry.usesClassic(self), r.branch != nil {
-            let middle = middleBranch ?? {
-                let view = MiddleTruncateView("", font: DSFont.ui(12))
-                view.lineHeight = 16
-                view.showsTitle = false
-                addSubview(view)
-                middleBranch = view
-                return view
-            }()
-            middle.value = branch.text
-            middle.color = branch.color
-        } else {
-            middleBranch?.removeFromSuperview()
-            middleBranch = nil
-        }
-        branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
-        branchIcon.strokeColor = DesignGeometry.usesClassic(self) ? SB.c(\.mutedForeground, 0.4) : SB.c(\.iconMuted)
-        scratchMachine.kind = showsScratch ? r.scratchMachine : nil
-        scratchMachine.isHidden = !showsScratch
-        scratchMachine.color = DesignGeometry.usesClassic(self) ? SB.c(\.mutedForeground, 0.4) : SB.c(\.secondaryLabel)
+        let redesign = DesignGeometry.usesClassic(self)
+        environment.color = capyRow || !redesign ? SB.c(\.secondaryLabel) : SB.c(\.mutedForeground, 0.4)
+        environment.font = SB.font(capyRow ? 11 : 12)
+        environmentGlyph.kind = r.environmentLabel == nil ? nil : r.environmentMachine
+        environmentGlyph.isHidden = r.environmentLabel == nil
+        environmentGlyph.color = capyRow ? SB.c(\.secondaryLabel) : redesign ? SB.c(\.mutedForeground, 0.4) : SB.c(\.iconMuted)
         provider.set(r.providers, dither: capyRow)
-        machine.kind = r.environmentMachine
-        // Dither drops the trailing machine glyph.
-        machine.isHidden = r.environmentMachine == nil || showsScratch || capyRow
-        machine.color = SB.c(\.sidebarMutedForeground, 0.7)
         terminal.count = r.terminalProcessCount
         prBadge.badge = r.pullRequestBadge
         issueBadge.badge = r.issueBadge
@@ -951,33 +927,23 @@ final class SidebarCardRowView: SidebarRowBase {
                              frame: NSRect(x: left, y: top + 23, width: right - left, height: 22))
         }
         if !DesignGeometry.usesClassic(self), row?.hasMetaLine == false {
-            // `titleLineIcons` (T3 4928 SidebarThreadRow.tsx:1317-1325): the remote machine, then the providers, `gap-1`.
+            // `titleLineIcons` (T3 5258 SidebarThreadRow.tsx:1304-1311): the providers, `gap-1`.
             let stackWidth = provider.preferredWidth
             provider.frame = NSRect(x: right - stackWidth, y: top + 27, width: stackWidth, height: 14)
-            var iconsWidth = stackWidth
-            if !machine.isHidden {
-                machine.frame = NSRect(x: right - stackWidth - (stackWidth > 0 ? 4 : 0) - 14, y: top + 27, width: 14, height: 14)
-                iconsWidth += 14 + (stackWidth > 0 ? 4 : 0)
-            }
-            title.frame.size.width = max(0, right - left - iconsWidth - (iconsWidth > 0 ? 6 : 0))
-            branch.isHidden = true
-            middleBranch?.isHidden = true
-            branchIcon.isHidden = true
-            scratchMachine.isHidden = true
+            title.frame.size.width = max(0, right - left - stackWidth - (stackWidth > 0 ? 6 : 0))
+            environment.isHidden = true
+            environmentGlyph.isHidden = true
             return
         }
-        branch.isHidden = middleBranch != nil
-        middleBranch?.isHidden = false
-        // Line 3: branch and provider, `mt-0.5`, text-xs. Dither: the meta line under the title.
+        environment.isHidden = false
+        // Line 3: environment and provider, `mt-0.5`, text-xs. Dither: the meta line under the title.
         let y3 = capy ? top + 21 : top + 46
         let stackWidth = provider.preferredWidth
         provider.frame = NSRect(x: right - stackWidth, y: y3 + 1, width: stackWidth, height: 14)
         removeAllToolTips()
         if stackWidth > 0 { addToolTip(provider.frame, owner: self, userData: nil) }
-        // `ml-auto gap-1`: the machine sits 4pt left of the provider.
         var trailing = stackWidth > 0 ? right - stackWidth : capy ? right + 4 : right
-        if !machine.isHidden { machine.frame = NSRect(x: trailing - 4 - 14, y: y3 + 1, width: 14, height: 14); trailing -= 18 }
-        // The terminal glyph follows the branch, `gap-1.5` before the provider group; then the pull request and issue.
+        // The terminal glyph follows the environment, `gap-1.5` before the provider group; then the pull request and issue.
         if !issueBadge.isHidden {
             let iw = issueBadge.preferredWidth
             issueBadge.frame = NSRect(x: trailing - 6 - iw, y: y3, width: iw, height: 16); trailing -= iw + 6
@@ -990,21 +956,20 @@ final class SidebarCardRowView: SidebarRowBase {
         var bx = left
         if capy {
             bx = row?.inProjectSection == true ? left : left + 24
-            // The project icon names the project; the meta line spells it out only when there is no branch to show.
-            let showsProject = !project.text.isEmpty && branch.text.isEmpty && row?.inProjectSection != true
+            // The project icon names the project; the meta line spells it out only when there is no environment to show.
+            let showsProject = !project.text.isEmpty && environment.text.isEmpty && row?.inProjectSection != true
             project.isHidden = !showsProject
             let pw = showsProject ? min(ceil(project.textWidth) + 1, max(0, trailing - bx)) : 0
             project.frame = NSRect(x: bx, y: y3, width: pw, height: 16)
             if pw > 0 { bx += pw + 8 }
         }
-        if !branchIcon.isHidden {
+        if !environmentGlyph.isHidden {
+            // Redesign keeps its 12pt meta glyph; the default themes draw `size-3.5`, then `gap-1.5`.
             let glyph: CGFloat = DesignGeometry.usesClassic(self) ? 12 : 14
-            branchIcon.frame = NSRect(x: bx, y: y3 + (16 - glyph) / 2, width: glyph, height: glyph)
+            environmentGlyph.frame = NSRect(x: bx, y: y3 + (16 - glyph) / 2, width: glyph, height: glyph)
             bx += glyph + 6
         }
-        if !scratchMachine.isHidden { scratchMachine.frame = NSRect(x: bx, y: y3 + 2, width: 12, height: 12); bx += 18 }
-        branch.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
-        middleBranch?.frame = branch.frame
+        environment.frame = NSRect(x: bx, y: y3, width: max(0, trailing - 6 - bx), height: 16)
     }
 }
 
@@ -1128,19 +1093,16 @@ final class SidebarSlimRowView: SidebarRowBase {
     /// first such row so one-line rows never make it.
     private var meta: MetaLine?
 
-    /// `mt-0.5 flex items-center gap-1.5 text-secondary-label text-xs`: the worktree glyph and branch, or a scratch
-    /// thread's machine, then the terminal, pull request and issue, then the machine and agents at the end.
+    /// `mt-0.5 flex items-center gap-1.5 text-secondary-label text-xs`: the environment's machine and label, then
+    /// the terminal, pull request and issue, then the agents at the end (T3 5258 SidebarThreadRow.tsx:1284-1302).
     @MainActor final class MetaLine {
-        /// `ThreadWorktreeIndicator`: `size-3.5 text-icon-muted` (ThreadStatusIndicators.tsx:801).
-        let branchIcon = IconView(name: .folderGit2, size: 14)
-        let branch = MiddleTruncateView("", font: DSFont.ui(12))
-        let scratch = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 12, height: 12))
-        let machine = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
+        /// `EnvironmentMachineIcon size-3.5 shrink-0 text-icon-muted`.
+        let glyph = EnvironmentMachineGlyphView(frame: NSRect(x: 0, y: 0, width: 14, height: 14))
+        let label = LabelView("", font: DSFont.ui(12))
         let provider = ProviderStackView()
-        var views: [NSView] { [branchIcon, branch, scratch, machine, provider] }
+        var views: [NSView] { [glyph, label, provider] }
         init(in row: NSView) {
-            branch.lineHeight = 16
-            branch.showsTitle = false
+            label.lineHeight = 16
             views.forEach(row.addSubview)
         }
     }
@@ -1285,22 +1247,15 @@ final class SidebarSlimRowView: SidebarRowBase {
         }
         let meta = self.meta ?? MetaLine(in: self)
         self.meta = meta
-        let showsScratch = r.branch == nil && r.scratchMachineLabel != nil
-        let color = SB.c(\.secondaryLabel)
-        meta.branch.value = r.branch ?? (showsScratch ? r.scratchMachineLabel ?? "" : "")
-        meta.branch.color = color
-        meta.branch.isHidden = meta.branch.value.isEmpty
-        meta.branchIcon.isHidden = !(r.branch != nil && r.hasWorktree)
-        meta.branchIcon.strokeColor = SB.c(\.iconMuted)
-        meta.scratch.kind = showsScratch ? r.scratchMachine : nil
-        meta.scratch.isHidden = !showsScratch
-        meta.scratch.color = color
+        meta.label.text = r.environmentLabel ?? ""
+        meta.label.color = SB.c(\.secondaryLabel)
+        meta.label.isHidden = r.environmentLabel == nil
+        meta.glyph.kind = r.environmentLabel == nil ? nil : r.environmentMachine
+        meta.glyph.isHidden = r.environmentLabel == nil
+        meta.glyph.color = SB.c(\.iconMuted)
         // An empty meta line is left out and its trailing icons join the title line (`titleLineIcons`).
         meta.provider.set(r.providers, dither: false)
         meta.provider.isHidden = false
-        meta.machine.kind = r.environmentMachine
-        meta.machine.isHidden = r.environmentMachine == nil || showsScratch
-        meta.machine.color = SB.c(\.sidebarMutedForeground, 0.7)
     }
 
     override func layout() {
@@ -1359,14 +1314,11 @@ final class SidebarSlimRowView: SidebarRowBase {
         }
         if !metaShown, !terminal.isHidden { terminal.frame = NSRect(x: right - 14, y: (lineHeight - 14) / 2, width: 14, height: 14); right -= 14 + 10 }
         if !pin.isHidden { pin.frame = NSRect(x: right - 12, y: (lineHeight - 12) / 2, width: 12, height: 12); right -= 12 + 10 }
-        // An empty meta line is left out and the machine and agents follow the title (`titleLineIcons`, #26803).
+        // An empty meta line is left out and the agents follow the title (`titleLineIcons`).
         if let meta, multiline, !metaShown {
-            meta.branch.isHidden = true; meta.branchIcon.isHidden = true; meta.scratch.isHidden = true
+            meta.label.isHidden = true; meta.glyph.isHidden = true
             let stack = meta.provider.preferredWidth
-            var left = right
-            if stack > 0 { meta.provider.frame = NSRect(x: right - stack, y: (lineHeight - 14) / 2, width: stack, height: 14); left = right - stack - 4 }
-            if !meta.machine.isHidden { meta.machine.frame = NSRect(x: left - 14, y: (lineHeight - 14) / 2, width: 14, height: 14); left -= 14 + 4 }
-            if left < right { right = left + 4 - 10 }
+            if stack > 0 { meta.provider.frame = NSRect(x: right - stack, y: (lineHeight - 14) / 2, width: stack, height: 14); right -= stack + 10 }
         }
         title.frame = NSRect(x: x, y: (lineHeight - 20) / 2, width: max(0, right - x), height: 20)
         placeRenameField(row?.isRenaming == true ? renameField : nil, over: title,
@@ -1377,10 +1329,9 @@ final class SidebarSlimRowView: SidebarRowBase {
     private func layoutMeta(_ meta: MetaLine, width w: CGFloat) {
         let stack = meta.provider.preferredWidth
         let y: CGFloat = 32, right = w - 10
-        // `ml-auto inline-flex gap-1`: the machine, then the agents, at the end.
+        // `ml-auto inline-flex gap-1`: the agents at the end.
         var trailing = right - stack
         meta.provider.frame = NSRect(x: trailing, y: y + 1, width: stack, height: 14)
-        if !meta.machine.isHidden { meta.machine.frame = NSRect(x: trailing - (stack > 0 ? 4 : 0) - 14, y: y + 1, width: 14, height: 14); trailing = meta.machine.frame.minX }
         // `gap-1.5` from the end: issue, pull request, terminal.
         if !issueBadge.isHidden {
             let iw = issueBadge.preferredWidth
@@ -1392,9 +1343,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         }
         if !terminal.isHidden { terminal.frame = NSRect(x: trailing - 6 - 14, y: y + 1, width: 14, height: 14); trailing = terminal.frame.minX }
         var x: CGFloat = 36 // `ps-9`, under the title
-        if !meta.branchIcon.isHidden { meta.branchIcon.frame = NSRect(x: x, y: y + 1, width: 14, height: 14); x += 14 + 6 }
-        if !meta.scratch.isHidden { meta.scratch.frame = NSRect(x: x, y: y + 2, width: 12, height: 12); x += 12 + 6 }
-        meta.branch.frame = NSRect(x: x, y: y, width: max(0, trailing - 6 - x), height: 16)
+        if !meta.glyph.isHidden { meta.glyph.frame = NSRect(x: x, y: y + 1, width: 14, height: 14); x += 14 + 6 }
+        meta.label.frame = NSRect(x: x, y: y, width: max(0, trailing - 6 - x), height: 16)
     }
 }
 final class SidebarShelfRowView: SidebarRowBase {

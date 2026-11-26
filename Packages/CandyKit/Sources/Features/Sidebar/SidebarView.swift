@@ -843,6 +843,7 @@ public final class SidebarContentView: DSView {
             m.environmentMachine = state.environments.machine(env)
         }
         m.branch = thread.branch
+        m.worktree = SidebarThreadHoverCardModel.worktreeDisplay(thread.worktreePath)
         // Sidebar.tsx:1243-1255, 1350-1355: the checkout's status when the thread has a branch; only a
         // Current checkout thread (no worktree) can be on another branch.
         if thread.branch != nil, thread.worktreePath == nil, let env = id.environmentId, let root = project?.workspaceRoot {
