@@ -763,8 +763,15 @@ final class WorkDetailView: DSView {
     override func mouseDown(with event: NSEvent) {
         guard let i = link(at: convert(event.locationInWindow, from: nil)), case .link(let href?) = detail.blocks[i].kind,
               let url = URL(string: href) else { return }
+        if WorkDetailLinks.open?(url) == true { return }
         NSWorkspace.shared.open(url)
     }
+}
+
+/// "Open links in" for web search results (`WebSearchResultLink`, 5258 V2ItemInspector.tsx:206, #42882). The app sets
+/// it to the browser panel's `openLink`, which returns false when the link leaves the app.
+@MainActor public enum WorkDetailLinks {
+    public static var open: ((URL) -> Bool)?
 }
 
 /// Only expanded blocks larger than the source's 320pt viewport own a scroller.

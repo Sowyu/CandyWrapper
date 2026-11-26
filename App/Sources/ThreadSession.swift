@@ -855,6 +855,7 @@ final class ThreadController {
         terminal.availableEditors = { [weak self] env in self?.composer.config(env)?.availableEditors }
         pullRequests.openIntegratedBrowser = { [weak self] url in self?.browser.openURL(url.absoluteString) }
         pullRequests.openBrowserLink = { [weak self] url in self?.browser.openLink(url) ?? false }
+        WorkDetailLinks.open = { [weak self] url in self?.browser.openLink(url) ?? false }
         devices = DevicePanelController(panel: panel, environments: environments, files: files)
         files.onSync = { [weak self] in self?.pullRequests.sync(); self?.browser.sync(); self?.terminal.panelChanged(); self?.devices.sync() }
         files.onTerminalTabsClosed = { [weak self] tabs in self?.terminal.panelTerminalsClosed(tabs) }
