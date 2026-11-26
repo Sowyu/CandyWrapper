@@ -140,18 +140,16 @@ final class MathFont: @unchecked Sendable {
         return (advance.width * scale, CGRect(x: bounds.minX * scale, y: bounds.minY * scale, width: bounds.width * scale, height: bounds.height * scale))
     }
 
-    /// A glyph's outline at one point size, cached: formulas repeat few glyphs at three sizes.
-    private var outlines: [Int: CGPath] = [:]
+    /// The font at one point size, cached: formulas use a few sizes (text, script, scriptscript, scaled operators).
+    private var sized: [Int: CTFont] = [:]
     private let lock = NSLock()
-    func outline(_ g: CGGlyph, size: CGFloat) -> CGPath? {
-        let key = Int(g) << 20 | Int((size * 64).rounded())
+    func font(size: CGFloat) -> CTFont {
+        let key = Int((size * 64).rounded())
         lock.lock(); defer { lock.unlock() }
-        if let p = outlines[key] { return p }
-        guard let p = CTFontCreatePathForGlyph(base, g, nil) else { return nil }
-        var t = CGAffineTransform(scaleX: size / CTFontGetSize(base), y: size / CTFontGetSize(base))
-        let scaled = p.copy(using: &t) ?? p
-        if outlines.count > 2_000 { outlines.removeAll() }
-        outlines[key] = scaled
-        return scaled
+        if let f = sized[key] { return f }
+        let f = CTFontCreateCopyWithAttributes(base, size, nil, nil)
+        if sized.count > 200 { sized.removeAll() }
+        sized[key] = f
+        return f
     }
 }

@@ -11,7 +11,7 @@ CandyWrapper lays formulas out natively, without a web view. The user chose that
 4. `MarkdownMath.swift` and `MarkdownLayout.displayMath` place formulas as T3's `wordsHast.ts` wrapper does. An inline formula is an `align-middle` box with 2px by 3px padding around the message's own line, and the line grows around a tall one. A display formula is centered and scrolls sideways when it is wider than the column.
 5. `MathRenderer` caches up to 1,000 layouts by source, style and text size, like T3's typeset cache.
 
-Glyphs are STIX Two Math, which macOS ships, so no font is bundled. They draw as filled outlines, because Blink fills Words' 1000-unit SVG text as paths rather than as hinted glyph masks.
+Glyphs are STIX Two Math, which macOS ships, so no font is bundled. They draw with Core Text and font smoothing at their device size, as Skia draws Blink's SVG text. The formula's baseline and each glyph's y sit on device rows and each glyph's x on a quarter pixel, where Blink and Skia put them. A display formula's SVG has `margin: 1em auto`, so the block holds an em above and below the formula.
 
 Copying a selection puts each formula's TeX on the pasteboard as `\(…\)` or `\[…\]`, as T3's `data-markdown-copy` does. Find matches the TeX.
 

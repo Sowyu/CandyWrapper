@@ -23,10 +23,23 @@ final class MathLayout: @unchecked Sendable {
         self.tag = tag.map { MathLayout($0) }
     }
 
-    /// Draws with the baseline's left end at `origin`, in a flipped (y down) context.
+    /// `point` with its y on the nearest device row, a tie going down the page as Blink rounds, and with `quarterX` its x
+    /// on the nearest quarter of a device pixel, Skia's subpixel glyph positions.
+    static func snapped(_ point: CGPoint, in ctx: CGContext, quarterX: Bool = false) -> CGPoint {
+        let m = ctx.ctm
+        var d = point.applying(m)
+        // Core Graphics device space has y up, so down the page is toward a smaller y.
+        d.y = (d.y - 0.5).rounded(.up)
+        if quarterX { d.x = (d.x * 4).rounded() / 4 }
+        return d.applying(m.inverted())
+    }
+
+    /// Draws with the baseline's left end at `origin`, in a flipped (y down) context. Blink puts the formula's baseline on a
+    /// device row and Skia draws each glyph on a device row at a quarter-pixel x, so both snap here; rules and shapes move
+    /// with the baseline.
     func draw(in ctx: CGContext, at origin: CGPoint, color: CGColor) {
         guard let font = MathFont.shared else { return }
-        // Words draws rules as SVG rects, which Blink antialiases without snapping.
+        let origin = Self.snapped(origin, in: ctx)
         ctx.saveGState()
         ctx.translateBy(x: origin.x, y: origin.y)
         ctx.scaleBy(x: 1, y: -1)
@@ -34,17 +47,22 @@ final class MathLayout: @unchecked Sendable {
             ctx.setFillColor((i < ruleColors.count ? ruleColors[i] : nil) ?? color)
             ctx.fill(r)
         }
-        // Words' glyphs are SVG text at 1000 units under the viewBox's scale, which Blink fills as outlines rather than as
-        // hinted, gamma-corrected glyph masks, so they draw as filled paths here too.
+        // Blink draws Words' SVG text through Skia, which asks Core Text for each glyph's mask at its device size with font
+        // smoothing on: the same weight as the app's other text, about 18% more ink than a filled outline at 1x.
+        // Measured against the 5258 references: mean 3.61% differing pixels as outlines, 2.09% this way.
+        ctx.saveGState()
+        ctx.setAllowsFontSmoothing(true)
+        ctx.setShouldSmoothFonts(true)
+        ctx.setAllowsFontSubpixelPositioning(true)
+        ctx.setShouldSubpixelPositionFonts(true)
+        ctx.setShouldSubpixelQuantizeFonts(false)
+        ctx.textMatrix = .identity
         for g in glyphs {
-            guard let path = font.outline(g.glyph, size: g.size) else { continue }
-            ctx.saveGState()
-            ctx.translateBy(x: g.position.x, y: g.position.y)
-            ctx.addPath(path)
+            var glyph = g.glyph
             ctx.setFillColor(g.color ?? color)
-            ctx.fillPath()
-            ctx.restoreGState()
+            CTFontDrawGlyphs(font.font(size: g.size), &glyph, [Self.snapped(g.position, in: ctx, quarterX: true)], 1, ctx)
         }
+        ctx.restoreGState()
         // After the glyphs, in Words' SVG order for radicals and delimiters, and over them for `\cancel`.
         for s in shapes {
             ctx.addPath(s.path)

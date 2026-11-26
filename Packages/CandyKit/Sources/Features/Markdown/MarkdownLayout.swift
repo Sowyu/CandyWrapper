@@ -911,7 +911,10 @@ private struct Builder {
         }
         let index = mathIndex
         mathIndex += 1
-        let (above, below) = MarkdownMathStyle.content(layout, parent: font, lineHeight: body.lineHeight)
+        // The SVG is `display:block; margin:1em auto` in its em (index.css:2352-2354), so no line box: the block is the
+        // formula's own box plus an em above and below.
+        let em = size * MathRenderer.scale
+        let above = em + layout.height, below = layout.depth + em
         let pad = MarkdownMathStyle.padX, padY = MarkdownMathStyle.padY
         // A `\tag` sits at the right edge; the formula stays centered, so the content reserves the tag's width on both sides.
         let tagRoom = layout.tag.map { $0.width + 0.5 * size * MathRenderer.scale } ?? 0

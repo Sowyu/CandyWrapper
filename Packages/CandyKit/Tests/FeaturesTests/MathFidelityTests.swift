@@ -101,6 +101,7 @@ struct MathFidelityTests {
         let spec = try JSONSerialization.jsonObject(with: Data(contentsOf: Self.repo.appendingPathComponent("design/component-reference/math.json"))) as! [String: Any]
         let dir = Fidelity.root.appendingPathComponent("math")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let metrics = try JSONSerialization.jsonObject(with: Data(contentsOf: refDir.appendingPathComponent("metrics.json"))) as! [String: [String: Any]]
         var rows = "", cases: [(String, Double)] = []
         for c in spec["cases"] as! [[String: Any]] {
             let name = c["name"] as! String
@@ -115,7 +116,12 @@ struct MathFidelityTests {
                     let height = view.height(forWidth: width)
                     let canvas = MarkdownFidelityTests.Canvas(frame: .zero)
                     canvas.addSubview(view)
-                    view.frame = NSRect(x: 8, y: 8, width: width, height: height)
+                    // Each reference is clipped from the page at its case's y, which has a fraction, and the PNG starts
+                    // at the nearest device row. Blink snaps the formula to the page's device rows, so the view sits at
+                    // the same fraction of a device pixel here.
+                    let cy = ((metrics[file]?["capture"] as? [String: Double])?["y"] ?? 0) * Double(scale)
+                    let phase = CGFloat(cy - cy.rounded()) / CGFloat(scale)
+                    view.frame = NSRect(x: 8, y: 8 + phase, width: width, height: height)
                     let ours = Snapshot.image(of: canvas, size: NSSize(width: CGFloat(ref.pixelsWide) / CGFloat(scale), height: CGFloat(ref.pixelsHigh) / CGFloat(scale)),
                                               scale: CGFloat(scale), dark: theme == "dark")
                     let (share, diff) = MarkdownFidelityTests.compare(ref, ours)

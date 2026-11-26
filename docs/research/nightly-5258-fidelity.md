@@ -62,10 +62,19 @@ CandyWrapper's port, in `Features/Markdown/Math`:
 1. `scripts/gen-math-spec` renders the corpus through that Words build, and the 156 math PNGs are recaptured from it.
 2. `MathFont` uses the system STIX Two Math, so the bundled Latin Modern Math (717 KB, GUST license) and its notice are gone.
 3. `MathTypesetter` follows Words for glyph metrics, script shifts, limits, big operators, radicals, `\left…\right` and delimiter shapes, and `\text` runs. `MathProbeTests.parity` with `CW_MATH_PARITY=1` compares every glyph and rule with Words' SVG. After the port, 36 of the 39 cases match to within 0.005em. The probe pairs glyphs one by one, so for the cases where Words draws a word as one `<text>` (`lim`, `det`, `mod`, `\text`) it checks the box.
-4. Glyphs draw as filled outlines, as Blink fills Words' 1000-unit SVG text.
+4. Glyphs draw with Core Text and font smoothing on device rows at quarter-pixel x, as Skia draws Blink's SVG text.
 5. VoiceOver reads a display formula as its TeX, as T3's `aria-label` gives it.
 
-`MathFidelityTests` against the 5258 references: 33 of 152 cases over their ceilings with the 4928 port, 1 after this one. `10-inline-sum` light at 1x differs by 9.81% against 9.00%. Its glyph positions match Words to within 0.005em, so the rest is rasterizing: Blink draws the subscripts about a fifth of a CSS pixel higher and 14% heavier. The ceiling stays.
+`MathFidelityTests` against the 5258 references: 33 of 152 cases over their ceilings with the 4928 port, 1 after this one. `10-inline-sum` light at 1x differed by 9.81% against 9.00%.
+
+Two causes, found by comparing the ink of each glyph column in the reference and the render:
+
+1. The references are clipped from the page at y values with a fraction (`15-energy` at 1416.640625), and the PNG starts at the nearest device row. Blink rounds each formula's baseline to a page device row, so a reference's baseline lands on row 27 or 28 depending on that fraction, while the test drew every formula at 27.5. `round(capture.y)` as the PNG's first row predicts the measured row of every inline case. The test now places the view at the capture's fraction of a device pixel (`metrics.json` has `capture.y`), and the formula snaps its baseline to a device row instead of half a point.
+2. Filled outlines carry 15 to 18% less ink than Chromium's glyphs at 1x. Skia draws SVG text through Core Text at the device size with font smoothing, so math does the same, with each glyph's y on a device row and its x on a quarter pixel.
+
+What didn't help: snapping the SVG box and scaling to its snapped size as `SVGRootPainter` does (mean 3.01%), Core Text without smoothing (no gain over outlines), subpixel quantizing by Core Text (3.08%), and smoothing off for light ink in dark mode (2.51%).
+
+The same comparison found display formulas drawn 1em high, as the block left out the SVG's `margin: 1em auto`. The loose ceilings hid it. After all three fixes the mean is 2.09% where it was 4.09%, `10-inline-sum` light at 1x is 1.02%, and no ceiling changed. Dark still differs more than light (7.11% for `10-inline-sum` at 1x): Core Text spreads light ink on dark more than Skia's mask does, and no Core Graphics setting closes that.
 
 Left:
 

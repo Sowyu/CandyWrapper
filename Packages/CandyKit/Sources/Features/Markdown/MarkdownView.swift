@@ -1523,7 +1523,7 @@ public final class MarkdownView: DSView {
                     .insetBy(dx: -2, dy: -2).intersects(dirtyRect) else { break }
                 ctx.saveGState()
                 if let clip { ctx.clip(to: clip) }
-                layout.draw(in: ctx, at: CGPoint(x: origin.x, y: MarkdownTextBox.snappedBaseline(origin.y)), color: color.cgColor(in: self))
+                layout.draw(in: ctx, at: CGPoint(x: origin.x, y: origin.y), color: color.cgColor(in: self))
                 ctx.restoreGState()
             case .favicon(let host, let rect):
                 guard rect.intersects(dirtyRect) else { break }
