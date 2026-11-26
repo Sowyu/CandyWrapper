@@ -596,7 +596,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | cb207e9f60 | #42228 | fix(web): long Issues and Pull Requests searches no longer end in a broken character | other | n/a (Swift Characters) † |
 | cb2a488c67 | #39302 | fix(web): an off-track desktop build no longer says "Up to date" | shell | n/a (Electron updater) † |
 | cbf4ea7ddc | #41264 | fix(web): shift-scroll and horizontal scrollers no longer navigate history | shell | n/a (web history swipe) † |
-| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4, details panel and code-only notice 3c28ca0f, glide in the next commit (pixel reference left) |
+| ccabed086a | #39445 | feat(web): the environments page is a map of your machines | connections | ported in part 50eb0ded, 07228df4, details panel and code-only notice 3c28ca0f, glide 086a837d, chrome and panel reference in the next commit (scene reference left) |
 | cef38e408d | #42805 | fix(web): file picker highlights no longer break emoji in file names | files | port (3.4) † |
 | d15123668e | #39579 | fix(web): keep reopened pairing link dialogs open on completion | connections | port (7.5) † |
 | d1f8636f49 | #39225 | fix(mobile,web): quote and port messages are translated in every language | other | n/a (translation strings) † |
@@ -713,3 +713,5 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 7.1's layout engine sorts lanes with a comparator that is not a total order (`crossings`, environmentsMap.logic.ts:1482-1486), so a port has to sort as V8 does to get T3's lanes. CW copies V8's binary insertion run below 64 items.
 - 7.1's search does not centre on each keystroke: typing only lights the matches, and Enter selects the first and centres it, or selects its stack with the machine as the stack list's filter (EnvironmentsMap.tsx:771-789, :900-904).
 - The "78722" on the sandbox's primary card is right. The 5258 server labels itself with macOS's ComputerName (ServerEnvironmentLabel.ts:161, `scutil --get ComputerName`), which is "78722" on this Mac, and T3 names its primary entry with `descriptor.label` (connection/platform.ts:483). The sidebar shows the same name, as T3 does.
+- 7.1's toolbar field is the default `h-8` input, so the toolbar is 45 tall, and Link several… and Clear are `xs` buttons (EnvironmentsMap.tsx:885-940). The help lists "Drag a plus onto a machine to link them." and the Shift-click line only when some environment can link.
+- 7.1 misses that "Link several…" is a menu of "From {source}" items when several environments can link and none is selected (EnvironmentsMap.tsx:946-968).

@@ -904,11 +904,14 @@ final class FleetStatusValue: DSView, SettingsGroupRow {
     }
     required init?(coder: NSCoder) { fatalError() }
     override var wantsUpdateLayer: Bool { false }
-    func height(forWidth width: CGFloat) -> CGFloat { text.height(forWidth: max(0, width - 18)) }
-    override func layout() { super.layout(); text.frame = NSRect(x: 18, y: 0, width: max(0, bounds.width - 18), height: bounds.height) }
+    /// `gap-1.5` after the glyph: the dots are `size-2`, the icons `size-3`.
+    var glyphWidth: CGFloat { switch health { case .reachable(nil), .unreachable: 8; default: 12 } }
+    var textX: CGFloat { glyphWidth + 6 }
+    func height(forWidth width: CGFloat) -> CGFloat { text.height(forWidth: max(0, width - textX)) }
+    override func layout() { super.layout(); text.frame = NSRect(x: textX, y: 0, width: max(0, bounds.width - textX), height: bounds.height) }
     override func draw(_ dirtyRect: NSRect) {
         guard let cg = NSGraphicsContext.current?.cgContext else { return }
-        FleetGlyphs.health(health, center: CGPoint(x: 6, y: min(bounds.midY, 8)), in: cg, view: self)
+        FleetGlyphs.health(health, center: CGPoint(x: glyphWidth / 2, y: min(bounds.midY, 8)), in: cg, view: self)
     }
 }
 

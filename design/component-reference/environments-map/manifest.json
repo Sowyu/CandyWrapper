@@ -1,0 +1,18 @@
+{
+  "details.link" : {
+    "height" : 176,
+    "width" : 796
+  },
+  "details.summary" : {
+    "height" : 80,
+    "width" : 796
+  },
+  "map.footer" : {
+    "height" : 38,
+    "width" : 796
+  },
+  "map.toolbar" : {
+    "height" : 45,
+    "width" : 796
+  }
+}

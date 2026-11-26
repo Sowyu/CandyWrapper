@@ -14,9 +14,9 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
     let search = InputGroupView(placeholder: "Find a machine", leading: .icon(.search))
     private let searchStatus = LabelView("", font: DSFont.ui(11), color: Themed.color(\.mutedForeground))
     private let selectedCount = LabelView("", font: DSFont.ui(11), color: Themed.color(\.foreground))
-    let clearButton = ButtonView("Clear", variant: .ghost, size: .micro)
-    let linkSeveral = ButtonView("Link several…", variant: .outline, size: .micro)
-    let help = ButtonView(nil, variant: .ghostMuted, size: .iconMicro)
+    let clearButton = ButtonView("Clear", variant: .ghostMuted, size: .xs)
+    let linkSeveral = ButtonView("Link several…", variant: .outline, size: .xs)
+    let help = ButtonView(nil, variant: .ghost, size: .iconXs)
     let zoomOut = ButtonView(nil, icon: .minus, variant: .ghost, size: .iconXs)
     let zoomIn = ButtonView(nil, icon: .plus, variant: .ghost, size: .iconXs)
     let fitButton = ButtonView(nil, icon: .maximize, variant: .ghost, size: .iconXs)
@@ -37,12 +37,13 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
     public var onLinkSeveral: ((_ sourceId: String?, _ environmentIds: [String]) -> Void)?
     public var onHeightChange: (() -> Void)?
 
-    static let toolbarHeight: CGFloat = 41
+    /// `py-1.5` around the `h-8` field, and the `border-b`.
+    static let toolbarHeight: CGFloat = 45
     static let footerHeight: CGFloat = 38
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        search.input.size = .sm
+        search.input.size = .default
         search.input.setAccessibilityLabel("Find a machine on the map")
         // Typing lights the matches; Enter goes to the first (:893-910).
         search.input.onChange = { [weak self] text in self?.canvas.state.query = text }
@@ -172,10 +173,13 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
     }
 
     func showHelp() {
-        let text = LabelView("• Select a machine to manage it.\n• Drag a plus onto a machine to link them.\n• A link reaches one machine and stops there.",
-                             font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+        // The two linking lines show only where some environment can link (:985-992).
+        let canLink = !linkSeveral.isHidden
+        let lines = ["Select a machine to manage it."] + (canLink ? ["Drag a plus onto a machine to link them.", "Shift-click or Shift-drag to select several"] : [])
+            + ["A link reaches one machine and stops there."]
+        let text = LabelView(lines.map { "• " + $0 }.joined(separator: "\n"), font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
         text.lineHeight = 20
-        text.frame = NSRect(x: 0, y: 0, width: 260, height: 64)
+        text.frame = NSRect(x: 0, y: 0, width: 260, height: CGFloat(lines.count) * 20 + 4)
         let box = DSView(frame: text.frame)
         box.addSubview(text)
         helpPopup = PopoverView(content: box).show(from: help)
@@ -201,7 +205,7 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
         let w = bounds.width
         toolbarRule.frame = NSRect(x: 0, y: Self.toolbarHeight - 1, width: w, height: 1)
         // `flex flex-wrap items-center gap-x-3 px-3 py-1.5`, the field `w-48`.
-        let fieldHeight: CGFloat = 28
+        let fieldHeight: CGFloat = 32
         search.frame = NSRect(x: 12, y: (Self.toolbarHeight - 1 - fieldHeight) / 2, width: 192, height: fieldHeight)
         var right = w - 12
         for v in [help, linkSeveral, clearButton] as [NSView] where !v.isHidden {
@@ -222,7 +226,7 @@ public final class EnvironmentsMapView: DSView, SettingsGroupRow {
         let footerY = canvasTop + canvasHeight
         footerRule.frame = NSRect(x: 0, y: footerY, width: w, height: 1)
         // `rounded-lg border p-0.5` around three `size-6` buttons with `gap-1`.
-        let groupWidth: CGFloat = 2 + 2 + 24 * 3 + 4 * 2 + 2 + 2
+        let groupWidth: CGFloat = 1 + 2 + 24 * 3 + 4 * 2 + 2 + 1
         zoomGroup.frame = NSRect(x: w - 12 - groupWidth, y: footerY + (Self.footerHeight - 30) / 2, width: groupWidth, height: 30)
         for (i, b) in [zoomOut, zoomIn, fitButton].enumerated() { b.frame = NSRect(x: 3 + CGFloat(i) * 28, y: 3, width: 24, height: 24) }
         legend.frame = NSRect(x: 12, y: footerY + (Self.footerHeight - 16) / 2, width: max(0, zoomGroup.frame.minX - 24), height: 16)
