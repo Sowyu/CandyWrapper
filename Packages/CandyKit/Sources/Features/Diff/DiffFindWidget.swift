@@ -14,6 +14,11 @@ final class DiffFindWidget: DSView {
     let previous = DiffFindButton(DiffFindGlyphs.arrowRight, label: "Previous", size: 24, rotation: -.pi / 2)
     let next = DiffFindButton(DiffFindGlyphs.arrowRight, label: "Next", size: 24, rotation: .pi / 2)
     let close = DiffFindButton(DiffFindGlyphs.close, label: "Close", size: 20, round: true)
+    /// Redesign's close: a ghost icon button inside the box after Next, as the thread find bar's, in place of pierre's
+    /// round button on the corner. It runs `close.action`.
+    private let ghostClose = ButtonView(icon: .x, variant: .ghost, size: .iconXs)
+    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+    private var closeWidth: CGFloat { redesign ? 2 + 24 : 0 }
     private let count = LabelView("", font: DSFont.ui(12, weight: .medium))
     private let box = BoxDecorationLayer(), fieldBox = BoxDecorationLayer()
 
@@ -23,7 +28,7 @@ final class DiffFindWidget: DSView {
     /// The room the host gives it. A narrow pane shrinks the field, down to the toggles plus a little text.
     var availableWidth: CGFloat = .greatestFiniteMagnitude { didSet { if availableWidth != oldValue { needsLayout = true } } }
     private var fieldWidth: CGFloat {
-        let fixed = 2 * Self.inset + Self.gap + countWidth + Self.gap + Self.navWidth + Self.overhang
+        let fixed = 2 * Self.inset + Self.gap + countWidth + Self.gap + Self.navWidth + closeWidth + Self.overhang
         return max(80, min(Self.fieldWidth, availableWidth - fixed))
     }
     /// Below this the case, word and regex toggles leave the field too little room, so they hide.
@@ -43,7 +48,10 @@ final class DiffFindWidget: DSView {
         field.paddingOverride = (6, 72)
         field.setAccessibilityLabel("Search")
         count.lineHeight = 20
-        for v in [field, matchCase, wholeWord, regex, count, previous, next, close] as [NSView] { addSubview(v) }
+        for v in [field, matchCase, wholeWord, regex, count, previous, next, close, ghostClose] as [NSView] { addSubview(v) }
+        ghostClose.setAccessibilityLabel("Close")
+        TooltipController.redesign(ghostClose, "Close find") { "Esc" }
+        ghostClose.action = { [weak self] in self?.close.action?() }
         previous.isEnabled = false
         next.isEnabled = false
         field.onStateChange = { [weak self] _ in self?.updateLayer() }
@@ -54,7 +62,7 @@ final class DiffFindWidget: DSView {
     private var countWidth: CGFloat { max(50, ceil(count.textWidth)) }
     /// The box: border 1, padding 4, then field, count and nav on a 6pt grid gap.
     var boxSize: CGSize {
-        CGSize(width: 2 * Self.inset + fieldWidth + Self.gap + countWidth + Self.gap + Self.navWidth, height: 38)
+        CGSize(width: 2 * Self.inset + fieldWidth + Self.gap + countWidth + Self.gap + Self.navWidth + closeWidth, height: 38)
     }
     var preferredSize: CGSize { CGSize(width: boxSize.width + Self.overhang, height: boxSize.height + Self.overhang) }
 
@@ -85,6 +93,15 @@ final class DiffFindWidget: DSView {
         next.frame = NSRect(x: navX + 24, y: y + 2, width: 24, height: 24)
         // `top: 0; right: 0; transform: translate(50%, -50%)` on the padding box's corner.
         close.frame = NSRect(x: box.maxX - 1 - 10, y: box.minY + 1 - 10, width: 20, height: 20)
+        close.isHidden = redesign
+        ghostClose.isHidden = !redesign
+        ghostClose.frame = NSRect(x: navX + 48 + 2, y: y + 2, width: 24, height: 24)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        // Redesign's close sits inside the box, so the box's width changes with the theme.
+        needsLayout = true; superview?.needsLayout = true
     }
 
     override func updateLayer() {
