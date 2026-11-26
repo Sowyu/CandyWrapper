@@ -393,9 +393,13 @@ final class FilesController {
     }
 
     private func refreshTree() {
-        let dirs = [""] + panel.filesPanel.model.directoryPaths.filter { panel.filesPanel.model.directories[$0] != nil }
+        // The root reads now. Every other listed folder waits until a row of it is on screen, so a
+        // refresh costs what shows, not every folder listed (useDirectoryEntries.ts:198-204 at 5258, #42870).
+        var model = panel.filesPanel.model
+        model.stale = Set(model.directoryPaths.filter { model.directories[$0] != nil })
+        panel.filesPanel.model = model
         reads = [:]
-        loadDirectories(dirs)
+        loadDirectories([""])
         let query = panel.filesPanel.searchField.input.text
         if !query.trimmingCharacters(in: .whitespaces).isEmpty { searchTree(query) }
         if panel.panelState.active?.kind == .file { showActiveFile(force: true) }

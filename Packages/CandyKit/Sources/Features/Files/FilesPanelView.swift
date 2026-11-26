@@ -290,6 +290,13 @@ public final class FileTreeView: DSView {
             view.configure(rows[i], selected: rows[i].path == selectedPath, guides: hostHovered)
             visible[i] = view
         }
+        // Rows on screen read again the stale folders they come from (FileBrowserPanel.tsx:336-345 at 5258).
+        var due: [String] = []
+        for i in wanted.sorted() { for folder in model.staleFolders(for: rows[i]) where !due.contains(folder) { due.append(folder) } }
+        if !due.isEmpty {
+            model.stale.subtract(due)
+            onLoad?(due)
+        }
     }
 
     private func dequeue() -> FileTreeRowView {
