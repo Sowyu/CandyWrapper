@@ -89,14 +89,14 @@ struct WorkDetail: Hashable {
         case fileHeader(additions: Int?, deletions: Int?)
         /// One `font-mono text-muted-foreground` list line (a file change's operations).
         case listLine
-        /// A file search hit: the path at `foreground/80`.
-        case path
-        /// A search hit's preview or snippet: `text-xs text-muted-foreground`, wrapping.
+        /// A web result's snippet: `text-xs text-muted-foreground`, wrapping.
         case preview
         /// A web result's title: `font-medium text-foreground`, a link with the external icon when the URL is safe.
         case link(String?)
         /// An image in a `ChatMarkdownAssetImage` box at most 16rem tall.
         case image(WorkImage)
+        /// A file search's matched lines by file (`FileSearchResults`, 5258 #42429).
+        case searchResults(FileSearchResults)
     }
 
     struct Block: Hashable {
@@ -255,14 +255,14 @@ struct WorkDetail: Hashable {
                 d.blocks.append(Block(text: operation + " " + old + path + suffix, kind: .listLine, gap: i == 0 ? 8 : 4))
             }
         case .fileSearch:
-            if let pattern = item["pattern"]?.stringValue, !pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                d.blocks.append(Block(text: pattern, kind: .mono(.pattern)))
+            // The row's label already shows the pattern unless the provider titled the search (V2ItemInspector.tsx:388-394).
+            let pattern = item["pattern"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !pattern.isEmpty, let title = item.title, !title.isEmpty, !title.contains(pattern) {
+                d.blocks.append(Block(text: item["pattern"]?.stringValue ?? pattern, kind: .mono(.pattern)))
             }
-            for (i, result) in (item["results"]?.arrayValue ?? []).enumerated() {
-                let path = formatWorkspaceRelativePath(result["fileName"]?.stringValue ?? "", workspaceRoot: workspaceRoot)
-                    + (result["line"]?.intValue.map { ":\($0)" } ?? "") + (result["column"]?.intValue.map { ":\($0)" } ?? "")
-                d.blocks.append(Block(text: path, kind: .path, gap: d.blocks.isEmpty ? 0 : i == 0 ? 8 : 4))
-                if let preview = result["preview"]?.stringValue, !preview.isEmpty { d.blocks.append(Block(text: preview, kind: .preview, gap: 2)) }
+            if let results = item["results"]?.arrayValue, !results.isEmpty {
+                let found = FileSearchResults(results: results, pattern: item["pattern"]?.stringValue, workspaceRoot: workspaceRoot)
+                d.blocks.append(Block(text: "", kind: .searchResults(found), gap: d.blocks.isEmpty ? 0 : 8))
             }
         case .webSearch:
             let patterns = (item["patterns"]?.arrayValue ?? []).compactMap(\.stringValue)
@@ -363,6 +363,7 @@ final class WorkDetailView: DSView {
     /// Tool output images by key, while the view is shown. Hiding or closing the row releases them.
     private var imageViews: [String: AsyncImageView] = [:]
     private var blockScrollers: [Int: NSScrollView] = [:]
+    private var searchViews: [Int: FileSearchResultsView] = [:]
     private var buttons: [Int: ButtonView] = [:]
     private var icons: [Int: IconView] = [:]
     private var hoveredLink: Int?
@@ -420,15 +421,13 @@ final class WorkDetailView: DSView {
         // Plain `font-mono` inside the `text-xs` root: 12px on 16px lines, not the code size.
         case .fileHeader, .listLine:
             return (NSAttributedString(string: block.text, attributes: [.font: DSFont.mono(12), .foregroundColor: TL.c(\.mutedForeground)]), captionLineHeight)
-        case .path:
-            return (NSAttributedString(string: block.text, attributes: [.font: DSFont.mono(12), .foregroundColor: TL.c(\.foreground, 0.8)]), captionLineHeight)
         case .caption, .preview:
             return (NSAttributedString(string: block.text, attributes: [.font: sans, .foregroundColor: TL.c(\.mutedForeground)]), captionLineHeight)
         case .link:
             var attributes: [NSAttributedString.Key: Any] = [.font: DSFont.ui(12, weight: .medium), .foregroundColor: TL.c(\.foreground)]
             if underline { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
             return (NSAttributedString(string: block.text, attributes: attributes), captionLineHeight)
-        case .image:
+        case .image, .searchResults:
             return (NSAttributedString(), captionLineHeight)
         }
     }
@@ -584,6 +583,8 @@ final class WorkDetailView: DSView {
                 if l.capped { text = TextBlockLayout(string, width: width - ScrollAreaScroller.laneWidth, lineHeight: lineHeight) }
                 l.text = text
                 l.height = min(text.height, Self.maxBlock)
+            case .searchResults(let results):
+                l.height = FileSearchResultsView.height(results, width: width)
             case .image(let image):
                 let box = Self.imageBox(image, width: width)
                 l.image = box.rect
@@ -679,6 +680,18 @@ final class WorkDetailView: DSView {
             y += l.height
         }
         for (i, scroll) in blockScrollers where i >= laid.count { scroll.isHidden = true }
+        var y2: CGFloat = 0, shownSearch: Set<Int> = []
+        for (i, (block, l)) in zip(detail.blocks, laid).enumerated() {
+            y2 += block.gap
+            if case .searchResults(let results) = block.kind {
+                let view = searchViews[i] ?? { let v = FileSearchResultsView(); addSubview(v); searchViews[i] = v; return v }()
+                view.results = results
+                view.frame = NSRect(x: 0, y: y2, width: bounds.width, height: l.height)
+                shownSearch.insert(i)
+            }
+            y2 += l.height
+        }
+        for (i, view) in searchViews where !shownSearch.contains(i) { view.removeFromSuperview(); searchViews[i] = nil }
         placeImages(laid)
     }
 
