@@ -426,7 +426,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | 3571f28cca | #40816 | fix(web): Usage Limits no longer shows a stale scrollbar | usage | n/a (web scrollbar; files read) |
 | 369b46900c | #42480 | fix(web): Enter saves the default viewport size and skipped runs kept | settings | already (viewport fields commit on Return, SettingsBrowserViewportControl.swift:56-61; skipped runs field 0ecbb07a) |
 | 36d6333885 | #42573 | fix(web): keep narrow PR Code toolbars readable | pull requests | ported 4b07f98d (short commit id below 36rem, the hidden-tests link from 42rem, the only-hidden-tests state), diff read 2026-11-25 |
-| 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | holds for reloads (CW reads an open file again only on Force Reload); grant renewal ported 46522128. CW never reloads a changed preview after an agent command either: left, follow `workspaceMutationId` and `fileRevision` (S) |
+| 391f93fc8f | #39736 | fix(web): stop reloading unchanged file previews during agent commands | files | ported 3ebb2742: an open file and the tree read again when `deriveWorkspaceMutationId` changes; text replaces its view only when it changed, assets only when `fileRevision` moved; grant renewal 46522128 |
 | 3b5033a28c | #42506 | feat(server): withdraw a waiting workflow question without cancelling its run | workflows | ported a6197a0d, e7039927 (step line, panel note, timeline's "withdrawn by") |
 | 3b829b6aa6 | #42130 | fix(web): Esc in the text generator model search clears it without closing the dialog | settings | ported cb5edfe1 |
 | 3d31ffcd9a | #28612 | feat(web): search actions when adding keybindings | settings | ported 5dce46e3 |
@@ -560,15 +560,15 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | aacdaba15c | #42852 | fix(web): panel resize handle no longer covers the chat scrollbar on touch devices | shell | n/a (touch devices; files read) |
 | ac3af66f21 | #41901 | fix(web): a copied issue or pull request error no longer ends in a broken character | other | n/a (Swift Characters; files read) |
 | acd4fc67b9 | #42884 | fix(web): show Labs device preferences read-only for projects | settings | ported 3f61ea5f: both folder rows are inert with "Saved on this device. Select All projects to change it." |
-| aced664ed9 | #39024 | fix(client-runtime): prefer newer completed compaction over stale liveUsage | other | left: not server only. The context meter prefers a newer completed compaction's `afterTokenCount` over stale live usage (client-runtime contextWindow.ts); check `ThreadContextWindowMeterView` (S, composer lane) |
+| aced664ed9 | #39024 | fix(client-runtime): prefer newer completed compaction over stale liveUsage | other | ported 78a51ad1: a newer completed compaction wins over stale usage; turn usage counts only the active provider thread |
 | ae926f6579 | #41852 | fix(web): Cmd/Ctrl+F opens the browser find bar while a pull request is maximized | shell | n/a (CW's Pull Requests page has no right panel to maximize over its list), diff read 2026-11-25 |
 | b042e4ee75 | #42722 | fix(web): hide the right panel add-surface menu when no surfaces are available | shell | already (Device is always available beside a thread, so the + menu is never empty), diff read 2026-11-25 |
 | b125918f4b | #42718 | fix(web): xlsx previews no longer fail on cells truncated mid-emoji | files | n/a (QuickLook previews, diff read 2026-11-25) |
 | b2d51f35bb | #42224 | fix(web): a held Esc closing a nested menu or dialog no longer closes Usage or Settings | shell | already (AppRouteModalView ignores Esc repeats), diff read 2026-11-25 |
 | b427708979 | #40299 | fix(issues): agents can file issues in any bound Linear team | issues | n/a (agent tool, server; files read) |
 | b4345bf904 | #41702 | fix(web): terminal copy shortcuts no longer type escape codes when nothing is selected | terminal | already (SwiftTerm disables Copy without a selection and drops Cmd keys), diff read 2026-11-25 |
-| b479ce21ed | #21667 | fix(client-runtime): stop sessions on incompatible server configuration | other | left: client-runtime session error mapping keeps blocked and transient errors as they are; compare `ConnectionSupervisor` (S, connections lane) |
-| b4a5a4927f | #42915 | fix(web): reading position survives a panel resize right after a thread opens | shell | port (thread note 1.10) † |
+| b479ce21ed | #21667 | fix(client-runtime): stop sessions on incompatible server configuration | other | holds: CW reads config as raw JSON, so no decode failure ends the session, and an interrupted config stream resubscribes |
+| b4a5a4927f | #42915 | fix(web): reading position survives a panel resize right after a thread opens | shell | holds: CW reads the reading line synchronously from the old layout at the width change (`TimelineView.readingLine`), so a resize right after opening is held |
 | b51399fb38 | #42093 | fix(web): a held Esc or a search of spaces no longer closes Settings | settings | ported 66bacda5: spaces clear first; held Esc already ignored |
 | b5481adcd8 | #32841 | fix(web,mobile): scheduled tasks from Settings start from the project's default branch | scheduled tasks | ported 54702697 |
 | b568fcbaa6 | #40023 | feat(issues): a project can list issues from several Linear teams | issues | ported 31648718 |
@@ -580,7 +580,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | bc13afaa3c | #40965 | Invalidate pending theme imports when a replacement is too large | settings | n/a (CW reads one theme file synchronously, no pending import to supersede, diff read 2026-11-25) |
 | bc6062805d | #39057 | fix(web): preserve file preview selection after scrolling back | files | holds: an NSTextView keeps its selection across scrolling (diff read 2026-11-25) |
 | bd3e495b5f | #42442 | fix(web): mod+f opens find in read-only source previews | files | ported 311e739a, then fdd1f7f8: T3 shows the diff view's search panel (`StyledDiffCodeView`), so CW shows `DiffFindWidget` instead of AppKit's find bar |
-| c14e9f9717 | #42810 | fix(server): preserve split terminal control sequences across scrollback clears | terminal | left: client-runtime terminalOutput.ts changed with the server; compare CW's terminal output decoding (S) |
+| c14e9f9717 | #42810 | fix(server): preserve split terminal control sequences across scrollback clears | terminal | ported 78a51ad1: `cleared` carries `pendingControlSequence` and the reset starts with it |
 | c198f73b37 | #40776 | fix(web): a click outside the project action editor no longer discards the draft | settings | ported 5dc3ddd9 |
 | c39c21f870 | #42361 | fix(web): Esc in a font family field closes Settings when no edit is pending | settings | ported 66bacda5: Esc discards a typed family, else closes Settings |
 | c43e073123 | #39319 | fix(web): Arrow and page keys scroll the pull request pane after a click or when it opens | pull requests | ported 92620f14 and d6eba4a9: a click focuses the Summary or Timeline, and maximizing hands them panel focus. Focus on F6 waits for CW's area cycle (SideChatController.swift:177) |
@@ -608,7 +608,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | d6cdb4f161 | #39554 | fix(web): scope checkout errors to the selected pull request | pull requests | ported 621628ec |
 | d73e41a3fa | #41931 | fix(web): Esc in pull request search clears it instead of leaving the page | pull requests | ported 65cd07a1 |
 | dbee5a0af0 | #38911 | fix(mobile,web): saves, account switches and registrations report their own outcome | connections | n/a (CW drops the old account's relay routes from its own catalog, T3ConnectController.swift:233-239; the rest is mobile) |
-| dc326236ea | #42055 | fix(web): raw HTML paragraphs and list items keep their lines when line breaks are on | files | left: raw HTML paragraphs and list items keep their lines with line breaks on (markdown/wordsHast.ts); check `MarkdownView` with `preservesLineBreaks` (S, Markdown) |
+| dc326236ea | #42055 | fix(web): raw HTML paragraphs and list items keep their lines when line breaks are on | files | holds: CW shows raw HTML as text with HTML whitespace collapsing, so no break lands in it; test in 78a51ad1 |
 | dc5ae5ce63 | #42991 | fix(web): empty ODS sheets show 0 columns instead of 1 | files | n/a (QuickLook previews; files read) |
 | dc7b8802b8 | #42356 | fix(connect): respect relay tracing opt-outs and remove machine details | shell | n/a (telemetry; files read) |
 | dca3ab2025 | #42757 | fix(web): held overlay and Usage shortcuts no longer flicker | shell | ported e9ebf28f |
@@ -644,7 +644,7 @@ Status values: `port` names the note above. `n/a` gives the reason in three word
 | f9f34aab78 | #41361 | fix(web): start without WebAssembly by initialising Words in a guard | shell | n/a (web only; files read) |
 | fa2ee196b5 | #41539 | fix(web): archived threads settings stay responsive with thousands of threads | settings | ported c82cac6d |
 | fa9f154e1b | #41949 | fix(web): the Cite button appears when a selection ends on a file chip's icon in Firefox | files | n/a (Firefox selection quirk) |
-| fb4558d77d | #40631 | fix(web,mobile,server): large files load in full without freezing the file preview | files | ported 7bb75df1 (no chunked Markdown or plain paged viewer; past the caps the 1 MB preview stays) |
+| fb4558d77d | #40631 | fix(web,mobile,server): large files load in full without freezing the file preview | files | ported 7bb75df, e0586a97 (Markdown pieces), 94719bfb (paged plain viewer past 64 MB or 1.2M lines; no wrap, tables keep the 1 MB preview) |
 | fbd939eb4c | #42598 | fix(web,mobile): author avatars keep emoji initials whole | pull requests | already (Swift prefix takes a whole grapheme), diff read 2026-11-25 |
 | fd4284d8b2 | #40556 | fix(vcs): refresh branch pickers after external worktree changes | git | already (both pickers re-read status or refs on open; the digest change is server side), diff read 2026-11-25 |
 | fd44bde571 | #41383 | fix(web): keep OpenDocument image descriptions in alt text | files | n/a (QuickLook previews; files read) |
@@ -783,3 +783,11 @@ Plus about 1 hour of review for the fidelity recaptures in 2.2, 2.1 and 7.1. Exc
 - 8.2: the hourglass is the queue and wait cards' mark in the step panel (WorkflowRunFeed.tsx:1626-1646); the timeline row says the queue words only.
 - 7be3a767cc: T3 knows its own session from `GET /api/auth/session`, whose body has `sessionId` (state/session.ts:56-62).
 
+
+## Corrections from the fifth panels port (2026-11-25)
+
+- 3.2: an open file follows a turn's edits since 3ebb2742 (`deriveWorkspaceMutationId`, threadDetail.ts:53-82). The tree marks its folders stale while hidden and reads nothing until it shows.
+- #41877 and the file header's Open in picker are ported (e6e5a990). The picker's `editor.openFavorite` shortcut on the file header is not wired; Cmd+O still opens the workspace.
+- 3.2: the paged plain viewer is ported (94719bfb) without word wrap or horizontal scroll, and tables past 1 MB keep the 1 MB preview until CW has T3's virtual table (M). A viewer's temporary file survives a crash or a kill; clean `cw-large-text-*` at launch if that matters.
+- #42919: the read-only slice and Redesign's home are ported. Left: the git control per repository (M, a second `GitController` keyed by folder), pins (S to M) and task folders (M).
+- The empty file tree the fourth port saw did not recur on a private 5258 server with a fresh scratch project: `repo-a`, `repo-b` and a file listed at once, and `workspace.listFolders` found both repositories as discovered tracked folders. The shared server's project is the likely cause, not the client.
