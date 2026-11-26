@@ -145,7 +145,7 @@ struct ConnectionRecoveryTests {
     @Test func socketURLsAskForFrameParts() {
         let http = EnvironmentHTTP(baseURL: URL(string: "http://127.0.0.1:47391")!)
         let url = http.webSocketURL(ticket: "t", identity: ClientIdentity(appVersion: "1"))
-        #expect(url.query?.hasSuffix("orchestrationProtocol=2&frameParts=1") == true)
+        #expect(url.query?.hasSuffix("orchestrationProtocol=2&frameParts=1&clientCapabilities=httpUsageLimitSources") == true)
     }
 
     @Test func routeKindsMatchT3() {
