@@ -269,9 +269,18 @@ final class SidebarCommands {
             return true
         }
         // `usage.open` closes the palette on the way (CommandPalette.tsx:567-572).
-        shortcuts.on("usage.open") { [weak self] _ in
-            self?.closePalette()
-            self?.openUtilityPage(.usage)
+        // A held key opens once (commandPaletteCommands.ts at 5258, #42757); pressed again over Usage, it closes it
+        // (UsagePage.tsx:276-292, #30459), unless a field, a popup or the model picker holds the key.
+        shortcuts.on("usage.open") { [weak self] call in
+            guard let self else { return false }
+            if call.isRepeat { return true }
+            if self.isUsagePageOpen {
+                guard !modelPickerOpen(), !Shortcuts.editableFocused(in: self.window), self.window?.attachedSheet == nil else { return true }
+                self.closeUtilityPage()
+                return true
+            }
+            self.closePalette()
+            self.openUtilityPage(.usage)
             return true
         }
         // The page's own keys, only while it is open (`usagePageOpen`); not while typing or in the model picker.

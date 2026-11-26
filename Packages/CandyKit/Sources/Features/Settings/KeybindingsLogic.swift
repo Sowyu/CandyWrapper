@@ -91,6 +91,8 @@ public enum KeybindingsLogic {
         case "thread.editQueuedMessage": return "Queue: Edit Last Queued Message"
         case "thread.copyReference": return "Pull Request: Copy Link or Thread"
         case "view.reopenClosed": return "Reopen Closed Tab"
+        // KeybindingsSettings.logic.ts at 5258 (#30459): the shortcut also closes Usage.
+        case "usage.open": return "Usage: Toggle"
         default: break
         }
         if let metric = usageMetrics[command] { return "Usage: \(metric)" }
