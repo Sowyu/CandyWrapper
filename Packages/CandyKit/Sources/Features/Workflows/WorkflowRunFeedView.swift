@@ -740,8 +740,30 @@ final class WorkflowQuestionCardView: DSView {
             }
             return items.isEmpty ? top : cy + rowH
         }
+        // Redesign lists choices that say what they do one per row, the note beside its button and the notes in one
+        // column, so a long note never pushes the next button away.
+        func rows(top: CGFloat) -> CGFloat {
+            let column = choices.map { $0.button.fittingSize.width }.max() ?? 0
+            let noteX = x + column + RedesignTokens.Space.m, noteW = max(0, x + w - noteX)
+            var cy = top
+            for (i, (b, note)) in choices.enumerated() {
+                if i > 0 { cy += RedesignTokens.Space.s }
+                set(b, NSRect(x: x, y: cy, width: b.fittingSize.width, height: 28))
+                var rowH: CGFloat = 28
+                if let note {
+                    let nh = note.height(forWidth: noteW)
+                    set(note, NSRect(x: noteX, y: cy + max(0, (28 - nh) / 2), width: noteW, height: nh))
+                    rowH = max(rowH, nh)
+                }
+                cy += rowH
+            }
+            return cy
+        }
         if !links.isEmpty { y = flow(links.map { ($0, nil) }, top: y + 8) }
-        if !choices.isEmpty { y = flow(choices.map { ($0.button, $0.note) }, top: y + 10) }
+        if !choices.isEmpty {
+            let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+            y = redesign && choices.contains(where: { $0.note != nil }) ? rows(top: y + 10) : flow(choices.map { ($0.button, $0.note) }, top: y + 10)
+        }
         // `mt-2 flex flex-wrap gap-x-4`: Add a reason, then Ask the agent first.
         if !addReason.isHidden || !askAgent.isHidden {
             y += 8
@@ -771,7 +793,11 @@ final class WorkflowQuestionCardView: DSView {
     }
 
     override var wantsUpdateLayer: Bool { false }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        // Redesign lays the choices out differently, so the height may change.
+        needsDisplay = true; needsLayout = true; superview?.needsLayout = true
+    }
     override func draw(_ dirtyRect: NSRect) {
         let r = DesignGeometry.radius(12, in: self)
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: r, yRadius: r)
