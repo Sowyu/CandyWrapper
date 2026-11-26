@@ -690,6 +690,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   let responder = panel.window?.firstResponder as? NSView, let diff = panel.lazyDiffPanel.loaded, responder.isDescendant(of: diff) else { return false }
             diff.showFind(); return true
         }
+        // Cmd+F in a file's source, read-only or editable, opens that file's find bar instead of the
+        // thread's (5258 ReadOnlySourcePreview.tsx, #42442). TextKit's find bar scrolls to matches
+        // under wrapped lines (#39616) and keeps the selection while it scrolls (#39057).
+        shortcuts.onKey { event in
+            guard event.charactersIgnoringModifiers?.lowercased() == "f", event.modifierFlags.intersection([.command, .control, .option, .shift]) == .command,
+                  let text = NSApp.keyWindow?.firstResponder as? NSTextView, text.usesFindBar,
+                  sequence(first: text as NSView, next: { $0.superview }).contains(where: { $0 is CodeFileView }) else { return false }
+            let item = NSMenuItem()
+            item.tag = NSTextFinder.Action.showFindInterface.rawValue
+            text.performTextFinderAction(item)
+            return true
+        }
         shortcuts.registerChat { threads.registerShortcuts(shortcuts) }
         commands.registerShortcuts(shortcuts) { [weak threads] in threads?.composer.pickers.isModelPickerOpen ?? false }
         palette.registerShortcuts(shortcuts)
