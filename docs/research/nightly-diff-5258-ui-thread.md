@@ -209,7 +209,8 @@ The "Tab" kbd hint after a prompt suggestion is now a `button` with `aria-label`
 - A slash command sent during a turn waits in the queue. Its send-now button tooltip reads "Move this command to the front of the queue ({shortcut})" instead of "Send into the current turn ({shortcut})" (#40316, components/chat/QueuedRunsControl.tsx:335). Goal commands keep the old tooltip.
 - @-file mentions show by name in the stash menu, queued rows and sidebar drafts (#40924).
 - CW: partly. `Features/Composer/QueuedRunEdits.swift`, `Features/Composer/QueuedRunsView.swift` and `Features/Composer/ComposerLogic.swift` (which has the steering capabilities) exist.
-- Ported (port-composer): #40316 and #40767 in 357ba3b8, #40924 in 9ff295a2. Left: #40945 attachment chips in queued edits (medium, 726 lines in T3), #41814 model choice in queued edits (medium, adds a wire field), #40763 reply-only edits (small).
+- Ported (port-composer): #40316 and #40767 in 357ba3b8, #40924 in 9ff295a2, #41814 in 31975590 (the edit picks under its own key, `followsThreadSelection` decodes, `queued-run.edit` carries `modelSelection`).
+- Correction (port-composer): CW's queued edit has never had T3's 4928 baseline for attachments or replies. It edits text only, `queued-run.edit` goes without `attachments`, so the server keeps them, and a reply stays an inline reference in the edit's text. So #40763 has nothing to fix here: a reply can only change by editing that text. Left: attachments in queued edits, the 4928 baseline plus #40945 (large, 726 lines in T3), and the reply shown above the composer while editing (small).
 - Commits: 87554a7b86 #40945, d572ce9afe #41814, d834a4e117 #40763, c3a330d834 #40767, c385377544 #40316, 9de4ec1bfa #40924.
 
 ### 2.4 Paste and drop (medium, default look: no)
@@ -218,6 +219,7 @@ Dropped text is parsed like pasted text, so Markdown and newlines match (#31098,
 
 - CW: partly. `Features/Composer/ComposerPasteboard.swift` and `Features/Composer/ComposerEditor.swift` handle `public.html`. Drop parsing and the Word case are unchecked.
 - Commits: d9c7e6f7fc #31098, c1fbdf6cdb #40686, 2c4310eb06 #40909, face82e8b9 #41327.
+- Ported (port-composer) in 8337eb04: #31098, #40686, #40909. Left: #41327, the caret after closing Markdown markers on a paste (small).
 
 ### 2.5 Typing, triggers and dictation (medium as a batch, default look: no)
 
@@ -227,6 +229,7 @@ Dropped text is parsed like pasted text, so Markdown and newlines match (#31098,
 - Opening Settings with Cmd+, closes an open model picker (#29282).
 - CW: partly. `Features/Composer/ComposerCompaction.swift`, `ComposerEditor.swift` and `ComposerMenuController.swift` exist, and `freshContext` is in `T3Protocol/Domain/ThreadProjection.swift`.
 - Commits: 6908754f0b #37122, bb0d718b31 #40253, b19ca97827 #40252, 470ca63499 #38224, 4157f383f6 #40553, a1e7ac2b24 #39133, b3fff82014 #29282.
+- Ported (port-composer) in e7a7413a: #37122, #39133, #29282 (Cmd+, closes every popup in the window). The four dictation fixes do not apply: CW has no dictation.
 
 ### 2.6 Model picker and effort (small, default look: small)
 
@@ -236,6 +239,7 @@ Dropped text is parsed like pasted text, so Markdown and newlines match (#31098,
 - A provider that needs an update shows a "Provider settings" link only when the install channel can update in Settings (#39966, ModelPickerContent.tsx:218).
 - CW: `Features/Composer/ComposerEffortGlyph.swift` and `Features/Composer/ComposerMenus.swift`. Typeahead and slug search are unchecked.
 - Commits: 2ced06ef4a #42041, 1acfd37c17 #40798, a891304c84 #30810, 9f9ebf61fb #40136, 39480b5c88 #27333, cf94598281 #39966.
+- Ported (port-composer) in 8e80f42f: #42041, #40798. Left: #30810, #40136, #27333, #39966 (small each).
 
 ### 2.7 The @ menu and the thread link picker (small, default look: no)
 
@@ -243,6 +247,7 @@ The @ menu lists machines the thread's server links to (#40191). Thread link sea
 
 - CW: `Features/Composer/ComposerMenus.swift`, `Features/Markdown/MarkdownContextChips.swift`.
 - Commits: d9fdd02523 #40191, 732c03f410 #39557, e28b2819ee #39610.
+- Ported (port-composer) in 6fa875f4: #39557. Left: #40191 machines in the @ menu (small), #39610 NFC names (small).
 
 ### 2.8 Keybinding conditions (small, default look: no)
 
@@ -250,6 +255,7 @@ A new `composerEmpty` when-condition is true when no queued edit is open, no que
 
 - CW: no `composerEmpty`. `Features/Settings/Keybindings.swift` and `KeybindingsLogic.swift` hold the conditions.
 - Commits: 342b58a79f #30644, 921349decf #42295, 51a8d20271 #42543.
+- Ported (port-composer) in 4871c2c9: #30644. Left: #42295 Mod+S in side chats, #42543 the project action shortcut field (small each).
 
 ### 2.9 Drafts and new threads (medium, default look: yes)
 
@@ -257,6 +263,7 @@ A new `composerEmpty` when-condition is true when no queued edit is open, no que
 - A No-project draft no longer offers New worktree: `offersWorkspaceModes` needs a non-scratch project that is a git repo or tracks repositories (components/BranchToolbar.logic.ts).
 - CW: no for the dialog. The settings side (#42386) is the other note's. `App/Sources/ComposerController.swift` and `Features/Composer/NewThreadDraftLaunch.swift` are the send path.
 - Commits: 924d9c1fff #42386, 9f24cac6d4 #41269.
+- Ported (port-composer) in 41958980: the approval dialog and its send path, and #41269. The description sets `t3.json` as plain text, and the managed-policy check is left to the server's refusal.
 
 ## 3. Sidebar
 
@@ -298,6 +305,7 @@ Numbered thread jumps and next/previous thread include unsent drafts (#39968): d
 
 - CW: no. `App/Sources/SidebarCommands.swift` holds the jumps. `Features/Sidebar/SidebarListModel.swift` builds the rows.
 - Commits: 5093d11490 #39968, 1e78f37618 #25272.
+- Ported (port-composer) in b7631e26: #39968. Left: #25272 drafts with a running terminal (small).
 
 ### 3.5 Order, settle, offline and menu rules (medium as a batch, default look: small)
 
@@ -310,6 +318,7 @@ Numbered thread jumps and next/previous thread include unsent drafts (#39968): d
 - A worktree thread of a project with tracked folders keeps its branch when git says the folder is no repository (#35925, components/Sidebar.logic.ts).
 - Snooze labels follow the app language (#39494).
 - Commits: bcb9217e8e #26661, 5812320a6a #41258, 42d2387285 #31545, 92199680cc #41365, 78de041d48 #24917, 9331811180 #41885, 60863edc41 #35925, 67f17528f2 #39494.
+- Ported (port-composer) in fa78d3d4: #41365, #31545, #41258, #26661. Correction: #35925's sidebar rule needs nothing, CW never drops a thread's branch on a non-repository status (T3's `withoutRemovedCheckout` is an older gap the other way). #39494 needs nothing, CW is English only. Left: #24917 offline settle and snooze, an outbox of 1,171 lines (large), and #41885 implied sort keys for unarranged threads (medium).
 
 ### 3.6 Update capsule in narrow sidebars (small, default look: yes)
 
@@ -334,6 +343,7 @@ Project picker tooltips fade in place on scroll instead of sliding away (#42657,
 
 - CW: `Features/Sidebar/SidebarSearchRowViews.swift`.
 - Commits: 221953fbf3 #42657, 28d8a63d7f #42011.
+- Ported (port-composer) in 75700d91: #42011. Correction: CW sized the time to its text, so short times widened the title. Left: #42657 (small).
 
 ## 4. Command palette
 
@@ -353,6 +363,7 @@ Opening Add project from a draft's project picker remembers the draft. After the
 
 - CW: no. `App/Sources/PaletteAddProject.swift`, `Features/Composer/NewThreadDraftLaunch.swift`.
 - Commit: 83a7c75b88 #42889.
+- Ported (port-composer) in df350067. A just-created project may not be in the shell yet, so the draft keys by its project id until it arrives.
 
 ### 4.3 A quoted query finds its words together (small, default look: no)
 
@@ -361,6 +372,7 @@ A query wrapped in straight or curly double quotes, longer than two characters, 
 - T3: packages/shared/src/paletteSearch.ts (`isExactQuery`, `unwrapQuery`, `foldSearchQuery` keeps straight double quotes for exact queries), components/chat/threadFindStore.ts.
 - CW: `Features/CommandPalette/PaletteScoring.swift` and `T3Store/ThreadSearch.swift` strip all wrapping quotes.
 - Correction (port-composer): this is medium, not small. The commit rewrites 234 lines of paletteSearch.ts scoring and touches the server's ThreadSearch.
+- Ported (port-composer) in 8eebfe14: titles, branches and other fields. A 4928 server strips the quotes and answers the words apart, which the palette still shows. Left: the exact message match (`EXACT_PHRASE_GAP`, `findExactPhrase`) and the in-thread find (small to medium).
 - Commit: 62e8042b21 #37700.
 
 ### 4.4 Keys in the palette (small, default look: no)
@@ -377,6 +389,7 @@ The palette's project picker and the contextual project use `pickableProjectGrou
 
 - CW: `Features/Sidebar/SidebarProjectOrder.swift`, `App/Sources/PaletteCommands.swift`.
 - Commit: c9359f6535 #38984.
+- Ported (port-composer) in a1ae5918: the groups were already pickable, the open project's archived copy was not skipped.
 
 ## 5. Commit table
 
@@ -391,7 +404,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | a3a4592cf5 | #42897 | fix(web): release terminal reply ownership when the drawer closes | other | n/a (terminal, other agent) |
 | 67918f51cc | #42919 | fix(web): Show more in Thread Details keeps every repository listed | thread | port (1.8) |
 | 2891419b93 | #42886 | fix(web): localize terminal excerpt line ranges | composer | port (1.18) |
-| 83a7c75b88 | #42889 | fix(web,mobile): adding a project from a draft's picker no longer leaves the draft behind | palette | port (4.2) |
+| 83a7c75b88 | #42889 | fix(web,mobile): adding a project from a draft's picker no longer leaves the draft behind | palette | ported df350067 |
 | e045a127e7 | #42882 | fix(web): web search result links follow Open links in | thread | port (1.18) |
 | 8783b9d2ea | #42880 | fix(web): Restart agent session toast says the conversation is kept | palette | port (1.18) |
 | 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | port (1.10) |
@@ -407,17 +420,17 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 283de2e4d4 | #42603 | fix(web): citation comment box stays open when its cited row scrolls out | thread | port (1.15) |
 | 89047261b1 | #42574 | fix(web): Option and Cmd arrows reach full-screen terminal apps | other | n/a (terminal, other agent) |
 | 6667f3c089 | #42575 | fix(web): timeline minimap previews no longer cut an emoji in half | thread | port (1.10) |
-| 62e8042b21 | #37700 | feat(search): a query in double quotes finds its words together | palette | port (4.3) |
+| 62e8042b21 | #37700 | feat(search): a query in double quotes finds its words together | palette | ported 8eebfe14 (fields); message match left |
 | 801b32f3a6 | #29546 | feat(web): hide and restore the sidebar by dragging | sidebar | ported 1feaf560 |
 | 51a8d20271 | #42543 | fix(web): project action keybinding field records shortcuts instead of running them | composer | port (2.8) |
 | b6869fad67 | #30664 | feat(terminal): Add keybindings for cycling through terminals | other | n/a (terminal, other agent) |
 | ea63274413 | #42489 | chore(deps): bump vite-plus to 1.8.0 | other | n/a (dependency bump) |
 | 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | port (1.18) |
 | c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | n/a (web canvas worker; CW prepares images with ImageIO off the main thread) |
-| 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | port (3.5) |
+| 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | left: offline outbox (large) |
 | dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | port (1.13) |
 | 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | port (1.8) |
-| 924d9c1fff | #42386 | feat(projects): worktree layout commands run only once a person approves them | composer | port (2.9) |
+| 924d9c1fff | #42386 | feat(projects): worktree layout commands run only once a person approves them | composer | ported 41958980 |
 | eb7cc44727 | #42309 | fix(web): showing or hiding a requested secret keeps the caret in place | thread | port (1.4) |
 | 571ed76fc3 | #42275 | fix(web): sidebar issue and pull request badges share one component | sidebar | port (3.7) |
 | 921349decf | #42295 | fix(web): Mod+S stashes a side chat's prompt | composer | port (2.8) |
@@ -431,17 +444,17 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | port (1.11) |
 | 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | port (1.17) |
 | 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | port (1.1) |
-| 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | port (3.8) |
-| 2ced06ef4a | #42041 | fix(web): model picker search finds a model by its ID | composer | port (2.6) |
+| 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | ported 75700d91 |
+| 2ced06ef4a | #42041 | fix(web): model picker search finds a model by its ID | composer | ported 8e80f42f |
 | a891304c84 | #30810 | fix(web): keep Codex Ultra off the effort bar scale | composer | port (2.6) |
 | 66259ff051 | #41964 | fix(web): a failed server update restored after the app relaunches can retry | sidebar | port (3.6) |
 | 74c6d21c7a | #41672 | fix(web): the update dialog says why a server was skipped | sidebar | port (3.6) |
 | a6c69be8df | #41927 | fix(web,mobile): a parent parked on subagents no longer reads as Thinking | thread | port (1.9) |
 | ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | port (1.2) |
-| b3fff82014 | #29282 | fix(web): Settings opened with Cmd+, no longer leaves the model picker open over it | composer | port (2.5) |
+| b3fff82014 | #29282 | fix(web): Settings opened with Cmd+, no longer leaves the model picker open over it | composer | ported e7a7413a |
 | 8032cbb66b | #28919 | fix(web): Cmd+F searches a side chat, and Escape closes it | thread | port (1.15) |
 | a4029d4b91 | #41899 | fix(web): an IME Escape no longer dismisses the citation highlight | thread | n/a (AppKit handles IME) |
-| 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | port (3.5) |
+| 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | left: implied sort keys (medium) |
 | 3d9a14d4da | #41875 | fix(web): IME keys no longer trigger or close the prompt stash menu | composer | n/a (AppKit handles IME) |
 | 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | port (1.4) |
 | d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | port (1.18) |
@@ -449,8 +462,8 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | port (1.10) |
 | 4162207ddd | #29771 | fix(web): file menu opens remote files over SSH instead of on the server | thread | n/a (web icons, wire A18) |
 | 8ef195587d | #33030 | fix(web): tell update-all users where to update desktop servers it can't reach | sidebar | port (3.6) |
-| d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | port (2.4) |
-| d572ce9afe | #41814 | fix(chat): preserve model choices when editing queued messages | composer | port (2.3) |
+| d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | ported 8337eb04 |
+| d572ce9afe | #41814 | fix(chat): preserve model choices when editing queued messages | composer | ported 31975590 |
 | 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | port (1.1) |
 | c5918e5d24 | #41803 | fix(web): align composer banner details with status text | composer | port (1.9) |
 | eecb58c6d6 | #41769 | fix: approvals and hosted pairing show what is being approved | composer | port (1.7) |
@@ -467,12 +480,12 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 1c9ccc7127 | #41554 | fix(web): a grouped project's folder New thread starts on the viewed machine's copy | sidebar | ported 11e1c196 |
 | 3b08d975ab | #41518 | fix(web): the desktop app plays thread sounds after a reload | thread | n/a (web audio unlock) |
 | 7e624c0c8d | #37405 | fix(web): chat links open their menu from the keyboard on macOS | thread | port (1.18) |
-| 92199680cc | #41365 | fix(web): hide Mark unread on threads with no completed run | sidebar | port (3.5) |
-| face82e8b9 | #41327 | fix(web): caret lands after closing Markdown markers after a paste | composer | port (2.4) |
+| 92199680cc | #41365 | fix(web): hide Mark unread on threads with no completed run | sidebar | ported fa78d3d4 |
+| face82e8b9 | #41327 | fix(web): caret lands after closing Markdown markers after a paste | composer | left (small) |
 | f4c38ca3e7 | #27236 | fix(web): remote open uses the environment's saved SSH route | thread | n/a (SSH route, wire A18) |
-| 9f24cac6d4 | #41269 | fix(web): No project drafts no longer offer New worktree | composer | port (2.9) |
+| 9f24cac6d4 | #41269 | fix(web): No project drafts no longer offer New worktree | composer | ported 41958980 |
 | 10765a4e47 | #41262 | fix(web): a refused desktop install shows as failed instead of downloaded | sidebar | n/a (desktop updater, Electron) |
-| 5812320a6a | #41258 | fix(web): quick clicks on different sidebar threads open each one | sidebar | port (3.5) |
+| 5812320a6a | #41258 | fix(web): quick clicks on different sidebar threads open each one | sidebar | ported fa78d3d4 |
 | 611410683b | #41242 | feat(cursor): show which step Cursor is in while a turn starts | thread | port (1.2) |
 | e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | port (1.10) |
 | 69c1d53826 | #38884 | feat: workflows on web and mobile | thread | port (1.18) |
@@ -481,38 +494,38 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | a3323d4a43 | #41070 | perf(web): new thread opens its draft without waiting on t3.json | composer | n/a (React load order) |
 | fe9c98c98f | #35871 | feat: agents can report T3 Code problems when you turn feedback on | thread | port (1.5) |
 | dbb5bdb582 | #33057 | feat(web): sidebar folder button picks or adds a project | sidebar | ported 11e1c196 |
-| 67f17528f2 | #39494 | fix(web): snooze labels follow the app language | sidebar | port (3.5) |
+| 67f17528f2 | #39494 | fix(web): snooze labels follow the app language | sidebar | nothing to port: English only |
 | c7df7004af | #41021 | fix(web): a photo picked on a phone attaches even when the composer collapses | composer | n/a (phone photo picker) |
 | 55880c41b4 | #40986 | fix(client-runtime): count ambiguous projects in chat file links | thread | port (1.12) |
-| 87554a7b86 | #40945 | fix(web): editing a queued message keeps its attachment chips resolved | composer | port (2.3) |
+| 87554a7b86 | #40945 | fix(web): editing a queued message keeps its attachment chips resolved | composer | left: CW edits text only, no 4928 attachment baseline (large) |
 | 7ddc81d639 | #40905 | fix(web): tool calls stay grouped after a usage-limit pause again | thread | port (1.9) |
 | 9de4ec1bfa | #40924 | fix(web,mobile): @-file mentions show by name in message previews, not as raw links | composer | ported 9ff295a2 |
-| 2c4310eb06 | #40909 | fix(web): pasting a chat message with text and a picture keeps both | composer | port (2.4) |
+| 2c4310eb06 | #40909 | fix(web): pasting a chat message with text and a picture keeps both | composer | ported 8337eb04 |
 | 1e78f37618 | #25272 | fix(web): keep script-only drafts reachable in the sidebar | sidebar | port (3.4) |
 | 501e39d54a | #40841 | fix(web): clicking the Tab hint inserts short prompt suggestions again | composer | ported 0a35f251 |
-| bcb9217e8e | #26661 | fix(web): settling a thread no longer jolts the sidebar list | sidebar | port (3.5) |
-| d834a4e117 | #40763 | fix(web): preserve reply-only edits when a queued message leaves the queue | composer | port (2.3) |
+| bcb9217e8e | #26661 | fix(web): settling a thread no longer jolts the sidebar list | sidebar | ported fa78d3d4 |
+| d834a4e117 | #40763 | fix(web): preserve reply-only edits when a queued message leaves the queue | composer | nothing to port: the reply stays in the edit text |
 | d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | port (1.1) |
 | 671e05bc8c | #40768 | fix(issues): an Activity cross-reference opens the issue or pull request it came from | other | n/a (issues, other agent) |
-| 1acfd37c17 | #40798 | fix(web): restore effort picker keyboard typeahead | composer | port (2.6) |
+| 1acfd37c17 | #40798 | fix(web): restore effort picker keyboard typeahead | composer | ported 8e80f42f |
 | c3a330d834 | #40767 | fix(web): show Queue for running sessions that cannot steer | composer | ported 357ba3b8 |
 | cd3a57ac72 | #40736 | feat(web): sidebar thread rows show the environment instead of the branch | sidebar | ported abb45d0c, reference 21dd98f3 |
 | 11224f63d2 | #40703 | fix(client-runtime): a new thread's first message and a queued send-now or steer survive a dropped socket | composer | n/a (resend rule, wire section 5) |
 | 4ac5e6e791 | #40682 | fix(client-runtime): typing a bare Windows drive lists its folders | palette | n/a (Windows drive paths) |
 | 3b3f8808f4 | #40672 | fix(web): wait for image uploads before sending | composer | ported 9499e23d |
-| c1fbdf6cdb | #40686 | fix(web): pasting text copied from Word inserts the text instead of an image | composer | port (2.4) |
+| c1fbdf6cdb | #40686 | fix(web): pasting text copied from Word inserts the text instead of an image | composer | ported 8337eb04 |
 | 0fb6ac6e65 | #27866 | perf(web): Markdown renders with Words as static islands under one shared tooltip; remark leaves the web app | thread | n/a (markdown render speed) |
 | 3f08098c99 | #40654 | fix(web): wrapped prompt suggestion no longer overlaps the composer toolbar | composer | left (2.2: wrapped suggestion overlap, not checked on screen) |
 | a9447cedbd | #33221 | fix(web): Cite button appears as fast after a double-click as after a drag | thread | port (1.15) |
 | 76b421864b | #40628 | fix(web): Ctrl+click in the composer no longer outlines the whole line | composer | n/a (web editor selection) |
 | 10586f9e31 | #40594 | feat: read feature flags from one T3CODE_FEATURE_FLAGS service | other | n/a (feature flags, wire A9) |
-| 4157f383f6 | #40553 | fix(web): send queued dictation to original thread after switching th… | composer | port (2.5) |
+| 4157f383f6 | #40553 | fix(web): send queued dictation to original thread after switching th… | composer | nothing to port: no dictation |
 | 1cedd4b4ed | #37314 | fix(web): scheduled task times follow the Time format setting | other | n/a (scheduled tasks, other agent) |
 | 8cf94f2542 | #40390 | fix(web): a modified click on a remote server opens it after forwarding | thread | n/a (desktop port forward) |
 | c385377544 | #40316 | fix(server): slash commands sent during a turn wait instead of steering | composer | ported 357ba3b8 (client tooltip) |
 | 47525fa3d6 | #40215 | fix(web): switching threads no longer restarts the Changes and git status reads | other | n/a (git reads, other agent) |
-| bb0d718b31 | #40253 | fix(web): typing and pasting no longer write into the read-only composer during dictation | composer | port (2.5) |
-| b19ca97827 | #40252 | fix(web): inline file and thread chips can be removed during dictation | composer | port (2.5) |
+| bb0d718b31 | #40253 | fix(web): typing and pasting no longer write into the read-only composer during dictation | composer | nothing to port: no dictation |
+| b19ca97827 | #40252 | fix(web): inline file and thread chips can be removed during dictation | composer | nothing to port: no dictation |
 | 1425613b9d | - | fix(web): keep restart seconds visible in narrow sidebars | sidebar | port (3.6) |
 | 4be39cf01a | - | fix(web): keep the update icon in place while the capsule shrinks | sidebar | port (3.6) |
 | dea657a0b1 | - | fix(web): show the update capsule at default sidebar width with a short grow-in | sidebar | port (3.6) |
@@ -521,7 +534,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | f4b8be84a0 | #40069 | fix(web): show custom theme backgrounds on the empty New thread screen | thread | port (1.18) |
 | d9fdd02523 | #40191 | fix(client-runtime): @ menu offers machines the thread's server links to | composer | port (2.7) |
 | cf94598281 | #39966 | fix(client-runtime): don't ask for a provider update the install channel lacks | composer | port (2.6) |
-| 60863edc41 | #35925 | feat(projects): a project covers several repositories | sidebar | port (3.5) |
+| 60863edc41 | #35925 | feat(projects): a project covers several repositories | sidebar | nothing to port in the sidebar: CW keeps the branch |
 | cfb720fa8a | #40131 | fix(web): guest share status expires at exact timestamp instead of start of minute | other | n/a (guest share, other agent) |
 | 39480b5c88 | #27333 | fix(opencode): custom models can go back to the default reasoning level | composer | port (2.6) |
 | 73e6472545 | #24583 | fix(client-runtime): recover thread messages after a failed resume | thread | port (1.9) |
@@ -533,16 +546,16 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | e28b2819ee | #39610 | fix(shared): compose NFD file names in link chips and the @ menu | composer | port (2.7) |
 | 9ab7da2a3e | #34646 | fix(web): screen readers can read expanded tool output | thread | n/a (web screen reader markup) |
 | af99412e9d | #24603 | fix(web): keep file path tooltips open for selection | thread | n/a (web tooltip hover) |
-| 5093d11490 | #39968 | fix(web): numbered jumps and next/previous thread include unsent drafts | sidebar | port (3.4) |
+| 5093d11490 | #39968 | fix(web): numbered jumps and next/previous thread include unsent drafts | sidebar | ported b7631e26 |
 | e7b1b88bef | #37274 | fix(web): IME composition replaces selected text beside chips | composer | n/a (AppKit handles IME) |
 | 46ee2fc7ff | #35185 | feat(web): sidebar New starts the thread in the scoped project | sidebar | ported 11e1c196 |
 | 1d975f53ea | #39488 | feat(web): click the Tab hint to use the suggested prompt | composer | ported 0a35f251 |
 | c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | port (1.8) |
-| 342b58a79f | #30644 | feat(web): add a composerEmpty keybinding condition | composer | port (2.8) |
+| 342b58a79f | #30644 | feat(web): add a composerEmpty keybinding condition | composer | ported 4871c2c9 |
 | 285558eb10 | #34027 | feat(desktop): dictate on this Mac with Apple Speech | composer | n/a (desktop IPC, wire A19) |
 | 669d8941e2 | #39921 | feat: sign in to an agent's MCP server from its warning | thread | port (1.6) |
 | 3027c2c840 | #40011 | fix(voice): start dictation capture sooner on iOS and desktop | composer | n/a (web audio capture) |
-| 6908754f0b | #37122 | fix(web): caret navigation no longer opens composer suggestions | composer | port (2.5) |
+| 6908754f0b | #37122 | fix(web): caret navigation no longer opens composer suggestions | composer | ported e7a7413a |
 | 8d37736cdd | #39889 | fix(web,mobile): usage-limit recovery banner updates copy after reset passes | thread | port (1.9) |
 | 7c6e889ddb | #39515 | feat: subagents, side chats and linked threads open the same way | thread | port (1.1) |
 | d7f6b3efca | #39439 | feat: connect to a linked environment from its read-only thread | thread | port (1.1) |
@@ -551,7 +564,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 0bc9b57b93 | #31257 | feat: secret cards get a show/hide toggle and multi-value fields | thread | port (1.4) |
 | d5a084c440 | #39636 | fix(web): the provider update pill no longer recounts dismissed updates | sidebar | port (3.6) |
 | 019e55bad5 | #39569 | fix(composer): keep screenshots preparing after an unanswered question closes | composer | left (2.1: screenshot preparing after a question closes, not checked) |
-| 732c03f410 | #39557 | fix(web): fold accents in thread link picker search | composer | port (2.7) |
+| 732c03f410 | #39557 | fix(web): fold accents in thread link picker search | composer | ported 6fa875f4 |
 | 22936ae669 | #39552 | fix(web): ignore superseded microphone refreshes in voice setup | composer | n/a (web mic setup) |
 | 29b42d409c | #39351 | fix(web): show status for grouped sidebar issues | sidebar | port (3.7) |
 | 3a60d0996a | #38869 | fix(server): background subagents can delegate after their parent's turn ends | thread | port (1.9) |
@@ -568,14 +581,14 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | c5badf4e40 | #39305 | fix(web): scope Git controls to the active checkout | other | n/a (git controls, other agent) |
 | 73caab68e3 | #38912 | fix(client): commands run as Effects on the caller's fiber, so interrupting a caller stops them | other | n/a (client effects refactor) |
 | 5bc2d512e4 | #39295 | fix(web): scroll wide tables to the selected Find match | thread | port (1.12) |
-| 42d2387285 | #31545 | fix(web): right-clicking a sidebar search result now opens its thread actions | sidebar | port (3.5) |
-| a1e7ac2b24 | #39133 | fix(web): the Compact chip no longer shows after /clear | composer | port (2.5) |
+| 42d2387285 | #31545 | fix(web): right-clicking a sidebar search result now opens its thread actions | sidebar | ported fa78d3d4 |
+| a1e7ac2b24 | #39133 | fix(web): the Compact chip no longer shows after /clear | composer | ported e7a7413a |
 | ff9efe89f6 | #39150 | fix(web): copying items within one list keeps their list markers | thread | port (1.12) |
 | b6afe8109c | #39146 | fix(web): home paths like ~/.claude/CLAUDE.md no longer show under the workspace folder | thread | port (1.12) |
 | d067a04175 | #39130 | fix(web): a slow chat file link no longer replaces a file opened from the picker | thread | port (1.12) |
-| 470ca63499 | #38224 | fix(web): restore the composer caret after dictation | composer | port (2.5) |
+| 470ca63499 | #38224 | fix(web): restore the composer caret after dictation | composer | nothing to port: no dictation |
 | 2c7bfcec84 | #38225 | fix(desktop): restore clicks across the floating dictation controls | composer | n/a (Electron drag region) |
-| c9359f6535 | #38984 | fix(mobile): project picker starts a chat in an open copy, not an archived one | palette | port (4.5) |
+| c9359f6535 | #38984 | fix(mobile): project picker starts a chat in an open copy, not an archived one | palette | ported a1ae5918 |
 
 Counts: 147 port, 45 n/a, 0 already, 0 not read, 192 in all. By area: composer 52, other 17, palette 9, sidebar 34, thread 80.
 
