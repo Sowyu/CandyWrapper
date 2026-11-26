@@ -344,6 +344,8 @@ final class ComposerController {
     private var replyTargets: [String: JSONValue] { get { shared.replyTargets } _modify { yield &shared.replyTargets } }
     /// A send made while images were being prepared, by draft key; it goes with the composer's text once they join.
     private var sendAfterPreparing: [String: (mode: ComposerLogic.SendMode, background: Bool)] = [:]
+    /// Finished images are going into the draft, which is not an edit that cancels a held send (`joinPreparedImagesToDraft`).
+    private var joiningPreparedImages = false
     /// Uploaded attachment ids to their local file, so a sent image shows before the server copy is fetched.
     private var sentFiles: [String: URL] = [:]
     /// Attachments a sent message took while their upload ran (#33092): the upload writes its outcome here once the
@@ -437,6 +439,10 @@ final class ComposerController {
         composer.onImplementInNewThread = { [weak self] in self?.implementPlanInNewThread() }
         composer.onResume = { [weak self] in self?.resume() }
         composer.onTextChange = { [weak self] text in self?.remember(text) }
+        composer.onHeldSendEscape = { [weak self] in
+            guard let self, let key = draftKey else { return false }
+            return cancelHeldSend(key)
+        }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
         panel.hero.onStartWithoutProject = { [weak self] in self?.startDraftWithoutProject() }
         panel.contextStrip.runOn.onAutoBalance = { [weak self] in self?.chooseAutomaticEnvironment() }
@@ -1631,6 +1637,8 @@ final class ComposerController {
             return
         }
         guard let key = draftKey else { return }
+        // Editing the draft cancels a held send (`composerDraftContentChanged`, preparingComposerImages.ts:195-205 at 5258).
+        if !joiningPreparedImages, sendAfterPreparing[key] != nil { cancelHeldSend(key) }
         let attachments = currentAttachments
         pruneUnreferencedFiles(text, key: key)
         if panel.stashMenuOpen { setStashMenu(false) }
@@ -2072,6 +2080,7 @@ final class ComposerController {
         // (#37547, ChatComposer.tsx `useSubmitAfterPreparingImages` at 4928).
         if let key = draftKey, (preparingImages[key] ?? 0) > 0 {
             sendAfterPreparing[key] = (mode, background)
+            updateHeldSend()
             return
         }
         if case .thread = target, let prompt = SideChats.parseCommand(text), sendSideChat(prompt, text: text, mode: mode) { return }
@@ -3353,6 +3362,7 @@ extension ComposerController {
         sessions[key] = nil
         prompts[draftId] = nil
         sendAfterPreparing[draftId] = nil
+        updateHeldSend()
         sendAfterRetry[draftId] = nil
         preparingImages[draftId] = nil
         preparingGenerations[draftId, default: 0] += 1
@@ -4876,6 +4886,8 @@ extension ComposerController {
         }
         refresh()
         guard !images.isEmpty else { return }
+        // More images cancel a held send (`addPreparingComposerImages`, preparingComposerImages.ts:74-80 at 5258).
+        cancelHeldSend(key)
         preparingImages[key, default: 0] += images.count
         // The chips go where the images were pasted, not where the caret is once they are ready (#35528, #37010).
         let mark = imagesGetChips ? composer.markInsertionPoint() : nil
@@ -4917,6 +4929,8 @@ extension ComposerController {
             draftAttachments[key, default: []] += prepared
             if let mark {
                 if key == draftKey, !prepared.isEmpty {
+                    joiningPreparedImages = true
+                    defer { joiningPreparedImages = false }
                     composer.insert(prepared.map(\.reference).joined(separator: " ") + " ", at: mark)
                 } else {
                     composer.dropInsertionMark(mark)
@@ -5058,8 +5072,34 @@ extension ComposerController {
 
     /// The held send goes once no image is being prepared, if its draft is still the open one.
     private func resumeSendAfterPreparing(_ key: String) {
-        guard (preparingImages[key] ?? 0) == 0, let pending = sendAfterPreparing.removeValue(forKey: key), key == draftKey else { return }
+        guard (preparingImages[key] ?? 0) == 0, key == draftKey, let pending = sendAfterPreparing.removeValue(forKey: key) else {
+            if key == draftKey { updateHeldSend() } // the banner counts the images still preparing
+            return
+        }
+        updateHeldSend()
         send(composer.text, mode: pending.mode, background: pending.background)
+    }
+
+    /// `heldComposerSendBannerItem` (ComposerHeldSendBanner.tsx at 5258, #40672) and the send button's held state, for
+    /// the open draft. The info variant draws as neutral (ComposerBanner.tsx:29-35).
+    private func updateHeldSend() {
+        let key = draftKey.flatMap { sendAfterPreparing[$0] == nil ? nil : $0 }
+        composer.isSendHeld = key != nil
+        if let key {
+            let banner = panel.lazyHeldSendBanner.view
+            banner.apply(.init(variant: .neutral, icon: .info, title: ComposerLogic.heldSendTitle(preparing: preparingImages[key] ?? 0),
+                               description: "Edit or press Esc to cancel", actions: ["Cancel"], spinner: true))
+            banner.onAction = { [weak self] index in if index == 0 { self?.cancelHeldSend(key) } }
+        }
+        panel.heldSendKey = key
+    }
+
+    /// `cancelHeldComposerSend`: the images keep preparing, the send is dropped. True when a send was held.
+    @discardableResult
+    private func cancelHeldSend(_ key: String) -> Bool {
+        guard sendAfterPreparing.removeValue(forKey: key) != nil else { return false }
+        updateHeldSend()
+        return true
     }
 
     /// Sends the retried message once no upload runs. A retry that failed again keeps the draft.
@@ -6262,6 +6302,7 @@ extension ComposerController {
 
     private func updateThreadBanners() {
         updateFreshSessionBanner()
+        updateHeldSend()
         updateReplyBanner()
         updateFallbackBanner()
         let thread = shellThread

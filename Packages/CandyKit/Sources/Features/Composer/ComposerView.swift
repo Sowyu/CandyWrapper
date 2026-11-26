@@ -74,6 +74,11 @@ public final class ComposerView: DSView {
     }
     /// A send or resume is in flight: the button shows a spinner and is disabled.
     public var isBusy = false { didSet { if isBusy != oldValue { refresh() } } }
+    /// A send waits for pasted images to finish preparing (`isSendHeld`, ComposerPrimaryActions.tsx:406, 439 at 5258):
+    /// the button shows busy and reads "Sending when ready".
+    public var isSendHeld = false { didSet { if isSendHeld != oldValue { refresh() } } }
+    /// Escape while a send is held cancels it; return true when it did.
+    public var onHeldSendEscape: (() -> Bool)? { didSet { editor.onHeldSendEscape = onHeldSendEscape } }
     /// Sending is blocked (`sendDisabledReason`: loading, rewinding, worktree, clone, uploads); the reason is the tooltip.
     public var sendDisabledReason: String? { didSet { if sendDisabledReason != oldValue { refresh() } } }
     /// `isEnvironmentUnavailable`: the button is disabled with "Environment disconnected", but Enter still
@@ -591,13 +596,13 @@ public final class ComposerView: DSView {
         // With a question open the round button is only Stop (`renderStopGenerationButton(true)`).
         let face = questionFooter != nil ? .stop
             : ComposerLogic.primaryAction(run: hasContent && runsDraftLocally?(prompt) == true ? ComposerLogic.RunState() : runState,
-                                          hasContent: hasContent, busy: isBusy, mode: sendMode, editingQueued: editingQueued,
+                                          hasContent: hasContent, busy: isBusy || isSendHeld, mode: sendMode, editingQueued: editingQueued,
                                           stopHeld: stopTracker.holdsStop)
         if primary.face != face { needsLayout = true }
         primary.face = face
         let validationMessage = ComposerLogic.lengthValidationMessage(prompt)
         let status = ComposerLogic.submitStatus(environmentUnavailable: environmentUnavailable, providerUnavailable: providerUnavailable,
-                                                sendDisabledReason: sendDisabledReason,
+                                                sendDisabledReason: sendDisabledReason, held: isSendHeld,
                                                 busy: isBusy, editingQueued: editingQueued)
         let canSend = sendDisabledReason == nil && !environmentUnavailable
         switch face {

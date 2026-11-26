@@ -273,9 +273,16 @@ public enum ComposerLogic {
     /// `submitStatus` (ComposerPrimaryActions.tsx:292-304): the send button's tooltip and label while
     /// it cannot send. A lost environment wins over every other reason.
     /// `providerUnavailable`: connected, but blocked only by a missing provider, which says so instead.
+    /// The held send banner's title (`HeldComposerSendStatus`, ComposerHeldSendBanner.tsx:12-23 at 5258).
+    public static func heldSendTitle(preparing: Int) -> String {
+        preparing == 0 ? "Sending message" : preparing == 1 ? "Sending once image is ready" : "Sending once \(preparing) images are ready"
+    }
+
+    /// `held`: a send waits for images to finish preparing, which reads before any other reason (5258, #40672).
     public static func submitStatus(environmentUnavailable: Bool, providerUnavailable: Bool = false, sendDisabledReason: String?,
-                                    busy: Bool, editingQueued: Bool) -> String? {
+                                    held: Bool = false, busy: Bool, editingQueued: Bool) -> String? {
         if environmentUnavailable { return providerUnavailable ? "Enable a provider to send a message" : "Environment disconnected" }
+        if held { return "Sending when ready" }
         if let sendDisabledReason { return sendDisabledReason }
         return busy ? (editingQueued ? "Updating queued message" : "Submitting message") : nil
     }

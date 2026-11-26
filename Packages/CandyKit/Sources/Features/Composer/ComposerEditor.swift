@@ -57,6 +57,8 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     var onMenuKey: ((MenuKey) -> Bool)?
     /// Tab (true) or Escape (false) in an empty prompt with no menu: accepts or dismisses the prompt suggestion.
     var onSuggestionKey: ((Bool) -> Bool)?
+    /// Asked first for a plain Escape: true when it cancelled a held send (ChatComposer.tsx:2571-2574 at 5258).
+    var onHeldSendEscape: (() -> Bool)?
     /// The caret or selection moved (the menu trigger follows it).
     var onSelectionChange: (() -> Void)?
     /// The look for a token's chip; nil keeps tokens as plain text.
@@ -999,6 +1001,7 @@ final class ComposerEditor: NSTextView, NSTextViewDelegate, FontRuntimeConsumer 
     override func keyDown(with event: NSEvent) {
         keyTime = event.timestamp
         defer { keyTime = nil }
+        if event.keyCode == 53, !hasMarkedText(), onHeldSendEscape?() == true { return }
         if let onMenuKey, !hasMarkedText() {
             let flags = event.modifierFlags.intersection([.shift, .option, .command, .control])
             let key: MenuKey? = switch event.keyCode {

@@ -444,6 +444,10 @@ public final class ThreadPanelView: DSView {
     /// `/clear`'s armed notice (ComposerFreshSession.tsx at 4928), keyed by thread; nil hides it.
     public let lazyFreshSessionBanner = LazyView { ComposerNoticeBannerView() }
     public var freshSessionKey: String? { didSet { if freshSessionKey != oldValue { needsLayout = true } } }
+    /// "Sending once image is ready" while a send waits for pasted images (`heldComposerSendBannerItem`,
+    /// ComposerHeldSendBanner.tsx at 5258, #40672), keyed by the draft; nil hides it.
+    public let lazyHeldSendBanner = LazyView { ComposerNoticeBannerView() }
+    public var heldSendKey: String? { didSet { if heldSendKey != oldValue { needsLayout = true } } }
     /// "Using <fallback>" on a new thread whose default provider is out of usage (`modelFallbackBannerItem`,
     /// ComposerUsageLimits.tsx:80-126 at 4928), keyed by the exhausted window; nil hides it.
     public let lazyFallbackBanner = LazyView { ComposerNoticeBannerView() }
@@ -557,6 +561,8 @@ public final class ThreadPanelView: DSView {
         if showsNoticeBanner && composerVisible { items.append(notice("project-clone:" + thread, noticeBanner)) }
         if composerVisible, let key = fallbackKey { items.append(notice("fallback-model:" + key, lazyFallbackBanner.view)) }
         if docked, let key = freshSessionKey { items.append(notice("fresh-session:" + key, lazyFreshSessionBanner.view)) }
+        // `heldSendItems` follow the fresh session (ChatView.tsx:2834-2851 at 5258).
+        if composerVisible, let key = heldSendKey { items.append(notice("held-composer-send:" + key, lazyHeldSendBanner.view)) }
         if docked && showsEnvironmentBanner {
             items.append(ComposerBannerStackItem(id: "environment-unavailable", view: environmentBanner,
                                                  height: { _ in EnvironmentBannerView.height }))
@@ -1881,7 +1887,8 @@ public final class ThreadPanelView: DSView {
                                                  lazyBranchBanner.loaded, usageLimitsBanner,
                                                  // Left out, a thread's `/clear` or reply banner stayed where it was laid out after the route
                                                  // moved to a new thread (screen pass 2026-11-20, item 3).
-                                                 lazyFreshSessionBanner.loaded, lazyReplyBanner.loaded, lazyFallbackBanner.loaded]
+                                                 lazyFreshSessionBanner.loaded, lazyReplyBanner.loaded, lazyFallbackBanner.loaded,
+                                                 lazyHeldSendBanner.loaded]
         for case let view? in candidates where !ordered.contains(where: { $0.view === view }) { view.isHidden = true }
         // A draft's notices are cards the draft branch below places, so the stack adopts none of them (#26958).
         bannerStack.update(ordered, adopting: !isDraft)
@@ -2247,7 +2254,8 @@ public final class ThreadPanelView: DSView {
                                                  lazyBranchBanner.loaded, usageLimitsBanner,
                                                  // Left out, a thread's `/clear` or reply banner stayed where it was laid out after the route
                                                  // moved to a new thread (screen pass 2026-11-20, item 3).
-                                                 lazyFreshSessionBanner.loaded, lazyReplyBanner.loaded, lazyFallbackBanner.loaded]
+                                                 lazyFreshSessionBanner.loaded, lazyReplyBanner.loaded, lazyFallbackBanner.loaded,
+                                                 lazyHeldSendBanner.loaded]
         for case let view? in candidates + ditherDockViews where view !== commandMenu && view !== lazyStashMenu.loaded {
             view.placement = .floating
             view.joinsAbove = false
