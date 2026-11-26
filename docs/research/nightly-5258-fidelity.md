@@ -61,7 +61,7 @@ CandyWrapper's port, in `Features/Markdown/Math`:
 
 1. `scripts/gen-math-spec` renders the corpus through that Words build, and the 156 math PNGs are recaptured from it.
 2. `MathFont` uses the system STIX Two Math, so the bundled Latin Modern Math (717 KB, GUST license) and its notice are gone.
-3. `MathTypesetter` follows Words for glyph metrics, script shifts, limits, big operators, radicals, `\left…\right` and delimiter shapes, and `\text` runs. `MathProbeTests.parity` with `CW_MATH_PARITY=1` compares every glyph and rule with Words' SVG. After the port, 36 of the 39 cases match to within 0.005em. The probe pairs glyphs one by one, so for the cases where Words draws a word as one `<text>` (`lim`, `det`, `mod`, `\text`) it checks the box.
+3. `MathTypesetter` follows Words for glyph metrics, script shifts, limits, big operators, radicals, `\left…\right` and delimiter shapes, and `\text` runs. `MathProbeTests.parity` with `CW_MATH_PARITY=1` compares every glyph and rule with Words' SVG. After the port, 36 of the 39 cases matched to within 0.005em, and all 39 after three fixes from `math.wat`. Grid rows take `$m.grid`'s struts (0.84em above, 0.36em below, no 1.2 stretch for `cases`), and a `\\[dim]` adds to the row's depth, never less than 0. A braced group, `\mathbb{R}` too, is a list in `$m.atomBox`, so its exponent hangs off the box. Glyph accents are the spacing forms from `math.txt` (ˆ U+02C6, not U+0302), centred box on box, and `\vec` is Words' stroked arrow. The probe pairs glyphs one by one, so for the cases where Words draws a word as one `<text>` (`lim`, `det`, `mod`, `\text`) it checks the box.
 4. Glyphs draw with Core Text and font smoothing on device rows at quarter-pixel x, as Skia draws Blink's SVG text.
 5. VoiceOver reads a display formula as its TeX, as T3's `aria-label` gives it.
 
@@ -78,7 +78,6 @@ The same comparison found display formulas drawn 1em high, as the block left out
 
 Left:
 
-- `cases` rows are 0.24em taller than Words', `\mathbb{R}^n` puts the exponent 0.07em lower, and accents sit 0.12em lower.
 - An unknown command shows the formula as code, where Words draws the command in red.
 - `\frac{a}{` shows as code, where Words draws a fraction with an empty denominator.
 - An inline formula wider than the column is clipped, where T3 scrolls it.

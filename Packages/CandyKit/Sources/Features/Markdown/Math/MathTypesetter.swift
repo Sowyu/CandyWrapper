@@ -281,7 +281,10 @@ struct MathTypesetter {
         case .namedOp(let text, _):
             return (.op, try self.text(text, .roman, style))
         case .group(let body, let cls):
-            return (cls, try list(body, style))
+            // A braced group, `\mathbb{R}` included, is a list in Words' `$m.atomBox`, so its scripts hang off the box.
+            var box = try list(body, style)
+            box.isChar = false
+            return (cls, box)
         case .scripts(let base, let sub, let sup):
             return try scripts(base, sub: sub, sup: sup, style)
         case .frac(let num, let den, let rule, let forced, let l, let r):
@@ -783,19 +786,56 @@ struct MathTypesetter {
 
     // MARK: Accents
 
+    /// The combining marks the parser stores, by the spacing accents Words draws for them (math.txt `accent`).
+    static let spacingAccents: [Unicode.Scalar: Unicode.Scalar] = [
+        "\u{302}": "\u{2C6}", "\u{30C}": "\u{2C7}", "\u{303}": "\u{2DC}", "\u{301}": "\u{2CA}", "\u{300}": "\u{2CB}",
+        "\u{307}": "\u{2D9}", "\u{308}": "\u{A8}", "\u{306}": "\u{2D8}", "\u{304}": "\u{2C9}", "\u{30A}": "\u{2DA}",
+    ]
+
+    /// Words' `\vec` (`$m.accent` with U+20D7, path 25): a stroked arrow 0.38 to 0.56em long and 0.036em thick, 0.18em
+    /// tall, 0.06em above the accent base height or the base's top.
+    func vector(over base: MathBox, _ style: Style) -> MathBox {
+        let u = size(style) / 1000
+        let w = min(max(base.width, 380 * u), 560 * u)
+        let raise = base.height - min(base.height, k(.accentBaseHeight, style)) + k(.accentBaseHeight, style) + 60 * u
+        let x = (base.width - w) / 2, mid = raise + 90 * u, head = 130 * u
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: x, y: mid)); p.addLine(to: CGPoint(x: x + w, y: mid))
+        p.move(to: CGPoint(x: x + w - head, y: mid + head)); p.addLine(to: CGPoint(x: x + w, y: mid)); p.addLine(to: CGPoint(x: x + w - head, y: mid - head))
+        var out = MathBox()
+        out.add(base, x: 0, y: 0)
+        out.shapes.append(.init(path: p, stroke: 36 * u))
+        out.height = max(base.height, raise + 180 * u)
+        out.width = base.width
+        out.depth = base.depth
+        out.italic = base.italic
+        return out
+    }
+
     func accent(_ a: Unicode.Scalar, _ body: [MathNode], stretchy: Bool, _ style: Style) throws -> MathBox {
         let base = try list(body, style.crampedSelf)
         let arrow = ["\u{2192}", "\u{2190}", "\u{2194}"].contains(a)
+        let u = size(style) / 1000
+        if !stretchy, a == "\u{20D7}" { return vector(over: base, style) }
         var mark: MathBox
         if stretchy {
             mark = try stretch(a, width: base.width, style)
+        } else if a == "\u{20DB}" || a == "\u{20DC}" {
+            // `\dddot`, `\ddddot`: Words sets three or four dot accents 0.21em apart.
+            let dot = try symbol("\u{2D9}", style)
+            mark = MathBox()
+            for i in (0..<(a == "\u{20DB}" ? 3 : 4)).reversed() { mark.add(dot, x: CGFloat(i) * 210 * u, y: 0) }
+            mark.width = dot.width + (mark.glyphs.count == 3 ? 420 : 630) * u
         } else {
-            mark = try symbol(a, style)
+            // Words' table (math.txt `accent`) sets the spacing forms, which sit higher than the combining marks.
+            mark = try symbol(Self.spacingAccents[a] ?? a, style)
         }
         let scale = size(style) / font.unitsPerEm
-        let markAttach: CGFloat = mark.glyph.flatMap { g in font.topAccent(g).map { $0 * scale } }
-            ?? (mark.glyphs.count == 1 ? glyphCenter(mark) : mark.width / 2)
-        let baseAttach: CGFloat = (base.isChar ? base.glyph.flatMap { g in font.topAccent(g).map { $0 * scale } } : nil)
+        // Words centres a glyph accent's box on its argument's: the argument is a list, which has no attachment point, and
+        // the spacing accents' table entries have none either.
+        let markAttach: CGFloat = stretchy ? mark.glyph.flatMap { g in font.topAccent(g).map { $0 * scale } }
+            ?? (mark.glyphs.count == 1 ? glyphCenter(mark) : mark.width / 2) : mark.width / 2
+        let baseAttach: CGFloat = (stretchy && base.isChar ? base.glyph.flatMap { g in font.topAccent(g).map { $0 * scale } } : nil)
             ?? base.width / 2
         var out = MathBox()
         out.add(base, x: 0, y: 0)
@@ -859,8 +899,10 @@ struct MathTypesetter {
         case .smallMatrix: cellStyle = Style(kind: .script, cramped: style.cramped)
         case .matrix, .cases, .array: cellStyle = Style(kind: style.kind == .display ? .text : style.kind, cramped: style.cramped)
         }
-        let stretch: CGFloat = kind == .cases ? 1.2 : kind == .substack || kind == .smallMatrix ? 0.5 : 1
-        let skip = 1.2 * stretch * size(style)
+        // Words' `$m.grid` row struts: 0.84em above and 0.36em below each row, 0.6 and 0.257 in script-style grids, with no
+        // array stretch for `cases`.
+        let half = kind == .substack || kind == .smallMatrix
+        let strutH = (half ? 0.6 : 0.84) * size(style), strutD = (half ? 0.257 : 0.36) * size(style)
         let jot: CGFloat = kind == .aligned || kind == .alignedAt || kind == .gathered ? 0.3 * size(style) : 0
         let columnCount = rows.map(\.count).max() ?? 0
         var cells: [[MathBox]] = []
@@ -904,18 +946,17 @@ struct MathTypesetter {
         var rowBottoms: [CGFloat] = []
         var placed: [(MathBox, CGFloat, CGFloat)] = []
         for (r, line) in cells.enumerated() {
-            let h = max(line.map(\.height).max() ?? 0, 0.7 * skip)
-            var d = max(line.map(\.depth).max() ?? 0, 0.3 * skip)
-            // `\\[dim]` (KaTeX array.ts): a positive gap deepens the row past its strut, a negative one pulls the next row up.
-            let gap = r < gaps.count ? gaps[r] * em : 0
-            if gap > 0 { d = max(d, gap + 0.3 * skip) }
+            let h = max(line.map(\.height).max() ?? 0, strutH)
+            // `\\[dim]` adds its space below the row's depth; Words keeps the largest per row from 0, so a negative one is 0.
+            let gap = r < gaps.count ? max(0, gaps[r] * em) : 0
+            let d = max(line.map(\.depth).max() ?? 0, strutD) + gap
             y -= h
             for (c, b) in line.enumerated() {
                 let a = align(c)
                 let dx = a == "l" ? 0 : a == "r" ? widths[c] - b.width : (widths[c] - b.width) / 2
                 placed.append((b, x[c] + dx, y))
             }
-            y -= d + (r < cells.count - 1 ? jot : 0) + min(0, gap)
+            y -= d + (r < cells.count - 1 ? jot : 0)
             rowBottoms.append(-y)
         }
         let total = -y
