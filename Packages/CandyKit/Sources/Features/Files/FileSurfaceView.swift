@@ -217,6 +217,24 @@ public final class FileSurfaceView: DSView {
         return nil
     }
 
+    /// A file past 64 MB, downloaded to `file` (nil past 256 MB): the paged plain viewer replaces the 1 MB preview
+    /// (5258 LargeFilePreview.tsx:38-41). Ignored once the surface shows something else.
+    public func showLargeText(file: URL?, sizeBytes: Int) {
+        guard case .text(let preview, true, sizeBytes, _) = content, attachment == nil else {
+            if let file { try? FileManager.default.removeItem(at: file) }
+            return
+        }
+        loadTask?.cancel()
+        body?.removeFromSuperview()
+        code = nil
+        notice.isHidden = true
+        let view = LargeTextFileView(file: file, sizeBytes: sizeBytes, preview: preview)
+        addSubview(view)
+        body = view
+        updateActions()
+        needsLayout = true
+    }
+
     /// The text the editor holds now (unsaved edits included).
     public var currentText: String? { code?.text }
 
@@ -429,7 +447,7 @@ public final class FileSurfaceView: DSView {
         explorerToggle.isHidden = attachmentMode || path.hasPrefix("/") || isDirectory
         // Save once there is a file, Remove and Close when the owner offers them.
         let copy = Self.copyAction(content, attachment: attachment != nil, fullTextLoading: fullTextLoading,
-                                   copied: (copiedUntil ?? .distantPast) > Date())
+                                   copied: (copiedUntil ?? .distantPast) > Date(), largeText: body is LargeTextFileView)
         copyButton.isHidden = copy == nil
         copyButton.icon = copy == "Copied" ? .check : .copy
         let copyLabel = copy ?? "Copy contents"
@@ -470,16 +488,24 @@ public final class FileSurfaceView: DSView {
     /// when it is whole and not empty (5258 FilePreviewPanel.tsx:1400-1409 and 1652-1659, 07fe456146 #34769), and while a
     /// large file's whole text downloads (`LargeFileActions`, :1965-2001). An attachment copies what it shows
     /// (AttachmentFilePreview.tsx:462).
-    static func copyAction(_ content: Content, attachment: Bool, fullTextLoading: Bool, copied: Bool) -> String? {
+    static func copyAction(_ content: Content, attachment: Bool, fullTextLoading: Bool, copied: Bool, largeText: Bool = false) -> String? {
         guard case .text(let text, let truncated, _, _) = content else { return nil }
+        if largeText { return copied ? "Copied" : "Copy contents" }
         if !attachment, truncated ? !fullTextLoading : text.isEmpty { return nil }
         if copied { return "Copied" }
         return truncated && attachment ? "Copy preview" : "Copy contents"
     }
 
     private func copyContents() {
-        guard case .text(let text, let truncated, _, _) = content else { return }
-        if truncated, attachment == nil {
+        guard case .text(var text, let truncated, _, _) = content else { return }
+        if let large = body as? LargeTextFileView {
+            // `text-copy-before-loaded` (previewFailureMessages.ts:35).
+            guard large.isIndexed, case .success(let whole) = large.copyText() else {
+                onCopyFailed?("Could not read file", "Wait for the file to finish loading before copying.")
+                return
+            }
+            text = whole
+        } else if truncated, attachment == nil {
             onCopyFailed?("Could not read file", "The file is still loading. Try again in a moment.")
             return
         }
