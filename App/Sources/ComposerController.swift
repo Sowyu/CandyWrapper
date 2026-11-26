@@ -1769,6 +1769,11 @@ final class ComposerController {
         if let thread = shellThread, thread.status == .failed, thread.lastErrorClass == .usageLimit {
             runState.resumableRunId = thread.latestRunId
         }
+        // 5258 `deriveResumableRunId` (threadExecution.ts:436-444): a session without native resume can only resend
+        // a message the provider never received.
+        if let id = runState.resumableRunId, let projection, RunStartup.resumeUnavailable(id, in: projection) {
+            runState.resumableRunId = nil
+        }
         composer.isCompacting = ComposerLogic.compactionBlocksSteering(projection, compactCommandActive: projection.map {
             let state = TimelineRunState(projection: $0)
             return state.isWorking && TimelineRunState.compactRequestActive($0, latestRun: state.latestRun)

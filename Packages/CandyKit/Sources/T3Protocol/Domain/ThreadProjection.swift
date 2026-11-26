@@ -124,6 +124,8 @@ public struct Run: Codable, Hashable, Sendable, Identifiable {
     public var restartCancelledBackgroundWork: JSONValue?
     /// The launch's workspace strategy, kept so a failed preparation can be retried (orchestrationV2.ts:583).
     public var workspacePreparation: JSONValue?
+    /// The run a manual continuation (Resume) continues (5258 orchestrationV2.ts:840).
+    public var manualContinuationOfRunId: RunId?
 }
 
 /// `OrchestrationV2RunAttempt` (orchestrationV2.ts:597-619).
@@ -138,6 +140,13 @@ public struct RunAttempt: Codable, Hashable, Sendable, Identifiable {
     public var reason: String?
     public var startedAt: T3Timestamp?
     public var completedAt: T3Timestamp?
+    /// The thread's modes when this attempt's turn started (5258 orchestrationV2.ts:902, T3 #41746).
+    public var startedModes: StartedModes?
+
+    public struct StartedModes: Codable, Hashable, Sendable {
+        public var runtimeMode: String
+        public var interactionMode: String
+    }
 
     public init(id: RunAttemptId, runId: RunId, attemptOrdinal: Int, rootNodeId: NodeId, status: String) {
         self.id = id
