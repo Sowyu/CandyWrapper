@@ -719,8 +719,10 @@ final class SidebarCardRowView: SidebarRowBase {
 
         let showActions = hovered
         statusLabel.font = SB.font(12, r.isPendingSync ? .regular : .medium)
-        // `PendingSyncLabel`'s tooltip (SidebarThreadRow.tsx:164-176 at 5258).
-        statusLabel.setTooltip(r.isPendingSync ? "Waiting to sync with its environment" : nil)
+        // `PendingSyncLabel`'s tooltip (SidebarThreadRow.tsx:164-176 at 5258). The status slot takes the pointer only for a
+        // woke status; any other turns `pointer-events-none` while the row is hovered (:1611-1615), and the pointer is on
+        // the row whenever it is on the label, so T3 never opens this one by hover. The time slot's (:1409-1417) does.
+        statusLabel.setTooltip(r.isPendingSync && r.topStatus == .woke ? "Waiting to sync with its environment" : nil)
         if r.isPendingSync {
             // `text-xs text-secondary-label`, no icon and no time (SidebarThreadRow.tsx:1620-1621 at 5258).
             statusIcon.set(nil, color: .clear)
