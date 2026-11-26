@@ -402,16 +402,16 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | cbc3057f59 | #42921 | fix(web,mobile): a running Read's image shows a loading frame, not "Image unavailable" | thread | ported 255b7394 (a running Read's image holds the 16:9 loading frame without asking for the file; Redesign shows its skeleton) |
 | 7d8c03fd99 | #42948 | fix(terminal): keep other input out of large bracketed pastes | other | n/a (terminal, other agent) |
 | a3a4592cf5 | #42897 | fix(web): release terminal reply ownership when the drawer closes | other | n/a (terminal, other agent) |
-| 67918f51cc | #42919 | fix(web): Show more in Thread Details keeps every repository listed | thread | left: CW's details card has no repository sections (3.5 #35925 first). Medium |
-| 2891419b93 | #42886 | fix(web): localize terminal excerpt line ranges | composer | port (1.18) |
+| 67918f51cc | #42919 | fix(web): Show more in Thread Details keeps every repository listed | thread | left for the details agent: the card's repository sections live in Features/Git (d414425c on main added issue rows, hub pools and HTTP quotas, not repository sections). Medium |
+| 2891419b93 | #42886 | fix(web): localize terminal excerpt line ranges | composer | nothing to port: English only, and CW's chip already reads "{terminal} line N" or "lines N-M" (ComposerMenus.swift:859) |
 | 83a7c75b88 | #42889 | fix(web,mobile): adding a project from a draft's picker no longer leaves the draft behind | palette | ported df350067 |
 | e045a127e7 | #42882 | fix(web): web search result links follow Open links in | thread | ported 3f79fad2 |
 | 8783b9d2ea | #42880 | fix(web): Restart agent session toast says the conversation is kept | palette | ported 2995f10a |
 | 172309c39c | #42876 | fix(web): timeline minimap no longer covers the Copy button when the chat lane is shifted left | thread | already: `layoutMinimap` takes the gutter from `laneFrame.x`, the measured lane offset |
 | 19a6e5b57b | #42856 | fix(web): clicking outside a citation comment keeps its dictation | thread | n/a here: same composer citation editor |
-| 3a63e0ca37 | #42771 | fix(web): expanding linked issues no longer hides thread details sections | thread | left: with b111b6310a |
+| 3a63e0ca37 | #42771 | fix(web): expanding linked issues no longer hides thread details sections | thread | ported d414425c by the details agent (on main): the first linked issue renders, the rest behind Show N more |
 | f99eceb76d | #42755 | fix(web): reasoning previews no longer cut emojis in half | thread | already: Swift slices previews by character, so no surrogate pair splits |
-| d38dcccef8 | #42707 | fix(web): project actions menu re-reads t3.json each time it opens | thread | port (1.18) |
+| d38dcccef8 | #42707 | fix(web): project actions menu re-reads t3.json each time it opens | thread | ported f4fddadf (the actions menu, inline and in Redesign's header menu, reads t3.json again on every open and keeps the scripts read before until the new read lands) |
 | 9eaac040de | #42697 | test(web): sidebar shift guard tests no longer race the click against fake time | sidebar | n/a (test only) |
 | 9b671699d4 | #42582 | perf(web): thread switches paint the timeline in their first frame | thread | n/a (React render speed) |
 | 221953fbf3 | #42657 | fix(web): fade project picker tooltips in place on scroll | sidebar | port (3.8) |
@@ -425,11 +425,11 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 51a8d20271 | #42543 | fix(web): project action keybinding field records shortcuts instead of running them | composer | port (2.8) |
 | b6869fad67 | #30664 | feat(terminal): Add keybindings for cycling through terminals | other | n/a (terminal, other agent) |
 | ea63274413 | #42489 | chore(deps): bump vite-plus to 1.8.0 | other | n/a (dependency bump) |
-| 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | left: CW's MCP app host was not checked against the bridge hand-over. Medium |
+| 2940ff33ad | #42504 | fix(web): MCP apps run only when their document hands over its bridge | thread | ported 7a0e6330 (an MCP app whose first message is not its document's port gets no bridge and shows T3's "needs a newer server" line; tested in a live web view) |
 | c3aacf1e5b | #42377 | fix(web): pasted images over 2000 px no longer stall on "Preparing" on busy pages | composer | n/a (web canvas worker; CW prepares images with ImageIO off the main thread) |
 | 78de041d48 | #24917 | fix: settle and snooze threads while their machine is offline | sidebar | left: offline outbox (large) |
 | dfa73216cc | #42429 | fix(web): search results show the matched lines | thread | ported d11002d4 (not seen on screen: the sandbox turn used Bash grep) |
-| 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | left: HTTP quota sources on the details card need `quotaAccounts` decoded. Medium |
+| 16742ca802 | #41291 | feat(usage): support user-hosted HTTP quota sources | thread | ported d414425c by the details agent (on main) |
 | 924d9c1fff | #42386 | feat(projects): worktree layout commands run only once a person approves them | composer | ported 41958980 |
 | eb7cc44727 | #42309 | fix(web): showing or hiding a requested secret keeps the caret in place | thread | ported f15f9c8d |
 | 571ed76fc3 | #42275 | fix(web): sidebar issue and pull request badges share one component | sidebar | port (3.7) |
@@ -439,11 +439,11 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | ff7d03ddfd | #42265 | fix(client-runtime): omit failed image reads from viewed-image previews | thread | ported 255b7394 |
 | e9b227b021 | #42183 | fix(web): typing / or $ in the composer no longer waits for the suggestion menu to render | composer | n/a (React render timing) |
 | ccdafe1f61 | #42205 | fix(web): held or modified Backspace no longer leaves a Command Palette submenu | palette | ported 8a847157 |
-| 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | port (1.18) |
+| 7c42bb1c5c | #38317 | fix(web): Open subagent in Background work looks like a button | thread | n/a here: CW has no Background work dialog (`BackgroundWorkDetails.tsx`); its banner and Redesign's waiting menu link the subagents directly. Port with the dialog |
 | d7ae1e1791 | #33002 | fix(web): report server rollback after an app update | sidebar | port (3.6) |
 | 6f6b978667 | #41963 | fix(web): image preview closes with an × again instead of a Back button | thread | ported 255b7394, reference recaptured from 5258 in the next commit with the popup's titlebar inset and centering |
 | 0a7864c887 | #42084 | fix(web): a run finishing in a background window stays unread | thread | ported 98004311 |
-| 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | left: the "Thread unavailable" page needs a route for a thread on an unknown environment; CW keeps the unresolved chip. Small to medium |
+| 74d73ac23f | #42048 | fix(web): a thread link to an unconnected environment shows why instead of a blank pane | thread | ported d9f298a4 (unit tested and seen on screen from a synthetic test build in dark and Redesign) |
 | 28d8a63d7f | #42011 | fix(web): sidebar search times no longer wrap in translated languages | sidebar | ported 75700d91 |
 | 2ced06ef4a | #42041 | fix(web): model picker search finds a model by its ID | composer | ported 8e80f42f |
 | a891304c84 | #30810 | fix(web): keep Codex Ultra off the effort bar scale | composer | port (2.6) |
@@ -452,25 +452,25 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | a6c69be8df | #41927 | fix(web,mobile): a parent parked on subagents no longer reads as Thinking | thread | ported ad384d3e (the server half, #38869, is not a client change) |
 | ff6b10e0a0 | #41928 | feat: starting providers show their real startup step and logo | thread | ported 3a1892b1 and 816b0031 + eec3b345 (the starting row before the server has a run, from the unconfirmed optimistic send and the composer's selected instance; unit tested, not seen on screen) |
 | b3fff82014 | #29282 | fix(web): Settings opened with Cmd+, no longer leaves the model picker open over it | composer | ported e7a7413a |
-| 8032cbb66b | #28919 | fix(web): Cmd+F searches a side chat, and Escape closes it | thread | left, unverified: the side chat pane embeds a full ThreadPanelView whose own ComposerController registers chat.find on the pane's shortcuts, so Cmd+F may already work there; Escape anywhere in the pane closing find is not built. Small to check, small to port |
+| 8032cbb66b | #28919 | fix(web): Cmd+F searches a side chat, and Escape closes it | thread | ported d727b761: Cmd+F already searched a side chat (its ComposerController registers chat.find on the pane's table, run while focus is in the pane); Escape anywhere in the chat or side chat now closes find through `cancelOperation`. Not driven on screen |
 | a4029d4b91 | #41899 | fix(web): an IME Escape no longer dismisses the citation highlight | thread | n/a (AppKit handles IME) |
 | 9331811180 | #41885 | fix(clients): threads can be dragged above threads from a disconnected machine | sidebar | left: implied sort keys (medium) |
 | 3d9a14d4da | #41875 | fix(web): IME keys no longer trigger or close the prompt stash menu | composer | n/a (AppKit handles IME) |
 | 8dc01892ad | #41886 | fix(server): answering a secret request with a reference needs provider management | thread | n/a (CW has no reference sources, so the card is always typed) |
-| d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | port (1.18) |
+| d36fb7d263 | #41877 | fix(web): Open in file manager waits for a file preview to load, then shows the file in its folder | thread | left for the files agent: the change is in the file preview's Open in picker (`fileManagerActionForPath`, FilePreviewPanel.tsx), which is FilesController's. Small |
 | 14ea095b0a | #41663 | feat(web): add an HTML preview width setting separate from chat width | thread | ported bc4d8e34 (wide 72rem and full, centered on the lane and clear of the details card; unit tested, not seen on screen: no HTML preview in the sandboxes) |
 | 4508c70681 | #41843 | fix(web): opening a thread lands at its end instead of jumping there | thread | already: a `.thread` change sets `followsEnd` before the anchor is taken, so the restore and every later footer change land at the end (test `aSwitchedThreadOpensAtItsEndWithoutLandingShort`) |
 | 4162207ddd | #29771 | fix(web): file menu opens remote files over SSH instead of on the server | thread | n/a (web icons, wire A18) |
 | 8ef195587d | #33030 | fix(web): tell update-all users where to update desktop servers it can't reach | sidebar | port (3.6) |
 | d9c7e6f7fc | #31098 | fix(web): dropped text is parsed like pasted text in the composer | composer | ported 8337eb04 |
 | d572ce9afe | #41814 | fix(chat): preserve model choices when editing queued messages | composer | ported 31975590 |
-| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | left: Lineage elapsed time for subagents on linked machines. Small |
+| 7e6a871a00 | #41798 | fix(web): Lineage panel shows elapsed time for subagents on linked machines | thread | left for the details agent: CW's Lineage has no remote subagent rows yet (`RemoteSubagentRow`, ThreadRelationshipsControl.tsx:300-370), and the section is Features/Git's `ThreadLineageSectionView`. Small with the rows |
 | c5918e5d24 | #41803 | fix(web): align composer banner details with status text | composer | already: CW's details button shares the 24pt row with the text, so it is centered |
 | eecb58c6d6 | #41769 | fix: approvals and hosted pairing show what is being approved | composer | ported 956f0e5a for the approval half; `draftSupportedRuntimeModes` is the composer's (2.x), hosted pairing the other note's |
 | 46f360d8dd | #41722 | fix(client): a link to a newly linked machine's thread opens without a reload | thread | ported 7c048ec6: a link naming a machine the cached peerLinks.names lack reads the names once more (`refreshNamesLacking`) |
 | 78cffe29ec | #41761 | fix: a merge or review stays on the commit you opened the pull request on | other | n/a (pull requests, other agent) |
 | 5e62206e7d | #41757 | fix(desktop): preview pages run in their own JavaScript world and popups open web links only | thread | n/a (Electron only) |
-| d4d08aed56 | #41745 | fix: XML assets open sandboxed and MCP apps bind to their document | thread | left with 2940ff33ad. Medium |
+| d4d08aed56 | #41745 | fix: XML assets open sandboxed and MCP apps bind to their document | thread | ported 7a0e6330 for the MCP app half (`attachMcpAppDocumentLink` in the bridge's isolated world, probes over the document's port); XML assets opening sandboxed is server side |
 | 1c6d41a9ba | #41317 | feat(web,mobile): remove the changed-files card under assistant turns | thread | ported 31bbc675 |
 | cdb0e238ed | #41674 | fix(web): keyboard-opened context menus start on their first action | other | n/a (AppKit native menus) |
 | b5e1f91cba | #27167 | fix(web): color sidebar PR text to match status icons | sidebar | port (3.7) |
@@ -479,7 +479,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | a369642c1c | #41578 | fix(web): keys pressed on a focused video stay with the player | composer | n/a (web focus redirect) |
 | 1c9ccc7127 | #41554 | fix(web): a grouped project's folder New thread starts on the viewed machine's copy | sidebar | ported 11e1c196 |
 | 3b08d975ab | #41518 | fix(web): the desktop app plays thread sounds after a reload | thread | n/a (web audio unlock) |
-| 7e624c0c8d | #37405 | fix(web): chat links open their menu from the keyboard on macOS | thread | port (1.18) |
+| 7e624c0c8d | #37405 | fix(web): chat links open their menu from the keyboard on macOS | thread | n/a: a Chromium on macOS workaround for Shift+F10 on focused links; CW's Markdown links take no keyboard focus |
 | 92199680cc | #41365 | fix(web): hide Mark unread on threads with no completed run | sidebar | ported fa78d3d4 |
 | face82e8b9 | #41327 | fix(web): caret lands after closing Markdown markers after a paste | composer | left (small) |
 | f4c38ca3e7 | #27236 | fix(web): remote open uses the environment's saved SSH route | thread | n/a (SSH route, wire A18) |
@@ -488,7 +488,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 5812320a6a | #41258 | fix(web): quick clicks on different sidebar threads open each one | sidebar | ported fa78d3d4 |
 | 611410683b | #41242 | feat(cursor): show which step Cursor is in while a turn starts | thread | ported 3a1892b1 |
 | e6ae5810a3 | #41184 | fix(web): preserve reading position when side panels resize | thread | ported 7a68cd54 (the text line, not a contenteditable caret: CW's timeline has none) |
-| 69c1d53826 | #38884 | feat: workflows on web and mobile | thread | port (1.18) |
+| 69c1d53826 | #38884 | feat: workflows on web and mobile | thread | n/a here: the workflow step header ("{workflow} · {step}", Open run) belongs to the workflows agent |
 | 7103527dcc | #41073 | fix(web): PR description file links resolve in the PR's repository from a No-project thread | thread | left: CW renders PR bodies in the pull request views (other agent), which pass no checkout cwd yet. Small |
 | 0938476b95 | #41060 | fix(web): Thinking row no longer shows below a streaming reply | thread | ported ad384d3e |
 | a3323d4a43 | #41070 | perf(web): new thread opens its draft without waiting on t3.json | composer | n/a (React load order) |
@@ -505,7 +505,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 501e39d54a | #40841 | fix(web): clicking the Tab hint inserts short prompt suggestions again | composer | ported 0a35f251 |
 | bcb9217e8e | #26661 | fix(web): settling a thread no longer jolts the sidebar list | sidebar | ported fa78d3d4 |
 | d834a4e117 | #40763 | fix(web): preserve reply-only edits when a queued message leaves the queue | composer | nothing to port: the reply stays in the edit text |
-| d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | left: Lineage show-more keeps the last row and focus. Small |
+| d27d29fe2d | #31295 | fix(web): lineage show-more no longer clips the last row or drops focus | thread | left for the details agent: Lineage show-more lives in Features/Git's `ThreadLineageSectionView`. Small |
 | 671e05bc8c | #40768 | fix(issues): an Activity cross-reference opens the issue or pull request it came from | other | n/a (issues, other agent) |
 | 1acfd37c17 | #40798 | fix(web): restore effort picker keyboard typeahead | composer | ported 8e80f42f |
 | c3a330d834 | #40767 | fix(web): show Queue for running sessions that cannot steer | composer | ported 357ba3b8 |
@@ -531,7 +531,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | dea657a0b1 | - | fix(web): show the update capsule at default sidebar width with a short grow-in | sidebar | port (3.6) |
 | 5aae5578de | - | fix(web): show the update capsule label in narrower sidebars | sidebar | port (3.6) |
 | 9f9ebf61fb | #40136 | fix(client-runtime): recognize thought_level and role: reasoning in effort summaries | composer | port (2.6) |
-| f4b8be84a0 | #40069 | fix(web): show custom theme backgrounds on the empty New thread screen | thread | port (1.18) |
+| f4b8be84a0 | #40069 | fix(web): show custom theme backgrounds on the empty New thread screen | thread | already: CW's timeline paints no background of its own, and ThreadPanelView goes clear while a theme image shows (ThreadPanelView.swift:313). Not checked on screen |
 | d9fdd02523 | #40191 | fix(client-runtime): @ menu offers machines the thread's server links to | composer | port (2.7) |
 | cf94598281 | #39966 | fix(client-runtime): don't ask for a provider update the install channel lacks | composer | port (2.6) |
 | 60863edc41 | #35925 | feat(projects): a project covers several repositories | sidebar | nothing to port in the sidebar: CW keeps the branch |
@@ -550,7 +550,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | e7b1b88bef | #37274 | fix(web): IME composition replaces selected text beside chips | composer | n/a (AppKit handles IME) |
 | 46ee2fc7ff | #35185 | feat(web): sidebar New starts the thread in the scoped project | sidebar | ported 11e1c196 |
 | 1d975f53ea | #39488 | feat(web): click the Tab hint to use the suggested prompt | composer | ported 0a35f251 |
-| c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | left: hub pools on the details card (`resolveThreadDetailsLimits`, instance hubs). Medium |
+| c436409da0 | #30778 | fix: proxied usage limits follow the hub's model routing and show on the thread card | thread | ported d414425c by the details agent (on main) |
 | 342b58a79f | #30644 | feat(web): add a composerEmpty keybinding condition | composer | ported 4871c2c9 |
 | 285558eb10 | #34027 | feat(desktop): dictate on this Mac with Apple Speech | composer | n/a (desktop IPC, wire A19) |
 | 669d8941e2 | #39921 | feat: sign in to an agent's MCP server from its warning | thread | ported ca680ce9 (seen offscreen only: no sandbox MCP server needs a login) |
@@ -558,7 +558,7 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 6908754f0b | #37122 | fix(web): caret navigation no longer opens composer suggestions | composer | ported e7a7413a |
 | 8d37736cdd | #39889 | fix(web,mobile): usage-limit recovery banner updates copy after reset passes | thread | ported fe5d9cd0 |
 | 7c6e889ddb | #39515 | feat: subagents, side chats and linked threads open the same way | thread | ported 7c048ec6 for linked threads opening as a panel tab; subagents and side chats keep their own paths. Left: the shared open intent (alternate click to the main screen), small |
-| d7f6b3efca | #39439 | feat: connect to a linked environment from its read-only thread | thread | left: "Connect to interact" (pairClient, reaches, pair, the connect notices) is not built; the bar has no action. Medium to large |
+| d7f6b3efca | #39439 | feat: connect to a linked environment from its read-only thread | thread | ported d55ba5d3 (pairClient with access:write, address probes, pairing, the three notices and Enter code; unit tested, the notices seen on screen from a synthetic build, the real round trip not run) |
 | 1cb3a8c753 | #39406 | feat: read a linked environment's threads from the client | thread | ported 7c048ec6 (read-only panel tab: peerLinks.subscribeThread while it shows, threadHistoryPage paging, threadItem rows, ReadOnlyComposerBar, failure copy and the 15 s retry; seen on screen against two linked 5258 sandboxes). Left: the main-screen page for `sideThreadOpenTarget` main (LinkedThreadPage.tsx), medium |
 | 9294a9801e | #39837 | fix(acp,web): stop showing "Running Ran" for commandless ACP tool calls | thread | ported ad384d3e |
 | 0bc9b57b93 | #31257 | feat: secret cards get a show/hide toggle and multi-value fields | thread | ported f15f9c8d (multi-value fields were already in from the wire port) |
@@ -567,13 +567,13 @@ Status values: `port` names the note above. `n/a` gives the reason in a few word
 | 732c03f410 | #39557 | fix(web): fold accents in thread link picker search | composer | ported 6fa875f4 |
 | 22936ae669 | #39552 | fix(web): ignore superseded microphone refreshes in voice setup | composer | n/a (web mic setup) |
 | 29b42d409c | #39351 | fix(web): show status for grouped sidebar issues | sidebar | port (3.7) |
-| 3a60d0996a | #38869 | fix(server): background subagents can delegate after their parent's turn ends | thread | port (1.9) |
+| 3a60d0996a | #38869 | fix(server): background subagents can delegate after their parent's turn ends | thread | ported 5aa812be (the client half: a subagent card after the turn's reply adds no turn time; the server half needs no client change) |
 | bb1a66a3a4 | #38323 | feat(web): reference a side chat from its main thread with Add to chat and @ | thread | n/a here: the @ menu and Add to chat are the composer's (composerThreadItems.ts), composer agent |
 | 5872b0a488 | #37419 | fix(web): a later thread error with the same text shows its banner again | thread | ported fe5d9cd0 (source is the shell's latest run and its end time, not the failure item; ponytail marker) |
 | dcf158c591 | #39415 | feat(server): setting and managed policy to turn off the preview tunnel | other | n/a (preview tunnel, wire A10) |
 | 420d1b5900 | #39393 | feat(desktop): forward another environment's ports to this machine | palette | n/a (desktop IPC, wire A19) |
 | 296f9131f7 | #39340 | fix(web): Cmd+W closes the browser tab when the page has focus | other | n/a (browser tabs, other agent) |
-| b111b6310a | #39232 | fix(web): collapse extra linked issues in thread details | thread | left: CW's details card has no linked issue rows yet, so no Show more. Medium with the rows |
+| b111b6310a | #39232 | fix(web): collapse extra linked issues in thread details | thread | ported d414425c by the details agent (on main) |
 | 98af8803fe | - | refactor(web): share restart countdown seconds in update capsule | sidebar | n/a (refactor) |
 | f0f9de46c6 | - | fix(web): localize compact restart countdown | sidebar | port (3.6) |
 | 40c1e861ee | - | fix(web): keep sidebar update control readable when narrow | sidebar | port (3.6) |
