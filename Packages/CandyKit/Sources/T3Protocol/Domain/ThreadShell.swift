@@ -83,6 +83,8 @@ public struct ThreadShell: Codable, Hashable, Sendable, Identifiable {
     /// The thread in a linked environment that delegated this task here (4928 orchestrationV2.ts:138-142, 2228).
     /// Absent before 4928; MCP-launched threads send `null`.
     public var delegatedFrom: DelegatedFrom?
+    /// The workflow run this thread is an agent step of (5258 orchestrationV2.ts:2436). Absent before 5258.
+    public var workflowRun: WorkflowOrigin?
     /// The outcome of the last title regeneration (4928 orchestrationV2.ts:2289).
     public var lastTitleRegeneration: LastTitleRegeneration?
     public var deletedAt: T3Timestamp?
@@ -250,29 +252,32 @@ public struct LastTitleRegeneration: Codable, Hashable, Sendable {
     public var completedAt: T3Timestamp
 }
 
-/// `OrchestrationV2AppThreadLineage` (orchestrationV2.ts:108-112).
+/// `OrchestrationV2AppThreadLineage` (5258 orchestrationV2.ts:189-196).
 public struct ThreadLineage: Codable, Hashable, Sendable {
     public var parentThreadId: ThreadId?
     public var relationshipToParent: LineageRelationship?
     public var rootThreadId: ThreadId
     /// A side chat: a hidden fork that lives in its parent's view (4928 orchestrationV2.ts:173).
     public var sideChat: Bool?
+    /// An agent step of a workflow run, which the thread's `workflowRun` names (5258 orchestrationV2.ts:195).
+    public var workflowStep: Bool?
     /// Client side, never on the wire: a task delegated from a thread the client lists, which shows under that
     /// parent (`delegatedUnderParent`, client-runtime state/threadShell.ts:731-753). Set when shells merge.
     public var delegatedUnderParent = false
 
-    private enum CodingKeys: String, CodingKey { case parentThreadId, relationshipToParent, rootThreadId, sideChat }
+    private enum CodingKeys: String, CodingKey { case parentThreadId, relationshipToParent, rootThreadId, sideChat, workflowStep }
 
-    public init(parentThreadId: ThreadId?, relationshipToParent: LineageRelationship?, rootThreadId: ThreadId, sideChat: Bool? = nil) {
+    public init(parentThreadId: ThreadId?, relationshipToParent: LineageRelationship?, rootThreadId: ThreadId, sideChat: Bool? = nil, workflowStep: Bool? = nil) {
         self.parentThreadId = parentThreadId
         self.relationshipToParent = relationshipToParent
         self.rootThreadId = rootThreadId
         self.sideChat = sideChat
+        self.workflowStep = workflowStep
     }
 
-    /// `isListedThreadLineage` (4928 orchestrationV2.ts:177-179): subagents and side chats show
-    /// inside their parent, never in thread lists, search or settled counts.
-    public var isListedLineage: Bool { relationshipToParent != .subagent && sideChat != true }
+    /// `isListedThreadLineage` (5258 orchestrationV2.ts:203-207): subagents and side chats show inside their
+    /// parent, and a workflow run's agent steps inside the run, never in thread lists, search or settled counts.
+    public var isListedLineage: Bool { relationshipToParent != .subagent && sideChat != true && workflowStep != true }
 
     /// `isShownUnderParent` negated (4928 client-runtime state/threadShell.ts:60-72): subagents, side chats and
     /// tasks delegated from a listed parent stay out of thread lists.
@@ -440,6 +445,19 @@ public struct PullRequestStack: Codable, Hashable, Sendable {
 extension ThreadShell {
     /// `isProviderNativeSubagentThread` (orchestrationV2.ts:442-451).
     public var isProviderNativeSubagent: Bool { lineage.relationshipToParent == .subagent && creationSource == "provider" }
+}
+
+/// `OrchestrationV2WorkflowOrigin` (5258 orchestrationV2.ts:165-174): the workflow run a thread is an agent step
+/// of, and the step's name. `environmentId` is where the run lives, another environment for a step run through a link.
+public struct WorkflowOrigin: Codable, Hashable, Sendable {
+    public var environmentId: String
+    public var runId: String
+    public var workflow: String
+    public var step: String
+
+    public init(environmentId: String, runId: String, workflow: String, step: String) {
+        self.environmentId = environmentId; self.runId = runId; self.workflow = workflow; self.step = step
+    }
 }
 
 /// `OrchestrationV2DelegatedFrom` (4928 orchestrationV2.ts:138-142): the delegating thread and its title then.

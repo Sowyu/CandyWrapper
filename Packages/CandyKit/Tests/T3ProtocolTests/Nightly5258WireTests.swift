@@ -29,4 +29,17 @@ struct Nightly5258WireTests {
         fresh.title = "T"; fresh.prompt = "P"; fresh.projectId = "p1"
         #expect(try send(fresh)["unbindThread"] == nil)
     }
+
+    /// B2: workflow agent steps stay out of thread lists (orchestrationV2.ts:195, 203-207), and `workflowRun`
+    /// decodes on the shell and the full thread (:165-174, :521, :2436).
+    @Test func workflowStepsAreNotListed() throws {
+        let step = try Self.decode(ThreadLineage.self, #"{"parentThreadId":null,"relationshipToParent":null,"rootThreadId":"t1","workflowStep":true}"#)
+        #expect(step.workflowStep == true && !step.isListedLineage)
+        let plain = try Self.decode(ThreadLineage.self, #"{"parentThreadId":null,"relationshipToParent":null,"rootThreadId":"t1"}"#)
+        #expect(plain.workflowStep == nil && plain.isListedLineage)
+        let origin = #"{"environmentId":"e1","runId":"wr1","workflow":"release","step":"build"}"#
+        let thread = try Self.decode(AppThread.self, #"{"id":"t1","title":"T","lineage":{"parentThreadId":null,"relationshipToParent":null,"rootThreadId":"t1","workflowStep":true},"workflowRun":\#(origin)}"#)
+        #expect(thread.workflowRun == WorkflowOrigin(environmentId: "e1", runId: "wr1", workflow: "release", step: "build"))
+        #expect(thread.lineage?.isListedLineage == false)
+    }
 }

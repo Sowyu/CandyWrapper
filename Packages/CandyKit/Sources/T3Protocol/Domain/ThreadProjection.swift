@@ -60,6 +60,8 @@ public struct AppThread: Codable, Hashable, Sendable, Identifiable {
     public var tags: [String] { (try? raw["tags"]?.decode(as: LenientArray<String>.self))?.values ?? [] }
     /// 4928 linked issues (orchestrationV2.ts:485).
     public var issues: [ThreadIssueLink] { (try? raw["issues"]?.decode(as: LenientArray<ThreadIssueLink>.self))?.values ?? [] }
+    /// The workflow run this thread is an agent step of (5258 orchestrationV2.ts:521).
+    public var workflowRun: WorkflowOrigin? { try? raw["workflowRun"]?.decode(as: WorkflowOrigin.self) }
     /// 4928 orchestrationV2.ts:535.
     public var lastTitleRegeneration: LastTitleRegeneration? { try? raw["lastTitleRegeneration"]?.decode(as: LastTitleRegeneration.self) }
 
