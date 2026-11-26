@@ -498,8 +498,6 @@ final class ServerController {
         let log = URL.libraryDirectory.appending(path: "Logs/CandyWrapper/t3-server.log")
         // One record per home, so test builds on other homes never adopt or stop each other's server.
         let record = URL.applicationSupportDirectory.appending(path: "CandyWrapper/" + Self.ownerRecordName(home: home))
-        // The server's environment is built from scratch; pass T3's telemetry switch through.
-        let telemetry = ProcessInfo.processInfo.environment["T3CODE_TELEMETRY_ENABLED"]
         let progress: @Sendable (String, RuntimeStore.Progress?) -> Void = { [weak self] version, p in
             Task { @MainActor in self?.onInstallProgress?(version, p) }
         }
@@ -509,7 +507,6 @@ final class ServerController {
             var config = LocalServerConfiguration(binary: binary, home: home, path: path)
             // ponytail: append-only log, rotate it if it grows past a few MB
             config.logFile = log
-            if let telemetry { config.extraEnvironment["T3CODE_TELEMETRY_ENABLED"] = telemetry }
             return config
         }, remoteAccess: remoteAccess.isOn, ownerRecord: record, onPhase: { [weak self] _ in
             Task { @MainActor in await self?.phaseChanged() }

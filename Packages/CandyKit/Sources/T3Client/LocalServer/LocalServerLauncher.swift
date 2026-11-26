@@ -17,7 +17,7 @@ public struct LocalServerConfiguration: Sendable {
     /// Measured: idle footprint 313 to 246 MB. No `--max-old-space-size`, a heap cap can crash
     /// the server on big threads.
     public var nodeOptions: String = "--max-semi-space-size=1"
-    /// Added to the clean environment, for example `T3CODE_TELEMETRY_ENABLED=false` in tests.
+    /// Added to the clean environment.
     public var extraEnvironment: [String: String] = [:]
     /// stderr goes here (appended). stdout is discarded: `t3 serve` prints a 5-minute admin
     /// pairing token there.
@@ -49,6 +49,10 @@ public struct LocalServerConfiguration: Sendable {
             "PATH": path,
             "T3CODE_HOME": home.path,
             "NODE_OPTIONS": nodeOptions,
+            // No server this app starts reports to T3: the first switch stops product analytics
+            // (AnalyticsService.ts:77,137), and either one stops relay tracing (otelEnvironment.ts:346-358).
+            "T3CODE_TELEMETRY_ENABLED": "false",
+            "DO_NOT_TRACK": "1",
         ]
         env.merge(extraEnvironment) { _, new in new }
         return env

@@ -102,16 +102,17 @@ struct LocalServerDiscoveryTests {
 
     @Test func cleanEnvironmentDropsLiveServiceVariables() {
         var config = LocalServerConfiguration(binary: URL(filePath: "/bin/t3"), home: URL(filePath: "/tmp/h"), path: "/usr/bin:/bin")
-        config.extraEnvironment = ["T3CODE_TELEMETRY_ENABLED": "false"]
         let env = config.environment()
         #expect(env["T3CODE_HOME"] == "/tmp/h")
         #expect(env["NODE_OPTIONS"] == "--max-semi-space-size=1")
         #expect(env["PATH"] == "/usr/bin:/bin")
+        // Telemetry is off without anyone asking, and an inherited switch can't turn it back on.
         #expect(env["T3CODE_TELEMETRY_ENABLED"] == "false")
+        #expect(env["DO_NOT_TRACK"] == "1")
         #expect(env["T3_SERVICE_LAUNCHER_CONTEXT"] == nil)
         #expect(env["T3_BOOT_SERVICE_UNIT"] == nil)
         #expect(Set(env.keys) == ["HOME", "USER", "LOGNAME", "SHELL", "LANG", "TMPDIR", "PATH", "T3CODE_HOME",
-                                  "NODE_OPTIONS", "T3CODE_TELEMETRY_ENABLED"])
+                                  "NODE_OPTIONS", "T3CODE_TELEMETRY_ENABLED", "DO_NOT_TRACK"])
     }
 
     @Test func remoteAccessFollowsConnectUntilTheUserChooses() {

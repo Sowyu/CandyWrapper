@@ -1978,7 +1978,7 @@ Command files in `apps/server/src/cli/`: `serve` (headless, no browser) and `sta
 | `--log-websocket-events` (`--log-ws-events`) | `T3CODE_LOG_WS_EVENTS` | |
 | `--tailscale-serve`, `--tailscale-serve-port` | `T3CODE_TAILSCALE_SERVE`, `T3CODE_TAILSCALE_SERVE_PORT` | publish over Tailscale HTTPS |
 | (none) | `T3CODE_LOG_LEVEL`, `T3CODE_TRACE_*`, `T3CODE_OTLP_*` | logging, tracing, OTLP export |
-| (none) | `T3CODE_TELEMETRY_ENABLED` | analytics; default true (`apps/server/src/telemetry/AnalyticsService.ts:76`) |
+| (none) | `T3CODE_TELEMETRY_ENABLED` | analytics; default true (`apps/server/src/telemetry/AnalyticsService.ts:76`). CandyWrapper always starts its servers with `false` and `DO_NOT_TRACK=1` |
 | (none) | `T3CODE_DEV_AUTH_TOKEN`, `T3CODE_DEV_ALLOWED_ORIGINS` | dev only (needs a dev URL); ignore |
 
 Recorded sandbox command (`scripts/sandbox-server`): `t3 serve --base-dir <dir> --port 47391 --host 127.0.0.1 --no-browser` with `T3CODE_HOME=<dir>` and `T3CODE_TELEMETRY_ENABLED=false`.
