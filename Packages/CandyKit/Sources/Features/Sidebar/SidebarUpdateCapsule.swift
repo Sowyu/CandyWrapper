@@ -290,7 +290,7 @@ extension SidebarUpdatePillView {
         countdownRing.frame = bounds
         countdownRing.path = CGPath(ellipseIn: iconArea.insetBy(dx: 0.5, dy: 0.5), transform: nil)
         capsuleLink.isHidden = !(expanded && action != nil)
-        let linkWidth = capsuleLink.isHidden ? 0 : min(capsuleLink.preferredWidth, bounds.width / 2)
+        let linkWidth = capsuleLink.isHidden ? 0 : min(capsuleLink.preferredWidth, bounds.width)
         capsuleLink.frame = NSRect(x: bounds.width - linkWidth, y: 0, width: linkWidth, height: h)
         let wasShown = labelShown
         capsuleLabel.isHidden = !expanded

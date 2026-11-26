@@ -1263,9 +1263,9 @@ public final class SidebarContentView: DSView {
         if accountFooter {
             for b in [settingsButton, pullRequestsButton, issuesButton, usageButton] { b.isHidden = true }
             // The update button sits inside the row at its right, a quiet 28pt control (the user, 2026-10-22).
-            // A pass grows it into a capsule: up to its label, leaving the name at least 96pt
-            // ponytail: fixed 96pt floor for the name, measure the name if a long one truncates too early
-            ditherPillWidth = updatePill.capsuleWidth(available: max(28, w - 2 * SidebarAccountRowView.inset - 46 - 96 - 8), side: 28)
+            // A pass grows it into a capsule: up to its label, leaving the name at least 48pt while the pass shows
+            // ponytail: fixed 48pt floor for the name, measure the name if a short one gives up room for nothing
+            ditherPillWidth = updatePill.capsuleWidth(available: max(28, w - 2 * SidebarAccountRowView.inset - 46 - 48 - 8), side: 28)
             accountRow.trailingReserve = updatePill.isHidden ? 0 : ditherPillWidth + 4
             accountRow.frame = NSRect(x: SidebarAccountRowView.inset, y: menuTop, width: max(0, w - 2 * SidebarAccountRowView.inset),
                                       height: SidebarAccountRowView.height)
