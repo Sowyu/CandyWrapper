@@ -219,6 +219,23 @@ struct RedesignBaselineTests {
             threadFind.present(query: "greet", index: 1, total: 4)
             find.addSubview(threadFind)
             try capture("find-panels", find, NSSize(width: 440, height: 120))
+            // A choice that says what it does takes a row of its own, its note beside the button.
+            let question = DSView(frame: .zero)
+            let questionCard = try WorkflowsFidelityTests.make(["kind": "question"], size: NSSize(width: 560, height: 200))
+            questionCard.frame.origin = NSPoint(x: 8, y: 8)
+            question.addSubview(questionCard)
+            try capture("workflows-question", question, NSSize(width: 576, height: questionCard.frame.height + 16))
+            // A model needs a newer Claude Code: the notice is the list card's bottom row, with Provider settings.
+            for stacked in [false, true] {
+                try RedesignPickerSettings.$stackedOverride.withValue(stacked) {
+                    try RedesignPickerSettings.$accountOverride.withValue(false) {
+                        let (popup, size) = try Self.updateNoticePicker()
+                        try capture("model-picker-update-notice" + (stacked ? "-stacked" : ""), popup, size)
+                    }
+                }
+            }
+            // A file past the paged viewer's limit says so with the state view.
+            try capture("large-file-limit", LargeTextFileView(file: nil, sizeBytes: 600_000_000, preview: ""), NSSize(width: 460, height: 320))
             // Project avatars at the sizes they show: palette and chips, sidebar, account card, a large preview.
             for size in [CGFloat(16), 20, 28, 64] {
                 let strip = DSView(frame: .zero)
@@ -328,7 +345,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 136)
+        #expect(count == 144)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -385,6 +402,23 @@ struct RedesignBaselineTests {
             MarkdownImages.record(CGSize(width: size.0, height: size.1), for: image.key)
             return image
         }
+    }
+
+    /// The docked picker on Claude with one model that needs Claude Code 3.2.0, which its channel can reach.
+    static func updateNoticePicker() throws -> (NSView, CGSize) {
+        let p = try PickersFidelityTests.pickers()
+        var providers = try PickersFidelityTests.recordedConfig().providers
+        let i = try #require(providers.firstIndex { $0.driver == "claudeAgent" })
+        providers[i].updateRequiredModels = [.init(slug: "claude-synthetic-next", name: "Claude Synthetic Next", minVersion: "3.2.0")]
+        providers[i].versionAdvisory = .object(["latestVersion": .string("3.2.1")])
+        let view = ModelPickerView(catalog: ProviderCatalog(providers), favorites: [], active: "claudeAgent", activeModel: "claude-haiku-5-5")
+        view.onManage = { _ in }
+        view.jumpLabel = { "⌘\($0 + 1)" }
+        let dock = DockedModelPickerView(picker: view)
+        dock.column.update(descriptors: p.current.descriptors, ultrathink: false, locked: false, model: p.current.modelTriggerLabel(spoken: true))
+        dock.footer.update(descriptors: p.current.descriptors, runtimeMode: p.current.runtimeMode)
+        let popup = PickerPopupView(dock)
+        return (popup, popup.popupSize)
     }
 
     static func image(_ view: NSView, size: NSSize, dark: Bool, inWindow: (() -> Void)? = nil) -> NSBitmapImageRep {

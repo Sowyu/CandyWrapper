@@ -489,7 +489,7 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
     private var footerHeight: CGFloat { (showsSharing ? ChatGptSharingControlView.height : 0) + noticesHeight }
     private var noticeViews: [ProviderUpdateNoticeView] = []
     /// Notices span the list column, right of the rail. Redesign's docked layouts take them under their own column: the
-    /// stacked one across its width, the detail one under the list card.
+    /// stacked one across its width, the detail one as the list card's bottom rows.
     private var noticeWidth: CGFloat {
         if stacked { return bounds.width > 0 ? bounds.width : Self.stackedWidth }
         if detailed { return (bounds.width > 0 ? bounds.width : Self.detailListWidth) - detailListLeft }
@@ -655,7 +655,8 @@ final class ModelPickerView: DSView, PickerPopupBody, HoverSyncPointerClient {
             b.frame = NSRect(x: 6, y: 6 + CGFloat(i) * 36, width: 32, height: 32)
         }
         let cardX = detailListLeft, cardW = max(0, bounds.width - cardX)
-        listCard.frame = CGRect(x: cardX, y: 6, width: cardW, height: max(0, bodyHeight - 6))
+        // The update notices are the card's bottom rows, over a hairline as the search row sits over one at the top.
+        listCard.frame = CGRect(x: cardX, y: 6, width: cardW, height: max(0, bodyHeight + noticesHeight - 6))
         searchIcon.isHidden = false
         searchIcon.frame = NSRect(x: cardX + 10, y: 6 + 9, width: 16, height: 16)
         search.frame = NSRect(x: cardX + 10, y: 6 + 4, width: max(0, cardW - 20), height: 26)
