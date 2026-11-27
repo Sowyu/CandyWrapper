@@ -31,6 +31,8 @@ public class ComposerBannerView: DSView {
     /// notices the banner stack shows above the column when it expands.
     public enum Placement { case attached, floating }
     public var quietTimelineLine = false { didSet { if quietTimelineLine != oldValue { needsLayout = true; needsDisplay = true } } }
+    /// No surface, rim or shadow at all: the view draws its own quiet control (Redesign's Stash on the new-thread row).
+    var bare = false { didSet { if bare != oldValue { needsLayout = true; needsDisplay = true } } }
     public var placement = Placement.attached { didSet { if placement != oldValue { needsLayout = true; needsDisplay = true } } }
     /// Redesign floats every attachment as its own card: whole, frosted, with a drop shadow (`DitherPill`).
     /// Redesign: the composer's own corner, for a panel that reads as part of it.
@@ -100,7 +102,7 @@ public class ComposerBannerView: DSView {
 
     public override func layout() {
         super.layout()
-        clip.isHidden = quietTimelineLine
+        clip.isHidden = quietTimelineLine || bare
         let w = bounds.width, h = bounds.height
         let floating = placement == .floating
         clip.frame = NSRect(x: 0, y: 0, width: w, height: max(0, h - (floating ? 0 : 16)))
@@ -118,7 +120,7 @@ public class ComposerBannerView: DSView {
         blur.cornerRadius = radius
         clipsToBounds = !dither
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        if dither {
+        if dither && !bare {
             let layer = shade ?? CALayer()
             if shade == nil, let root = self.layer { root.insertSublayer(layer, at: 0); shade = layer }
             // The composer casts the same resting shadow in both appearances, so a panel matching it does too.
