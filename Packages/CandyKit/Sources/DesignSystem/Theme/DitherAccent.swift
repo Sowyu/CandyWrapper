@@ -30,9 +30,11 @@ public struct DitherAccent: Equatable, Sendable {
     /// Light draws the accent darkened to `lightAccent`, so white labels on it and the focus ring keep AA.
     public func accent(dark: Bool) -> String { dark ? self.dark : Self.lightAccent(light) }
 
-    /// Text on the accent: white while it reads at 3:1 or better (WCAG's floor for bold text and controls), else near black.
+    /// Text on the accent: white while it reads at 4.5:1 or better, else near black. Labels on the accent are 12 to 13pt,
+    /// under WCAG's large-text size, so the 3:1 this used to allow left white on dark teal at 3.7:1 (X8, 2026-11-27).
+    /// Light's accent is darkened for white (`lightAccent`); dark's mid-tone accents take the near-black label.
     public func foreground(dark: Bool) -> String {
-        Self.contrast(Self.luminance(accent(dark: dark)), 1) >= 3 ? "#ffffff" : "#111111"
+        Self.contrast(Self.luminance(accent(dark: dark)), 1) >= 4.5 ? "#ffffff" : "#111111"
     }
 
     /// The accent's roles in a Dither palette: primary, ring, send button and its hover, terminal cursor and selection,

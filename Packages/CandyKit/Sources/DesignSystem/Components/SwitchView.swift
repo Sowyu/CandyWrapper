@@ -99,9 +99,8 @@ public final class SwitchView: ControlView {
 
     /// Redesign's switch in dark, measured on Capy's settings page (2x, converted from Display P3 to sRGB): a 30 by 18
     /// track, a 14pt knob inset 2pt, the knob solid `--panel` #131314 with no shadow. The on track is the accent
-    /// (#2b948b for teal), the off track Capy's `--muted` #353537.
+    /// (#2b948b for teal). The off track was Capy's `--muted` #353537 and is now `RedesignTokens.Control.offTrackDark`.
     static let ditherDarkKnob = NSColor(srgbRed: 0x13 / 255, green: 0x13 / 255, blue: 0x14 / 255, alpha: 1)
-    static let ditherDarkOffTrack = NSColor(srgbRed: 0x35 / 255, green: 0x35 / 255, blue: 0x37 / 255, alpha: 1)
 
     private func apply(animated: Bool) {
         let animate = animated && window != nil && !Motion.reduced
@@ -135,7 +134,8 @@ public final class SwitchView: ControlView {
         thumb.boxStyle = thumbStyle
 
         let onColor = ditherDark ? ThemeRuntime.ditherAccent.darkColor : Themed.color(\.primary)
-        let offColor = ditherDark ? Self.ditherDarkOffTrack : Themed.color(\.contrastInput)
+        let offColor = ditherDark ? RedesignTokens.Control.offTrackDark
+            : ThemeRuntime.isDither(dark: dark) ? RedesignTokens.Control.offTrackLight : Themed.color(\.contrastInput)
         let trackColor = (isOn && !isMixed ? onColor : offColor).cgColor(in: self)
         let offset = isMixed ? (t - 4) / 2 : (isOn ? t - 4 : 0)
         let slide = CATransform3DMakeTranslation(offset, 0, 0)
