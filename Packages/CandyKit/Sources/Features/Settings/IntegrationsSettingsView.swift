@@ -103,7 +103,9 @@ public final class IntegrationsSettingsView: ScopedSettingsPage {
         let mouse = clientSwitch("browser-recording-mouse-presses", "Highlight mouse presses and held buttons in new recordings.",
                                  key: "browserRecordingShowMousePresses", label: "Show mouse presses in recordings")
         let links = clientSelect("browser-link-target",
-                                 "Where links in the chat and terminal open. Hold ⌘ or Ctrl while clicking a link to open it in your default browser either way.",
+                                 ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark)
+                                    ? "Where links in the chat and terminal open. ⌘-click a link to open it in your default browser either way."
+                                    : "Where links in the chat and terminal open. Hold ⌘ or Ctrl while clicking a link to open it in your default browser either way.",
                                  key: "browserLinkTarget", options: [("system", "Your default browser"), ("app", "CandyWrapper")], width: 160,
                                  reset: "link target", label: "Open links in")
         let floating = clientSwitch("browser-auto-show-floating-preview",

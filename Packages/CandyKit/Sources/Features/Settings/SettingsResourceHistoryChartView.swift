@@ -16,7 +16,11 @@ final class SettingsResourceHistoryChartView: DSView, SettingsGroupRow {
     private let legends = ["CPU average", "I/O reads", "I/O writes"].map {
         LabelView($0, font: DSFont.ui(10), color: Themed.color(\.mutedForeground, 0.65))
     }
-    private let colors = [Themed.color(\.foreground, 0.7), Themed.color(\.info, 0.7), Themed.color(\.warning, 0.8)]
+    /// Redesign draws reads in its teal accent instead of T3's info blue, which no other Redesign surface uses.
+    private var colors: [NSColor] {
+        let reads = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? Themed.color(\.primary, 0.8) : Themed.color(\.info, 0.7)
+        return [Themed.color(\.foreground, 0.7), reads, Themed.color(\.warning, 0.8)]
+    }
     private var targets: [DSView] = []
     init(buckets: [JSONValue]) {
         self.buckets = buckets

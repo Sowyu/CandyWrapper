@@ -18,6 +18,9 @@ public final class WorkflowsPageView: DSView, DitherBandPage {
         case failed(String)
         /// `turnedOff` (WorkflowsPage.tsx:68-71): connected servers have workflows off in Labs.
         case off
+        /// The connected server has no Workflows switch in Labs at all: its version predates workflows. Redesign
+        /// names it and offers its update; the default themes show `off` as T3 does.
+        case unsupported(ServerUpdateRoute)
         case noEnvironment
         case runs(WorkflowRunsSnapshot)
     }
@@ -35,6 +38,8 @@ public final class WorkflowsPageView: DSView, DitherBandPage {
 
     public var onSelect: ((String?) -> Void)?
     public var onOpenSettings: (() -> Void)?
+    /// The unsupported state's button: update the server, or open Environments.
+    public var onUpdateServer: (() -> Void)?
     public var onOpenURL: ((String) -> Void)?
     /// Answers a question; the completion gets an error message on failure.
     public var onAnswer: ((_ runId: String, _ name: String, _ choice: String, _ reason: String?, _ done: @escaping @MainActor (String?) -> Void) -> Void)?
@@ -148,6 +153,12 @@ public final class WorkflowsPageView: DSView, DitherBandPage {
         case .loading: break
         case .failed(let message): showEmpty("Could not load workflow runs", message)
         case .off: showEmpty("Workflows are off", "Turn them on for this server in Settings → Labs.", action: true)
+        case .unsupported(let route):
+            if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+                showEmpty("Workflows need a newer server", route.message(for: "workflows"), update: route)
+            } else {
+                showEmpty("Workflows are off", "Turn them on for this server in Settings → Labs.", action: true)
+            }
         case .noEnvironment: showEmpty("No environment connected", "Connect an environment to see its workflow runs.")
         case .runs(let s):
             if s.runs.isEmpty && s.workflows.isEmpty {
@@ -257,9 +268,13 @@ public final class WorkflowsPageView: DSView, DitherBandPage {
     public override func viewDidHide() { super.viewDidHide(); syncTick() }
     public override func viewDidUnhide() { super.viewDidUnhide(); syncTick() }
 
-    private func showEmpty(_ title: String, _ message: String, action: Bool = false, guide: Bool = false) {
+    private func showEmpty(_ title: String, _ message: String, action: Bool = false, guide: Bool = false, update: ServerUpdateRoute? = nil) {
         let e = EmptyView(title: title, message: message, icon: .workflow)
-        if action {
+        if let update {
+            let b = ButtonView(update.buttonTitle, variant: .outline, size: .sm)
+            b.action = { [weak self] in self?.onUpdateServer?() }
+            e.content = b
+        } else if action {
             let b = ButtonView("Open Settings → Labs", variant: .outline, size: .sm)
             b.action = { [weak self] in self?.onOpenSettings?() }
             e.content = b
@@ -285,7 +300,9 @@ public final class WorkflowsPageView: DSView, DitherBandPage {
         let band = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         header.isHidden = band
         header.frame = NSRect(x: 0, y: 0, width: w, height: 52)
-        definitions.isHidden = onOpenDefinitions == nil || content == .noEnvironment || content == .off
+        var unsupported = false
+        if case .unsupported = content { unsupported = true }
+        definitions.isHidden = onOpenDefinitions == nil || content == .noEnvironment || content == .off || unsupported
         let controlsHidden = !band || definitions.isHidden
         if bandControls.isHidden != controlsHidden { bandControls.isHidden = controlsHidden; bandControls.superview?.needsLayout = true }
         let dw = definitions.fittingSize.width

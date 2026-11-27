@@ -106,12 +106,13 @@ public enum SettingsProjectList {
         return SettingsProjectDeletion(name: p.displayName, members: chosen, threadCount: threads, message: message, confirmTitle: button)
     }
 
-    /// The list's prompt, which only Redesign shows: the scope as the question, then where it lives, then one line on
-    /// what goes and what stays. T3's five lines (`ProjectRemoval.message`) stay on the default themes' project page.
+    /// The list's prompt, which only Redesign shows: the scope as the question, then where it lives, what goes and
+    /// what stays. T3's five lines (`ProjectRemoval.message`) stay on the default themes' project page.
     static func deletionMessage(noun: String, name: String, members: [SettingsScopeProject.Member], threads: Int,
                                 hasOtherMembers: Bool) -> String {
-        let question = threads > 0 ? "Remove \(noun) \"\(name)\" and delete its \(threads) thread\(threads == 1 ? "" : "s")?"
-            : "Remove \(noun) \"\(name)\"?"
+        // Short enough to stay on one line in the dialog: the checkout noun only where it isn't the whole project.
+        let subject = noun == "project" ? name : "checkout \(name)"
+        let question = threads > 0 ? "Delete \(subject) and its \(threads) thread\(threads == 1 ? "" : "s")?" : "Delete \(subject)?"
         let place: String
         if members.count == 1 {
             place = members[0].workspaceRoot + (members[0].environmentLabel.map { " on \($0)" } ?? "")
@@ -122,7 +123,8 @@ public enum SettingsProjectList {
         let goes = threads > 0 ? "Its threads and archived threads are deleted from this server for good."
             : "Its archived threads are deleted from this server for good."
         let stays = hasOtherMembers ? "Other checkouts, the files on disk and provider sessions stay." : "The files on disk and provider sessions stay."
-        return [question, place, goes + " " + stays].joined(separator: "\n")
+        // The path, then what goes, then what stays, each on its own line so the place doesn't read as part of the effect.
+        return [question, place, goes, stays].joined(separator: "\n")
     }
 
     /// Rows whose name, machine or path contains every word of the query, ignoring case and accents.

@@ -131,7 +131,8 @@ public final class PullRequestsPageView: DSView {
         scroll = ScrollAreaView(documentView: document, scrollbars: .native) // `scrollbar-gutter-both overflow-y-auto` (_chat.pull-requests.tsx:2671)
         super.init(frame: frameRect)
         header.plainTitle = "Pull Requests"
-        bandTitle.set(project: "", title: "Pull Requests")
+        // Only Redesign draws the band, in the sidebar's sentence case.
+        bandTitle.set(project: "", title: "Pull requests")
         addSubview(scroll)
         addSubview(header)
         search.input.setAccessibilityLabel("Search pull requests")

@@ -42,7 +42,9 @@ public final class KeybindingsSettingsView: SettingsPageBase, RouteModalEscapeHa
     public override init(context: SettingsPageContext) {
         sentence = SettingsScopeSentenceView(context: context)
         let bar = ToolbarRow(search: search, add: addButton, file: fileButton)
-        toolbar = SettingsSectionView(title: SettingsSearch.title("keybindings"), rows: [bar])
+        // Redesign: the page title already says Keybindings, so the toolbar's section goes untitled.
+        let dither = ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark)
+        toolbar = SettingsSectionView(title: dither ? "" : SettingsSearch.title("keybindings"), rows: [bar])
         empty = SettingsGroupView(rows: [EmptyMessageRow("No keybindings match your search.",
             redesign: StateCopy(title: "No keybindings match", detail: "Search by the command's name or its keys.", icon: .keyboard))])
         super.init(context: context)

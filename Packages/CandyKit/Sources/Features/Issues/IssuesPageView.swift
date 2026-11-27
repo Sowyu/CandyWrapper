@@ -38,6 +38,8 @@ public final class IssuesPageView: DSView {
         public var moreFailures: [String: String] = [:]
         /// Server names per environment, when the list spans more than one.
         public var environmentLabels: [String: String] = [:]
+        /// The server the unsupported state names, nil when none is connected.
+        public var updateRoute: ServerUpdateRoute?
         // Controls.
         public var state = "open"
         public var involvement = "all"
@@ -88,6 +90,8 @@ public final class IssuesPageView: DSView {
     public var onFiltersOpen: (() -> Void)?
     public var onRefresh: (() -> Void)?
     public var onRetry: (() -> Void)?
+    /// Redesign's unsupported state: update the server, or open Environments.
+    public var onUpdateServer: (() -> Void)?
     public var onLoadMore: ((_ environmentId: String, _ host: String) -> Void)?
     public var onSelect: ((IssueListLogic.Row) -> Void)?
     public var onTogglePanel: (() -> Void)?
@@ -191,12 +195,20 @@ public final class IssuesPageView: DSView {
 
     private func rebuildBody(old: Model?) {
         let m = model
-        if old?.body != m.body || (bodyView == nil && m.body != .list) {
+        if old?.body != m.body || old?.updateRoute != m.updateRoute || (bodyView == nil && m.body != .list) {
             bodyView?.removeFromSuperview()
             bodyView = nil
             switch m.body {
             case .unsupported:
-                bodyView = EmptyView(title: "Issues unavailable", message: "Update this environment's T3 Code server to browse issues.", icon: .circleDot)
+                if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let route = m.updateRoute {
+                    let empty = EmptyView(title: "Issues need a newer server", message: route.message(for: "issues"), icon: .circleDot)
+                    let b = ButtonView(route.buttonTitle, variant: .outline, size: .sm)
+                    b.action = { [weak self] in self?.onUpdateServer?() }
+                    empty.content = b
+                    bodyView = empty
+                } else {
+                    bodyView = EmptyView(title: "Issues unavailable", message: "Update this environment's T3 Code server to browse issues.", icon: .circleDot)
+                }
             case .ghost:
                 bodyView = PullRequestListGhostView(rows: 7, caption: nil)
             case .unavailable(let message, let retrying):

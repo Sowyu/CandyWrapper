@@ -170,6 +170,7 @@ public final class SettingsSidebarView: DSView {
     public var isRouteModal = false {
         didSet {
             for item in Array(items.values) + [signIn] { item.sidebarContext = !isRouteModal }
+            if isRouteModal, isDither { revealsSelected = true }
             needsLayout = true
             needsDisplay = true
         }
@@ -181,10 +182,12 @@ public final class SettingsSidebarView: DSView {
         didSet {
             for (section, item) in items { item.isActive = section == selected }
             for (section, item) in concernRows { item.isActive = section == selected }
+            // Redesign's modal opens on any page, so its row comes into view too; a row already in view stays put.
+            if isRouteModal, isDither, selected != oldValue { revealSelected() }
         }
     }
-    /// A search jump can land on a page whose row sits below the nav's fold: the next layout brings it into view. Only
-    /// a jump asks, so picking a page from the nav, or opening one, leaves the nav where it is, as T3 does.
+    /// A search jump can land on a page whose row sits below the nav's fold: the next layout brings it into view. In the
+    /// default themes only a jump asks, so picking a page from the nav, or opening one, leaves the nav where it is, as T3 does.
     public func revealSelected() { revealsSelected = true; needsLayout = true }
     private var revealsSelected = false
     /// A project is picked in the scope: the nav lists Project first.
@@ -505,6 +508,8 @@ public final class SettingsSidebarView: DSView {
             // The nav scrolls inside the modal and stops 8pt above its edge, or above the pinned foot row. A rule marks
             // the foot whenever rows run under it, so a cut-off row reads as more to scroll.
             let foot: CGFloat = avatar.isHidden ? (ditherSignIn.isHidden ? 8 : rowH + 16) : 52
+            // A row cut at either edge fades out, so the nav reads as scrolling.
+            if navScroll.scrollFade != isDither { navScroll.fadeSize = RedesignTokens.Space.l; navScroll.scrollFade = isDither }
             layoutConcernNavigation(top: y, bottom: h - foot, dither: true)
             avatar.frame = NSRect(x: 8, y: h - 44, width: 36, height: 36)
             ditherSignIn.frame = NSRect(x: 8, y: h - 8 - rowH, width: max(0, w - 16), height: rowH)

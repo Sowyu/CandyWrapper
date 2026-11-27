@@ -19,7 +19,7 @@ struct RedesignSidebarFooterTests {
     }
 
     /// S3: a failed pass was a red-ringed box in the account card. Now it is a line of the card: no fill, no ring,
-    /// the status color on the glyph and on "failed" only.
+    /// the status color on the glyph only, a muted label that names the operation, and Retry as a text action.
     @Test func failedCapsuleIsAQuietLine() {
         withRedesign {
             let pill = SidebarUpdatePillView(frame: NSRect(x: 0, y: 0, width: 220, height: 28))
@@ -30,8 +30,14 @@ struct RedesignSidebarFooterTests {
             #expect(pill.capsuleFill.fillColor == nil && pill.capsuleRing.isHidden)
             #expect(!pill.capsuleFailedGlyph.isHidden && pill.capsuleSlowGlyph.isHidden)
             #expect(pill.capsuleLabel.frame.minX >= pill.capsuleFailedGlyph.frame.maxX)
-            #expect(pill.capsuleLabel.prefixColor?.count == "studio ".utf16.count)
+            #expect(pill.capsuleLabel.prefixColor == nil)
+            #expect(pill.capsuleLabel.color == Themed.color(\.sidebarMutedForeground, sidebar: true))
+            #expect(pill.capsuleLabel.text == "Couldn't update studio")
+            let rim = pill.capsuleLink.layer?.sublayers?.contains { $0.borderWidth > 0 } ?? false
+            #expect(!rim)
         }
+        #expect(SidebarUpdatePillView.ditherFailedLabel("2 failed") == "Couldn't update 2 machines")
+        #expect(SidebarUpdatePillView.ditherFailedLabel("Downloading") == "Downloading")
     }
 
     /// S3: Working and Settled read like the "Threads" label: the sidebar palette's muted color, which Blur keeps

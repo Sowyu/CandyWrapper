@@ -340,7 +340,9 @@ public final class StorageSettingsView: ScopedSettingsPage {
         input.frame.size = NSSize(width: 256, height: 28)
         input.setAccessibilityLabel("Worktree location")
         locationRow = row("storage-worktrees-location",
-                          detail: "Folder where new worktrees are created, on any drive, such as D:\\worktrees or ~/worktrees. Existing worktrees stay where they are. Leave empty to use the T3 home folder.",
+                          detail: ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark)
+                            ? "Folder where new worktrees are created, on any drive, such as ~/worktrees. Existing worktrees stay where they are. Leave empty to use the T3 home folder."
+                            : "Folder where new worktrees are created, on any drive, such as D:\\worktrees or ~/worktrees. Existing worktrees stay where they are. Leave empty to use the T3 home folder.",
                           control: input)
         _ = bindServerRow(locationRow, keys: ["worktreesDirectory"], reset: "worktree location",
                           isDefault: { [weak self] in

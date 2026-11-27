@@ -11,6 +11,14 @@ import QuartzCore
 /// for a whole panel, `.compact` for a card and `.inline` for a row. `redesign` and `action` show only there, so the
 /// default themes keep T3's pinned look.
 public final class EmptyView: DSView {
+    /// The last sentence of a detail with several: Redesign's copy states the cause first and the recovery last, and the
+    /// inline row's title already names the cause.
+    static func inlineDetail(_ text: String) -> String {
+        let sentences = text.components(separatedBy: ". ").filter { !$0.isEmpty }
+        guard sentences.count > 1, let last = sentences.last else { return text }
+        return last
+    }
+
     public enum Size: String, CaseIterable, Sendable {
         /// `inline` is CandyWrapper's: one row, the icon beside the text and the action at the right.
         case `default`, compact, hero, inline
@@ -165,11 +173,15 @@ public final class EmptyView: DSView {
         let redesign = isRedesign
         let copy = redesign ? self.redesign : nil
         titleLabel.text = copy?.title ?? stock.title
-        descriptionLabel.text = copy.map { $0.detail ?? "" } ?? stock.message
+        let full = copy.map { $0.detail ?? "" } ?? stock.message
+        descriptionLabel.text = full
+        // An inline row has room for one short clause: the recovery step, when the detail opens by restating the title.
+        // The whole detail stays in its accessibility help, and the raw error behind the panel's Details.
+        if copy != nil, size == .inline { descriptionLabel.text = Self.inlineDetail(full) }
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel(titleLabel.text)
-        setAccessibilityHelp(descriptionLabel.text.isEmpty ? nil : descriptionLabel.text)
+        setAccessibilityHelp(full.isEmpty ? nil : full)
         if usesParts { restyleParts(); return }
         redesignParts?.hide()
         media?.isHidden = false

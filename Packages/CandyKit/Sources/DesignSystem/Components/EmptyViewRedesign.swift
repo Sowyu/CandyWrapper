@@ -157,6 +157,9 @@ extension EmptyView {
         p.box.boxStyle = style
         p.box.setNeedsDisplay()
         p.button?.isHidden = false
+        // Details sits beside the action at its height and weight, a ghost of the same button.
+        if p.detailsButton.size != m.button { p.detailsButton.size = m.button }
+        if p.detailsButton.variant != .ghost { p.detailsButton.variant = .ghost }
         let raw = rawDetails
         p.detailsButton.isHidden = raw == nil || inline
         p.detailsLabel.isHidden = raw == nil || !p.detailsOpen || inline

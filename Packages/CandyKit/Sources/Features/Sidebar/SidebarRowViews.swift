@@ -504,7 +504,17 @@ class SidebarRowBase: ControlView {
     /// `rowSurfaceClassName`: the open thread, then a selected row, then hover (or files dragged over).
     /// Redesign adds the press: a held row takes the pressed step (`RedesignTokens.State.pressed`, the active row's fill).
     static func surfaceColor(_ r: SidebarRowModel, hovered: Bool, pressed: Bool = false) -> NSColor? {
-        r.isActive || pressed ? SB.c(\.sidebarRowActive) : r.isSelected ? SB.c(\.sidebarRowSelected) : hovered ? SB.c(\.sidebarRowHover) : nil
+        if r.dither, r.isActive || r.isSelected || pressed {
+            // Over Blur the see-through white took the tint under it and read brown, so Redesign's selection is the
+            // same step laid on the sidebar's own color, opaque and neutral over any background.
+            let fill = r.isActive || pressed ? SB.c(\.sidebarRowActive) : SB.c(\.sidebarRowSelected)
+            return NSColor(name: nil) { appearance in
+                var out = fill
+                appearance.performAsCurrentDrawingAppearance { out = composite(fill, over: SB.c(\.sidebar)) }
+                return out
+            }
+        }
+        return r.isActive || pressed ? SB.c(\.sidebarRowActive) : r.isSelected ? SB.c(\.sidebarRowSelected) : hovered ? SB.c(\.sidebarRowHover) : nil
     }
 
     /// The surface's ring: the keyboard focus ring (2px), else the file drag ring (`ring-1 ring-primary/70`).
@@ -814,6 +824,8 @@ final class SidebarCardRowView: SidebarRowBase {
         title.color = r.recedes ? SB.c(\.secondaryLabel)
             : r.isUnread || r.isWoke || r.status == .input || r.status == .request ? SB.c(\.foreground)
             : r.status == .failed ? SB.c(\.foreground, 0.95) : SB.c(\.foreground, 0.9)
+        // Redesign: a read title a step under the text, above its meta line's gray, so it stays readable.
+        if capyRow, r.recedes { title.color = hovered ? SB.c(\.foreground) : SB.c(\.foreground, RedesignTokens.Text.quiet) }
         if !DesignGeometry.usesClassic(self) {
             title.color = r.recedes ? (hovered ? SB.c(\.foreground) : SB.c(\.foreground, 0.75))
                 : r.status == .failed && !r.isUnread && !r.isWoke ? SB.c(\.foreground, 0.95) : SB.c(\.foreground)

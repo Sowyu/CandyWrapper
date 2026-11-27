@@ -336,7 +336,8 @@ public final class ButtonView: ControlView {
             (iconView as? SpinnerView)?.color = iconColor ?? look.icon
         }
         if variant == .link {
-            label.isUnderlined = state.hoverOrPressed
+            // Redesign underlines a link at rest too, since it has no other mark that it acts.
+            label.isUnderlined = state.hoverOrPressed || ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         }
         needsLayout = true
     }

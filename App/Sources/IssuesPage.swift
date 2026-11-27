@@ -20,6 +20,14 @@ final class IssuesPageController {
     private let pullRequest: PullRequestDetailBinding
     /// The linked-threads count pressed: the palette searches for the issue's URL.
     var onSearchThreads: ((String) -> Void)?
+    /// The unsupported state's server and its update (`SidebarCommands.updateRoute`).
+    var updateRoute: ((String) -> ServerUpdateRoute)?
+    var updateServer: ((String) -> Void)?
+    /// The connected server the unsupported state is about: the primary, else the first.
+    private var unsupportedEnvironment: String? {
+        let connected = environments.environmentIds.filter { environments.session($0) != nil }
+        return environments.primaryId.flatMap { connected.contains($0) ? $0 : nil } ?? connected.first
+    }
 
     // The route's search params (`IssuesSearch`), remembered as `issueListPreferences`.
     private var query = ""
@@ -108,6 +116,10 @@ final class IssuesPageController {
         page.onFiltersOpen = { [weak self] in self?.readCandidates() }
         page.onRefresh = { [weak self] in self?.reload(keepRows: true, refresh: true) }
         page.onRetry = { [weak self] in self?.reload(keepRows: true) }
+        page.onUpdateServer = { [weak self] in
+            guard let self, let env = self.unsupportedEnvironment else { return }
+            self.updateServer?(env)
+        }
         page.onLoadMore = { [weak self] env, host in self?.loadMore(env, host) }
         page.onSelect = { [weak self] row in self?.select(row) }
         page.onTogglePanel = { [weak self] in self?.togglePanel() }
@@ -410,6 +422,7 @@ final class IssuesPageController {
             m.body = .ghost
         } else if envs.isEmpty {
             m.body = .unsupported
+            m.updateRoute = unsupportedEnvironment.flatMap { env in updateRoute?(env) }
         } else if everyProjectHidden {
             m.body = .everyProjectHidden
         } else if held.isEmpty && loading {

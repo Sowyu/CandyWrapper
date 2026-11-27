@@ -257,7 +257,10 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
                            ("Server PID", n(p, "serverPid").map { "\(Int($0))" } ?? "...", nil, .normal)]),
         ] + errorRows([optionValue(p?["error"])?["message"]?.stringValue, errors["process"]]) + [
             DiagnosticsTableView(headers: ["Name", "CPU", "Memory", "Command", "PID", "Type", "Kill"],
-                                 widths: [0.24, 0.08, 0.10, 0.33, 0.08, 0.11, 0.06], rightAligned: [1, 2, 4, 6],
+                                 // Redesign: Memory and the INT and KILL pair get room for their whole header and buttons.
+                                 widths: ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark)
+                                    ? [0.20, 0.08, 0.12, 0.28, 0.08, 0.10, 0.14] : [0.24, 0.08, 0.10, 0.33, 0.08, 0.11, 0.06],
+                                 rightAligned: [1, 2, 4, 6],
                                  rows: processes.map { proc in processRow(proc) },
                                  empty: pending.contains("process") && p == nil ? "Loading live processes..." : "No live descendant processes found."),
         ])
