@@ -129,6 +129,10 @@ struct ThreadMinimapHoverTests {
             #expect(BackdropMarks.contrast(rest, lum(ground)) >= BackdropMarks.contrast(t3.states[0], t3.background) * 0.97,
                     "\(theme) dark \(dark): the resting strip is fainter than T3's")
             #expect(dark ? on > rest : on < rest)
+            // Redesign's resting strip is a target, so it keeps a graphic's 3:1 on the panel's plain ground (T10, round 2).
+            if theme == .redesign, ground == solid {
+                #expect(BackdropMarks.contrast(rest, lum(ground)) >= 3, "redesign dark \(dark): resting strip \(BackdropMarks.contrast(rest, lum(ground)))")
+            }
         }
         // Over light Redesign's worst dot the resting strip stands clearly further out than T3's, so it never reads as a
         // stray mark. Dark has no room for that: the on-screen strip already keeps T3's ratio to it only up to white.

@@ -314,8 +314,9 @@ extension ThreadMinimapView {
     ]
     /// At T3's resting contrast the strips read as stray marks over Redesign's picture (round-0 review, T10), so the
     /// resting strip stands 1.6 times as far from the worst dot; the other states keep T3's ratios to it. In dark the
-    /// on-screen strip reaching white caps it, so the boost shows in light.
-    static let restingBoost = 1.6
+    /// on-screen strip reaching white caps it, so the boost shows in light. 1.9 holds the resting strip at 3:1 on light's
+    /// plain ground, where 1.6 gave 2.7:1 and read as a faint dash (T10, Sol, round 2).
+    static let restingBoost = 1.9
     static func backdropColors(dark: Bool) -> [NSColor]? { BackdropMarks.colors(strips, keep: 3, dark: dark, restingBoost: restingBoost) }
     /// A strip's length by its distance from the hovered one: T3's 24, 16, 10 and 8 (TimelineMinimap.tsx:194-214), or
     /// Redesign's 24, 20, 16 and 12, one step apart.
