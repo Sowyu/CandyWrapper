@@ -630,7 +630,7 @@ public final class ThreadImageWallView: DSView {
             count.lineHeight = 16
             let cw = ceil(count.textWidth) + 1
             count.frame = NSRect(x: close.frame.minX - RedesignTokens.Space.m - cw, y: Self.header / 2 - 8, width: cw, height: 16)
-            count.toolTip = hint.text
+            count.setTooltip(hint.text)
         }
         rule.frame = NSRect(x: 0, y: Self.header - 1, width: w, height: 1)
         let top = Self.header
