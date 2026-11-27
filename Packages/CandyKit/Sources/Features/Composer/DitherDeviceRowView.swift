@@ -9,7 +9,7 @@ import DesignSystem
 public final class DitherDeviceRowView: ControlView {
     private var icon = IconView(name: .laptop, size: 14)
     private let label = LabelView()
-    private let chevron = IconView(name: .chevronUp, size: 12)
+    private var chevron = IconView(name: .chevronUp, size: 12)
     private let dot = CALayer()
     private let pill = DitherPillSurface()
     private let fill = CALayer()
@@ -64,8 +64,24 @@ public final class DitherDeviceRowView: ControlView {
         return NSSize(width: w + 6 + 12 + Self.pad, height: DitherPill.height)
     }
 
-    /// Space between the pill's edges and the glyph on the left, the chevron on the right.
-    private static let pad: CGFloat = 8
+    /// Space between the pill's edges and the glyph on the left, the chevron on the right: the chips' (`DitherPill.pad`).
+    private static let pad = DitherPill.pad
+
+    /// On the new-thread page the row is one of the quiet controls beside the project chip (`DitherPillSurface.quiet`).
+    public var quiet = false { didSet { if quiet != oldValue { pill.quiet = quiet; restyle() } } }
+
+    /// On the new-thread page the row sits above the composer beside the project chip, and its menu opens downward
+    /// like the chip's, so its chevron points down.
+    public var opensDown = false {
+        didSet {
+            guard opensDown != oldValue else { return }
+            chevron.removeFromSuperview()
+            chevron = IconView(name: opensDown ? .chevronDown : .chevronUp, size: 12)
+            addSubview(chevron)
+            restyle()
+            needsLayout = true
+        }
+    }
 
     public override func layout() {
         super.layout()
@@ -105,9 +121,10 @@ public final class DitherDeviceRowView: ControlView {
 
     private func restyle() {
         let lit = state.hoverOrPressed
-        label.color = lit ? Themed.color(\.foreground) : Themed.color(\.mutedForeground)
-        icon.strokeColor = lit ? Themed.color(\.foreground, 0.85) : Themed.color(\.mutedForeground)
-        chevron.strokeColor = lit ? Themed.color(\.foreground, 0.85) : Themed.color(\.mutedForeground)
+        let rest = quiet ? Themed.color(\.foreground, RedesignTokens.Text.quiet) : Themed.color(\.mutedForeground)
+        label.color = lit ? Themed.color(\.foreground) : rest
+        icon.strokeColor = lit ? Themed.color(\.foreground, 0.85) : rest
+        chevron.strokeColor = lit ? Themed.color(\.foreground, 0.85) : rest
         needsDisplay = true
     }
 }

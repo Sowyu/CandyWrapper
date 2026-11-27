@@ -97,8 +97,12 @@ public enum RedesignTokens {
         public static let rim: CGFloat = 0.08
         /// Increase Contrast's rim.
         public static let rimContrast: CGFloat = 0.24
-        /// A line that has to read at a glance, in the text color: a meter's unfilled track, a queued message's dashes.
+        /// A line that has to read at a glance, in the text color: a meter's unfilled track.
         public static let strongRim: CGFloat = 0.24
+        /// A dashed outline, a step above `strongRim` so each dash counts at 1x: a queued message that is waiting, not
+        /// sent (the user, 2026-11-26: "make the dashes more prominent"). 1pt, `dashPattern` long, round joins.
+        public static let dash: CGFloat = 0.42
+        public static let dashPattern: [NSNumber] = [4, 3]
         /// A card's rim while the keyboard is inside it (the terminal drawer), in the accent.
         public static let focusRim: CGFloat = 0.4
         /// The black under a caption over a picture (the agent gallery), reached halfway down a short gradient. 0.62
@@ -165,6 +169,15 @@ public enum RedesignTokens {
         @MainActor public static func fill(_ state: ControlView.State, dark: Bool) -> NSColor? {
             state.activeOrPressed ? fill(pressed, dark: dark) : state.hovered ? fill(hover, dark: dark) : nil
         }
+    }
+
+    /// The new-thread page, after Capy's: the project and machine row, the composer and the starter actions form one
+    /// group, narrower than the thread's column and centred a little above the card's middle.
+    public enum Draft {
+        /// The group's widest.
+        public static let width: CGFloat = 640
+        /// Where the group's middle sits, as a share of the card's height under the top row. Capy's is 0.45.
+        public static let centre: CGFloat = 0.45
     }
 
     /// Text steps in the text color. Capy's sidebar labels rest a step under the text color and come to full strength

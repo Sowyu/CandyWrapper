@@ -123,15 +123,23 @@ final class ComposerPrimaryButton: ControlView {
     override func updateLayer() {
         let enabled = state.enabled
         let modern = ComposerDesign.uses3814(dark: effectiveAppearance.isDark)
-        disabledOpacity = modern && !stageArt ? 1 : 0.64
+        // Redesign's empty send is a quiet grey key rather than a faded accent, so the accent means "ready".
+        let quietDisabled = capy && face != .stop
+        disabledOpacity = (modern || quietDisabled) && !stageArt ? 1 : 0.64
         alphaValue = enabled ? 1 : CGFloat(disabledOpacity)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let shadowColor: NSColor
         if face == .stop {
             fill.backgroundColor = Themed.color(\.destructive, state.hovered ? 1 : 0.9).cgColor(in: self)
             shadowColor = Themed.color(\.destructive)
+        } else if quietDisabled && !enabled {
+            fill.backgroundColor = RedesignTokens.State.fill(RedesignTokens.State.selected, dark: effectiveAppearance.isDark).cgColor
+            (icon as? IconView)?.strokeColor = Themed.color(\.mutedForeground)
+            shadowColor = .clear
         } else if capy {
+            // The accent token itself, so send matches every other accent control.
             fill.backgroundColor = Themed.color(\.primary, state.hovered ? 0.9 : 1).cgColor(in: self)
+            (icon as? IconView)?.strokeColor = Themed.color(\.primaryForeground)
             shadowColor = Themed.color(\.primary)
         } else if stageArt {
             fill.backgroundColor = nil

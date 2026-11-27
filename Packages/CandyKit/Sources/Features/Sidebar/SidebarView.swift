@@ -1179,11 +1179,12 @@ public final class SidebarContentView: DSView {
         let bs = brand.intrinsicContentSize
         if capyBrand {
             // One left edge for the whole sidebar: the 16pt icon column of the search and nav rows. The candy
-            // centres in the gap between the traffic lights and the search icon (the user, r6), and the collapse
-            // button takes its centre line, its 16pt icon box ending 16 in like the rows' action icons.
+            // centres in the gap between the traffic lights and the search icon (the user, r6). The collapse button
+            // sits on the traffic lights' row before back and forward, as in Capy (`SidebarLayoutView.historyGap`).
             let searchIconTop = 52 + brandRow + (SidebarNavRowView.height - 16) / 2
             let centre = Self.brandCentre(lightsBottom: trafficLightsBottom(), searchIconTop: searchIconTop)
-            trigger.frame = NSRect(x: w - 16 - 6 - 16, y: centre - 14, width: 28, height: 28)
+            let gap = SidebarLayoutView.historyGap
+            trigger.frame = NSRect(x: w - 8 - 3 * 28 - 2 * gap, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
             brand.frame = NSRect(x: 16, y: centre - brand.markCentreY, width: min(bs.width, max(0, w - 16 - 44)), height: 28)
         } else {
             trigger.frame = NSRect(x: controlsLeft + 1, y: (52 - 28) / 2, width: 28, height: 28)

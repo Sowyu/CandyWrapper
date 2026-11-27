@@ -282,11 +282,17 @@ private final class ModernQueuedRowView: DSView {
             // and the accent only on the message being edited.
             let dark = effectiveAppearance.isDark
             outline.strokeColor = (editing ? Themed.color(\.primary) : guest ? Themed.color(\.guest)
-                : Themed.color(\.foreground, RedesignTokens.Surface.strongRim)).cgColor(in: self)
-            outline.fillColor = RedesignTokens.Surface.fill(in: self)
-            actionBar.layer?.backgroundColor = RedesignTokens.Surface.fill(in: self)
-            actionBar.layer?.borderColor = RedesignTokens.Surface.rim(dark: dark).cgColor
-            actionBar.layer?.cornerRadius = RedesignTokens.Radius.card
+                : Themed.color(\.foreground, RedesignTokens.Surface.dash)).cgColor(in: self)
+            outline.lineDashPattern = RedesignTokens.Surface.dashPattern
+            outline.lineJoin = .round
+            // The panel's own ground, a clear step under a sent bubble's raised fill, so waiting never reads as sent.
+            let ground = Themed.color(\.background).cgColor(in: self)
+            outline.fillColor = ground
+            // The actions hang from the bubble's trailing edge on the same ground, with the nested corner and no rim of
+            // their own: part of the bubble, not a second card.
+            actionBar.layer?.backgroundColor = ground
+            actionBar.layer?.borderWidth = 0
+            actionBar.layer?.cornerRadius = RedesignTokens.Radius.control
             for tile in thumbnails {
                 tile.layer?.backgroundColor = RedesignTokens.Surface.insetFill(dark: dark).cgColor
                 tile.layer?.borderColor = RedesignTokens.Surface.rim(dark: dark).cgColor
@@ -295,7 +301,10 @@ private final class ModernQueuedRowView: DSView {
         }
         let color = editing ? Themed.color(\.primary, 0.6) : guest ? Themed.color(\.guest, 0.5) : Themed.color(\.mutedForeground, 0.4)
         outline.strokeColor = color.cgColor(in: self)
+        outline.lineDashPattern = [3, 3]
+        outline.lineJoin = .miter
         outline.fillColor = nil
+        actionBar.layer?.borderWidth = 1
         for tile in thumbnails { tile.layer?.backgroundColor = Themed.color(\.muted, 0.6).cgColor(in: self); tile.layer?.borderColor = Themed.color(\.border, 0.7).cgColor(in: self) }
     }
     override func layout() {
@@ -363,11 +372,18 @@ private final class ModernQueuedRowView: DSView {
             thumbnails.forEach { $0.layer?.contents = nil }; return
         }
         let ids = thumbnailIds
+        // Redesign loads the whole picture and fits it to the tile: a picture wider than 2:1, like a screenshot, shows
+        // whole on the tile's ground instead of a crop too tight to recognise; others fill the tile from the centre.
+        let fits = redesign
         thumbnailTask = Task { [weak self] in
             for (i, id) in ids.enumerated() {
                 guard let source = await resolve(id) else { continue }
-                let image = await ComposerImageIO.thumbnail(source, side: 64, cover: true)
+                let image = await ComposerImageIO.thumbnail(source, side: fits ? 128 : 64, cover: !fits)
                 guard !Task.isCancelled, let self, ids == thumbnailIds, thumbnails.indices.contains(i) else { return }
+                if fits, let image {
+                    let ratio = CGFloat(image.width) / CGFloat(max(1, image.height))
+                    thumbnails[i].layer?.contentsGravity = QueuedTile.gravity(ratio)
+                }
                 thumbnails[i].layer?.contents = image
                 if image != nil { thumbnails[i].subviews.first?.isHidden = true }
             }
@@ -385,6 +401,14 @@ private final class ModernQueuedRowView: DSView {
     }
     override func mouseEntered(with event: NSEvent) { hovered = true; needsLayout = true }
     override func mouseExited(with event: NSEvent) { hovered = false; needsLayout = true }
+}
+
+/// Redesign's queued attachment tile.
+enum QueuedTile {
+    /// A picture wider or taller than 2:1 fits whole on the tile's ground; any other fills the tile from its centre.
+    static func gravity(_ ratio: CGFloat) -> CALayerContentsGravity {
+        ratio > 2 || ratio < 0.5 ? .resizeAspect : .resizeAspectFill
+    }
 }
 
 private final class QueueInlineAction: ControlView {

@@ -47,6 +47,23 @@ public final class DitherHeaderPillView: DSView {
         return items
     }
 
+    /// The actions button's tooltip: the sections the menu holds now, like "Editor, scripts and git".
+    public func menuSummary(shown: [String: Bool] = ThreadDetailsItems.visibility(ClientSettingsStore.shared.current)) -> String {
+        let names: [MenuSection: String] = [.editor: "editor", .scripts: "scripts", .git: "git", .lineage: "lineage"]
+        let held = MenuSection.allCases.filter { section in
+            if let id = Self.sectionItems[section], shown[id] == false { return false }
+            return !(menuSections[section]?() ?? []).isEmpty
+        }.compactMap { names[$0] }
+        guard var text = held.count > 1 ? held.dropLast().joined(separator: ", ") + " and " + held.last! : held.first else {
+            return "Thread actions"
+        }
+        text = text.prefix(1).uppercased() + text.dropFirst()
+        return text
+    }
+
+    /// A new-thread page: it has no diff and no cost yet, so the totals stay hidden.
+    public var isDraft = false { didSet { if isDraft != oldValue { resized() } } }
+
     /// The header's views placed among the pill's own: cost, the actions and terminal toggles, the totals, then the
     /// right panel toggle.
     var cost: NSView?
@@ -98,12 +115,18 @@ public final class DitherHeaderPillView: DSView {
         onResize?()
     }
 
+    /// The totals show on a thread whose repository has changes.
+    var showsTotals: Bool {
+        showsVersionControl && isRepo && !isDraft && totals.insertions + totals.deletions > 0
+    }
+
     /// The views in order, each with its visibility now.
     private var arranged: [(NSView, Bool)] {
         var views: [(NSView, Bool)] = [(guest, guestShare != nil)]
-        if let cost = cost as? ThreadCostPillView { views.append((cost, cost.breakdown != nil)) }
+        // "$0.00" says nothing, so the cost shows from the first cent.
+        if let cost = cost as? ThreadCostPillView { views.append((cost, (cost.breakdown?.usd ?? 0) >= 0.005)) }
         if toggles.count == 3 {
-            views += [(toggles[0], true), (gallery, galleryCount > 0), (toggles[1], true), (changes, showsVersionControl && isRepo), (toggles[2], true)]
+            views += [(toggles[0], true), (gallery, galleryCount > 0), (toggles[1], true), (changes, showsTotals), (toggles[2], true)]
         }
         return views.filter { $0.0.superview === self }
     }

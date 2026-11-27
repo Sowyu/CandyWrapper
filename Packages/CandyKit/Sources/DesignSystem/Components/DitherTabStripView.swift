@@ -86,6 +86,12 @@ public final class DitherTabStripView: TopbarDragView {
     /// shows. Nil without a sheet.
     public var sheetStart: CGFloat? { didSet { if sheetStart != oldValue { needsLayout = true } } }
 
+    /// While the sidebar is hidden the window's own controls (sidebar toggle, back, forward) sit at the left of this row:
+    /// the breadcrumb or the tabs start at `leadStart` and centre on `leadMidY`, the traffic lights' centre line, both in
+    /// the strip's coordinates. Nil while the sidebar shows.
+    public var leadStart: CGFloat? { didSet { if leadStart != oldValue { needsLayout = true } } }
+    public var leadMidY: CGFloat? { didSet { if leadMidY != oldValue { needsLayout = true } } }
+
     /// The accessory's top left at rest, before `accessoryShift`.
     public func accessoryRest(_ size: CGSize) -> CGPoint {
         insetCard ? CGPoint(x: contentEnd - CardTopRow.floatGap - size.width, y: CardTopRow.floatGap)
@@ -158,7 +164,7 @@ public final class DitherTabStripView: TopbarDragView {
         }
         if let leading = leadingAccessory, !leading.isHidden {
             // The trailing accessory's resting place, so the breadcrumb doesn't jump while it glides into the card.
-            let x = contentStart - Self.accessoryRight
+            let x = leadStart ?? contentStart - Self.accessoryRight
             let end = trailingAccessory.map { $0.isHidden ? bounds.width - Self.accessoryRight : bounds.width - Self.accessoryRight - $0.intrinsicContentSize.width }
                 ?? bounds.width - Self.accessoryRight
             let width = leading.fittingWidth(max: max(0, end - Self.leadingGap - x))
@@ -169,7 +175,7 @@ public final class DitherTabStripView: TopbarDragView {
         let shown = !showsTabs ? 0..<0 : Self.window(count: views.count, selected: views.firstIndex { $0.tab.id == selected }, room: room)
         let count = CGFloat(shown.count)
         let width = shown.isEmpty ? 0 : min(Self.tabWidth, (room - Self.gap * (count - 1)) / count)
-        var x = contentStart - 12
+        var x = leadStart ?? contentStart - 12
         for (i, v) in views.enumerated() {
             v.isHidden = !shown.contains(i)
             guard !v.isHidden else { continue }
@@ -189,7 +195,7 @@ public final class DitherTabStripView: TopbarDragView {
     private func layoutInsetRow() {
         let gap = CardTopRow.floatGap
         let end = max(0, contentEnd)
-        let lead = max(gap, contentStart - 20 + gap)
+        let lead = leadStart ?? max(gap, contentStart - 20 + gap)
         var stop = end - gap, crumbStop = stop
         if let accessory = trailingAccessory, !accessory.isHidden {
             let size = accessory.intrinsicContentSize
@@ -202,7 +208,7 @@ public final class DitherTabStripView: TopbarDragView {
             stop = min(stop, sheetStart - gap)
             crumbStop = min(crumbStop, sheetStart - Self.leadingGap)
         }
-        let y = gap
+        let y = leadMidY.map { ($0 - Self.tabHeight / 2).rounded() } ?? gap
         if let leading = leadingAccessory, !leading.isHidden {
             leading.frame = NSRect(x: lead, y: y, width: leading.fittingWidth(max: max(0, crumbStop - lead)), height: Self.tabHeight)
         }

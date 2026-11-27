@@ -659,7 +659,7 @@ final class GitController {
                 items.append(copy)
             }
         }
-        let menu = MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: .top, align: .start, sideOffset: 4, fallbackAxisSide: .none),
+        let menu = MenuPopupView.show(items, from: anchor, placement: PopupPlacement(side: anchor.opensDown ? .bottom : .top, align: .start, sideOffset: 4, fallbackAxisSide: .none),
                                       minimumWidth: previousWorktree != nil ? 336 : 240)
         anchor.isPopupOpen = menu != nil
         let previous = menu?.hostPopup?.onClose
@@ -723,7 +723,7 @@ final class GitController {
         }
         view.onPick = { [weak self] value in self?.pick(value) }
         let placement = inPanel ? PopupPlacement(side: .bottom, align: .start, sideOffset: 4, fallbackAxisSide: .none)
-            : PopupPlacement(side: .top, align: row != nil ? .start : .end, sideOffset: 4, fallbackAxisSide: .none)
+            : PopupPlacement(side: panel.deviceRow.opensDown && row != nil ? .bottom : .top, align: row != nil ? .start : .end, sideOffset: 4, fallbackAxisSide: .none)
         guard let popup = view.present(from: anchor, placement: placement) else { return }
         popup.onClose = { [weak self] in self?.picker = nil }
         if !inPanel { returnFocusToComposer(popup, from: anchor) }

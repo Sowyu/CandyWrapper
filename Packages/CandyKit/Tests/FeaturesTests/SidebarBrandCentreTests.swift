@@ -3,8 +3,8 @@ import Testing
 @testable import DesignSystem
 @testable import Features
 
-/// Redesign's candy centres between the traffic lights and the search icon, and the collapse button shares its centre
-/// line (the user, r6-logo-between-lights-and-search.png). The lights' bottom is 33, where `MainWindow` centres them in
+/// Redesign's candy centres between the traffic lights and the search icon (the user, r6-logo-between-lights-and-search.png);
+/// the collapse button moved up to the lights' row with back and forward. The lights' bottom is 33, where `MainWindow` centres them in
 /// the 52pt top bar: the window moves them after the sidebar's layout, so measuring the button read the system's spot.
 @MainActor
 struct SidebarBrandCentreTests {
@@ -36,8 +36,9 @@ struct SidebarBrandCentreTests {
         let centre = content.brand.frame.minY + content.brand.markCentreY
         #expect(abs(centre - (33 + searchIconTop) / 2) <= 0.5)
         #expect(centre == 64)
-        #expect(content.trigger.frame.midY == centre)
-        #expect(content.trigger.frame.maxX == width - 10) // its 16pt icon ends 16 in, like the rows' action icons
+        // The collapse button sits on the traffic lights' row before back and forward, as in Capy (2026-11-26).
+        #expect(content.trigger.frame.midY == SidebarMetrics.topbarHeight / 2)
+        #expect(content.trigger.frame.maxX == width - 8 - 2 * 28 - 2 * SidebarLayoutView.historyGap)
         #expect(content.brand.frame.minX == 16)
     }
 

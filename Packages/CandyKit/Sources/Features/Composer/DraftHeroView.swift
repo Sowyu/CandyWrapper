@@ -27,7 +27,15 @@ public final class DraftHeroView: DSView, HoverSyncPointerClient {
     /// (DraftHeroHeadline.tsx:189-203, 323-346 at 4928).
     public var onStartWithoutProject: (() -> Void)?
     /// A machine offers a scratch folder (`scratchWorkspaceRoot`); without one T3 leaves the line out.
-    public var offersScratch = true { didSet { if offersScratch != oldValue { needsDisplay = true; window?.invalidateCursorRects(for: self) } } }
+    public var offersScratch = true {
+        didSet {
+            guard offersScratch != oldValue else { return }
+            needsDisplay = true
+            window?.invalidateCursorRects(for: self)
+            // Redesign's starter row under the composer follows it.
+            superview?.needsLayout = true
+        }
+    }
 
     let projectAnchor = NSView()
     private(set) var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }

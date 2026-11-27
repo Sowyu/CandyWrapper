@@ -210,6 +210,43 @@ struct RedesignBaselineTests {
             insetDraft.setDraft(projectTitle: "demo-repo")
             insetDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
             try capture("inset-new-thread", insetWindow(insetDraft), insetSize)
+            // The new-thread page with a notice: a quiet control at the project row's right end, never a row above.
+            let noticeDraft = ComposerFidelityTests.panel(width: 1200, dark: dark)
+            noticeDraft.setDraft(projectTitle: "demo-repo")
+            noticeDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
+            noticeDraft.deviceRow.configure(machine: "MacBook Pro", kind: "laptop", workspace: "Local", online: true)
+            noticeDraft.showsDeviceRow = true
+            noticeDraft.noticeBanner.apply(.init(variant: .neutral, icon: .download, title: "Server update available",
+                                                 actions: ["Copy relaunch command"], dismissible: true, shortTitle: "Server update", actionIcons: [.copy]))
+            noticeDraft.showsNoticeBanner = true
+            try capture("inset-new-thread-notice", insetWindow(noticeDraft), insetSize)
+            // The new-thread page's other states: typed, with attachments, two and three notices (one icon button with a
+            // count), a long project name, and no project.
+            for state in ["typed", "attachments", "two-notices", "three-notices", "long-name", "no-project"] {
+                let draft = ComposerFidelityTests.panel(width: 1200, dark: dark)
+                draft.setDraft(projectTitle: state == "long-name" ? "an-unusually-long-project-name-for-the-weather-service" : "demo-repo",
+                               isScratch: state == "no-project")
+                draft.hero.offersScratch = true
+                draft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
+                draft.deviceRow.configure(machine: "MacBook Pro", kind: "laptop", workspace: "Local", online: true)
+                draft.showsDeviceRow = true
+                if state == "typed" { draft.composer.text = "Add a --json flag to the forecast command and cover it with a test" }
+                if state == "attachments" {
+                    let shelf = ComposerAttachmentsFidelityTests.view("shelf", size: NSSize(width: 680, height: 100)) as! ComposerImageShelfView
+                    draft.composer.imageTiles = shelf.tiles
+                }
+                if state == "three-notices" {
+                    draft.noticeBanner.apply(.init(variant: .warning, icon: .triangleAlert, title: "Cloning demo-repo failed", dismissible: true))
+                    draft.showsNoticeBanner = true
+                }
+                if state.hasSuffix("-notices") {
+                    draft.serverUpdateNotice = ComposerServerUpdateNotice(status: .available(serverVersion: "0.1.10", clientVersion: "0.1.11"),
+                                                                        action: "Copy relaunch command")
+                    draft.lazyFallbackBanner.view.apply(.init(variant: .neutral, icon: .info, title: "Using Sonnet 5.5", dismissible: true))
+                    draft.fallbackKey = "weekly"
+                }
+                try capture("inset-new-thread-" + state, insetWindow(draft), insetSize)
+            }
             let insetThread = ComposerFidelityTests.panel(width: 1200, dark: dark)
             insetThread.referenceViewportWidth = 1200
             insetThread.timeline.context.now = { Self.now }
@@ -425,7 +462,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 180)
+        #expect(count == 194)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

@@ -186,10 +186,14 @@ public final class ThreadContextWindowMeterView: ControlView {
     /// 2026-11-21: "this is borderline unreadable", about the bare 13pt ring at 1.5pt).
     private var ringRadius: CGFloat { capy ? 5 : 9.75 * 20 / 24 }
     private var ringWidth: CGFloat { capy ? 2 : 2.5 }
-    private var ringCenter: CGPoint { capy ? CGPoint(x: Self.figureX / 2, y: bounds.midY) : CGPoint(x: bounds.midX, y: bounds.midY) }
-    /// Where the figure starts in Redesign's pill, and the pill's right padding: the Stash pill's icon column and title.
-    static let figureX: CGFloat = 32, figureTrail: CGFloat = 8
-    let figure = LabelView("", font: TL.tabular(12))
+    /// In the machine pill's glyph box, so the row under the composer has one rhythm.
+    private var ringCenter: CGPoint {
+        capy ? CGPoint(x: DitherPill.pad + DitherPill.glyph / 2, y: bounds.midY) : CGPoint(x: bounds.midX, y: bounds.midY)
+    }
+    /// Where the figure starts in Redesign's pill, and the pill's right padding: the machine pill's text column and pad.
+    static let figureX = DitherPill.textX, figureTrail = DitherPill.pad
+    /// The machine pill's 13pt, in tabular digits.
+    let figure = LabelView("", font: TL.tabular(13))
     private lazy var tip = TooltipController.attach(to: self, text: "")
     /// Redesign's pill width: the ring and the figure, or the square when there is no figure.
     public var redesignWidth: CGFloat {
@@ -212,7 +216,8 @@ public final class ThreadContextWindowMeterView: ControlView {
 
     private var figureColor: KeyPath<Palette, TokenColor> {
         switch usage?.level ?? .neutral {
-        case .neutral: \.foreground
+        // The machine pill's muted text beside it; the status colors still say when the window fills.
+        case .neutral: \.mutedForeground
         case .warning: \.warningForeground
         case .danger: \.destructiveForeground
         }
