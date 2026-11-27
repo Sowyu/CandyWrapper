@@ -223,6 +223,10 @@ public enum RedesignTokens {
         public static let fill = Text.quiet
         /// The least a bar shows for any reading above zero, as a share of its width, so a light load still reads.
         public static let least: CGFloat = 0.125
+        /// The context ring under a thread's composer: it fills the 14pt glyph box (radius plus half the stroke), the
+        /// arc at full text strength over a `Surface.strongRim` track, and never less than `least` of a turn.
+        public static let ringRadius: CGFloat = 5.75
+        public static let ringStroke: CGFloat = 2.5
     }
 
     /// Type weights. Redesign's chrome draws at 400 and 500, and size and color carry the hierarchy. Message content

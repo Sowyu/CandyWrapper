@@ -182,10 +182,17 @@ public final class ThreadContextWindowMeterView: ControlView {
     /// Dither: Capy's ring (measured in Capy 2026-10-22), a 13pt circle with a 1.5pt stroke in a 28pt pill under the
     /// composer, opened by a click into Capy's Context popover.
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    /// Redesign: a 12pt ring with a 2pt stroke where the Stash pill has its icon, then the share used as text (the user,
-    /// 2026-11-21: "this is borderline unreadable", about the bare 13pt ring at 1.5pt).
-    private var ringRadius: CGFloat { capy ? 5 : 9.75 * 20 / 24 }
-    private var ringWidth: CGFloat { capy ? 2 : 2.5 }
+    /// Redesign: a ring filling the 14pt glyph box with a 2.5pt stroke, then the share used as text (the user,
+    /// 2026-11-21: "this is borderline unreadable", about the bare 13pt ring at 1.5pt; three round-1 reviewers,
+    /// 2026-11-26, still squinted at the 12pt one). `RedesignTokens.Meter`.
+    private var ringRadius: CGFloat { capy ? RedesignTokens.Meter.ringRadius : 9.75 * 20 / 24 }
+    private var ringWidth: CGFloat { capy ? RedesignTokens.Meter.ringStroke : 2.5 }
+    /// The arc's share of a turn: Redesign shows at least `Meter.least` for any usage above zero, as the account
+    /// card's meters do, so 4.6% reads as an arc and not a dot. The figure beside it carries the exact share.
+    static func arcFraction(_ percentage: Double?, redesign: Bool) -> CGFloat {
+        let f = CGFloat(min(1, max(0, (percentage ?? 0) / 100)))
+        return redesign && f > 0 ? max(RedesignTokens.Meter.least, f) : f
+    }
     /// In the machine pill's glyph box, so the row under the composer has one rhythm.
     private var ringCenter: CGPoint {
         capy ? CGPoint(x: DitherPill.pad + DitherPill.glyph / 2, y: bounds.midY) : CGPoint(x: bounds.midX, y: bounds.midY)
@@ -205,7 +212,7 @@ public final class ThreadContextWindowMeterView: ControlView {
     private func syncFigure() {
         let text = capy ? (usage?.percentageLabel ?? usage.map { ThreadContextWindowUsage.tokens($0.used).uppercased() } ?? "") : ""
         figure.isHidden = text.isEmpty
-        figure.color = Themed.color(figureColor)
+        figure.color = figureColor
         tip.text = capy ? usage?.redesignSummary ?? "" : ""
         guard figure.text != text else { return }
         let widthChanged = figure.text.count != text.count || figure.text.isEmpty != text.isEmpty
@@ -214,12 +221,12 @@ public final class ThreadContextWindowMeterView: ControlView {
         if widthChanged { superview?.needsLayout = true }
     }
 
-    private var figureColor: KeyPath<Palette, TokenColor> {
+    var figureColor: NSColor {
         switch usage?.level ?? .neutral {
-        // The machine pill's muted text beside it; the status colors still say when the window fills.
-        case .neutral: \.mutedForeground
-        case .warning: \.warningForeground
-        case .danger: \.destructiveForeground
+        // The machine control's quiet text beside it; only the status colors say when the window fills.
+        case .neutral: Themed.color(\.foreground, RedesignTokens.Text.quiet)
+        case .warning: Themed.color(\.warningForeground)
+        case .danger: Themed.color(\.destructiveForeground)
         }
     }
     public var summary: String {
@@ -252,7 +259,7 @@ public final class ThreadContextWindowMeterView: ControlView {
     private static let easeOut = CAMediaTimingFunction(controlPoints: 0, 0, 0.2, 1)
 
     private func updateArc(animated: Bool) {
-        let fraction = min(1, max(0, (usage?.percentage ?? 0) / 100))
+        let fraction = Self.arcFraction(usage?.percentage, redesign: capy)
         let color: CGColor
         if capy {
             // Redesign: the fill at full strength over the track, in the status colors as the window fills.
@@ -292,9 +299,12 @@ public final class ThreadContextWindowMeterView: ControlView {
     public override func draw(_ dirtyRect: NSRect) {
         // Redesign shows nothing until the provider reports usage: an empty ring said nothing.
         guard let ctx = NSGraphicsContext.current?.cgContext, usage != nil else { return }
-        if capy, state.hoverOrPressed || detailsPopup != nil {
-            ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: DitherPill.radius, cornerHeight: DitherPill.radius, transform: nil))
-            ctx.setFillColor(Themed.color(\.foreground, 0.07).cgColor(in: self))
+        // The row's quiet controls fill their patch on hover and while open, as the machine control beside it does.
+        if capy, let lit = detailsPopup != nil ? RedesignTokens.State.fill(RedesignTokens.State.pressed, dark: effectiveAppearance.isDark)
+                                               : RedesignTokens.State.fill(state, dark: effectiveAppearance.isDark) {
+            let r = DitherPill.quietRadius
+            ctx.addPath(CGPath(roundedRect: DitherPill.quietPatch(bounds), cornerWidth: r, cornerHeight: r, transform: nil))
+            ctx.setFillColor(lit.cgColor)
             ctx.fillPath()
         }
         let center = ringCenter

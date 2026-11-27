@@ -513,8 +513,8 @@ public final class ThreadPanelView: DSView {
     /// Redesign shows the background work as this quiet indicator under the composer, at the right beside the
     /// context ring, instead of the banner pill above it.
     public let waitingIndicator = DitherWaitingView()
-    /// The pill behind the context ring under Redesign; the ring itself is the composer's meter, moved here.
-    private let ringPill = DitherPillSurface()
+    /// The quiet patch behind the context ring under Redesign; the ring itself is the composer's meter, moved here.
+    private let ringPill: DitherPillSurface = { let s = DitherPillSurface(); s.quiet = true; return s }()
     /// "Branch changed from <branch>" (ChatView.tsx:7801-7837), keyed like T3's `branch-mismatch:<key>`.
     public let lazyBranchBanner = LazyView { ComposerNoticeBannerView() }
     public var branchBanner: ComposerNoticeBannerView { lazyBranchBanner.view }
@@ -2158,7 +2158,9 @@ public final class ThreadPanelView: DSView {
         // beside the project chip; its menu holds the strip's machine, workspace and ref.
         let deviceShown = visible && showsDeviceRow
         deviceRow.opensDown = isDraft
-        deviceRow.quiet = isDraft
+        // Quiet on both pages: under a thread's composer the machine and the ring are plain text on a patch of the
+        // panel's ground, like the new-thread page's row (the user, 2026-11-26: "not everything has to be pills").
+        deviceRow.quiet = true
         hero.projectChip.quiet = true
 
         // The draft's context row on the composer's top left: the project chip, then the machine. Its notices are one

@@ -1,8 +1,8 @@
 import AppKit
 import DesignSystem
 
-/// Redesign's machine and workspace row under the composer, after Capy's (2026-10-22): a floating pill like the chips
-/// (the user: "this thing deserves a pill"), a 14pt machine glyph, "machine · Worktree" in muted 13pt text, the
+/// Redesign's machine and workspace row under the composer, after Capy's (2026-10-22): a quiet control since
+/// 2026-11-26 (`DitherPill.quietPatch`, the user: "not everything has to be pills"), a 14pt machine glyph, "machine · Worktree" in 13pt text, the
 /// disconnected machine's status dot and a small up chevron, with the chips' hover fill and brighter text on hover
 /// and while its menu is open. It takes the place of the checkout and ref pills; its menu holds the machine, the workspace and
 /// the ref (`GitController.openDeviceMenu`).
@@ -67,8 +67,9 @@ public final class DitherDeviceRowView: ControlView {
     /// Space between the pill's edges and the glyph on the left, the chevron on the right: the chips' (`DitherPill.pad`).
     private static let pad = DitherPill.pad
 
-    /// On the new-thread page the row is one of the quiet controls beside the project chip (`DitherPillSurface.quiet`).
-    public var quiet = false { didSet { if quiet != oldValue { pill.quiet = quiet; restyle() } } }
+    /// A quiet control (`DitherPill.quietPatch`): beside the project chip on the new-thread page, and under a thread's
+    /// composer.
+    public var quiet = false { didSet { if quiet != oldValue { pill.quiet = quiet; restyle(); needsLayout = true } } }
 
     /// On the new-thread page the row sits above the composer beside the project chip, and its menu opens downward
     /// like the chip's, so its chevron points down.
@@ -94,7 +95,7 @@ public final class DitherDeviceRowView: ControlView {
         label.frame = NSRect(x: textX, y: midY - 8, width: max(0, min(textWidth, bounds.width - textX - tail)), height: 16)
         var x = label.frame.maxX
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        fill.frame = bounds
+        DitherPill.placeFill(fill, in: bounds, quiet: quiet)
         dot.isHidden = !showsStatusDot
         if showsStatusDot {
             dot.frame = CGRect(x: x + 6, y: midY - 3, width: 6, height: 6)

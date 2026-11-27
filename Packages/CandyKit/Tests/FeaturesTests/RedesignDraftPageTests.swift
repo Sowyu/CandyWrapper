@@ -108,7 +108,10 @@ struct RedesignDraftPageTests {
         meter.usage = ThreadContextWindowUsage(used: 32_800, maximum: 400_000, automatically: true)
         panel.layoutSubtreeIfNeeded()
         let composer = panel.composer.frame, machine = panel.deviceRow.frame, ring = meter.frame
-        #expect(!panel.deviceRow.opensDown && !panel.deviceRow.quiet)
+        // Plain text on a quiet patch, like the new-thread page's row: not raised pills (the user, 2026-11-26).
+        #expect(!panel.deviceRow.opensDown && panel.deviceRow.quiet)
+        let patches = panel.subviews.compactMap { $0 as? DitherPillSurface }.filter { !$0.isHidden && $0.frame == ring }
+        #expect(patches.count == 1 && patches.allSatisfy(\.quiet), "the ring sits on one quiet patch")
         // One row: same top, same height, flush with the composer's edges.
         #expect(machine.minY == ring.minY && machine.height == ring.height && machine.height == DitherPill.height)
         #expect(machine.minX == composer.minX + DitherPill.inset && ring.maxX == composer.maxX - DitherPill.inset)
