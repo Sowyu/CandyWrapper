@@ -650,7 +650,9 @@ final class UsagePoolSegmentView: ControlView {
         let fillW = r.width * CGFloat(remaining) / 100
         if fillW > 0 {
             ctx.addPath(CGPath(roundedRect: CGRect(x: 0, y: 0, width: fillW, height: r.height), cornerWidth: min(6, fillW / 2), cornerHeight: 6, transform: nil))
-            ctx.setFillColor(color.withAlphaComponent(0.35).cgColor(in: self))
+            let dark = effectiveAppearance.isDark
+            let open = ThemeRuntime.isDither(dark: dark) && dark ? RedesignTokens.Meter.poolOpenDark : 0.35
+            ctx.setFillColor(color.withAlphaComponent(open).cgColor(in: self))
             ctx.fillPath()
         }
         // A 7px tile of `repeating-linear-gradient(135deg, transparent 0 1px, color 1px 2px, transparent 2px 50%)` at 20%,

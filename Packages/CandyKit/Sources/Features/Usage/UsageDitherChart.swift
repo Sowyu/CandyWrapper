@@ -156,6 +156,19 @@ final class UsageDitherPlotView: DSView {
         }
     }
 
+    /// `tops` as the plot draws them: a series in front that is under one cell tall draws nothing where a series behind
+    /// it stands, since its one-cell foot ran as a white strip along the rear series' base (Grok, G6, round 2).
+    static func drawnTops(_ input: Input, size: CGSize, shape: Shape = shape, cell c: CGFloat = cell) -> [[Int]] {
+        var tops = tops(input, size: size, shape: shape, cell: c)
+        let rows = gridFrame(size, cell: c).rows
+        for i in tops.indices.dropFirst() {
+            for x in tops[i].indices where tops[i][x] == rows - 1 && tops[..<i].contains(where: { x < $0.count && $0[x] < rows - 1 }) {
+                tops[i][x] = rows
+            }
+        }
+        return tops
+    }
+
     /// The whole plot as cells: gridline dots as layer 1, series `i`'s fill as `2 + 2i` and its edge as `3 + 2i`.
     /// Pure, so the same size and figures give the same cells.
     static func grid(_ input: Input, size: CGSize, shape: Shape = shape, cell c: CGFloat = cell,
@@ -170,7 +183,7 @@ final class UsageDitherPlotView: DSView {
                 grid.dots(row: Int(((y - frame.rect.minY) / c).rounded(.down)), every: every, layer: 1)
             }
         }
-        let tops = tops(input, size: size, shape: shape, cell: c)
+        let tops = drawnTops(input, size: size, shape: shape, cell: c)
         for (i, top) in tops.enumerated() where !top.isEmpty {
             grid.fill(tops: top, layer: UInt8(2 + 2 * i), texture: textures(i), gap: i > 0, holes: holeLayer(i, of: tops.count))
         }
