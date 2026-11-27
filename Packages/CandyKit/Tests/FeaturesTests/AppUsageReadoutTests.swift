@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import DesignSystem
 @testable import Features
 
 /// Redesign's account pill shows CandyWrapper's own CPU and memory where the e-mail used to be.
@@ -34,17 +35,31 @@ struct AppUsageReadoutTests {
         #expect(L.tooltip(cpu: 0.4, footprint: 182 << 20) == "CandyWrapper CPU 0.4% of one core · Memory 182 MB")
     }
 
-    @Test func metersLightAtLeastOneDotAndCapAtTheEnd() {
-        #expect(L.lit(0) == 0)
-        #expect(L.lit(0.004) == 1)
-        #expect(L.lit(0.5) == 3)
-        #expect(L.lit(3) == L.dots)
+    @Test func metersShowAnyLoadAndCapAtTheEnd() {
+        #expect(L.level(0) == 0)
+        #expect(L.level(0.004) == RedesignTokens.Meter.least)
+        #expect(L.level(0.5) == 0.5)
+        #expect(L.level(3) == 1)
+    }
+
+    /// Round-0 review, S3: the card showed dot rows and dashes before any reading, read as placeholders.
+    @Test func noReadingShowsNothingAndTheNameCentres() {
+        let v = AppUsageReadoutView(frame: NSRect(x: 0, y: 0, width: 180, height: 16))
+        v.layout()
+        #expect(!v.hasReading)
+        let anyShown = v.subviews.contains { !$0.isHidden }
+        #expect(!anyShown)
+        v.show(cpu: nil, footprint: 182 << 20, animated: false)
+        v.layout()
+        #expect(v.hasReading && !v.memoryLabel.isHidden && !v.memoryMeter.isHidden)
+        // CPU waits for its second sample, and the memory reading takes the line's start.
+        #expect(v.cpuLabel.isHidden && v.cpuMeter.isHidden && v.memoryMeter.frame.minX == 12 + AppUsageReadoutView.gap)
     }
 
     @Test func cpuTurnsAmberAfterTwoHotSamples() {
         let v = AppUsageReadoutView(frame: NSRect(x: 0, y: 0, width: 180, height: 16))
         v.show(cpu: 80, footprint: 1 << 28, animated: false)
-        #expect(!v.cpuMeter.hot && v.cpuMeter.lit == 5)
+        #expect(!v.cpuMeter.hot && abs(v.cpuMeter.level - 0.8) < 1e-9)
         v.show(cpu: 80, footprint: 1 << 28, animated: false)
         #expect(v.cpuMeter.hot)
         v.show(cpu: 1, footprint: 1 << 28, animated: false)

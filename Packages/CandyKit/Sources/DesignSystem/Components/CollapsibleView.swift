@@ -165,7 +165,8 @@ public final class CollapsibleSectionHeaderView: ControlView {
         super.layout()
         decoration.layout(boxSize: bounds.size)
         let midY = bounds.height / 2
-        var x: CGFloat = 8
+        // Redesign's shelves start on the "Threads" label's column (`SidebarView.navSection`), 1pt in from the 8 here.
+        var x: CGFloat = showsStrip ? 7 : 8
         var right = bounds.width - 8 - 12
         if let accessory {
             let s = accessory.intrinsicContentSize
@@ -302,7 +303,7 @@ public final class CollapsibleSectionHeaderView: ControlView {
     }
 
     private func restyle() {
-        let text: NSColor, line: NSColor
+        var text: NSColor, line: NSColor
         switch tone {
         case .muted:
             text = Themed.color(\.contrastSidebarMutedForeground, DesignGeometry.usesClassic(self) ? 0.6 : 1)
@@ -318,6 +319,13 @@ public final class CollapsibleSectionHeaderView: ControlView {
             text = Themed.color(\.primary)
             line = Themed.color(\.primary, 0.5)
         }
+        // Redesign's sidebar shelves read as the "Threads" label above the list: the sidebar's muted color at full
+        // strength from the sidebar palette, which keeps 4.5:1 over Blur, at 400.
+        if showsStrip, tone == .muted || tone == .emphasized {
+            text = Themed.color(tone == .muted ? \.sidebarMutedForeground : \.sidebarForeground, sidebar: true)
+        }
+        let font = showsStrip ? DSFont.ui(12) : DSFont.ui(12, weight: .medium)
+        if label.font != font { label.font = font; needsLayout = true }
         label.color = text
         let fill = showsStrip ? RedesignTokens.State.fill(state, dark: effectiveAppearance.isDark)?.cgColor(in: self) : nil
         setHoverFill(fill)
