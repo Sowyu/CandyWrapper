@@ -278,18 +278,26 @@ public enum ThemeRuntime {
         let grounds = (light: (light?.0 ?? Tokens.light).background, dark: (dark?.0 ?? Tokens.dark).background)
         func redesign(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
             // Redesign light: the sidebar's menu icons, which T3 mixes toward the sidebar, take the muted icon color
-            // so they keep 3:1, and success takes `capyLightSuccess`.
+            // so they keep 3:1, and success takes `capyLightSuccess`. The diff counts ("+59 −1" in the header pill,
+            // the diff panel and the work log) are text, so they take success and the error text color: T3's
+            // #00c590 and #fb2c36 read 2.3:1 and 3.7:1 on a white pill (2026-11-27 contrast table).
             var palette = palette
             if !dark, input.ditherLight {
-                let members = palette.members, icon = palette.iconMuted
+                let members = palette.members, icon = palette.iconMuted, errorText = palette.errorForeground
                 let success = ThemeCSSColor.parse(ThemeDefinition.capyLightSuccess)?.token
                 palette = Palette(members: {
                     switch Palette.memberNames[$0] {
                     case "--sidebar-icon-color": icon
-                    case "--success", "--success-foreground": success ?? members[$0]
+                    case "--success", "--success-foreground", "--diff-addition": success ?? members[$0]
+                    case "--diff-deletion": errorText
                     default: members[$0]
                     }
                 })
+            }
+            // Redesign dark: the same for the sidebar's menu icons, which T3's mix left at 2.6:1 (#505051 on #030303).
+            if dark, input.ditherDark {
+                let members = palette.members, icon = palette.iconMuted
+                palette = Palette(members: { Palette.memberNames[$0] == "--sidebar-icon-color" ? icon : members[$0] })
             }
             // Blur: the sidebar sits on the picture too, so its muted text keeps 4.5:1 over the brightest (dark) or
             // darkest (light) blurred pixel, which is never past the dots' reach.

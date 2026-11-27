@@ -921,6 +921,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         case "issues": self.sidebarCommands?.openUtilityPage(.issues)
                         case "workflows": self.sidebarCommands?.openUtilityPage(.workflows)
                         case "collapsed": (window.contentView as? SidebarLayoutView)?.setOpen(false)
+                        // `size:<width>x<height>` sizes the window's content in points, kept on screen at its top left.
+                        case let s where s.hasPrefix("size:"):
+                            let wh = s.dropFirst("size:".count).split(separator: "x").compactMap { Double($0) }
+                            if wh.count == 2 {
+                                var f = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: wh[0], height: wh[1]))
+                                f.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - f.height)
+                                window.setFrame(f, display: true)
+                            }
                         case "picker": threads.composer.pickers.toggleModelPicker()
                         case "access": threads.composer.pickers.openAccessMode()
                         case "usage": self.sidebarCommands?.openUtilityPage(.usage)

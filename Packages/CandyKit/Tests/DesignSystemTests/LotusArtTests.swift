@@ -144,6 +144,25 @@ struct LotusPlacementTests {
         #expect(reach > Double(c.width), "\(w)")
     }
 
+    /// A thread's lotus is whole: inside the card with its gap, clear of the top row and the composer, at least
+    /// `least` in radius; in the margin right of the column when the margin holds it, else against the card's right edge.
+    @Test(arguments: windows.filter { $0.height >= 560 }) func threadLotusIsWholeBesideTheColumn(_ w: Window) throws {
+        let c = w.content, t = LotusArt.threadLayout, e = LotusArt.reach
+        let column = (c.midX - 368)...(c.midX + 368)
+        let spot = try #require(LotusArt.spot(in: c, thread: .init(column: column)))
+        let r = spot.radius
+        #expect(r >= min(t.least, (c.width - 2 * t.gap) / CGFloat(e.left + e.right)) - 0.01, "\(w)")
+        #expect(spot.centre.x + CGFloat(e.right) * r <= c.maxX - t.gap + 0.01, "\(w)")
+        #expect(spot.centre.y - CGFloat(e.up) * r >= c.minY + min(t.top, 0.12 * c.height) - 0.01, "\(w)")
+        #expect(spot.centre.y + CGFloat(e.down) * r <= c.maxY - min(t.reserve, 0.3 * c.height) + 0.01, "\(w)")
+        let margin = c.maxX - (column.upperBound + LotusArt.columnPad) - t.gap
+        if margin >= CGFloat(e.left + e.right) * t.least {
+            #expect(spot.centre.x - CGFloat(e.left) * r >= column.upperBound + LotusArt.columnPad - 0.01, "\(w)")
+        }
+        // The new thread's resting composition is untouched by a thread's placement.
+        #expect(LotusArt.spot(in: c) != spot)
+    }
+
     /// The canvas covers only cells of the content area, only what any frame reaches, on the art's lattice, and the
     /// whole upper half of the flower is in it.
     @Test(arguments: windows) func canvasIsClippedToTheContentArea(_ w: Window) throws {
@@ -290,7 +309,8 @@ struct LotusColumnTests {
         var last = Int(row(0).level)
         for x in 1..<200 {
             let level = Int(row(x).level)
-            #expect(abs(level - last) <= 4, "a step at x \(x)")
+            // 96pt of ease over 3pt cells moves at most about 8 levels (3%) a cell, which shows no step.
+            #expect(abs(level - last) <= 10, "a step at x \(x)")
             last = level
         }
         let middle = (0..<p.height).flatMap { y in (190..<210).map { m[y * p.width + $0] } }
@@ -298,8 +318,17 @@ struct LotusColumnTests {
         #expect(abs(kept - Double(LotusArt.columnKeep)) < 0.1)
     }
 
-    /// Light's falloff runs far wider than dark's.
-    @Test func lightFalloffIsWide() {
-        #expect(LotusArt.columnReach(dark: false) >= 2 * LotusArt.columnReach(dark: true))
+    /// A lotus wholly in the margin is eased over only the gap to it, so none of it dims; one behind the column gets
+    /// the full ease.
+    @Test func lotusInTheMarginStaysFull() {
+        let column: ClosedRange<CGFloat> = 300...900
+        #expect(LotusArt.columnEase(lotusLeft: 960, column: column) == 40)
+        #expect(LotusArt.columnEase(lotusLeft: 925, column: column) == 24)
+        #expect(LotusArt.columnEase(lotusLeft: 1200, column: column) == LotusArt.columnReach)
+        #expect(LotusArt.columnEase(lotusLeft: 800, column: column) == LotusArt.columnReach)
+        // The mask is full from the lotus's left edge on.
+        let p = LotusArt.Placement(width: 100, height: 4, centreX: 50, centreY: 2, radius: 40, originX: 320, originY: 0)
+        let m = LotusArt.columnMask(p, column: column, cap: 0.2, reach: LotusArt.columnEase(lotusLeft: 960, column: column), dark: false)
+        #expect((0..<p.height).allSatisfy { m[$0 * p.width] == 255 })
     }
 }

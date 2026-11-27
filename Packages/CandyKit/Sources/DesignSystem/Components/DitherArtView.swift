@@ -868,8 +868,9 @@ extension DitherArtView {
 
     func refreshFlower(palette: Palette, dark: Bool) {
         let (page, front) = self.front
+        let thread = flowerStage(page, front).flatMap { $0.kind == .thread ? LotusArt.ThreadStage(column: flowerColumn()) : nil }
         guard let stage = flowerStage(page, front),
-              let target = LotusArt.canvas(content: stage.content, cell: DitherArt.gradientUnit) else {
+              let target = LotusArt.canvas(content: stage.content, thread: thread, cell: DitherArt.gradientUnit) else {
             flowerContent = nil
             dropFlower()
             return
@@ -886,7 +887,7 @@ extension DitherArtView {
         flowerContent = stage.content
         flowerKind = stage.kind
         flowerOpening = stage.kind == .hero ? stage.floorTop.flatMap { LotusArt.opening(content: stage.content, floorTop: $0, cell: DitherArt.gradientUnit) } : nil
-        guard let full = LotusArt.fullCanvas(content: stage.content, field: stage.field, cell: DitherArt.gradientUnit) else { dropFlower(); return }
+        guard let full = LotusArt.fullCanvas(content: stage.content, field: stage.field, thread: thread, cell: DitherArt.gradientUnit) else { dropFlower(); return }
         flowerTarget = FlowerKey(placement: target, full: full, dark: dark)
         flowerFloorTop = stage.floorTop
         flowerResizing = resizing
@@ -945,16 +946,19 @@ extension DitherArtView {
         syncGlow()
     }
 
+    /// The front thread's reading column across this view, snapped to the art's cells, or nil with none.
+    func flowerColumn() -> ClosedRange<CGFloat>? {
+        guard let front = front.view, let lane = Self.columns.object(forKey: front)?.rectValue else { return nil }
+        let l = convert(lane, from: front), cell = DitherArt.gradientUnit
+        return (l.minX / cell).rounded() * cell...(l.maxX / cell).rounded() * cell
+    }
+
     /// The column's still mask over the flower in a thread, and the blurred flower under the floating surfaces, from
     /// the open frame. Both build on the main thread in about a millisecond, and only when what they show changed.
     func updateFlowerOverlays(palette: Palette, dark: Bool) {
         guard let set = flowerSet else { return }
         let p = set.key.full, cell = DitherArt.gradientUnit
-        var column: ClosedRange<CGFloat>?
-        if flowerKind == .thread, let front = front.view, let lane = Self.columns.object(forKey: front)?.rectValue {
-            let l = convert(lane, from: front)
-            column = (l.minX / cell).rounded() * cell...(l.maxX / cell).rounded() * cell
-        }
+        var column = flowerKind == .thread ? flowerColumn() : nil
         let text = palette.foreground.srgb, muted = palette.mutedForeground.srgb, ground = palette.background.srgb
         let cap = column == nil ? 1 : LotusArt.columnCap(ground: SIMD3(ground.x, ground.y, ground.z), ink: Self.flowerInkRGB(palette, dark: dark),
                                                          text: SIMD3(text.x, text.y, text.z), muted: SIMD3(muted.x, muted.y, muted.z),
@@ -965,7 +969,8 @@ extension DitherArtView {
         let key = ColumnKey(placement: p, column: column, cap: cap, dark: dark, dim: dim)
         let glass = RedesignTokens.FlowerGlass.isOn(dark: dark)
         guard key != columnKey || (glass && glowKey != key) || (!glass && glowKey != nil) else { return }
-        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: Self.flowerShare(cap, dim: dim), keep: Self.flowerShare(dark ? LotusArt.columnKeep : LotusArt.lightColumnKeep, dim: dim),
+        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: Self.flowerShare(cap, dim: dim), keep: Self.flowerShare(LotusArt.columnKeep, dim: dim),
+                                                    reach: LotusArt.columnEase(lotusLeft: CGFloat(set.key.placement.originX) * cell, column: $0),
                                                     dark: dark, cell: cell) }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }

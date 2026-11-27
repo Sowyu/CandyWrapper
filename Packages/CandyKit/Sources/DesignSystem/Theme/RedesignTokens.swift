@@ -242,6 +242,16 @@ public enum RedesignTokens {
         }
     }
 
+    /// A control whose edge is all that shows its state: an off switch's track keeps 3:1 against the card under it,
+    /// the X8 floor for a control's edge (docs/research/redesign-contrast-2026-11-27.md). Capy's #353537 read 1.5:1 on a
+    /// dark Settings card and T3's light track 2.7:1 on white.
+    public enum Control {
+        /// #6b6b6d: 3.4:1 on the dark card #151414; the dark knob on it keeps 3.4:1 too.
+        public static let offTrackDark = NSColor(srgbRed: 0x6b / 255, green: 0x6b / 255, blue: 0x6d / 255, alpha: 1)
+        /// #8a8a87, light's control outline (`input`): 3.4:1 on white.
+        public static let offTrackLight = NSColor(srgbRed: 0x8a / 255, green: 0x8a / 255, blue: 0x87 / 255, alpha: 1)
+    }
+
     /// Segmented controls in light. T3's track (`bg-input/40`) and selection (`bg-input/72`) are greys of the control
     /// outline color, which in light gave a #cfcfcd track under a #a3a3a1 selection, the "muddy grey" in the picker.
     /// Light draws a quiet track in the text color and lifts the selection as a white card with the rim and the
