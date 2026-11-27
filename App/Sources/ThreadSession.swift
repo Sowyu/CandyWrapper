@@ -713,6 +713,10 @@ final class ThreadController {
     /// after the first shell, as a click would, then 2 s later the thread open before it, then 2 s
     /// later the match again (a reopen). scripts/perf-review times both with CANDY_THREAD_TIMING.
     private var perfOpen: (delay: Double, prefix: String)?
+    /// Development: `--perf-switch <seconds> <count> <prefix|prefix|...>` opens the first thread matching each
+    /// prefix in turn, one every 2 s, `count` times, that long after the first shell, printing `perf-switch <n>`
+    /// and then `perf-switch done` to stderr, so switches can be timed and sampled without input.
+    private var perfSwitch: (delay: Double, count: Int, prefixes: [String])?
     private var restored = false
     /// The environment the connection banner speaks for, and since when it is unavailable.
     private var bannerEnvironment: (id: String, since: Date)?
@@ -736,6 +740,9 @@ final class ThreadController {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--open-thread"), i + 1 < args.count { openPrefix = args[i + 1] }
         if let i = args.firstIndex(of: "--perf-open"), i + 2 < args.count, let delay = Double(args[i + 1]) { perfOpen = (delay, args[i + 2]) }
+        if let i = args.firstIndex(of: "--perf-switch"), i + 3 < args.count, let delay = Double(args[i + 1]), let count = Int(args[i + 2]) {
+            perfSwitch = (delay, count, args[i + 3].split(separator: "|").map(String.init))
+        }
         sidebar.actions.openThread = { [weak self] id in self?.open(id) }
         composer = ComposerController(panel: panel, sidebar: sidebar, environments: environments)
         panel.lazyDiffPanel.set(\.canReadFiles, { [weak self, weak environments] in
@@ -1637,6 +1644,16 @@ final class ThreadController {
 
     /// The sidebar's new-thread button: the draft page for the open thread's project.
     // ponytail: no projects means no draft; T3 shows "Add a project to start" there
+    private func perfSwitchStep(_ n: Int, count: Int, prefixes: [String]) {
+        guard n < count else { FileHandle.standardError.write(Data("perf-switch done\n".utf8)); return }
+        let prefix = prefixes[n % prefixes.count]
+        if let match = sidebar?.snapshot?.threads.first(where: { $0.title.hasPrefix(prefix) }) { open(match.id) }
+        FileHandle.standardError.write(Data("perf-switch \(n + 1) \(prefix)\n".utf8))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            MainActor.assumeIsolated { self?.perfSwitchStep(n + 1, count: count, prefixes: prefixes) }
+        }
+    }
+
     /// A draft with content moves to a project Add project just added, in place of a new draft (#42889).
     func moveDraft(_ draftId: String, toAdded project: ProjectShell) -> Bool {
         let previous = session
@@ -2253,6 +2270,12 @@ final class ThreadController {
                         }
                     }
                 }
+            }
+        }
+        if let perf = perfSwitch {
+            perfSwitch = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + perf.delay) { [weak self] in
+                MainActor.assumeIsolated { self?.perfSwitchStep(0, count: perf.count, prefixes: perf.prefixes) }
             }
         }
         if let prefix = openPrefix, let match = snapshot.threads.first(where: { $0.title.hasPrefix(prefix) }) {

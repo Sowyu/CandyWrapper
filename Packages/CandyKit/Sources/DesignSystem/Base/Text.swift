@@ -70,6 +70,7 @@ public final class LabelView: DSView {
     public override func fontRuntimeDidChange() {
         super.fontRuntimeDidChange()
         measuredWidth = nil
+        reshape()
         if let recipe = fontRecipe { font = recipe.resolve() }
     }
     // Setters skip unchanged values: rows reconfigure on every streamed delta, and each redraw costs a frame.
@@ -77,7 +78,7 @@ public final class LabelView: DSView {
         didSet {
             guard color != oldValue else { return }
             if Motion.activeTransitions.contains(.color), window != nil, let layer { Motion.crossfade(layer) }
-            needsDisplay = true
+            reshape()
         }
     }
     /// CSS line-height in points. Defaults to the font's natural height.
@@ -103,10 +104,10 @@ public final class LabelView: DSView {
     public var emphasizedSuffix: String? { didSet { if emphasizedSuffix != oldValue { invalidate() } } }
     /// UTF-16 offsets drawn semibold in `highlightColor` (a fuzzy match's `<strong>` characters).
     public var highlightedIndices: [Int]? { didSet { if highlightedIndices != oldValue { invalidate() } } }
-    public var highlightColor: NSColor? { didSet { if highlightColor != oldValue { needsDisplay = true } } }
+    public var highlightColor: NSColor? { didSet { if highlightColor != oldValue { reshape() } } }
     /// The first `count` UTF-16 units in their own color (a search excerpt's "You:" tag).
     public var prefixColor: (count: Int, color: NSColor)? {
-        didSet { if prefixColor?.count != oldValue?.count || prefixColor?.color != oldValue?.color { needsDisplay = true } }
+        didSet { if prefixColor?.count != oldValue?.count || prefixColor?.color != oldValue?.color { reshape() } }
     }
 
     // Static text for VoiceOver, except inside a control, which reads it as its name.
@@ -136,8 +137,30 @@ public final class LabelView: DSView {
 
     private func invalidate() {
         measuredWidth = nil
+        reshape()
         invalidateIntrinsicContentSize()
+    }
+
+    /// Drops the shaped line after a change to what it was shaped from, and redraws.
+    private func reshape() {
+        shaped = nil
+        fitted = nil
         needsDisplay = true
+    }
+
+    /// The line as shaped from `attributed()`, and as last fitted to the box, kept until an input changes. A label
+    /// redraws for its row's hover, selection or a neighbour's tick without new text, and shaping it again on each
+    /// draw was two thirds of `LabelView.draw` in a user's sample (2026-11-27).
+    private var shaped: TextLine?
+    private var fitted: (width: CGFloat, truncates: Bool, truncation: CTLineTruncationType, line: TextLine)?
+    var shapesForTesting = 0
+
+    private func shapedLine() -> TextLine {
+        if let shaped { return shaped }
+        let line = TextLine(attributed())
+        shapesForTesting += 1
+        shaped = line
+        return line
     }
 
     /// Layouts ask for the width on every pass (the composer footer measures its pickers each
@@ -156,6 +179,10 @@ public final class LabelView: DSView {
         super.viewDidChangeEffectiveAppearance()
         if (fontRecipe?.weight.rawValue ?? 0) > RedesignTokens.Weight.heaviest.rawValue || emphasizedSuffix != nil || highlightedIndices != nil {
             invalidate()
+        } else {
+            // The colors resolve for the new appearance when the line is shaped again.
+            shaped = nil
+            fitted = nil
         }
     }
 
@@ -188,7 +215,7 @@ public final class LabelView: DSView {
     /// The unrounded advance width, for layouts that place text at fractional x like CSS.
     public var textWidth: CGFloat {
         if let measuredWidth { return measuredWidth }
-        let width = TextLine(attributed()).width
+        let width = shapedLine().width
         measuredWidth = width
         return width
     }
@@ -202,14 +229,20 @@ public final class LabelView: DSView {
         // plain antialiasing: Button fidelity 2.91% differing pixels with it, 3.27% without.
         ctx.setShouldSmoothFonts(smoothsFont && FontRuntime.smoothing)
         ctx.setAllowsFontSmoothing(smoothsFont && FontRuntime.smoothing)
-        func fitted(_ string: NSAttributedString, _ extra: [NSAttributedString.Key: Any] = [:]) -> TextLine {
-            let line = TextLine(string)
-            guard truncates, line.width > bounds.width, bounds.width > 0 else { return line }
-            let ellipsis = CTLineCreateWithAttributedString(
-                NSAttributedString(string: "\u{2026}", attributes: [.font: drawnFont, .foregroundColor: color].merging(extra) { $1 }))
-            return CTLineCreateTruncatedLine(line.line, Double(bounds.width), truncation, ellipsis).map { TextLine(line: $0) } ?? line
+        let line: TextLine
+        if let fitted, fitted.width == bounds.width, fitted.truncates == truncates, fitted.truncation == truncation {
+            line = fitted.line
+        } else {
+            let whole = shapedLine()
+            if truncates, whole.width > bounds.width, bounds.width > 0 {
+                let ellipsis = CTLineCreateWithAttributedString(
+                    NSAttributedString(string: "\u{2026}", attributes: [.font: drawnFont, .foregroundColor: color]))
+                line = CTLineCreateTruncatedLine(whole.line, Double(bounds.width), truncation, ellipsis).map { TextLine(line: $0) } ?? whole
+            } else {
+                line = whole
+            }
+            fitted = (bounds.width, truncates, truncation, line)
         }
-        let line = fitted(attributed())
         let x: CGFloat
         switch alignment {
         case .center: x = (bounds.width - line.width) / 2

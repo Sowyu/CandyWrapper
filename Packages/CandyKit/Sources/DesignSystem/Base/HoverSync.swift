@@ -161,7 +161,15 @@ public final class HoverSync: NSResponder {
 
     public override func mouseMoved(with event: NSEvent) {
         topWindowCache = nil
-        sync()
+        // The WindowServer stamps each mouse event with the window that takes it at the pointer, so a move needs no
+        // round trip to ask. Asking on every move was 108 of 123 samples in mouseMoved in a user's sample (2026-11-27).
+        // The pass reads the event's point, which the stamp is for: the live pointer can already be a step further on.
+        if let window, event.window === window, let under = Self.windowTakingEvent(event) {
+            topWindowCache = (window.convertPoint(toScreen: event.locationInWindow), under == window.windowNumber, CACurrentMediaTime())
+            sync(at: event.locationInWindow)
+        } else {
+            sync()
+        }
         for entry in hovered.values { (entry.owner as? HoverSyncPointerClient)?.hoverPointerMoved() }
     }
     public override func mouseEntered(with event: NSEvent) { topWindowCache = nil; sync() }
@@ -192,9 +200,9 @@ public final class HoverSync: NSResponder {
         return host.bounds.contains(area.rect)
     }
 
-    func sync() {
+    func sync(at eventPoint: NSPoint? = nil) {
         guard let window else { return }
-        let point = window.mouseLocationOutsideOfEventStream
+        let point = eventPoint ?? window.mouseLocationOutsideOfEventStream
         let buttonsDown = NSEvent.pressedMouseButtons != 0
         var now: [Key: Entry] = [:]
         if pointerIsInside(window, at: point), let content = window.contentView {
@@ -241,6 +249,14 @@ public final class HoverSync: NSResponder {
             if let trigger = popup.trigger, trigger.window === window, !trigger.isHiddenOrHasHiddenAncestor { continue }
             host.close(popup, returnFocus: false)
         }
+    }
+
+    /// The number of the window under the pointer that takes `event`, as the WindowServer routed it, the same
+    /// window `NSWindow.windowNumber(at:belowWindowWithWindowNumber:)` names. Nil for events posted without it.
+    static func windowTakingEvent(_ event: NSEvent) -> Int? {
+        guard let number = event.cgEvent?.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent),
+              number != 0 else { return nil }
+        return Int(number)
     }
 
     private func pointerIsInside(_ window: NSWindow, at point: NSPoint) -> Bool {
