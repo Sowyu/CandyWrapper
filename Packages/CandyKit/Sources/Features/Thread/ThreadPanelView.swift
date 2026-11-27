@@ -2609,7 +2609,8 @@ public final class ThreadPanelView: DSView {
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
         layoutThreadTitle(chat: chat, above: above)
-        reportFlowerStage(chat: chat, chatHeight: chatHeight)
+        // The lotus ends at the drawer card's top edge; the field runs on behind the card (`DitherArtView.flowerStage`).
+        reportFlowerStage(chat: chat, chatHeight: min(bounds.height, drawerTop))
         if let findBar = lazyFindBar.loaded {
             // `top-3 right-3 w-[min(var(--thread-details-panel-width),calc(100%-1.5rem))]`: as wide as the
             // details card and lined up with it (ThreadFindBar.tsx:62-66 in 2994, f92afe79c).

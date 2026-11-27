@@ -1027,11 +1027,14 @@ public enum LotusArt {
         return out
     }
 
-    /// The content area's whole canvas: the field and the flower's every position on it.
-    public static func fullCanvas(content: CGRect, cell: CGFloat = 3) -> Placement? {
+    /// The whole canvas: the field and the flower's every position on it. The flower sits by `content`; the field
+    /// covers `content` and `field`, which on a thread runs on behind the cards floating over the art (the terminal
+    /// drawer and the right panel), as Picture does.
+    public static func fullCanvas(content: CGRect, field: CGRect? = nil, cell: CGFloat = 3) -> Placement? {
         guard cell.isFinite, cell >= 0.5, let spot = spot(in: content) else { return nil }
-        let x0 = (content.minX / cell).rounded(.down), y0 = (content.minY / cell).rounded(.down)
-        let x1 = (content.maxX / cell).rounded(.up), y1 = (content.maxY / cell).rounded(.up)
+        let area = field.map { $0.isEmpty || ![$0.minX, $0.minY, $0.maxX, $0.maxY].allSatisfy({ $0.isFinite && abs($0) <= 1e7 }) ? content : content.union($0) } ?? content
+        let x0 = (area.minX / cell).rounded(.down), y0 = (area.minY / cell).rounded(.down)
+        let x1 = (area.maxX / cell).rounded(.up), y1 = (area.maxY / cell).rounded(.up)
         guard x1 > x0, y1 > y0, x1 - x0 <= CGFloat(maxSide), y1 - y0 <= CGFloat(maxSide) else { return nil }
         let p = Placement(width: Int(x1 - x0), height: Int(y1 - y0), centreX: Double(spot.centre.x / cell - x0),
                           centreY: Double(spot.centre.y / cell - y0), radius: Double(spot.radius / cell), originX: Int(x0), originY: Int(y0))
