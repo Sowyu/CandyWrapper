@@ -232,8 +232,8 @@ public enum PictureInk {
 
     /// The text floors behind a thread's reading column, against the worst cell. Dark holds body at 15:1 and muted at
     /// 7.5:1: 14 and 6.8, what the Great Wave in a 1975pt window needed (picture-fix-2026-11-21/5 and 7), still left
-    /// muted text and inline code on busy dots for the round-0 reviewers (W3). Light holds 7:1 and 4.5:1, and its
-    /// column is plain ground anyway (`columnBound`).
+    /// muted text and inline code on busy dots for the round-0 reviewers (W3). Light's minimum is 7:1 and 4.5:1;
+    /// its column holds the calmer `lightColumnFloors` (`columnBound`).
     nonisolated static func floors(dark: Bool) -> (body: Double, muted: Double) { dark ? (15, 7.5) : (7, 4.5) }
     /// How the cap lets go beside the column (`calmFalloff`): the power on the distance before its smoothstep.
     nonisolated static let calmSpread = 1.3
@@ -265,7 +265,8 @@ public enum PictureInk {
     /// How far beside the column dark's cap holds fully before it starts to let go, in points. The inset card with the
     /// right panel open leaves margins of about 48pt; without the hold the cap let go across them and left a bright
     /// strip of picture at each of the card's edges (round-0 review, 03-thread-right-panel.dark.png). Light holds
-    /// none: its column is plain ground, so a hold there left a narrow card with no picture at all.
+    /// none: a narrow light card keeps most of the cap to its edges anyway (`calmReach`), and a hold left it no
+    /// picture at all while the column was plain ground.
     nonisolated static let calmHold = 64.0
 
     /// The cap's weight at `t` of the way from the column's edge (0) to the panel's edge (1): 1 to 0 on a smoothstep of
@@ -314,7 +315,38 @@ public enum PictureInk {
         let groundY = luminance(ground)
         var row = [Double](repeating: 1, count: w), fade = [Double](repeating: 0, count: w)
         var columnInks: [(UInt8, UInt8, UInt8)]?
-        if case let .thread(column?) = shape, column.count == 4,
+        // Light: both inks move toward the ground together by one share per cell (`quiet`), so the picture keeps its
+        // two tones and its shapes at a lower contrast instead of collapsing to one pale ink at a floor.
+        let table = dark ? [] : quietInks(levels, ground: ground)
+        var quietX: [UInt8]?, quietCell: [UInt8]?, smoothAt: [Double]?
+        let deepest = levels.map(luminance).min() ?? groundY
+        if !dark, case let .thread(column?) = shape, column.count == 4,
+           let bound = TextDim.pictureBound(columnBound(text, groundY: groundY, dark: false), groundY: groundY, dark: false, at: dim) {
+            var q = [UInt8](repeating: UInt8(quietSteps), count: w), sm = [Double](repeating: 0, count: w)
+            for x in 0..<w {
+                let f = columnCalm((Double(x) + 0.5) * unit, column: column, panelWidth: panel.width, hold: 0)
+                fade[x] = calmJitter * 4 * f * (1 - f)
+                sm[x] = f
+                let cap = cellCap(column: bound, falloff: f, dark: false)
+                q[x] = quietStep(share: groundY - deepest > 1e-6 ? (groundY - cap) / (groundY - deepest) : 1)
+            }
+            quietX = q
+            smoothAt = sm
+        } else if !dark, case let .hero(composer?) = shape, composer.count == 4 {
+            let bound = columnBound(text, groundY: groundY, dark: false)
+            var q = [UInt8](repeating: UInt8(quietSteps), count: w * h)
+            if let bound, groundY - deepest > 1e-6 {
+                let near = (groundY - bound) / (groundY - deepest)
+                for y in 0..<h {
+                    for x in 0..<w {
+                        let c = heroCalm((Double(x) + 0.5) * unit, (Double(y) + 0.5) * unit, composer: composer)
+                        q[y * w + x] = quietStep(share: 1 - (1 - min(near, 1)) * c)
+                    }
+                }
+            }
+            quietCell = q
+        }
+        if dark, case let .thread(column?) = shape, column.count == 4,
            let bound = TextDim.pictureBound(columnBound(text, groundY: groundY, dark: dark), groundY: groundY, dark: dark, at: dim) {
             var inksAt = [(UInt8, UInt8, UInt8)](repeating: (0, 0, 0), count: w * 2)
             for x in 0..<w {
@@ -325,13 +357,20 @@ public enum PictureInk {
             }
             columnInks = inksAt
         }
+        // Light behind a column: the tone over a few cells, so the dots form the picture's broad shapes in an even
+        // screen instead of single dots beside the glyphs.
+        let soft = smoothAt.map { _ in softTone(tone.values, width: w, height: h, radius: lightSoften) }
+        let ledge = feather(tone.values, lut: lut, width: w, height: h)
         for y in 0..<h {
             let py = (Double(y) + 0.5) * unit
             for x in 0..<w {
                 let px = (Double(x) + 0.5) * unit
                 var density = 1.0
                 if case let .hero(composer) = shape { density = heroDensity(px, py, panel: panel, composer: composer) }
-                let v = lut[Int(tone.values[y * w + x])] * coverage * 2 * density
+                var t = Double(tone.values[y * w + x])
+                if let soft, let s = smoothAt?[x], s > 0 { t += (Double(soft[y * w + x]) - t) * s }
+                var v = lut[Int(t.rounded())] * coverage * 2 * density
+                if v == 0 { v = Double(ledge[y * w + x]) * coverage * 2 * density }
                 row[x] = v
                 if fade[x] > 0, v > 0 {
                     var hash = UInt32(truncatingIfNeeded: x &* 73_856_093 ^ y &* 19_349_663)
@@ -347,7 +386,8 @@ public enum PictureInk {
                 let level = lo < 2 && v - Double(lo) > threshold ? lo + 1 : lo
                 let i = (y * w + x) * 4
                 guard level > 0 else { data[i] = groundBytes.0; data[i + 1] = groundBytes.1; data[i + 2] = groundBytes.2; continue }
-                let c = columnInks?[x * 2 + level - 1] ?? levelBytes[level - 1]
+                let c: (UInt8, UInt8, UInt8)
+                if let q = quietX?[x] ?? quietCell?[y * w + x] { c = table[Int(q) * 2 + level - 1] } else { c = columnInks?[x * 2 + level - 1] ?? levelBytes[level - 1] }
                 data[i] = c.0; data[i + 1] = c.1; data[i + 2] = c.2
             }
         }
@@ -364,12 +404,104 @@ public enum PictureInk {
     }
 
     /// The bound behind a thread's column at the standard "Dim behind text": the text floors' bound in dark; in light
-    /// the plain ground, so no ink sits behind the text at all and it comes back across the margin on the same
-    /// falloff. Pale ink held only to light's 7:1 and 4.5:1 floors still sat right behind the words, and all four
-    /// round-0 reviewers found it hard to read (W3, W7, T2). Nil when no text is given.
+    /// the calmer `lightColumnFloors`. Light's own 7:1 and 4.5:1 floors put pale ink right behind the words and all
+    /// four round-0 reviewers found it hard to read (W3, W7, T2); plain ground (2026-11-26) lost the picture at
+    /// ordinary widths (round 1). Nil when no text is given.
     nonisolated static func columnBound(_ text: [SIMD3<Double>], groundY: Double, dark: Bool) -> Double? {
         guard let bound = textBound(text, dark: dark) else { return nil }
-        return dark ? bound : max(bound, groundY)
+        if dark { return bound }
+        let muted = luminance(text[1]), body = luminance(text[0]), f = lightColumnFloors
+        return max(bound, f.muted * (muted + 0.05) - 0.05, f.body * (body + 0.05) - 0.05)
+    }
+
+    /// Light's floors behind the column and around the composer, against the deepest ink: muted 5:1 where light's
+    /// muted (#5c5c5a) has 6.3:1 on the plain ground, which puts the deep ink at about a third of its strength and
+    /// leaves body text over 13:1. Compared on 2026-11-26 with 4.6 (the most picture, but right at the floor) and
+    /// 5.4 (calmest, the picture faint), light-picture/sheet-thread-*.png.
+    nonisolated static let lightColumnFloors = (body: 12.0, muted: 5.0)
+    /// Light behind the column: the tone's box blur radius, in cells. Single dots beside glyphs read as noise; a
+    /// softened tone draws an even screen in the picture's broad shapes. It eases in on the column's fall-off.
+    nonisolated static let lightSoften = 2
+
+    /// How many shares `quietInks` holds between the ground (0) and the inks as they are (`quietSteps`).
+    nonisolated static let quietSteps = 64
+    /// Rounds down, so a quantized share never takes an ink past its bound.
+    nonisolated static func quietStep(share: Double) -> UInt8 { UInt8((min(max(share, 0), 1) * Double(quietSteps)).rounded(.down)) }
+
+    /// Light's inks at each share from the ground to themselves, in linear light, as byte triples: entry `2 * q + k`
+    /// is level `k + 1` at share `q / quietSteps`. Both inks scale by the same share, so they keep their ratio.
+    nonisolated static func quietInks(_ levels: [SIMD3<Double>], ground: SIMD3<Double>) -> [(UInt8, UInt8, UInt8)] {
+        let g = SIMD3(lin(ground.x), lin(ground.y), lin(ground.z))
+        return (0...quietSteps).flatMap { q -> [(UInt8, UInt8, UInt8)] in
+            let s = Double(q) / Double(quietSteps)
+            return levels.map { ink in
+                let m = g + (SIMD3(lin(ink.x), lin(ink.y), lin(ink.z)) - g) * s
+                return SIMD3(enc(m.x), enc(m.y), enc(m.z)).byteTriple
+            }
+        }
+    }
+
+    /// The new-thread page in light: 1 at the composer, easing to 0 away from it, on `heroDensity`'s ellipse.
+    nonisolated static func heroCalm(_ x: Double, _ y: Double, composer c: [Double]) -> Double {
+        let dx = (x - (c[0] + c[2] / 2)) / 760, dy = (y - (c[1] + c[3] / 2 - 10)) / 230
+        return 1 - DitherArt.smoothstep(0.3, 1.5, (dx * dx + dy * dy).squareRoot())
+    }
+
+    /// How many cells a long horizontal edge feathers into the empty ground beside it, the share of the tone it starts
+    /// at, and how wide a run (cells each way) counts as long.
+    nonisolated static let featherReach = 10, featherShare = 0.9, featherRun = 8
+
+    /// Tone (0...1 after the black point) for the empty cells above and below a long horizontal edge, thinning over
+    /// `featherReach` cells. A horizon of a dark photo (Big Sur Night Grasses: a lifted sky over a sea under the black
+    /// point) drew a dot field that stopped on one ruler-straight row, which read as a seam (round-1 review, W3). Only
+    /// a run of tone `featherRun` cells each way counts, so a lamp head keeps no halo and grain stays clean.
+    nonisolated static func feather(_ values: [UInt8], lut: [Double], width w: Int, height h: Int) -> [Float] {
+        var run = [Float](repeating: 0, count: w * h), out = run
+        let span = Float(2 * featherRun + 1)
+        for y in 0..<h {
+            var s: Float = 0
+            for x in -featherRun...featherRun { s += Float(lut[Int(values[y * w + min(max(x, 0), w - 1)])]) }
+            for x in 0..<w {
+                run[y * w + x] = s / span
+                s += Float(lut[Int(values[y * w + min(x + featherRun + 1, w - 1)])]) - Float(lut[Int(values[y * w + max(x - featherRun, 0)])])
+            }
+        }
+        for c in run.indices { run[c] *= Float(DitherArt.smoothstep(0.1, 0.3, Double(run[c]))) }
+        for y in 0..<h {
+            for x in 0..<w {
+                var best: Float = 0
+                for d in 1...featherReach {
+                    let k = Float(featherShare) * (1 - Float(d) / Float(featherReach + 1))
+                    if y >= d { best = max(best, run[(y - d) * w + x] * k) }
+                    if y + d < h { best = max(best, run[(y + d) * w + x] * k) }
+                }
+                out[y * w + x] = best
+            }
+        }
+        return out
+    }
+
+    /// The tone box-blurred over `radius` cells each way.
+    nonisolated static func softTone(_ v: [UInt8], width w: Int, height h: Int, radius r: Int) -> [UInt8] {
+        guard r > 0 else { return v }
+        var a = [Double](repeating: 0, count: w * h), out = [UInt8](repeating: 0, count: w * h)
+        for y in 0..<h {
+            var s = 0.0
+            for x in -r...r { s += Double(v[y * w + min(max(x, 0), w - 1)]) }
+            for x in 0..<w {
+                a[y * w + x] = s / Double(2 * r + 1)
+                s += Double(v[y * w + min(x + r + 1, w - 1)]) - Double(v[y * w + max(x - r, 0)])
+            }
+        }
+        for x in 0..<w {
+            var s = 0.0
+            for y in -r...r { s += a[min(max(y, 0), h - 1) * w + x] }
+            for y in 0..<h {
+                out[y * w + x] = UInt8(min(max(s / Double(2 * r + 1), 0), 255).rounded())
+                s += a[min(y + r + 1, h - 1) * w + x] - a[max(y - r, 0) * w + x]
+            }
+        }
+        return out
     }
 
     /// `ink` moved toward `ground` in linear light until its luminance is within `bound`. The two stay one hue.

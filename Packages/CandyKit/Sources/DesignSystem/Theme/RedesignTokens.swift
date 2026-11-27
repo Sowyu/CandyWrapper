@@ -95,6 +95,9 @@ public enum RedesignTokens {
         public static let inset: CGFloat = 0.05
         /// The 1pt rim on every surface and card, in the text color.
         public static let rim: CGFloat = 0.08
+        /// Light's rim, a step above `rim`: at 0.08 the inset card, Settings and the cards over the picture dissolved
+        /// into the off-white beside them (round-1 review, W7 and Sol's fix 10).
+        public static let rimLight: CGFloat = 0.12
         /// Increase Contrast's rim.
         public static let rimContrast: CGFloat = 0.24
         /// A line that has to read at a glance, in the text color: a meter's unfilled track.
@@ -141,7 +144,7 @@ public enum RedesignTokens {
 
         /// The rim in the text color.
         public nonisolated static func rim(dark: Bool) -> NSColor {
-            let a = increaseContrast ? rimContrast : rim
+            let a = increaseContrast ? rimContrast : dark ? rim : rimLight
             return dark ? Themed.white(a) : Themed.black(a)
         }
 

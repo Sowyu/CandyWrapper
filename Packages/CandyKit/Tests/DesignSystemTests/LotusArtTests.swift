@@ -203,25 +203,18 @@ struct LotusPlacementTests {
         #expect(shown[0] == 90)
     }
 
-    /// Light's ground shows wherever the flower is not: every 8 x 8 block of its field holds dots, also at the bottom
-    /// right, where Gradient's field thins to almost nothing and the gaps between the petals were bare off-white. Dark's
-    /// field is Gradient's own.
-    @Test func lightFieldNeverLeavesTheGroundBare() throws {
+    /// Light's field fades down the page to nothing instead of tiling the canvas with a floor of dots (round-1 review,
+    /// W6: "a uniform crosshatch grid", like graph paper). Dark's field is Gradient's own and unchanged.
+    @Test func lightFieldFadesOutTowardTheFoot() throws {
         let full = try #require(LotusArt.fullCanvas(content: CGRect(x: 0, y: 0, width: 900, height: 600)))
         for t in [0.0, 0.3, 0.7] {
             let light = LotusArt.field(full, t: t, dark: false), dark = LotusArt.field(full, t: t, dark: true)
             #expect(dark == LotusArt.field(full, t: t))
-            var sparsestDark = 64
-            for by in stride(from: 0, to: full.height - 7, by: 8) {
-                for bx in stride(from: 0, to: full.width - 7, by: 8) {
-                    var l = 0, d = 0
-                    for y in by..<(by + 8) { for x in bx..<(bx + 8) { l += Int(light[y * full.width + x]); d += Int(dark[y * full.width + x]) } }
-                    #expect(l >= 8, "light block at \(bx), \(by) of t \(t): \(l) dots")
-                    sparsestDark = min(sparsestDark, d)
-                }
-            }
-            // The case it fixes: dark's field thins below that at the bottom right.
-            #expect(sparsestDark < 8)
+            func band(_ f: [UInt8], _ rows: Range<Int>) -> Int { rows.reduce(0) { s, y in s + (0..<full.width).reduce(0) { $0 + Int(f[y * full.width + $1]) } } }
+            let h = full.height, top = band(light, 0..<(h / 4)), foot = band(light, (h - h / 10)..<h)
+            #expect(top > 0, "t \(t)")
+            #expect(foot * 10 < top, "t \(t): top \(top), foot \(foot)")
+            #expect(band(light, (h - 2)..<h) == 0, "t \(t)")
         }
     }
 

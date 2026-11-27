@@ -965,7 +965,7 @@ extension DitherArtView {
         let key = ColumnKey(placement: p, column: column, cap: cap, dark: dark, dim: dim)
         let glass = RedesignTokens.FlowerGlass.isOn(dark: dark)
         guard key != columnKey || (glass && glowKey != key) || (!glass && glowKey != nil) else { return }
-        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: Self.flowerShare(cap, dim: dim), keep: Self.flowerShare(LotusArt.columnKeep, dim: dim),
+        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: Self.flowerShare(cap, dim: dim), keep: Self.flowerShare(dark ? LotusArt.columnKeep : LotusArt.lightColumnKeep, dim: dim),
                                                     dark: dark, cell: cell) }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
