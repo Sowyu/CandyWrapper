@@ -76,9 +76,9 @@ struct PictureInkTests {
         #expect(abs(deep.h - PictureInk.oklch(srgb: accent).h) < 2)
     }
 
-    /// Light holds the same cap mirrored. Its muted text (#737373) measures 4.47:1 on the plain ground, so nothing but
-    /// ground fits behind the column; the ink comes back over the margin with no step, so the column isn't cut out.
-    @Test func lightColumnIsClean() throws {
+    /// Light keeps the picture behind the column at `lightColumnFloors` (the user, 2026-11-26: "i approve of picture
+    /// back"), both inks scaled toward the ground together, and the ink comes back over the margin with no step.
+    @Test func lightColumnKeepsAQuietPicture() throws {
         // Redesign light's own ground, text and muted text, so the test follows the palette.
         let light = try #require(ThemeDefinition.dither.colors(for: .light))
         func rgb(_ role: ThemeColorRole) throws -> SIMD3<Double> {
@@ -95,20 +95,42 @@ struct PictureInkTests {
         func lum(_ x: Int) -> Double { (0..<h).map { y in PictureInk.luminance(SIMD3(Double(b[y * row + x * 4]), Double(b[y * row + x * 4 + 1]), Double(b[y * row + x * 4 + 2])) / 255) }.reduce(0, +) / Double(h) }
         let plain = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 250), ground: ground, dark: false, shape: .plain, text: []))
         let p = [UInt8](plain.dataProvider!.data! as Data)
-        // Light's column is plain ground at the standard "Dim behind text" (decided 2026-11-26 after the round-0
-        // review: pale ink at the text floors read badly to all four reviewers; pictures in
-        // redesign-audit-2026-11-26/choice-light-column).
-        for x in 0..<w where Double(x) * 3 + 1.5 >= column[0] && Double(x) * 3 + 1.5 <= column[0] + column[2] {
-            #expect(b[x * 4] == ground.bytes[0] && b[x * 4 + 2] == ground.bytes[2], "x \(x)")
+        // Behind the column the picture shows, and no cell is darker than muted text at 5:1 allows.
+        let muted = PictureInk.luminance(try rgb(.textMuted)), body = PictureInk.luminance(try rgb(.text))
+        var inked = 0
+        for y in 0..<h {
+            for x in 0..<w where Double(x) * 3 + 1.5 >= column[0] && Double(x) * 3 + 1.5 <= column[0] + column[2] {
+                let i = y * row + x * 4, l = PictureInk.luminance(SIMD3(Double(b[i]), Double(b[i + 1]), Double(b[i + 2])) / 255)
+                if b[i] != ground.bytes[0] || b[i + 2] != ground.bytes[2] { inked += 1 }
+                #expect(PictureInk.contrast(muted, l) >= PictureInk.lightColumnFloors.muted - 0.01, "\(x), \(y)")
+                #expect(PictureInk.contrast(body, l) >= PictureInk.lightColumnFloors.body - 0.01, "\(x), \(y)")
+            }
         }
+        #expect(inked > 0)
         // Out from the column, in bands one Bayer tile wide, the ink comes back without a step: never lighter outward.
         let first = Int(((column[0] + column[2]) / 3).rounded(.up))
         let bands = stride(from: first, to: w - 7, by: 8).map { x in (x..<(x + 8)).map(lum).reduce(0, +) / 8 }
         let steps = zip(bands, bands.dropFirst()).map { $0.0 - $0.1 }
         let total = bands.first! - bands.last!
-        #expect(total > 0.5 && steps.allSatisfy { $0 > -0.005 && $0 < total / 3 }, "\(steps)")
+        #expect(total > 0.3 && steps.allSatisfy { $0 > -0.005 && $0 < total / 3 }, "\(steps)")
         // And by the panel's edge it is the picture as it is.
         #expect(Array(b[(w - 1) * 4..<(w - 1) * 4 + 3]) == Array(p[(w - 1) * 4..<(w - 1) * 4 + 3]))
+    }
+
+    /// A long horizontal edge over empty ground (a lifted night sky over a black sea) thins out over a few rows below
+    /// it instead of stopping on one straight row (round-1 review, W3's seam).
+    @Test func aHorizonFeathersIntoTheGround() throws {
+        let w = 64, h = 40, ground = SIMD3<Double>(repeating: 8.0 / 255)
+        let values = (0..<(w * h)).map { $0 / w < 20 ? UInt8(110) : 0 }
+        let tone = PictureInk.Tone(width: w, height: h, values: values, hue: 0, median: 0.5)
+        let art = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 220), ground: ground, dark: true, shape: .plain, text: []))
+        let b = [UInt8](art.dataProvider!.data! as Data), row = art.bytesPerRow
+        func lit(_ y: Int) -> Int { (0..<w).filter { b[y * row + $0 * 4 + 2] != 8 }.count }
+        let below = (20..<(20 + PictureInk.featherReach + 2)).map(lit)
+        #expect(below[0] > 0 && below[0] + below[1] <= lit(18) + lit(19), "\(below)")
+        // Bayer rows hold different thresholds, so compare the first rows with the later ones, not row by row.
+        #expect(below[0] + below[1] > below[4] + below[5], "\(below)")
+        #expect(below.last == 0, "\(below)")
     }
 
     @Test(arguments: [true, false])

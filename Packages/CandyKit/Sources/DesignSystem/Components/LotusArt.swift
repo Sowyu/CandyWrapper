@@ -987,7 +987,7 @@ public enum LotusArt {
         let row = (0..<w).map { DitherArt.gradientField((Double($0) + 0.5) / Double(w), t) * fieldDensity }
         let least = fieldLeast(dark: dark)
         for y in 0..<h {
-            let fall = 1 - (1 - fieldFloor) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
+            let fall = 1 - (1 - fieldFloor(dark: dark)) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
             for x in 0..<w where Swift.max(row[x] * fall, least) > (Double(DitherArt.bayer[b + ((x + full.originX) & 7)]) + 0.5) / 64 {
                 out[y * w + x] = 1
             }
@@ -997,15 +997,16 @@ public enum LotusArt {
 
     /// The share of Gradient's density the field keeps, so the lotus stays the brighter, clearer thing.
     public static let fieldDensity = 0.5
-    /// The field's strength at the bottom edge, as a share of the top's.
-    static let fieldFloor = 0.35
-    /// The field's least density. Light's ground shows between the petals: the field thins to about 4% at the bottom
-    /// right, and there the bare off-white gaps beside the tinted petals looked cut out (the 1.17.0 walk). Dark's
-    /// thin field reads as the black ground, so it keeps none.
-    static func fieldLeast(dark: Bool) -> Double { dark ? 0 : 0.14 }
+    /// The field's strength at the bottom edge, as a share of the top's. Light's runs out to none, so the dots fade
+    /// down the page instead of tiling it to the foot.
+    static func fieldFloor(dark: Bool) -> Double { dark ? 0.35 : 0 }
+    /// The field's least density. Light kept 0.14 from the 1.17.0 walk, so the bare gaps beside the petals didn't look
+    /// cut out, but that floor tiled the whole canvas in an even grid of dots like graph paper (round-1 review, W6).
+    static func fieldLeast(dark: Bool) -> Double { 0 }
     /// The field's share of the ink: about Gradient's own cell color (36% of the accent over the ground in dark), and in
-    /// light about 24% under the flower's 0.75, quieter than the lotus so the dots stay calm behind controls and text.
-    public static func fieldAlpha(dark: Bool) -> UInt8 { dark ? 92 : 80 }
+    /// light about 19% under the flower's 0.75, quieter than the lotus so the dots stay calm behind controls and text.
+    /// Light's 80 (24%) still read as a heavy field on the new-thread page (round-1 review, W7).
+    public static func fieldAlpha(dark: Bool) -> UInt8 { dark ? 92 : 64 }
 
     /// One shown frame over `full`'s cells: the field, then the flower's `codes` on `flower` (a canvas inside `full`, or
     /// `full` itself) over it, a covered cell hiding the field.
@@ -1216,7 +1217,7 @@ public enum LotusArt {
         let alphas = codeAlpha
         packed.withUnsafeBufferPointer { pk in
             for y in 0..<h {
-                let fall = 1 - (1 - fieldFloor) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
+                let fall = 1 - (1 - fieldFloor(dark: dark)) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
                 let fy = y - dy, inFlower = fy >= 0 && fy < flower.height
                 for x in 0..<w {
                     let k = y * w + x, fx = x - dx
@@ -1239,7 +1240,10 @@ public enum LotusArt {
     /// beside it the effect eases out, in points. Light eases out over a much wider run, so no cut-out shape reads on
     /// the pale ground.
     public static let columnKeep: Float = 0.3
-    public static func columnReach(dark: Bool) -> CGFloat { dark ? 240 : 900 }
+    /// Light keeps far fewer: 30% of the lotus's dots, capped pale, read as grey static over the reply text when the
+    /// thread's lotus rises behind the column (round-1 review, W6 and W7).
+    public static let lightColumnKeep: Float = 0.06
+    public static func columnReach(dark: Bool) -> CGFloat { dark ? 240 : 480 }
     /// How far past the column's sides the full effect holds, points.
     public static let columnPad: CGFloat = 20
 
