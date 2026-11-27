@@ -86,9 +86,8 @@ struct ThreadMinimapHoverTests {
 
     enum Theme: CaseIterable { case standard, redesign }
 
-    /// T3's resting strips are dim and the strips of turns on screen bright. In every theme, over the background behind
-    /// the rail (T3's panel, or the brightest dot dark and the darkest dot light of Redesign's art),
-    /// a resting strip keeps at least T3's contrast ratio to an on-screen one, and stays visible over both extremes.
+    /// T3's resting strips are dim and the strips of turns on screen bright. In every theme, over the panel's plain
+    /// ground, a resting strip shows and the on-screen strip stands further from the ground than it.
     @Test(arguments: Theme.allCases, [false, true])
     func restingStripsAreDimmerThanOnScreenOnes(_ theme: Theme, dark: Bool) throws {
         let previous = ThemeRuntime.input
@@ -103,42 +102,21 @@ struct ThreadMinimapHoverTests {
         map.cacheDisplay(in: map.bounds, to: cached)
         let rep = try #require(cached.converting(to: .sRGB, renderingIntent: .default))
         let scale = CGFloat(rep.pixelsWide) / map.bounds.width
-        func lum(_ c: SIMD3<Double>) -> Double { BackdropMarks.luminance(c) }
         func strip(_ i: Int, over ground: SIMD3<Double>) throws -> Double {
             let y = Int((CGFloat(i) / 9 * (map.bounds.height - 2) + 1) * scale)
             let c = try #require(rep.colorAt(x: Int(4 * scale), y: y))
             let a = Double(c.alphaComponent)
             #expect(a > 0, "strip \(i) draws")
-            return lum(SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent)) * a + ground * (1 - a))
+            return OKLCH.luminance(SIMD3(Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent)) * a + ground * (1 - a))
         }
-        let t3 = BackdropMarks.reference(ThreadMinimapView.strips, dark: dark)
-        let t3Ratio = BackdropMarks.contrast(t3.states[2], t3.states[0])
         let panel = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.srgb
-        let solid = SIMD3(panel.x, panel.y, panel.z)
-        let grounds: [SIMD3<Double>]
-        if let worst = BackdropMarks.worstBackground(dark: dark) {
-            #expect(theme != .standard)
-            grounds = [SIMD3(repeating: worst), solid]
-        } else {
-            #expect(theme == .standard)
-            grounds = [solid]
-        }
-        for ground in grounds {
-            let rest = try strip(0, over: ground), on = try strip(9, over: ground)
-            #expect(BackdropMarks.contrast(on, rest) >= t3Ratio * 0.97, "\(theme) dark \(dark): \(BackdropMarks.contrast(on, rest)) < T3's \(t3Ratio)")
-            #expect(BackdropMarks.contrast(rest, lum(ground)) >= BackdropMarks.contrast(t3.states[0], t3.background) * 0.97,
-                    "\(theme) dark \(dark): the resting strip is fainter than T3's")
-            #expect(dark ? on > rest : on < rest)
-            // Redesign's resting strip is a target, so it keeps a graphic's 3:1 on the panel's plain ground (T10, round 2).
-            if theme == .redesign, ground == solid {
-                #expect(BackdropMarks.contrast(rest, lum(ground)) >= 3, "redesign dark \(dark): resting strip \(BackdropMarks.contrast(rest, lum(ground)))")
-            }
-        }
-        // Over light Redesign's worst dot the resting strip stands clearly further out than T3's, so it never reads as a
-        // stray mark. Dark has no room for that: the on-screen strip already keeps T3's ratio to it only up to white.
-        if theme == .redesign, !dark, let worst = BackdropMarks.worstBackground(dark: dark) {
-            let rest = try strip(0, over: SIMD3(repeating: worst))
-            #expect(BackdropMarks.contrast(rest, lum(SIMD3(repeating: worst))) >= BackdropMarks.contrast(t3.states[0], t3.background) * 1.3)
+        let ground = SIMD3(panel.x, panel.y, panel.z)
+        let rest = try strip(0, over: ground), on = try strip(9, over: ground)
+        #expect(OKLCH.contrast(rest, OKLCH.luminance(ground)) > 1.05, "\(theme) dark \(dark): the resting strip shows")
+        #expect(dark ? on > rest : on < rest, "\(theme) dark \(dark)")
+        // Redesign's resting strip is a target, so it keeps a graphic's 3:1 on the panel's plain ground (T10, round 2).
+        if theme == .redesign {
+            #expect(OKLCH.contrast(rest, OKLCH.luminance(ground)) >= 3, "redesign dark \(dark): resting strip \(OKLCH.contrast(rest, OKLCH.luminance(ground)))")
         }
     }
 }

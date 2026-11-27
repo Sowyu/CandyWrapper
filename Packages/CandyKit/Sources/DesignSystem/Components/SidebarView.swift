@@ -227,8 +227,7 @@ public final class SidebarLayoutView: DSView {
     /// Adds Redesign's art while it shows, and drops it otherwise. The theme runtime calls
     /// `viewDidChangeEffectiveAppearance` on every view when the theme changes, so switching is instant.
     private func updateArt() {
-        // Blur draws the picture behind the whole window, sidebar included; Dither only in the main panel.
-        ditherArt = DitherArtView.sync(ditherArt, in: ThemeRuntime.ditherBlur ? self : main)
+        ditherArt = DitherArtView.sync(ditherArt, in: main)
         needsLayout = true // Dither frames the main panel
     }
 
@@ -304,7 +303,7 @@ public final class SidebarLayoutView: DSView {
     public override func layout() {
         super.layout()
         // The main page may have changed, say from a new thread to Settings.
-        ditherArt?.updateScrim()
+        ditherArt?.updateGround()
         let w = restorePreviewWidth ?? effectiveWidth
         // Offcanvas: the container slides fully off screen to `left: -width`, the gap collapses to 0. Mid-slide
         // the gap is the open share of the width, on whole device pixels so the main panel's text stays sharp.
@@ -332,14 +331,10 @@ public final class SidebarLayoutView: DSView {
         main.layer?.cornerRadius = dither && !inset ? DitherChrome.panelRadius : 0
         main.layer?.maskedCorners = dither ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             : [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
-        // Blur: the sidebar and the panel are transparent over one blurred picture, with no edge between them.
-        let blur = dither && ThemeRuntime.ditherBlur
-        layoutPanelRim(dither: dither && !blur && !inset)
+        layoutPanelRim(dither: dither && !inset)
         layer?.backgroundColor = dither ? DitherChrome.bandColor(in: self) : nil
         // The inset card's ground is the art; the margins around it show this view's sidebar color.
-        if main.clearsFill != (blur || inset) { main.clearsFill = blur || inset }
-        if sidebar.surface.clearsFill != blur { sidebar.surface.clearsFill = blur }
-        if blur { ditherArt?.frame = bounds }
+        if main.clearsFill != inset { main.clearsFill = inset }
         sidebar.showsBorder = !dither
         // The band and frame around the panel are flat, so the sidebar drops its grain to match them.
         if sidebar.surface.showsGrain == dither { sidebar.surface.showsGrain = !dither }
@@ -400,19 +395,18 @@ public final class SidebarLayoutView: DSView {
 
     private func placeInsetCard() {
         let inset = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && insetActive
-        let picture = inset && !ThemeRuntime.ditherBlur
         tabStrip.insetCard = inset
         cardRim.isHidden = !inset
         if let art = ditherArt {
-            art.isInsetCard = picture && art.superview === main
-            if !picture, art.superview === main { art.frame = main.bounds }
+            art.isInsetCard = inset
+            if !inset { art.frame = main.bounds }
         }
         guard inset else { return }
         let card = insetCardFrame
         CATransaction.begin(); CATransaction.setDisableActions(true)
         cardRim.frame = convert(card, from: main)
         cardRim.isHidden = card.width < 1 || card.height < 1
-        if picture, let art = ditherArt, art.superview === main, art.frame != card { art.frame = card }
+        if let art = ditherArt, art.frame != card { art.frame = card }
         CATransaction.commit()
         tabStrip.contentEnd = max(0, cardRim.frame.maxX - tabStrip.frame.minX)
     }

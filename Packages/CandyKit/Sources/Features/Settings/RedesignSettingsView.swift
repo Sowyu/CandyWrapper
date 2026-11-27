@@ -23,7 +23,7 @@ enum RedesignPickerSettings {
 
 /// The Redesign tab, CandyWrapper's own: the switch that turns Redesign on, then every setting only Redesign uses.
 /// The switch is the theme picker's own setting, so the two always agree. While Redesign is off the rows under it
-/// stay visible and inert, except Ignore Reduce Transparency.
+/// stay visible and inert.
 public final class RedesignSettingsView: SettingsPageBase {
     static let offReason = "Turn on Redesign to change this."
     private let library: ThemeLibrary
@@ -33,7 +33,7 @@ public final class RedesignSettingsView: SettingsPageBase {
     /// Where Redesign shows: both appearances, or one, with the theme from Settings > Appearance in the other.
     let useIn = settingsSelect(RedesignSettingsView.useInChoices.map(\.0), width: 136)
     static let useInChoices: [(String, Set<ThemeAppearance>)] = [("Light and dark", [.light, .dark]), ("Dark only", [.dark]), ("Light only", [.light])]
-    /// The rows inert while Redesign is off: all but the switch and Ignore Reduce Transparency.
+    /// The rows inert while Redesign is off: all but the switch.
     private(set) var gated: [SettingsRowView] = []
 
     public convenience override init(context: SettingsPageContext) { self.init(context: context, library: .shared) }
@@ -56,18 +56,12 @@ public final class RedesignSettingsView: SettingsPageBase {
             if let i = Self.useInChoices.firstIndex(where: { $0.1 == shown }), self?.useIn.selectedIndex != i { self?.useIn.selectedIndex = i }
         }
 
-        let picture = pictureRow(), dim = textDimRow(), reading = readingWidthRow()
-        // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").
-        let animate = clientSwitch("redesign-gradient-animate", "Let Flower's lotus bloom and its dots drift, except while the window is in the background or Reduce Motion is on.",
+        let reading = readingWidthRow()
+        // Capy's dither moves (the user, 2026-11-21: "capys plain dither isnt just static"). Gradient is the only
+        // background (the user, 2026-11-27: "lets just only do the gradient theme"), so this is its one setting.
+        let animate = clientSwitch("redesign-gradient-animate", "Let the dots at the top of a new thread drift, except while the window is in the background or Reduce Motion is on.",
                                    key: "redesignGradientAnimate", reset: "animate background", title: "Animate background")
-        let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
-                                key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
-        let ink = inkRow(), dots = dotSizeRow(), threadFlower = threadFlowerRow()
-        // Background first, then only the rows the chosen background uses; the binder below hides the rest.
-        let background: [SettingsRowView] = [backgroundRow(), picture, ink, dots, tint, animate, threadFlower, dim]
-        let look: [SettingsRowView] = [accentRow(), avatarsRow(), reading]
-        let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture and blur as if Reduce Transparency were off in macOS.",
-                                        key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
+        let look: [SettingsRowView] = [accentRow(), animate, avatarsRow(), reading]
         let stacked = clientSwitch("redesign-stacked-picker", "Show the models in one column instead of beside a details pane.",
                                    key: "redesignStackedPicker", reset: "stacked model picker", title: "Stacked model picker")
         let account = clientSwitch("redesign-picker-account", "Show the provider's account and usage bar in the model picker.",
@@ -79,30 +73,22 @@ public final class RedesignSettingsView: SettingsPageBase {
         // The user, 2026-11-26: the quiet Compact toggle by default, the old split button kept under Legacy.
         let legacyCompact = clientSwitch("redesign-legacy-compact-send", "Brings back the wide Compact and send button, with a menu to send with full history, in place of the Compact toggle.",
                                          key: "redesignLegacyCompactSend", reset: "compact and send button", title: "Compact and send button")
-        gated = background + look + [inset, rows, stacked, account, legacyCompact]
+        gated = look + [inset, rows, stacked, account, legacyCompact]
         binder.add { [weak self] in
             guard let self else { return }
             let off = library.isRedesignOn ? nil : Self.offReason
             for r in self.gated where r.inertReason != off { r.inertReason = off }
             // "Use in" means nothing until Redesign is on.
             if self.useIn.isHidden == library.isRedesignOn { self.useIn.isHidden = !library.isRedesignOn; masterRow.needsLayout = true }
-            // Each background shows only its own rows: Picture's inks and dots, Flower's motion, and the picture and
-            // its tint for the two that draw it.
-            let mode = self.client.string("redesignBackground") == "gradient" ? "flower" : self.client.string("redesignBackground")
-            let shown: [(SettingsRowView, Bool)] = [(picture, mode != "flower"), (tint, mode != "flower"), (ink, mode == "dither"),
-                                                     (dots, mode == "dither"), (animate, mode == "flower"), (threadFlower, mode == "flower")]
-            var changed = false
-            for (r, show) in shown where r.isHidden == show { r.isHidden = !show; changed = true }
             let readingOff = off ?? Self.readingWidthReason(self.client.string("chatWidth"))
             if reading.inertReason != readingOff { reading.inertReason = readingOff }
-            if changed { self.needsLayout = true; self.onHeightChange?() }
         }
-        // Most used first: the switch, the background, the colors, the layout, then the model picker's options.
+        // Most used first: the switch, the colors and motion, the layout, the sidebar, then the model picker's options.
         items = [
             section(nil, "Theme", [masterRow]),
-            section("redesign-background-section", "Background", background + [transparency]),
             section("redesign-look", "Look", look),
-            section("redesign-layout", "Layout", [inset, rows]),
+            section("redesign-layout", "Layout", [inset]),
+            section("redesign-sidebar", "Sidebar", [rows]),
             section("redesign-model-picker", "Model picker", [stacked, account]),
             section("redesign-legacy", "Legacy", [legacyCompact]),
         ]
@@ -115,45 +101,6 @@ public final class RedesignSettingsView: SettingsPageBase {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    /// The picture Redesign shows in the main panel: choose one, or go back to the desktop picture.
-    private func pictureRow() -> SettingsRowView {
-        let choose = ButtonView("Choose…", variant: .outline, size: .sm)
-        let desktop = ButtonView("Use desktop", variant: .ghost, size: .sm)
-        choose.action = { [weak self] in self?.choosePicture() }
-        desktop.action = { [weak self] in DitherPicture.clear(); ThemeLibrary.shared.apply(); self?.refresh() }
-        let group = SettingsControlGroup([desktop, choose], gap: 6)
-        let r = row("redesign-picture", title: "Picture", detail: "The picture behind the chat, or your desktop picture until you choose one.", control: group)
-        binder.add { [weak group] in
-            desktop.isHidden = DitherPicture.path == nil
-            group?.invalidateIntrinsicContentSize()
-        }
-        return r
-    }
-
-    /// How Redesign draws its background: the picture dithered in the main panel, as before, the picture blurred behind
-    /// the whole window (the user, 2026-11-21: "either full blur or full dither"), or a dotted lotus over accent dots
-    /// with no picture. Gradient's dots became Flower's field; a stored "gradient" loads as Flower.
-    private func backgroundRow() -> SettingsRowView {
-        let key = "redesignBackground", values = ["dither", "blur", "flower"]
-        let toggle = ToggleGroupView(variant: .segmented, items: [("Picture", nil), ("Blur", nil), ("Flower", nil)], selected: 0)
-        toggle.setAccessibilityLabel("Background")
-        // "Style": the section above is titled Background.
-        let r = row("redesign-background", title: "Style",
-                    detail: "Draw your picture in dots behind the chat, blur it behind the whole window, or show a dotted lotus instead.",
-                    control: toggle)
-        toggle.onChange = { [weak self, weak toggle] i in
-            guard let self else { return }
-            // Clicking the pressed segment unpresses it; the choice stays.
-            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
-            self.context.writeClient?([key: .string(values[i])])
-        }
-        binder.add { [weak self, weak toggle] in
-            guard let self else { return }
-            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key) == "gradient" ? "flower" : self.client.string(key)) ?? 0
-        }
-        return r
-    }
-
     /// The sidebar's thread rows: two lines with the environment and provider under the title (the default, the user,
     /// 2026-11-26: "keep 2 lines default"), or one line after Capy.
     private func sidebarRowsRow() -> SettingsRowView {
@@ -162,27 +109,6 @@ public final class RedesignSettingsView: SettingsPageBase {
         toggle.setAccessibilityLabel("Sidebar rows")
         let r = row("redesign-sidebar-rows", title: "Sidebar rows",
                     detail: "Show each thread's environment and provider on a second line, or keep each thread to one line.",
-                    control: toggle)
-        toggle.onChange = { [weak self, weak toggle] i in
-            guard let self else { return }
-            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
-            self.context.writeClient?([key: .string(values[i])])
-        }
-        binder.add { [weak self, weak toggle] in
-            guard let self else { return }
-            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0
-        }
-        return r
-    }
-
-    /// The lotus a thread draws under Flower (`LotusArt.ThreadLook`; the user, 2026-11-27: "make old and new a toggle
-    /// they both look good"): the whole lotus beside the column, the default, or the smaller one from before.
-    private func threadFlowerRow() -> SettingsRowView {
-        let key = "redesignThreadFlower", values = ["large", "small"]
-        let toggle = ToggleGroupView(variant: .segmented, items: [("Large", nil), ("Small", nil)], selected: 0)
-        toggle.setAccessibilityLabel("Flower on a thread")
-        let r = row("redesign-thread-flower", title: "Flower on a thread",
-                    detail: "Show a whole lotus beside the conversation, or a smaller one that fades behind the text.",
                     control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
@@ -211,103 +137,6 @@ public final class RedesignSettingsView: SettingsPageBase {
         binder.add { [weak self, weak toggle] in
             guard let self else { return }
             toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0
-        }
-        return r
-    }
-
-    /// Where Picture's two inks come from (the user, 2026-11-21: "i like 2 ink"): the picture's own hue, the accent, or
-    /// a color the user picks. Accent and Custom make that color the light ink and derive the deep one from its hue.
-    private func inkRow() -> SettingsRowView {
-        let key = "redesignInk", colorKey = "redesignInkColor", values = ["auto", "accent", "custom"]
-        let toggle = ToggleGroupView(variant: .segmented, items: [("Auto", nil), ("Accent", nil), ("Custom", nil)], selected: 0)
-        toggle.setAccessibilityLabel("Ink")
-        let well = NSColorWell(style: .minimal)
-        well.setAccessibilityLabel("Custom ink color")
-        well.frame.size = NSSize(width: 38, height: 24)
-        let target = InkWellTarget { [weak self] color in
-            guard let self, let c = color.usingColorSpace(.sRGB) else { return }
-            let hex = String(format: "#%02x%02x%02x", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()),
-                             Int((c.blueComponent * 255).rounded()))
-            self.context.writeClient?([colorKey: .string(hex), key: .string("custom")])
-        }
-        well.target = target
-        well.action = #selector(InkWellTarget.changed(_:))
-        objc_setAssociatedObject(well, &InkWellTarget.key, target, .OBJC_ASSOCIATION_RETAIN)
-        let group = SettingsControlGroup([well, toggle], gap: 8)
-        let r = row("redesign-ink", title: "Ink",
-                    detail: "Where Picture's two colors come from: the picture itself, the accent, or a color you pick.",
-                    control: group)
-        toggle.onChange = { [weak self, weak toggle] i in
-            guard let self else { return }
-            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
-            self.context.writeClient?([key: .string(values[i])])
-        }
-        binder.add { [weak self, weak toggle, weak well, weak group] in
-            guard let self else { return }
-            let mode = self.client.string(key)
-            toggle?.selectedIndex = values.firstIndex(of: mode) ?? 0
-            well?.isHidden = mode != "custom"
-            if case let .custom(c) = DitherInk(mode: "custom", color: self.client.string(colorKey)),
-               well?.color.usingColorSpace(.sRGB).map({ SIMD3($0.redComponent, $0.greenComponent, $0.blueComponent) }) != c {
-                well?.color = NSColor(srgbRed: c.x, green: c.y, blue: c.z, alpha: 1)
-            }
-            group?.invalidateIntrinsicContentSize()
-        }
-        return r
-    }
-
-    /// The size of Picture's dots (the user, 2026-11-21, on 3pt dots on a 2x laptop: "i feel like the pixels might be a
-    /// bit big"). Fine is 1.5pt, 3 pixels on a Retina screen; at 1x it draws Medium's 2pt, since 1.5pt falls between
-    /// pixels there (`DitherDotSize`).
-    private func dotSizeRow() -> SettingsRowView {
-        let key = "redesignDotSize", values = DitherDotSize.allCases.map(\.rawValue)
-        let toggle = ToggleGroupView(variant: .segmented, items: [("Fine", nil), ("Medium", nil), ("Coarse", nil)], selected: 1)
-        toggle.setAccessibilityLabel("Dot size")
-        let r = row("redesign-dot-size", title: "Dot size",
-                    detail: "How big Picture's dots are, with Fine keeping the most detail on a Retina screen.",
-                    control: toggle)
-        toggle.onChange = { [weak self, weak toggle] i in
-            guard let self else { return }
-            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 1; return }
-            self.context.writeClient?([key: .string(values[i])])
-        }
-        binder.add { [weak self, weak toggle] in
-            guard let self else { return }
-            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 1
-        }
-        return r
-    }
-
-    /// "Dim behind text" (the user, 2026-11-21: "allow me to change the dimness of the opacity of the line down the
-    /// middle"): how much the background is held back behind a thread's text, 0 to 100 with the earlier look at 70
-    /// (`TextDim`). Picture moves its cap's floors and Flower its mask's depth, both from `redesignTextDim`. Blur's dim
-    /// over the whole thread page is the same thing for Blur, so this row folds in the old "Background dim": in Blur it
-    /// shows and writes `ditherBackgroundDim`, mapped so its 35% default sits at 70 too and a saved value carries over.
-    private func textDimRow() -> SettingsRowView {
-        let control = SettingsSliderControl(value: Double(TextDim.standard), range: 0...100, step: 1, outputWidth: 48)
-        control.format = { "\(Int($0))%" }
-        control.slider.setAccessibilityLabel("Dim behind text")
-        let r = row("redesign-text-dim", title: "Dim behind text", detail: "How much the background is held back behind a thread\u{2019}s text.",
-                    control: control)
-        let slot = ResetSlot(label: "dim behind text")
-        r.accessories = [slot]
-        let blurKey = "ditherBackgroundDim", key = "redesignTextDim"
-        let blur = { [weak self] in self?.client.string("redesignBackground") == "blur" }
-        slot.action = { [weak self] in
-            let k = blur() ? blurKey : key
-            self?.context.writeClient?([k: ClientSettings.fields[k]!.defaultValue])
-        }
-        control.onChange = { [weak self] v in
-            let position = Int(v.rounded())
-            self?.context.writeClient?(blur() ? [blurKey: .number(Double(TextDim.blurDim(at: position)))] : [key: .number(Double(position))])
-        }
-        binder.add { [weak self, weak control, weak r] in
-            guard let self else { return }
-            let position = Self.textDimPosition(self.client)
-            if control?.value != Double(position) { control?.value = Double(position) }
-            slot.isShown = !self.client.isDefault(blur() ? blurKey : key)
-            let status = position < 50 ? Self.textDimWarning : nil
-            if r?.status != status { r?.status = status }
         }
         return r
     }
@@ -350,13 +179,6 @@ public final class RedesignSettingsView: SettingsPageBase {
         return Int((width / max(1, advance) / 5).rounded()) * 5
     }
 
-    static let textDimWarning = "Text may be harder to read over bright backgrounds."
-
-    /// Where "Dim behind text" stands for the chosen background.
-    static func textDimPosition(_ client: ClientSettings) -> Int {
-        client.string("redesignBackground") == "blur" ? TextDim.position(blurDim: client.int("ditherBackgroundDim")) : client.int("redesignTextDim")
-    }
-
     /// Redesign's accent (the user, 2026-10-23). It recolors the palette's accent roles.
     private func accentRow() -> SettingsRowView {
         let key = "ditherAccent"
@@ -377,13 +199,6 @@ public final class RedesignSettingsView: SettingsPageBase {
             slot.isShown = !self.client.isDefault(key)
         }
         return r
-    }
-
-    private func choosePicture() {
-        DitherPicture.choose(in: window, onError: { [weak self] in self?.context.toast?("Couldn’t use that picture", $0, .error) }) { [weak self] in
-            ThemeLibrary.shared.apply()
-            self?.refresh()
-        }
     }
 }
 
@@ -421,12 +236,4 @@ final class AccentSwatchButton: ControlView {
             : DitherAccent.color(accent.accent(dark: dark))).setFill()
         NSBezierPath(ovalIn: r.insetBy(dx: 3, dy: 3)).fill()
     }
-}
-
-/// Hands the ink well's color to the Ink row. NSColorWell keeps its target weakly, so the well holds this.
-private final class InkWellTarget: NSObject {
-    nonisolated(unsafe) static var key = 0
-    let onChange: (NSColor) -> Void
-    init(_ onChange: @escaping (NSColor) -> Void) { self.onChange = onChange }
-    @MainActor @objc func changed(_ sender: NSColorWell) { onChange(sender.color) }
 }

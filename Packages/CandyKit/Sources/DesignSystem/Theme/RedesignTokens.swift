@@ -40,7 +40,7 @@ public enum RedesignTokens {
         public static let pill: CGFloat = 30
     }
 
-    /// Two shadows: one for surfaces that rest on the picture, one for layers that float over content.
+    /// Two shadows: one for surfaces that rest on the ground, one for layers that float over content.
     public struct Shadow: Sendable {
         public let y: CGFloat
         /// `CALayer.shadowRadius`; CSS blur is twice this.
@@ -48,7 +48,7 @@ public enum RedesignTokens {
         public let dark: Float
         public let light: Float
 
-        /// The composer, the pills, the header pill and every card on the picture.
+        /// The composer, the pills, the header pill and the floating cards.
         public static let resting = Shadow(y: 2, radius: 4, dark: 0.28, light: 0.08)
         /// Menus, popovers, the docked picker, tooltips, toasts and modals.
         public static let floating = Shadow(y: 8, radius: 12, dark: 0.45, light: 0.12)
@@ -71,31 +71,14 @@ public enum RedesignTokens {
         }
     }
 
-    /// The one blur Redesign allows (the user, 2026-11-21, of the composer over the lotus: "have a very very slight blur
-    /// but still solid enough so it feels premium", then "i kinda hate blur it just looks unpremium but also i like
-    /// blur"): surfaces over the Flower are frosted glass. Through `fill` of their fill shows the flower blurred by `blur`
-    /// points, wide enough that no petal or dot survives, a soft light stronger where the flower is behind
-    /// (`LotusArt.glow`, `FlowerGlassView`). Never transparency without blur.
-    public enum FlowerGlass {
-        /// The fill's share over the blurred flower, and the blur's sigma in points.
-        public static let fill: CGFloat = 0.76
-        public static let blur: CGFloat = 36
-        /// How much more chroma the light under the glass has than the ink, so it stays violet and not grey.
-        public static let saturation: Double = 1.3
-
-        @MainActor public static func isOn(dark: Bool) -> Bool {
-            ThemeRuntime.ditherFlower && ThemeRuntime.isDither(dark: dark) && !ThemeRuntime.reducesTransparency()
-        }
-    }
-
-    /// Solid surfaces: an opaque fill, a 1pt hairline rim and the token shadow. Redesign draws no backdrop blur except `FlowerGlass` (the
+    /// Solid surfaces: an opaque fill, a 1pt hairline rim and the token shadow. Redesign draws no backdrop blur (the
     /// user, 2026-11-21: "in redesign no more blurs its no premium").
     public enum Surface {
         /// A card on a surface, in the text color over the panel's ground: code blocks, tables, tool output.
         public static let inset: CGFloat = 0.05
         /// The 1pt rim on every surface and card, in the text color.
         public static let rim: CGFloat = 0.08
-        /// Light's rim, a step above `rim`: at 0.08 the inset card, Settings and the cards over the picture dissolved
+        /// Light's rim, a step above `rim`: at 0.08 the inset card, Settings and the floating cards dissolved
         /// into the off-white beside them (round-1 review, W7 and Sol's fix 10).
         public static let rimLight: CGFloat = 0.12
         /// Increase Contrast's rim.
@@ -119,14 +102,6 @@ public enum RedesignTokens {
         @MainActor public static func fill(in view: NSView) -> CGColor {
             let dark = view.effectiveAppearance.isDark
             return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view)
-        }
-
-        /// `fill` for a surface that floats over the Flower background: a little of the flower, blurred, shows through
-        /// (`FlowerGlass`). Every other background, the default themes and Reduce Transparency keep it solid.
-        @MainActor public static func floatingFill(in view: NSView) -> CGColor {
-            let solid = fill(in: view)
-            guard FlowerGlass.isOn(dark: view.effectiveAppearance.isDark) else { return solid }
-            return solid.copy(alpha: solid.alpha * FlowerGlass.fill) ?? solid
         }
 
         /// The fill of a card on a surface: a step in the text color over the panel's ground, opaque so the picture
@@ -244,6 +219,12 @@ public enum RedesignTokens {
         /// Quieter still, for the new-thread page's context row (Capy draws it near 4:1): the text color at the
         /// strength that keeps 5:1 on the ground, 0.52 in dark and 0.64 in light.
         public static func faint(dark: Bool) -> CGFloat { dark ? 0.52 : 0.64 }
+    }
+
+    /// The message rail's strips on the plain ground.
+    public enum Rail {
+        /// The muted color's strength in a resting strip, the least that keeps 3:1 on the ground (ThreadMinimapHoverTests).
+        public static func rest(dark: Bool) -> CGFloat { dark ? 0.58 : 0.74 }
     }
 
     /// The account card's CPU and memory meters: a short bar on a faint track in the text color, the reading after it.

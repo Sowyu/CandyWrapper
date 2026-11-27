@@ -182,7 +182,6 @@ struct SettingsProjectListTests {
             light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
             dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
         input.ditherLight = true; input.ditherDark = true
-        input.ditherPicture = ComposerAttachmentsFidelityTests.fixture.path
         ThemeRuntime.apply(input); FontRuntime.apply(.init())
         NSApplication.shared.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         try body()

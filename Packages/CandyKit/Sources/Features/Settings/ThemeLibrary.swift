@@ -58,7 +58,7 @@ public final class ThemeLibrary {
     public func start() {
         migrateRemovedGlass()
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("redesignTextDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignThreadFlower") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInsetPanel") || keys.contains("redesignInk") || keys.contains("redesignDotSize") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherAccent") || keys.contains("redesignGradientAnimate") || keys.contains("redesignInsetPanel") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -515,21 +515,11 @@ public final class ThemeLibrary {
     func runtimeInput(client: ClientSettings) -> (ThemeRuntimeInput, forced: String) {
         var input = ThemeRuntimeInput(contrast: client.int("appearanceContrast"), glassOpacity: client.int("glassOpacity"))
         input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
-        input.ditherDim = client.int("ditherBackgroundDim")
-        input.textDim = client.int("redesignTextDim")
-        input.ditherBlur = client.string("redesignBackground") == "blur"
-        // Gradient's dots became Flower's field (2026-11-21); a 1.16.0 "gradient" shows Flower.
-        input.ditherFlower = ["flower", "gradient"].contains(client.string("redesignBackground"))
+        // Gradient is Redesign's one background (the user, 2026-11-27: "lets just only do the gradient theme"). A stored
+        // `redesignBackground`, picture, ink, dot size, dim, tint or thread flower stays in the settings and is ignored.
         input.ditherGradientAnimates = client.bool("redesignGradientAnimate")
-        input.threadFlower = LotusArt.ThreadLook(setting: client.string("redesignThreadFlower"))
-        input.ditherInk = DitherInk(mode: client.string("redesignInk"), color: client.string("redesignInkColor"))
-        input.ditherDotSize = DitherDotSize(rawValue: client.string("redesignDotSize")) ?? .medium
-        input.ignoreReduceTransparency = client.bool("ignoreReduceTransparency")
         input.projectSprites = client.string("redesignProjectAvatars") != "letters"
-        input.ditherTintFromPicture = client.bool("redesignTintFromPicture")
         input.insetPanel = client.bool("redesignInsetPanel")
-        // The art computes the picture's tint after it loads (`PictureTint.sync`); a settings change keeps it.
-        input.pictureTint = ThemeRuntime.input.pictureTint
         let accent = DitherAccent.named(client.string("ditherAccent"))
         input.ditherAccent = accent.id
         if let preview {
@@ -541,9 +531,8 @@ public final class ThemeLibrary {
         for a in ThemeAppearance.allCases {
             guard let id = owner(of: a), let d = definition(id) else { continue }
             if d.isDither {
-                // Dither wears its own palette (after Capy), with its picture in the main panel.
+                // Dither wears its own palette (after Capy), with Gradient in the main panel.
                 if a == .light { input.ditherLight = true } else { input.ditherDark = true }
-                input.ditherPicture = DitherPicture.path
                 var colors = d.colors(for: a) ?? d.colors
                 // The accent replaces its roles once, so every accent use follows, teal included: skipping teal left
                 // the default dark send button and Approve white on teal at 3.7:1 (X8, 2026-11-27).

@@ -1,7 +1,7 @@
 import AppKit
 
-/// Color math Redesign's palette uses over its art: WCAG luminance, moving text until it keeps a contrast ratio, and
-/// turning lines and light fills into overlays (`frosted`). Also the floating fill Redesign gives dialogs and toasts.
+/// Color math Redesign's palette uses: WCAG luminance, and turning lines and light fills into overlays (`frosted`).
+/// Also the floating fill Redesign gives dialogs and toasts.
 public enum WindowGlass {
     nonisolated static func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
     nonisolated static func gamma(_ c: Double) -> Double { c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1 / 2.4) - 0.055 }
@@ -17,28 +17,10 @@ public enum WindowGlass {
         \.secondaryLabel, \.contrastSecondaryLabel, \.placeholder, \.contrastPlaceholder,
     ]
 
-    /// The muted text roles Redesign dark paints at full strength in the main panel (`DitherArt.readableMembers`).
+    /// The muted text roles Redesign dark paints at full strength in the main panel.
     nonisolated(unsafe) static let ditherFullStrength: Set<KeyPath<Palette, TokenColor>> = [
         \.mutedForeground, \.contrastMutedForeground, \.secondaryLabel, \.contrastSecondaryLabel,
     ]
-
-    /// `color` moved toward white (dark) or black (light) until it keeps `ratio` against a background of luminance `lb`.
-    nonisolated static func readable(_ color: TokenColor, over lb: Double, ratio: Double, dark: Bool) -> TokenColor {
-        let l = luminance(color)
-        let lin = SIMD3(linear(color.srgb.x), linear(color.srgb.y), linear(color.srgb.z))
-        let out: SIMD3<Double>
-        if dark {
-            let target = min(1, ratio * (lb + 0.05) - 0.05)
-            guard l < target else { return color }
-            let t = (target - l) / max(1 - l, 1e-6)
-            out = lin + (SIMD3(repeating: 1) - lin) * t
-        } else {
-            let target = max(0, (lb + 0.05) / ratio - 0.05)
-            guard l > target else { return color }
-            out = lin * (target / max(l, 1e-6))
-        }
-        return ThemeCSSColor(srgb: gamma(out.x), gamma(out.y), gamma(out.z)).token
-    }
 
     /// Light fills and lines that T3 paints opaque, a step off the background. In light, each becomes the black
     /// overlay that paints the same color over the stock background, so it tints whatever sits on the art.

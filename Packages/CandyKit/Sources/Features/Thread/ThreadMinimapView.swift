@@ -271,32 +271,24 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         // mark straight into the context, in the same order, so overlapping marks blend as before.
         // T3's strip (TimelineMinimap.tsx:194-214 at 4928): `bg-muted-foreground/25`, `/60` on the hovered strip, and
         // `after:bg-foreground/55` over it while its turn is on screen. 4928 has no guide line under the strips (#35577).
-        // Over Redesign's picture each state is one opaque color with T3's contrast ratios instead.
-        let backdrop = Self.backdropColors(dark: effectiveAppearance.isDark)
-        let current = (backdrop?[2] ?? Themed.color(\.foreground, 0.55)).cgColor
-        let near = (backdrop?[1] ?? Themed.color(\.mutedForeground, 0.6)).cgColor
-        let base = (backdrop?[0] ?? Themed.color(\.mutedForeground, 0.25)).cgColor
-        let nearCurrent = backdrop?[3].cgColor
+        let current = Themed.color(\.foreground, 0.55).cgColor
         // Redesign (round-1 review T10, 2026-11-26: "short bright white bars read as a stray glyph"): the strips are a
-        // column of targets, 12pt at rest and even steps up to the hovered one. Their colors keep T3's ratios
-        // (`backdropColors`).
-        let redesign = backdrop != nil
+        // column of targets, 12pt at rest and even steps up to the hovered one. On its plain ground the resting strip
+        // keeps a graphic's 3:1 and the hovered one the full muted color (T10, round 2: a faint dash at T3's 0.25).
+        let dark = effectiveAppearance.isDark
+        let redesign = ThemeRuntime.isDither(dark: dark)
+        let near = Themed.color(\.mutedForeground, redesign ? 1 : 0.6).cgColor
+        let base = Themed.color(\.mutedForeground, redesign ? RedesignTokens.Rail.rest(dark: dark) : 0.25).cgColor
         for i in items.indices {
             let distance = hovered.map { abs(i - $0) }
             let width = Self.stripWidth(distance: distance, redesign: redesign)
             let rect = CGRect(x: 0, y: tickY(i), width: width, height: 2)
             guard rect.intersects(dirtyRect) else { continue }
             let path = CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil)
-            if let nearCurrent, inView.contains(i) {
-                ctx.setFillColor(distance == 0 ? nearCurrent : current)
-                ctx.addPath(path)
-                ctx.fillPath()
-                continue
-            }
             ctx.setFillColor(distance == 0 ? near : base)
             ctx.addPath(path)
             ctx.fillPath()
-            if backdrop == nil, inView.contains(i) {
+            if inView.contains(i) {
                 ctx.setFillColor(current)
                 ctx.addPath(path)
                 ctx.fillPath()
@@ -306,18 +298,6 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
 }
 
 extension ThreadMinimapView {
-    /// T3's four strip states: resting, hovered, on screen, and hovered on screen. The first three keep T3's ratios;
-    /// the hovered on-screen strip is the brightest and may stop at white.
-    static let strips: [[BackdropMarks.Layer]] = [
-        [.init(\.mutedForeground, 0.25)], [.init(\.mutedForeground, 0.6)],
-        [.init(\.mutedForeground, 0.25), .init(\.foreground, 0.55)], [.init(\.mutedForeground, 0.6), .init(\.foreground, 0.55)],
-    ]
-    /// At T3's resting contrast the strips read as stray marks over Redesign's picture (round-0 review, T10), so the
-    /// resting strip stands 1.6 times as far from the worst dot; the other states keep T3's ratios to it. In dark the
-    /// on-screen strip reaching white caps it, so the boost shows in light. 1.9 holds the resting strip at 3:1 on light's
-    /// plain ground, where 1.6 gave 2.7:1 and read as a faint dash (T10, Sol, round 2).
-    static let restingBoost = 1.9
-    static func backdropColors(dark: Bool) -> [NSColor]? { BackdropMarks.colors(strips, keep: 3, dark: dark, restingBoost: restingBoost) }
     /// A strip's length by its distance from the hovered one: T3's 24, 16, 10 and 8 (TimelineMinimap.tsx:194-214), or
     /// Redesign's 24, 20, 16 and 12, one step apart.
     static func stripWidth(distance: Int?, redesign: Bool) -> CGFloat {

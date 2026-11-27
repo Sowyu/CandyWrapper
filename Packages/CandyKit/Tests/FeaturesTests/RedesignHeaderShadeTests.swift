@@ -8,7 +8,8 @@ import T3Protocol
 /// 2026-11-22). Only the breadcrumb's text gets a blur patch, the window's top edge an 8 pt fade, and no layer the
 /// size of the timeline carries a mask.
 @MainActor @Suite(.serialized) struct RedesignHeaderShadeTests {
-    enum Ground: CaseIterable { case picture, blur, flower }
+    /// Redesign's one background since 2026-11-27.
+    enum Ground: CaseIterable { case gradient }
 
     static func withRedesign(_ ground: Ground, dark: Bool, _ body: () throws -> Void) rethrows {
         let previous = ThemeRuntime.input, appearance = NSApp?.appearance
@@ -17,8 +18,7 @@ import T3Protocol
             light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
             dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
         input.ditherLight = true; input.ditherDark = true
-        input.ditherPicture = ComposerAttachmentsFidelityTests.fixture.path
-        input.ditherFlower = ground == .flower; input.ditherBlur = ground == .blur; input.ditherGradientAnimates = false
+        input.ditherGradientAnimates = false
         ThemeRuntime.apply(input)
         NSApplication.shared.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         try body()
@@ -46,7 +46,7 @@ import T3Protocol
         for ground in Ground.allCases {
             for dark in [false, true] {
                 try Self.withRedesign(ground, dark: dark) {
-                    let size = NSSize(width: ground == .flower ? 1300 : 844, height: 780)
+                    let size = NSSize(width: 844, height: 780)
                     // The same thread at its start and scrolled to its end: wherever rows draw, the two differ.
                     let top = RedesignBaselineTests.image(try Self.thread(width: size.width, dark: dark, fraction: 0), size: size, dark: dark)
                     let panel = try Self.thread(width: size.width, dark: dark, fraction: 1)
@@ -69,7 +69,7 @@ import T3Protocol
     }
 
     @Test func theBreadcrumbIsAPillAtTheLeftEnd() throws {
-        try Self.withRedesign(.picture, dark: true) {
+        try Self.withRedesign(.gradient, dark: true) {
             let panel = try Self.thread(width: 1240, dark: true)
             _ = RedesignBaselineTests.image(panel, size: NSSize(width: 1240, height: 780), dark: true)
             // The render took the panel out of its window, which hides the pill until the panel lays out again.
@@ -97,7 +97,7 @@ import T3Protocol
     }
 
     @Test func theStripPairsThePillWithTheHeaderPill() throws {
-        try Self.withRedesign(.picture, dark: true) {
+        try Self.withRedesign(.gradient, dark: true) {
             let panel = try Self.thread(width: 1240, dark: true)
             panel.header.threadTitle = String(repeating: "A very long thread title that runs on ", count: 6)
             panel.layoutSubtreeIfNeeded()

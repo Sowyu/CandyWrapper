@@ -1701,8 +1701,6 @@ public final class ThreadPanelView: DSView {
     /// The new-thread page: header "{project} / New thread", the hero and the centered composer.
     /// Pass nil to leave it.
     public func setDraft(projectTitle: String?, isScratch: Bool = false) {
-        // The new-thread page appearing, or showing another project, opens it: Redesign's Flower blooms.
-        let opening = projectTitle != nil && (!isDraft || hero.projectTitle != projectTitle)
         isDraft = projectTitle != nil
         header.pill.isDraft = isDraft
         hero.isHidden = !isDraft
@@ -1718,7 +1716,6 @@ public final class ThreadPanelView: DSView {
             header.cancelTitleRename()
         }
         updateComposerShown()
-        if opening { DitherArtView.flowerOpened(from: self) }
     }
 
     /// The header icon for a draft, which only names its project by title.
@@ -1749,7 +1746,6 @@ public final class ThreadPanelView: DSView {
         header.setThreadVisible(true)
         header.cancelTitleRename()
         updateComposerShown()
-        if !fromSend { DitherArtView.flowerOpened(from: self) }
     }
 
     /// Shows a thread. Pass nil to clear.
@@ -1829,7 +1825,6 @@ public final class ThreadPanelView: DSView {
         let width = placement.width
         let height = composer.preferredHeight
         let x = placement.x.rounded()
-        DitherArtView.setColumn(NSRect(x: x, y: 0, width: width, height: chatHeight), from: self)
         readingLane = NSRect(x: x, y: 0, width: width, height: chatHeight)
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: x, width: width, height: height)
@@ -2089,20 +2084,6 @@ public final class ThreadPanelView: DSView {
     /// The breadcrumb pill, for the tab strip to hold at its left end.
     public var titlePill: DitherStripLeading { threadTitle }
 
-    /// Redesign's Flower background: the content area left of the right panel, from the window's top, which the lotus
-    /// fills, and on the new thread the top of the composer and its pills, which the opening bloom sits above.
-    private func reportFlowerStage(chat: CGFloat, chatHeight: CGFloat) {
-        guard ThemeRuntime.isDither(dark: effectiveAppearance.isDark), !isEmbedded, chat > 0 else {
-            DitherArtView.clearFlowerStage(from: self)
-            return
-        }
-        // The group's top: the composer, the project chip's row and the notices above it.
-        let floor = isDraft ? ([composer, hero] + ditherShown).filter { !$0.isHidden }.map { isFlipped ? $0.frame.minY : $0.frame.maxY }
-            .reduce(nil as CGFloat?) { acc, y in acc.map { isFlipped ? min($0, y) : max($0, y) } ?? y } : nil
-        DitherArtView.setFlowerStage(kind: isDraft ? .hero : .thread, content: NSRect(x: 0, y: 0, width: chat, height: chatHeight),
-                                     floorTop: floor, from: self)
-    }
-
     /// Redesign's new-thread page: the composer's top when the group (the context row, then the composer,
     /// `RedesignTokens.Draft.rowGap` apart) has its middle `RedesignTokens.Draft.centre` of the way down from `top` to
     /// `bottom`.
@@ -2186,7 +2167,7 @@ public final class ThreadPanelView: DSView {
             draftRow = (rowY, left)
             top = rowY
         }
-        // The art keeps clear of the whole group: Picture's dots thin around it and Flower's lotus stays under it.
+        // The art keeps clear of the whole group: Gradient's field ends above it.
         let group = composer.frame.union(NSRect(x: x, y: y - rowGap - pillH, width: width, height: pillH))
         DitherArtView.setComposer(isDraft && composerShown && chat > 0 ? group : nil, from: self)
 
@@ -2746,8 +2727,6 @@ public final class ThreadPanelView: DSView {
         timeline.detailsCardLeft = inlineDetails?.minX
         layoutComposer(chat: chat, height: chatHeight)
         layoutThreadTitle(chat: chat, above: above)
-        // The lotus ends at the drawer card's top edge; the field runs on behind the card (`DitherArtView.flowerStage`).
-        reportFlowerStage(chat: chat, chatHeight: min(bounds.height, drawerTop))
         if let findBar = lazyFindBar.loaded {
             // `top-3 right-3 w-[min(var(--thread-details-panel-width),calc(100%-1.5rem))]`: as wide as the
             // details card and lined up with it (ThreadFindBar.tsx:62-66 in 2994, f92afe79c).

@@ -40,9 +40,8 @@ public enum DitherPill {
     }
 
     /// The solid surface fill: a timeline card scrolled under a panel never reads through it (the user's 1.14.10
-    /// subagent panel over the changed-files card, 2026-10-28). Over the Flower background a little of the blurred
-    /// flower shows through instead (`RedesignTokens.FlowerGlass`).
-    @MainActor public static func fill(in view: NSView) -> CGColor { RedesignTokens.Surface.floatingFill(in: view) }
+    /// subagent panel over the changed-files card, 2026-10-28).
+    @MainActor public static func fill(in view: NSView) -> CGColor { RedesignTokens.Surface.fill(in: view) }
 
     /// The resting shadow.
     @MainActor public static func shadow(_ layer: CALayer, path: CGRect, radius: CGFloat, dark: Bool) {
@@ -61,8 +60,6 @@ public final class DitherPillSurface: DSView {
     /// it stays readable over a picture and vanishes into a plain page, with no rim and no shadow.
     public var quiet = false { didSet { if quiet != oldValue { needsDisplay = true; needsLayout = true } } }
     private let shade = DSView()
-    /// What shows through the fill over the Flower background.
-    private let backing = FlowerGlassView()
     private let face = DSView()
 
     public override init(frame frameRect: NSRect) {
@@ -70,7 +67,7 @@ public final class DitherPillSurface: DSView {
         layer?.masksToBounds = false
         face.layer?.borderWidth = 1
         face.layer?.masksToBounds = true
-        for v in [shade, backing, face] { addSubview(v) }
+        for v in [shade, face] { addSubview(v) }
         setAccessibilityElement(false)
         // Increase Contrast changes the rim.
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
@@ -84,7 +81,6 @@ public final class DitherPillSurface: DSView {
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         face.layer?.backgroundColor = ground || quiet ? Themed.color(\.background).cgColor(in: self) : DitherPill.fill(in: self)
-        backing.isHidden = ground || quiet
         shade.isHidden = quiet
         face.layer?.borderWidth = quiet ? 0 : 1
         face.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
@@ -95,8 +91,7 @@ public final class DitherPillSurface: DSView {
     public override func layout() {
         super.layout()
         let r = quiet ? DitherPill.quietRadius : min(radius, bounds.height / 2)
-        for v in [shade, backing, face] { v.frame = quiet ? DitherPill.quietPatch(bounds) : bounds }
-        backing.radius = r
+        for v in [shade, face] { v.frame = quiet ? DitherPill.quietPatch(bounds) : bounds }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         face.layer?.cornerRadius = r
         shade.layer?.masksToBounds = false

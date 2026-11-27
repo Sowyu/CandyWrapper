@@ -24,7 +24,6 @@ struct SpriteAvatarPictures {
                     light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
                     dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
                 input.ditherLight = true; input.ditherDark = true
-                input.ditherPicture = ComposerAttachmentsFidelityTests.fixture.path
                 input.projectSprites = sprites
                 ThemeRuntime.apply(input); FontRuntime.apply(.init())
                 Motion.reducedOverride = true

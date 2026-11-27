@@ -42,7 +42,6 @@ struct SidebarSettledShots {
                 light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
                 dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
             input.ditherLight = true; input.ditherDark = true
-            input.ditherPicture = ComposerAttachmentsFidelityTests.fixture.path
             ThemeRuntime.apply(input)
             Motion.reducedOverride = true
             NSApplication.shared.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
