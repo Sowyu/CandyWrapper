@@ -120,8 +120,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
     /// Tests render the grid from their own library.
     var themes = ThemeLibrary.shared
 
-    /// The grid's built-in cards: Redesign has none, since Settings > Redesign turns it on and off. While it is on, a
-    /// Redesign card leads the grid to show where it paints, and opens that page (`redesignCard`).
+    /// The grid's built-in cards: Redesign has none, since Settings > Redesign turns it on and off.
     static let gridBuiltIns = ThemeDefinition.pickerBuiltIns.filter { !$0.isDither }
 
     /// The line under the Theme heading while Redesign paints an appearance; nil while it is off. `under` names the
@@ -137,7 +136,7 @@ public final class AppearanceSettingsView: SettingsPageBase {
 
     static func ordered(_ modes: Set<ThemeAppearance>) -> [ThemeAppearance] { ThemeAppearance.allCases.filter(modes.contains) }
 
-    /// A card's rings: the appearances it shows on screen. Redesign's card takes the ones Redesign paints.
+    /// A card's rings: the appearances it shows on screen, so none where Redesign paints.
     private func ringed(_ cardId: String?) -> [ThemeAppearance] {
         let on = themes.redesignAppearances
         return themes.pickedModes(cardId).filter { !on.contains($0) }
@@ -153,28 +152,18 @@ public final class AppearanceSettingsView: SettingsPageBase {
     struct ThemeGridContent: Equatable {
         var picked: [[ThemeAppearance]]
         var custom: [ThemeCardDefinition]
-        /// Redesign's card draws the accent, so a new accent rebuilds the cards.
         var accent = ""
-        /// The appearances Redesign paints; its card shows while any does.
+        /// The appearances Redesign paints, which take the cards' rings away.
         var redesign: [ThemeAppearance] = []
     }
 
-    /// Redesign's card while it is on: rings where it paints, and a click opens Settings > Redesign, the one place that
-    /// turns it on and off.
-    private func redesignCard(_ on: [ThemeAppearance]) -> ThemeLibraryCardView {
-        let open: @MainActor @Sendable () -> Void = { [weak self] in self?.context.openSection?(.redesign) }
-        let card = ThemeLibraryCardView(card: ThemeCardDefinition(ThemeDefinition.dither), picked: on, actions: .init(use: open, useMode: { _ in open() }))
-        TooltipController.attach(to: card, text: "Open Redesign settings")
-        card.setAccessibilityHelp("Redesign is on. Opens Redesign settings.")
-        return card
-    }
-
+    /// The themes under Redesign. Redesign has no card here, on or off: the notice above the grid says it is on and
+    /// links to Settings > Redesign, the one place that turns it on and off (round-1 review G2, 2026-11-26).
     private func themeCards(_ custom: [ThemeDefinition]) -> [ThemeLibraryCardView] {
         let lib = themes
         let appearance = lib.resolvedAppearance
         let editor = ThemeEditorController.shared
-        let redesign = Self.ordered(lib.redesignAppearances)
-        var cards = redesign.isEmpty ? [] : [redesignCard(redesign)]
+        var cards: [ThemeLibraryCardView] = []
         cards.append(ThemeLibraryCardView(card: .standard, picked: ringed(nil), actions: .init(
             use: { lib.keepingRedesign { lib.useStandard() } }, useMode: { a in lib.keepingRedesign { lib.assignHalf(a, nil) } },
             duplicate: { editor.open(.init(editingThemeId: nil, seedThemeId: nil, seedName: "T3 Code copy", initialAppearance: appearance)) })))
@@ -290,7 +279,10 @@ public final class AppearanceSettingsView: SettingsPageBase {
             select.leading = dots
             binder.add { [weak self] in dots.swapped = self?.client.string("diffColorScheme") == "blue-orange" }
         }
-        let strip = clientSwitch("composer-context", "Keep branch and worktree controls below the composer after a thread starts.",
+        // Redesign has no strip: the switch adds the branch to the machine control under a thread's composer.
+        let strip = clientSwitch("composer-context", ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+                                    ? "Show the branch beside the machine and worktree below the composer after a thread starts."
+                                    : "Keep branch and worktree controls below the composer after a thread starts.",
                                  key: "persistComposerContextStrip", reset: "composer context", label: "Keep composer context visible in active threads")
         let width = clientSelect("chat-width", "Set how wide messages and the composer can grow on large screens.", key: "chatWidth",
                                  options: [("comfortable", "Comfortable (default)"), ("wide", "Wide"), ("full", "Full")], width: 160,
