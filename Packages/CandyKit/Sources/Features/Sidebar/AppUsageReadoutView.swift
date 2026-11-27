@@ -128,8 +128,9 @@ public final class AppUsageReadoutView: DSView {
     static let gap: CGFloat = 4
     /// CPU's number to memory's icon.
     static let segmentGap: CGFloat = 10
-    private let cpuIcon = IconView(name: .cpu, size: 12)
-    private let memoryIcon = IconView(name: .memoryStick, size: 12)
+    /// Each reading is named in words. The chip and memory-stick glyphs at 12pt read as one unlabeled bar (S3, Grok).
+    let cpuIcon = LabelView("CPU", font: SB.font(11), color: SB.c(\.sidebarMutedForeground))
+    let memoryIcon = LabelView("RAM", font: SB.font(11), color: SB.c(\.sidebarMutedForeground))
     let cpuMeter = AppUsageMeterView()
     let memoryMeter = AppUsageMeterView()
     let cpuLabel = LabelView("", font: SB.font(11).monospacedDigits, color: SB.c(\.sidebarMutedForeground))
@@ -167,7 +168,7 @@ public final class AppUsageReadoutView: DSView {
     public override var wantsUpdateLayer: Bool { true }
 
     public override func updateLayer() {
-        for i in [cpuIcon, memoryIcon] { i.strokeColor = SB.c(\.sidebarMutedForeground) }
+        for i in [cpuIcon, memoryIcon] { i.color = SB.c(\.sidebarMutedForeground) }
     }
 
     public override func layout() {
@@ -178,13 +179,14 @@ public final class AppUsageReadoutView: DSView {
         for (icon, meter, label) in all where label.text.isEmpty { icon.isHidden = true; meter.isHidden = true; label.isHidden = true }
         let segments = all.filter { !$0.2.text.isEmpty }
         // In a narrow sidebar the meters go first, so the numbers and units never truncate.
-        let full = segments.reduce(-Self.segmentGap) { $0 + 12 + g + AppUsageMeterView.width + g + ceil($1.2.textWidth) + Self.segmentGap }
+        let full = segments.reduce(-Self.segmentGap) { $0 + ceil($1.0.textWidth) + g + AppUsageMeterView.width + g + ceil($1.2.textWidth) + Self.segmentGap }
         let meters = full <= bounds.width
         for (icon, meter, label) in segments {
-            icon.frame = NSRect(x: x, y: (h - 12) / 2, width: 12, height: 12)
+            let iw = ceil(icon.textWidth)
+            icon.frame = NSRect(x: x, y: (h - 16) / 2, width: iw, height: 16)
             meter.isHidden = !meters
-            meter.frame = NSRect(x: x + 12 + g, y: 0, width: meters ? AppUsageMeterView.width : 0, height: h)
-            let lx = meters ? meter.frame.maxX + g : x + 12 + g, w = ceil(label.textWidth)
+            meter.frame = NSRect(x: x + iw + g, y: 0, width: meters ? AppUsageMeterView.width : 0, height: h)
+            let lx = meters ? meter.frame.maxX + g : x + iw + g, w = ceil(label.textWidth)
             label.frame = NSRect(x: lx, y: (h - 16) / 2, width: w, height: 16)
             // Narrower still, a reading that would be cut ("1" of "182 MB") goes with its icon.
             let fits = lx + w <= bounds.width

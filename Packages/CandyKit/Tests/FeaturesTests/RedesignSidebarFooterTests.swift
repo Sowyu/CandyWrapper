@@ -32,12 +32,17 @@ struct RedesignSidebarFooterTests {
             #expect(pill.capsuleLabel.frame.minX >= pill.capsuleFailedGlyph.frame.maxX)
             #expect(pill.capsuleLabel.prefixColor == nil)
             #expect(pill.capsuleLabel.color == Themed.color(\.sidebarMutedForeground, sidebar: true))
-            #expect(pill.capsuleLabel.text == "Couldn't update studio")
+            #expect(pill.capsuleLabel.text == "studio: update failed")
+            // Retry reads as a button: the card's hairline rim (round 2, S3).
             let rim = pill.capsuleLink.layer?.sublayers?.contains { $0.borderWidth > 0 } ?? false
-            #expect(!rim)
+            #expect(rim)
+            // Narrower, the machine's name keeps whole and the words around it go first.
+            pill.frame.size.width = 140
+            pill.layoutSubtreeIfNeeded()
+            #expect(pill.capsuleLabel.text == "studio failed")
         }
-        #expect(SidebarUpdatePillView.ditherFailedLabel("2 failed") == "Couldn't update 2 machines")
-        #expect(SidebarUpdatePillView.ditherFailedLabel("Downloading") == "Downloading")
+        #expect(SidebarUpdatePillView.ditherFailedLabels("2 failed") == ["2 machines: update failed", "2 failed"])
+        #expect(SidebarUpdatePillView.ditherFailedLabels("Downloading") == ["Downloading"])
     }
 
     /// S3: Working and Settled read like the "Threads" label: the sidebar palette's muted color, which Blur keeps
