@@ -35,7 +35,8 @@ struct SidebarBrandCentreTests {
         let searchIconTop = content.search.frame.minY + (content.search.frame.height - 16) / 2
         let centre = content.brand.frame.minY + content.brand.markCentreY
         #expect(abs(centre - (33 + searchIconTop) / 2) <= 0.5)
-        #expect(centre == 64)
+        // A 24pt brand row since round 2 (S1): Search sits 12pt higher, the candy still centred above it.
+        #expect(centre == 58)
         // The collapse button sits on the traffic lights' row before back and forward, as in Capy (2026-11-26).
         #expect(content.trigger.frame.midY == SidebarMetrics.topbarHeight / 2)
         #expect(content.trigger.frame.maxX == width - 8 - 2 * 28 - 2 * SidebarLayoutView.historyGap)

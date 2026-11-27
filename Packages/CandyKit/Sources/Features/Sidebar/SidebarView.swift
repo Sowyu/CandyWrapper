@@ -1174,7 +1174,8 @@ public final class SidebarContentView: DSView {
         // Dither (after Capy): the traffic lights keep the titlebar row to themselves; the brand and the collapse
         // button take the row under it.
         let capyBrand = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        let brandRow: CGFloat = capyBrand ? 36 : 0
+        // 24pt: the candy keeps its centre between the lights and Search with about 11pt clear on each side.
+        let brandRow: CGFloat = capyBrand ? 24 : 0
         brand.markOnly = capyBrand
         let bs = brand.intrinsicContentSize
         if capyBrand {
@@ -1315,6 +1316,9 @@ public final class SidebarContentView: DSView {
             let pw = updatePill.capsule == nil ? 32 : updatePill.capsuleWidth(available: max(32, pillRoom - 4), side: 32)
             updatePill.frame = NSRect(x: w - 8 - pw, y: menuTop, width: pw, height: 32)
         }
+        // Redesign's 48pt rows: a 12pt fade left a cut row reading as a clipped line, so its edges fade over half a row.
+        let fade = capy ? RedesignTokens.Space.xl : 12
+        if scrollArea.fadeSize != fade { scrollArea.fadeSize = fade }
         scrollArea.frame = NSRect(x: 0, y: listTop, width: w, height: max(0, footerTop - listTop))
         list.frame.size.width = w
         list.needsLayout = true

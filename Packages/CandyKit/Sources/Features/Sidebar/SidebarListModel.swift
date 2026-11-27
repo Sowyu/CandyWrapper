@@ -54,7 +54,8 @@ public struct SidebarRowModel: Equatable, Sendable {
     /// The drivers the thread ran on, distinct and most recent first: the current one, then `providerInstanceHistory`.
     public var providers: [String]
     /// The thread's environment label, which starts the meta line on every row that has one, primary or not
-    /// (`environmentLabelById`, T3 5258 Sidebar.tsx:3384, SidebarThreadRow.tsx:1281-1290, #40736).
+    /// (`environmentLabelById`, T3 5258 Sidebar.tsx:3384, SidebarThreadRow.tsx:1281-1290, #40736). Redesign drops it
+    /// while only one environment is set up, where every row would repeat the same name.
     public var environmentLabel: String? = nil
     /// `EnvironmentMachineKind` drawn before `environmentLabel`, `server` when unknown (Sidebar.tsx:3385-3387).
     public var environmentMachine = "server"
@@ -839,7 +840,8 @@ public enum SidebarListBuilder {
             snoozeLabel: wake.map { snoozeWakeLabel(wakeMs: $0, nowMs: nowMs) },
             workingStartedMs: working,
             providers: providerStack(history: (shell.providerInstanceHistory ?? []).map(\.rawValue), current: shell.runtimeInstanceId),
-            environmentLabel: shell.id.environmentId.flatMap { state.environments.labels[$0] },
+            environmentLabel: state.dither && state.environments.labels.count < 2
+                ? nil : shell.id.environmentId.flatMap { state.environments.labels[$0] },
             environmentMachine: shell.id.environmentId.map(state.environments.machine) ?? "server",
             canSnooze: SidebarModel.canSnooze(t, nowMs: nowMs),
             terminalProcessCount: state.terminalProcesses[shell.id] ?? 0,

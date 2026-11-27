@@ -85,8 +85,8 @@ final class SidebarUpdateCapsuleLink: ControlView {
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
-    /// Redesign draws the link as a small button: no underline, the card's hairline rim, the state fill on the control
-    /// corner.
+    /// Redesign draws the link as a text action: no underline and no rim, the label in the foreground with the state
+    /// fill on the control corner under the pointer.
     private func restyle() {
         let fg = Themed.color(\.sidebarForeground, sidebar: true)
         label.color = fg
@@ -97,8 +97,7 @@ final class SidebarUpdateCapsuleLink: ControlView {
             hover.frame = bounds.insetBy(dx: 2, dy: 2)
             hover.cornerRadius = RedesignTokens.Radius.nested(in: RedesignTokens.Radius.control, inset: 2)
             hover.backgroundColor = RedesignTokens.State.fill(state, dark: dark)?.cgColor(in: self)
-            hover.borderWidth = 1
-            hover.borderColor = RedesignTokens.Card.border.cgColor(in: self)
+            hover.borderWidth = 0
             return
         }
         hover.borderWidth = 0
@@ -222,6 +221,15 @@ final class SidebarUpdateCapsulePopoverView: DSView {
 extension SidebarUpdatePillView {
     private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     private var iconSide: CGFloat { min(bounds.width, bounds.height) }
+
+    /// Redesign names the operation that failed, so Retry says what it repeats: "studio failed" reads "Couldn't update
+    /// studio", "2 failed" reads "Couldn't update 2 machines".
+    static func ditherFailedLabel(_ label: String) -> String {
+        guard label.hasSuffix(" failed") else { return label }
+        let source = String(label.dropLast(" failed".count))
+        if let n = Int(source) { return "Couldn't update \(n) machines" }
+        return "Couldn't update \(source)"
+    }
     /// The capsule shows its label: wider than its round icon.
     var isCapsuleExpanded: Bool { capsule != nil && bounds.width > iconSide + 0.5 }
 
@@ -247,7 +255,8 @@ extension SidebarUpdatePillView {
     func capsuleChanged(from old: SidebarUpdateCapsule?) {
         if let capsule {
             let view = capsule.view
-            capsuleLabel.text = view.label + (view.slow.map { " \($0.elapsed)" } ?? "")
+            capsuleLabel.text = (dither && view.tone == .failed ? Self.ditherFailedLabel(view.label) : view.label)
+                + (view.slow.map { " \($0.elapsed)" } ?? "")
             capsuleLink.text = view.action?.rawValue ?? ""
             countdownLabel.text = capsule.countdown.map { "\($0)s" } ?? ""
             if let open = capsulePopup, let body = (open.content as? PopoverView)?.content as? SidebarUpdateCapsulePopoverView {
@@ -371,10 +380,10 @@ extension SidebarUpdatePillView {
         }
         capsuleRing.isHidden = capsuleRing.strokeColor == nil
         let view = capsule.view
-        if view.tone == .failed, dither, view.label.hasSuffix(" failed") {
-            // The machine in the foreground, "failed" in `destructive`, after the glyph.
-            capsuleLabel.color = Themed.color(\.destructive, sidebar: true)
-            capsuleLabel.prefixColor = (view.label.utf16.count - "failed".utf16.count, fg)
+        if view.tone == .failed, dither {
+            // One quiet status line of the account card: the glyph alone carries the red.
+            capsuleLabel.color = Themed.color(\.sidebarMutedForeground, sidebar: true)
+            capsuleLabel.prefixColor = nil
         } else if view.tone == .failed {
             capsuleLabel.color = Themed.color(\.destructive, sidebar: true)
             capsuleLabel.prefixColor = nil

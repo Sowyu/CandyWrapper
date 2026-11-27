@@ -32,7 +32,9 @@ struct AppUsageReadoutTests {
         #expect(L.cpuText(12.3) == "12%")
         #expect(L.memoryText(182 << 20) == "182 MB")
         #expect(L.memoryText(1288 << 20) == "1.3 GB")
-        #expect(L.tooltip(cpu: 0.4, footprint: 182 << 20) == "CandyWrapper CPU 0.4% of one core · Memory 182 MB")
+        // The tooltip names each meter and where its bar is full.
+        #expect(L.tooltip(cpu: 0.4, footprint: 182 << 20)
+            == "CandyWrapper's own use\nCPU: 0.4% of one core, the bar full at one core\nMemory: 182 MB, the bar full at 1 GB")
     }
 
     @Test func metersShowAnyLoadAndCapAtTheEnd() {

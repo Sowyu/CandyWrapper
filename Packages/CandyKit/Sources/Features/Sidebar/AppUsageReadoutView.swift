@@ -56,8 +56,9 @@ public enum AppUsageLogic {
     }
 
     public static func tooltip(cpu: Double?, footprint: UInt64) -> String {
-        let c = cpu.map { "\(cpuText($0)) of one core" } ?? "measuring"
-        return "CandyWrapper CPU \(c) · Memory \(String(format: "%.0f", Double(footprint) / 1_048_576)) MB"
+        // One line per meter, saying what it measures and where its bar is full.
+        let c = cpu.map { "\(cpuText($0)) of one core, the bar full at one core" } ?? "measuring"
+        return "CandyWrapper's own use\nCPU: \(c)\nMemory: \(String(format: "%.0f", Double(footprint) / 1_048_576)) MB, the bar full at 1 GB"
     }
 }
 
