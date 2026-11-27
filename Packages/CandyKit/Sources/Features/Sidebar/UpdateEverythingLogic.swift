@@ -25,9 +25,12 @@ public enum UpdateEverythingLogic {
         public var turnedOff = false
         /// Why the connection is down, when it says (`connectionErrorText`, #41672).
         public var connectionError: String?
+        /// The local environment, T3's `PrimaryConnectionTarget`. It has no row in Environments > List.
+        public var primary = false
         public init(environmentId: String, label: String, serverVersion: String?, connected: Bool, canMaintain: Bool, updating: Bool,
                     capabilities: ServerUpdateCapabilities, ownServer: Bool = false, continuesThreads: Bool = false,
-                    turnedOff: Bool = false, connectionError: String? = nil) {
+                    turnedOff: Bool = false, connectionError: String? = nil, primary: Bool = false) {
+            self.primary = primary
             self.environmentId = environmentId; self.label = label; self.serverVersion = serverVersion; self.connected = connected
             self.canMaintain = canMaintain; self.updating = updating; self.capabilities = capabilities; self.ownServer = ownServer
             self.continuesThreads = continuesThreads; self.turnedOff = turnedOff; self.connectionError = connectionError
@@ -71,14 +74,30 @@ public enum UpdateEverythingLogic {
         return (targets, skipped)
     }
 
-    /// Version availability is broader than the automatic update plan. Manual installs and
-    /// sessions without maintenance permission still need the update guidance in Connections.
+    /// A saved environment's row in Settings > Environments > List shows the server's version and an update control:
+    /// switched on, connected and behind this client (`showUpdateAction`, SavedEnvironmentRows.tsx:244-248 at 5258, less
+    /// its running-update check, since a running update shows its progress on the row instead).
+    public static func rowOffersUpdate(enabled: Bool, connected: Bool, serverVersion: String?, target: String) -> Bool {
+        enabled && connected && serverVersion.map { ServerVersionSkewLogic.serverIsBehind($0, client: target) } == true
+    }
+
+    /// The machines the sidebar's server update notice counts, in sidebar order. The notice is CandyWrapper's own
+    /// (T3 lights the button only for `servers.length > 0 || providers`, useUpdateEverything.ts:107), for servers
+    /// Update all can't take. It counts only what a row in Environments > List can update. The local environment has
+    /// no row there, and T3 never counts it (`hostedByThisApp`, useUpdateEverything.ts:41-48, updateEverything.logic.ts:96).
+    public static func serverUpdateNoticeMachines(_ machines: [Machine], target: String) -> [Machine] {
+        machines.filter { m in
+            !m.primary && !m.ownServer && rowOffersUpdate(enabled: !m.turnedOff, connected: m.connected, serverVersion: m.serverVersion, target: target)
+        }
+    }
+
+    /// The notice and the button's tooltip: "Server update available: studio runs 0.1.12, this app expects 0.1.13".
     public static func serverUpdateNotice(_ machines: [Machine], target: String) -> String? {
-        let count = machines.filter { machine in
-            guard machine.connected, !machine.ownServer, let version = machine.serverVersion else { return false }
-            return ServerVersionSkewLogic.serverIsBehind(version, client: target)
-        }.count
-        return count == 0 ? nil : count == 1 ? "Server update available" : "\(count) server updates available"
+        let counted = serverUpdateNoticeMachines(machines, target: target)
+        guard let first = counted.first, let version = first.serverVersion else { return nil }
+        let head = counted.count == 1 ? "Server update available" : "\(counted.count) server updates available"
+        let more = counted.count == 1 ? "" : " and \(counted.count - 1) more"
+        return "\(head): \(first.label) runs \(version)\(more), this app expects \(target)"
     }
 
     public struct MachineRow: Equatable, Sendable {

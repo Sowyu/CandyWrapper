@@ -35,7 +35,12 @@ final class UpdateEverything {
         var providerMachines: [(environmentId: String, label: String, candidates: [ServerProvider])]
         var localVersion: String?
         var serverNotice: String?
+        /// The environments the notice counts, so its click scrolls to the first one's row.
+        var serverNoticeIds: [String] = []
     }
+
+    /// The first environment the server update notice counts.
+    var firstServerNoticeId: String? { plan?.serverNoticeIds.first }
 
     init(updater: UpdateController, environments: Environments, serverUpdates: ServerUpdates, pill: SidebarUpdatePillView, window: NSWindow,
          toasts: @escaping () -> ToastViewport?, providers: @escaping (String) -> [ServerProvider]) {
@@ -141,7 +146,8 @@ final class UpdateEverything {
                              updating: serverUpdates.state(id).isRunning, capabilities: caps, ownServer: serverUpdates.isOwnServer(id),
                              continuesThreads: caps.threadContinuation && serverUpdates.continueThreads(id),
                              turnedOff: environments.saved.first { $0.environmentId == id }?.enabled == false,
-                             connectionError: environments.state(id)?.status == .connected ? nil : environments.state(id)?.lastFailure)
+                             connectionError: environments.state(id)?.status == .connected ? nil : environments.state(id)?.lastFailure,
+                             primary: id == environments.primaryId)
         }
     }
 
@@ -163,7 +169,8 @@ final class UpdateEverything {
                            providerMachines: providerMachines.map { ($0.environmentId, $0.label, $0.candidates.map { SidebarProviderUpdatePillModel.displayName($0.driver) }) },
                            localMachines: environments.environmentIds.filter { serverUpdates.isOwnServer($0) }.map { ($0, environments.label($0) ?? $0) }, skipped: skipped)
         return Plan(summary: d.summary, description: d, servers: servers, skipped: skipped, providerMachines: providerMachines, localVersion: local,
-                    serverNotice: L.serverUpdateNotice(machineSnapshot, target: target))
+                    serverNotice: L.serverUpdateNotice(machineSnapshot, target: target),
+                    serverNoticeIds: L.serverUpdateNoticeMachines(machineSnapshot, target: target).map(\.environmentId))
     }
 
     private func refresh() {
