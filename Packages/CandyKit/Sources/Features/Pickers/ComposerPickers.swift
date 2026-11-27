@@ -770,7 +770,8 @@ public final class PickerControlsView: DSView {
         for v in items {
             var w = v.naturalWidth
             if v === model { w = max(model.minimumWidth, min(w, bounds.width - fixed)) }
-            let h: CGFloat = 28
+            // Redesign's footer row is 24 tall (`RedesignTokens.Composer.control`); T3's controls are 28.
+            let h: CGFloat = min(28, bounds.height)
             if v === traits { x -= 4 }
             v.frame = NSRect(x: fractions ? x : snap(x), y: (bounds.height - h) / 2, width: fractions ? w : snap(x + w) - snap(x), height: h)
             x += w + gap

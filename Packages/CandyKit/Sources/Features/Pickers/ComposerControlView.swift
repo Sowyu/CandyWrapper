@@ -42,7 +42,7 @@ public final class ComposerControlView: ControlView {
     private var labelWidth: CGFloat { min(label.textWidth, maximumLabelWidth) }
     private var leadingPadding: CGFloat { paddingOverride?.0 ?? padding }
     private var trailingPadding: CGFloat { paddingOverride?.1 ?? padding }
-    private var padding: CGFloat { capy || modern ? 8 : Self.padding }
+    private var padding: CGFloat { capy ? 6 : modern ? 8 : Self.padding }
     /// Nightly 3824's footer controls; the composer's chips take them under Redesign too.
     private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) || capy }
     private var glyphWidth: CGFloat { if let compactIcon, visibleIcon === compactIcon { return 14 }; return (visibleIcon as? ComposerEffortGlyphView)?.intrinsicContentSize.width ?? 16 }
@@ -161,7 +161,7 @@ public final class ComposerControlView: ControlView {
 
     private var controlFont: NSFont {
         if settingsTrigger { return DSFont.ui(14) }
-        let font = capy ? DSFont.ui(13, weight: .medium) : DSFont.ui(14, weight: .medium)
+        let font = capy ? DSFont.ui(RedesignTokens.Composer.label, weight: .medium) : DSFont.ui(14, weight: .medium)
         guard modern, font.fontName.hasPrefix(".AppleSystemUIFont") else { return font }
         // ComposerControl.tsx:16 asks for CSS 500; AppKit's named medium resolves to SF 510.
         // ponytail: default SF composer labels use 505, remove compensation when Core Text matches Chromium's CSS 500 coverage.

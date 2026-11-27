@@ -9,10 +9,9 @@ import DesignSystem
 public final class DitherNoticeControlView: ControlView {
     /// The banners the page would have shown, in order. Their actions and dismissals run through them.
     public private(set) var notices: [ComposerNoticeBannerView] = []
-    private let surface = DitherPillSurface()
     private let fill = CALayer()
     private var icon = IconView(name: .info, size: 14)
-    private let label = LabelView("", font: DSFont.ui(13))
+    private let label = LabelView("", font: DSFont.ui(RedesignTokens.Draft.rowText))
     private let count = LabelView("", font: TL.tabular(11))
     private let dismiss = ButtonView(nil, icon: .x, variant: .ghostMuted, size: .iconXs)
     private var popup: OpenPopup?
@@ -22,11 +21,9 @@ public final class DitherNoticeControlView: ControlView {
     public override init(frame: NSRect) {
         super.init(frame: frame)
         scalesWhenPressed = false
-        surface.quiet = true
         fill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         fill.cornerRadius = DitherPill.radius
         layer?.masksToBounds = false
-        addSubview(surface)
         layer?.addSublayer(fill)
         label.lineHeight = 16
         count.lineHeight = 14
@@ -77,12 +74,13 @@ public final class DitherNoticeControlView: ControlView {
     public override func layout() {
         super.layout()
         let midY = bounds.height / 2
-        surface.frame = bounds
         CATransaction.begin(); CATransaction.setDisableActions(true)
         DitherPill.placeFill(fill, in: bounds, quiet: true)
         CATransaction.commit()
-        let iconX = titled || !count.text.isEmpty ? DitherPill.pad : (bounds.width - DitherPill.glyph) / 2
-        icon.frame = NSRect(x: iconX, y: midY - 7, width: DitherPill.glyph, height: DitherPill.glyph)
+        // The context row's glyph, ending where a 14pt one would.
+        let g = RedesignTokens.Draft.rowGlyph
+        let iconX = titled || !count.text.isEmpty ? DitherPill.pad + DitherPill.glyph - g : ((bounds.width - g) / 2).rounded()
+        icon.frame = NSRect(x: iconX, y: midY - g / 2, width: g, height: g)
         label.isHidden = !titled
         label.frame = NSRect(x: DitherPill.textX, y: midY - 8, width: ceil(label.textWidth) + 1, height: 16)
         count.isHidden = titled || count.text.isEmpty
@@ -118,7 +116,7 @@ public final class DitherNoticeControlView: ControlView {
 
     private func restyle() {
         let lit = state.hoverOrPressed || popup != nil
-        let text = lit ? Themed.color(\.foreground) : Themed.color(\.foreground, RedesignTokens.Text.quiet)
+        let text = lit ? Themed.color(\.foreground) : Themed.color(\.foreground, RedesignTokens.Text.faint(dark: effectiveAppearance.isDark))
         label.color = text
         count.color = text
         icon.strokeColor = switch notices.first?.content?.variant {

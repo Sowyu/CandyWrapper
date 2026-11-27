@@ -47,24 +47,22 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     public var showsCount = true { didSet { if showsCount != oldValue { countLabel.isHidden = !showsCount; needsLayout = true } } }
     private let countLabel = glassLabel("0", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
 
-    /// Redesign's new-thread page: Stash is one of the context row's quiet controls (`DitherPill.quietPatch`) beside
-    /// the project, the machine and the notices, not a raised pill on a row of its own (the user, 2026-11-26: "whys
-    /// the stash so weird"). A 14pt glyph and 13pt text at the quiet strength, the count in muted tabular figures,
-    /// the patch filled on hover and while the stash list is open.
+    /// Redesign's new-thread page: Stash is one of the context row's quiet controls beside the project, the machine
+    /// and the notices, not a raised pill on a row of its own (the user, 2026-11-26: "whys the stash so weird"). Bare
+    /// text and glyph on the page's ground at the row's scale (`RedesignTokens.Draft`), the count in tabular figures,
+    /// the patch (`DitherPill.quietPatch`) filled only on hover and while the stash list is open.
     public var quiet = false {
         didSet {
             guard quiet != oldValue else { return }
             bare = quiet
-            quietSurface.isHidden = !quiet
             quietIcon.isHidden = !quiet
             icon.isHidden = quiet
-            title.font = quiet ? DSFont.ui(13) : DSFont.ui(12)
-            countLabel.font = quiet ? TL.tabular(13) : DSFont.ui(12, weight: .medium)
+            title.font = DSFont.ui(quiet ? RedesignTokens.Draft.rowText : 12)
+            countLabel.font = quiet ? TL.tabular(RedesignTokens.Draft.rowText) : DSFont.ui(12, weight: .medium)
             title.lineHeight = 16; countLabel.lineHeight = 16
             restyle(); needsLayout = true
         }
     }
-    private let quietSurface: DitherPillSurface = { let s = DitherPillSurface(); s.quiet = true; s.isHidden = true; return s }()
     private let quietFill = CALayer()
     private let quietIcon: IconView
 
@@ -77,7 +75,6 @@ public final class ComposerStashBadgeView: ComposerBannerView {
         self.title = glassLabel(title, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
         self.describe = describe
         super.init(variant: .neutral)
-        addSubview(quietSurface)
         quietFill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
         row.wantsLayer = true
         row.layer?.addSublayer(quietFill)
@@ -129,9 +126,10 @@ public final class ComposerStashBadgeView: ComposerBannerView {
         row.setAccessibilityLabel(describe(count))
         if quiet {
             let lit = menuOpen || row.state.hovered
-            title.color = lit ? Themed.color(\.foreground) : Themed.color(\.foreground, RedesignTokens.Text.quiet)
-            quietIcon.strokeColor = lit ? Themed.color(\.foreground, 0.85) : Themed.color(\.foreground, RedesignTokens.Text.quiet)
             let dark = effectiveAppearance.isDark
+            let rest = Themed.color(\.foreground, RedesignTokens.Text.faint(dark: dark))
+            title.color = lit ? Themed.color(\.foreground) : rest
+            quietIcon.strokeColor = lit ? Themed.color(\.foreground, 0.85) : rest
             CATransaction.begin(); CATransaction.setDisableActions(true)
             quietFill.backgroundColor = menuOpen ? RedesignTokens.State.fill(RedesignTokens.State.pressed, dark: dark).cgColor
                 : row.state.hovered ? RedesignTokens.State.fill(RedesignTokens.State.hover, dark: dark).cgColor : nil
@@ -149,13 +147,14 @@ public final class ComposerStashBadgeView: ComposerBannerView {
         if quiet {
             // One of the new-thread row's quiet controls: the glyph in the machine control's glyph box, the text at
             // its text column, the count after it, all on one 16pt line.
-            quietSurface.frame = bounds
             row.frame = bounds
             let midY = bounds.height / 2
             CATransaction.begin(); CATransaction.setDisableActions(true)
             DitherPill.placeFill(quietFill, in: row.bounds, quiet: true)
             CATransaction.commit()
-            quietIcon.frame = NSRect(x: DitherPill.pad, y: midY - DitherPill.glyph / 2, width: DitherPill.glyph, height: DitherPill.glyph)
+            // The context row's glyph, ending where a 14pt one would.
+            let g = RedesignTokens.Draft.rowGlyph
+            quietIcon.frame = NSRect(x: DitherPill.pad + DitherPill.glyph - g, y: midY - g / 2, width: g, height: g)
             var x = DitherPill.pad + DitherPill.glyph
             title.isHidden = !showsTitle
             if showsTitle {

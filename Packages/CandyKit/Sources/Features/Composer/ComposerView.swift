@@ -32,11 +32,16 @@ public final class ComposerView: DSView {
     static let inset: CGFloat = 1, pad: CGFloat = 16, footerHeight: CGFloat = 32
     /// `min-h-19.5` and `max-h-52` less the `p-1 -m-1` pair.
     static let editorMin: CGFloat = 70, editorMax: CGFloat = 200
-    /// Dither: Capy's prompt bar, measured in Capy 2026-10-22. 28pt footer controls 9 from the bottom and right
-    /// edges, the attach "+" at the left, one prompt line (79 tall) in a thread and 118 tall on the new-thread page.
+    /// Dither: Capy's prompt bar, measured again 2026-11-26 (`RedesignTokens.Composer`): 24pt footer controls 6 from
+    /// the bottom and right edges, the attach "+" at the left, one prompt line (67 tall) in a thread and 100 tall on
+    /// the new-thread page.
     private var modern: Bool { ComposerDesign.uses3814(dark: effectiveAppearance.isDark) }
     var capy: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    static let capyEdge: CGFloat = 9, capyRow: CGFloat = 28, capyGap: CGFloat = 2, capyDraftEditorMin: CGFloat = 62
+    static let capyEdge = RedesignTokens.Composer.edge, capyRow = RedesignTokens.Composer.control
+    static let capyGap = RedesignTokens.Composer.rowGap, capyDraftEditorMin = RedesignTokens.Composer.draftEditor
+    /// Where the text, the shelves and the placeholder start: Redesign's measured insets, else T3's 1px rim and 16 pad.
+    private var textX: CGFloat { capy ? RedesignTokens.Composer.textInset : Self.inset + Self.pad }
+    private var textY: CGFloat { capy ? RedesignTokens.Composer.textTop : Self.inset + Self.pad }
     private var editorMinimum: CGFloat { capy ? (isDraftRoute ? Self.capyDraftEditorMin : ceil(ComposerEditor.lineHeight)) : (modern ? 2 * ComposerEditor.lineHeight : Self.editorMin) }
 
     // MARK: Inputs
@@ -215,8 +220,8 @@ public final class ComposerView: DSView {
     /// `bg-accent/45 ring-1 ring-primary/70` while files hover over the composer.
     private let dropHighlight = CALayer()
     private var laidOutShelfHeight: CGFloat = 0
-    private var queuedShelfHeight: CGFloat { queuedShelf.preferredHeight(width: max(0, bounds.width - 2 * (Self.inset + Self.pad))) }
-    private var shelfHeight: CGFloat { queuedShelfHeight + imageShelf.preferredHeight(width: max(0, bounds.width - 2 * (Self.inset + Self.pad))) }
+    private var queuedShelfHeight: CGFloat { queuedShelf.preferredHeight(width: max(0, bounds.width - 2 * textX)) }
+    private var shelfHeight: CGFloat { queuedShelfHeight + imageShelf.preferredHeight(width: max(0, bounds.width - 2 * textX)) }
     public var fileRows: [ComposerFileRow] {
         get { fileList.rows }
         set {
@@ -276,9 +281,9 @@ public final class ComposerView: DSView {
         if let replacement { return Self.inset * 2 + max(48, replacement.intrinsicContentSize.height) }
         switch pending {
         // Without the 32px send button the footer row is the 28px controls (`h-7`): 148 empty (reference 06).
-        case .question: return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + (modern ? 8 : Self.pad)
+        case .question: return textY + Self.inset + shelfHeight + fileList.preferredHeight + editorHeight + 8 + 8 + 28 + (modern ? 8 : Self.pad)
         case .none, .approval:
-            if capy { return Self.inset + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + Self.capyGap + Self.capyRow + Self.capyEdge }
+            if capy { return textY + shelfHeight + fileList.preferredHeight + editorHeight + Self.capyGap + Self.capyRow + Self.capyEdge }
             return Self.inset * 2 + Self.pad + shelfHeight + fileList.preferredHeight + editorHeight + 8 + Self.footerHeight + (modern ? 8 : Self.pad)
         }
     }
@@ -808,7 +813,7 @@ public final class ComposerView: DSView {
     /// of running into the toolbar. Capy keeps its placeholder on one line.
     private var placeholderHeight: CGFloat {
         guard !capy, editor.string.isEmpty, !placeholder.text.isEmpty else { return 0 }
-        let width = bounds.width - 2 * (Self.inset + Self.pad)
+        let width = bounds.width - 2 * textX
         return width > 0 ? ceil(placeholder.height(forWidth: width)) : 0
     }
 
@@ -1056,7 +1061,7 @@ public final class ComposerView: DSView {
         queuedShelf.isHidden = queuedShelf.tiles.isEmpty
         fileList.isHidden = fileList.rows.isEmpty
         // Editor: text box at x 17, the scroller in the 4px `p-1` padding outside it.
-        let textWidth = max(0, w - 2 * (Self.inset + Self.pad))
+        let textWidth = max(0, w - 2 * textX)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         dropHighlight.frame = box
         CATransaction.commit()
@@ -1064,25 +1069,26 @@ public final class ComposerView: DSView {
         // The shelf wraps by width: a new width can change the box height the parent planned with.
         if shelf != laidOutShelfHeight { laidOutShelfHeight = shelf; DispatchQueue.main.async { [weak self] in self?.onHeightChange?() } }
         let queued = queuedShelfHeight
-        queuedShelf.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad, width: textWidth,
-                                   height: max(0, queued - ComposerImageShelfView.marginBottom))
-        imageShelf.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad + queued, width: textWidth,
-                                  height: max(0, shelf - queued - ComposerImageShelfView.marginBottom))
-        fileList.frame = NSRect(x: Self.inset + Self.pad, y: Self.inset + Self.pad + shelf, width: textWidth,
+        let margin = imageShelf.marginBottom
+        queuedShelf.frame = NSRect(x: textX, y: textY, width: textWidth,
+                                   height: max(0, queued - queuedShelf.marginBottom))
+        imageShelf.frame = NSRect(x: textX, y: textY + queued, width: textWidth,
+                                  height: max(0, shelf - queued - margin))
+        fileList.frame = NSRect(x: textX, y: textY + shelf, width: textWidth,
                                 height: max(0, fileList.preferredHeight - ComposerFileListView.marginBottom))
-        let textTop = Self.inset + Self.pad + shelf + fileList.preferredHeight
-        scroll.frame = NSRect(x: Self.inset + Self.pad - 4, y: textTop - 4, width: textWidth + 8, height: editorHeight + 8)
+        let textTop = textY + shelf + fileList.preferredHeight
+        scroll.frame = NSRect(x: textX - 4, y: textTop - 4, width: textWidth + 8, height: editorHeight + 8)
         setEditorGeometry(minSize: NSSize(width: textWidth + 8, height: editorHeight + 8), width: textWidth + 8)
         // `absolute inset-0` over the editor (ComposerPromptEditorTiptap.tsx:1791-1798): a long placeholder wraps.
         // Capy keeps the placeholder on one line, so a narrow prompt bar never runs it into the footer.
         placeholder.maxLines = capy ? 1 : 0
-        placeholder.frame = NSRect(x: Self.inset + Self.pad, y: textTop, width: textWidth,
+        placeholder.frame = NSRect(x: textX, y: textTop, width: textWidth,
                                    height: capy ? ComposerEditor.lineHeight : placeholder.height(forWidth: textWidth))
         placeholder.isHidden = !editor.string.isEmpty
         layoutSuggestionKbd()
 
         // ponytail: the length message overlaps the footer's top edge; T3 grows the box for it (ComposerPromptLengthValidation)
-        validation.frame = NSRect(x: Self.inset + Self.pad, y: textTop + editorHeight - 16, width: textWidth, height: 16)
+        validation.frame = NSRect(x: textX, y: textTop + editorHeight - 16, width: textWidth, height: 16)
 
         // Footer row: 32 tall, 16 from the bottom.
         let capyFooter = capy && questionFooter == nil
@@ -1148,7 +1154,8 @@ public final class ComposerView: DSView {
             // `flex items-center gap-2` with the send button.
             compactPill.narrow = bounds.width <= 480
             let pw = compactPill.intrinsicContentSize.width
-            compactPill.frame = NSRect(x: actionsLeft - 8 - pw, y: midY - 14, width: pw, height: 28)
+            let ph: CGFloat = capyFooter ? rowHeight : 28
+            compactPill.frame = NSRect(x: actionsLeft - (capyFooter ? RedesignTokens.Space.xs : 8) - pw, y: midY - ph / 2, width: pw, height: ph)
             actionsLeft = compactPill.frame.minX
         }
         planPill.isHidden = !planFollowUp || questionFooter != nil
@@ -1183,12 +1190,15 @@ public final class ComposerView: DSView {
         // Nightly 3824 groups the controls beside send (#25869); Redesign keeps its "+" at its own edge.
         if modern || capy {
             let start = capy ? Self.capyEdge : 9
-            attach.frame = NSRect(x: start, y: midY - 14, width: 28, height: 28)
+            // Redesign's controls take the row's height, `RedesignTokens.Composer.control`.
+            let size: CGFloat = capyFooter ? rowHeight : 28
+            let gap: CGFloat = capyFooter ? RedesignTokens.Space.xs : 8
+            attach.frame = NSRect(x: start, y: midY - size / 2, width: size, height: size)
             let left = attach.isHidden ? start : attach.frame.maxX + (capy ? 3 : 8)
-            var available = max(0, actionsLeft - 8 - left)
+            var available = max(0, actionsLeft - gap - left)
             for control in footerControls.reversed() {
                 let width = min(control.intrinsicContentSize.width, available)
-                control.frame = NSRect(x: actionsLeft - 8 - width, y: midY - 14, width: width, height: 28)
+                control.frame = NSRect(x: actionsLeft - gap - width, y: midY - size / 2, width: width, height: size)
                 available -= width
             }
             return
