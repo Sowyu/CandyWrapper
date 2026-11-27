@@ -47,6 +47,27 @@ struct MarkdownTableTests {
         #expect(MarkdownLayout.tableCellPadding(0, of: 1) == (0, 0) && MarkdownLayout.tableCellPadding(1, of: 3) == (12, 24))
     }
 
+    /// Inline code in a cell is one token: the column's minimum counts the chip's padding on both sides, so a narrow
+    /// lane scrolls the table instead of breaking `kmh_to_mph` into `kmh_to_mp` and `h`.
+    @Test(arguments: ["legacy", "modern", "redesign"]) func codeInACellNeverBreaksMidToken(design: String) throws {
+        let modern: Bool? = design == "redesign" ? nil : design == "modern"
+        try ThreadDesign.$layoutUses3814.withValue(modern) { try withTheme(SmallFixes3Pictures.redesign(dark: true)) {
+            let source = "| Function | Result |\n|---|---|\n| `kmh_to_mph` | " + String(repeating: "converts kilometres per hour ", count: 6) + "|\n"
+                + "| `mph_to_kmh_rounded_value` | the inverse |"
+            let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 120, height: 200))
+            view.messageID = "table-token-test"
+            view.setMarkdown(source)
+            for width in stride(from: CGFloat(60), through: 400, by: 7) {
+                let codes = view.layout(forWidth: width).items.compactMap { item -> MarkdownTextBox? in
+                    if case .text(let box, _) = item, box.text.contains("_") { return box }
+                    return nil
+                }
+                try #require(codes.count == 2)
+                for box in codes { #expect(box.lineCount == 1, "\(box.text) wraps at \(width)") }
+            }
+        } }
+    }
+
     /// Cells whose longest words together pass the lane still scroll sideways.
     static let wide = "| " + (0..<8).map { "column\($0)withaverylongunbrokenheadername" }.joined(separator: " | ") + " |\n|"
         + String(repeating: "---|", count: 8) + "\n| " + (0..<8).map { "cell\($0)withaverylongunbrokenvalueinside" }.joined(separator: " | ") + " |"

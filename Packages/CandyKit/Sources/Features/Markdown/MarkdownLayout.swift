@@ -1707,7 +1707,8 @@ extension MarkdownLayout {
     /// scrolls. With it, a lane at least 36rem wide (index.css:2164-2178, T3 f8b06c5fd0) drops that minimum, so
     /// headers wrap and the table shrinks to the lane, each column giving up its room above its longest word in
     /// proportion, as Chromium's auto table layout does. The table only overflows when the longest words don't fit.
-    private static let unbroken = try! NSRegularExpression(pattern: "\\S+")
+    /// A no-break space never breaks, so it belongs to the word: inline code's leading padding is a kerned one.
+    private static let unbroken = try! NSRegularExpression(pattern: "(?:\\S|\\u00A0)+")
 
     /// A cell's `0.75rem` side padding, without the first column's leading or the last column's trailing
     /// side (`:is(th, td):first-child` and `:last-child`, index.css:2146-2152).
@@ -1733,7 +1734,10 @@ extension MarkdownLayout {
                 }
                 let cap: CGFloat = hasFormula ? .infinity : 384
                 let padding = tableCellPadding(c, of: columns).total
-                maxs[c] = max(maxs[c], min(cap, natural(cell) + padding))
+                // A cell that opens with inline code reserves its leading padding as the first line's indent,
+                // which the natural width leaves out.
+                let indent = cell.length > 0 ? (cell.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.firstLineHeadIndent ?? 0 : 0
+                maxs[c] = max(maxs[c], min(cap, natural(cell) + indent + padding))
                 // ponytail: breaks only at spaces, not after hyphens, add UAX 14 opportunities if a column comes out wide
                 let longest = Self.unbroken.matches(in: cell.string, range: NSRange(location: 0, length: cell.length))
                     .map { match -> CGFloat in
@@ -1744,7 +1748,7 @@ extension MarkdownLayout {
                                 return natural(word.attributedSubstring(from: NSRange(index..<end, in: word.string)))
                             }.max() ?? 0
                         }
-                        return natural(word)
+                        return natural(word) + (match.range.location == 0 ? indent : 0)
                     }.max() ?? 0
                 mins[c] = max(mins[c], min(cap, max(longest, formulaWidth) + padding))
             }
