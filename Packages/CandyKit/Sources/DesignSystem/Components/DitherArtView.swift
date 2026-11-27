@@ -88,6 +88,10 @@ public final class DitherArtView: NSView {
     /// The frames' cell codes, newest key first (`flowerCodes(for:)`). They stay while the window shows, across pages
     /// and returns, and go with the window or the Flower.
     var flowerCodeSets: [FlowerCodes] = []
+    /// Gradient: the accent color through the current frame's mask, one cell per mask pixel.
+    private let gradientMask = CALayer()
+    /// Gradient's loop, held only while the new-thread page shows (`DitherArt.gradientFrames`).
+    private var gradientFrames: [CGImage] = []
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -103,6 +107,9 @@ public final class DitherArtView: NSView {
         scrim.startPoint = CGPoint(x: 0, y: 0.5)
         scrim.endPoint = CGPoint(x: 1, y: 0.5)
         layer?.masksToBounds = true
+        gradientMask.contentsGravity = .resize
+        gradientMask.magnificationFilter = .nearest
+        gradientMask.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
         layer?.addSublayer(art)
         let still: [String: CAAction] = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull(), "opacity": NSNull(),
                                          "hidden": NSNull(), "contents": NSNull(), "path": NSNull(), "fillColor": NSNull(), "mask": NSNull()]
@@ -328,6 +335,7 @@ public final class DitherArtView: NSView {
             debounce?.cancel()
             shown = nil; pending = nil; desktopAnswer = nil
             art.contents = nil
+            dropGradient()
             dropFlower()
             flowerCodeSets = []
             PictureInk.dropCache()
@@ -355,10 +363,48 @@ public final class DitherArtView: NSView {
         return window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible) && window.isKeyWindow
     }
 
-    /// The Flower moves only while it can be seen and wanted (`syncFlowerMotion`); nothing else here moves.
+    /// Gradient moves only while it can be seen and wanted: the new-thread page with Animate background on, the window
+    /// active and Reduce Motion off. Anything else removes the animation, holding the frame it was on, so nothing runs
+    /// while idle (the user, 2026-11-21: "capys plain dither isnt just static"). The Flower follows `syncFlowerMotion`.
     func syncMotion() {
         syncFlowerMotion()
+        let on = ThemeRuntime.ditherGradient && ThemeRuntime.ditherGradientAnimates && !Motion.reduced && windowIsActive
+            && !isHiddenOrHasHiddenAncestor && page == .hero && !art.isHidden && gradientFrames.count > 1 && art.mask === gradientMask
+        let running = gradientMask.animation(forKey: "drift") != nil
+        guard on != running else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if on {
+            let drift = CAKeyframeAnimation(keyPath: "contents")
+            drift.values = gradientFrames
+            drift.calculationMode = .discrete
+            drift.keyTimes = (0...gradientFrames.count).map { NSNumber(value: Double($0) / Double(gradientFrames.count)) }
+            drift.duration = DitherArt.gradientPeriod
+            drift.repeatCount = .infinity
+            // Start from the frame it holds, so resuming never jumps.
+            if let held = gradientMask.contents, let i = gradientFrames.firstIndex(where: { $0 === (held as AnyObject) }) {
+                drift.timeOffset = DitherArt.gradientPeriod * Double(i) / Double(gradientFrames.count)
+            }
+            // Only `syncMotion` takes it off, never Core Animation (an offscreen window counts it finished at once).
+            drift.isRemovedOnCompletion = false
+            gradientMask.add(drift, forKey: "drift")
+        } else {
+            // Hold the frame on screen now.
+            if let current = gradientMask.presentation()?.contents { gradientMask.contents = current }
+            gradientMask.removeAnimation(forKey: "drift")
+        }
+        CATransaction.commit()
     }
+
+    /// Gradient's frames go when its page or window does; they render again when it shows.
+    private func dropGradient() {
+        gradientMask.removeAnimation(forKey: "drift")
+        gradientMask.contents = nil
+        gradientFrames = []
+        if art.mask === gradientMask { art.mask = nil }
+    }
+
+    var gradientAnimatingForTesting: Bool { gradientMask.animation(forKey: "drift") != nil }
+    var gradientFrameCountForTesting: Int { gradientFrames.count }
 
     /// Moving between the main panel (Dither) and the window (Blur): the old art never shows at the new place.
     public override func viewDidMoveToSuperview() {
@@ -390,15 +436,31 @@ public final class DitherArtView: NSView {
         let target = canvasSize(for: shown)
         if target == (shown.width, shown.height) {
             art.frame = CGRect(x: 0, y: bounds.height - h, width: w, height: h)
+        } else if shown.tint != nil {
+            // Gradient covers the panel's width and the top of its height: stretch it there.
+            let gh = CGFloat(target.height) * unit
+            art.frame = CGRect(x: 0, y: bounds.height - gh, width: bounds.width, height: gh)
         } else {
             let k = max(bounds.width / w, bounds.height / h)
             art.frame = CGRect(x: (bounds.width - w * k) / 2, y: (bounds.height - h * k) / 2, width: w * k, height: h * k)
         }
+        gradientMask.frame = art.bounds
     }
 
     /// The canvas size, in cells, a render for this panel's size would have in `request`'s mode.
     private func canvasSize(for request: DitherArt.Request) -> (width: Int, height: Int) {
-        (Int((artRect.width / request.unit).rounded(.up)), Int((artRect.height / request.unit).rounded(.up)))
+        if request.tint != nil { return gradientCanvas() }
+        return (Int((artRect.width / request.unit).rounded(.up)), Int((artRect.height / request.unit).rounded(.up)))
+    }
+
+    /// Gradient's canvas in cells: the panel's width, and from its top down `DitherArt.gradientHeight`, which stops
+    /// short of the new thread's composer group so the field has faded to plain ground well above it.
+    private func gradientCanvas() -> (width: Int, height: Int) {
+        let (_, front) = self.front
+        let groupTop = front.flatMap { Self.composers.object(forKey: $0)?.rectValue }.map { bounds.height - convert($0, from: front).maxY }
+        let unit = DitherArt.gradientUnit
+        return (Int((artRect.width / unit).rounded(.up)),
+                Int((DitherArt.gradientHeight(panel: artRect.height, groupTop: groupTop) / unit).rounded()))
     }
 
     /// How many renders reached the screen, for tests.
@@ -460,11 +522,13 @@ public final class DitherArtView: NSView {
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
         // Flower: the lotus on a new thread and beside a thread's column, the plain ground everywhere else.
+        // Gradient: the cells show on a new thread only, with no scrim; every other page is the plain ground.
         let flowerOn = ThemeRuntime.ditherFlower
-        let artHidden = flowerOn
+        let gradient = ThemeRuntime.ditherGradient && !flowerOn
+        let artHidden = flowerOn || (gradient && page != .hero)
         if art.isHidden != artHidden { art.isHidden = artHidden }
-        let picture = !flowerOn && !ThemeRuntime.ditherBlur
-        let alpha = flowerOn ? 0 : DitherArt.scrim(page, display, light: !dark, picture: picture)
+        let picture = !flowerOn && !gradient && !ThemeRuntime.ditherBlur
+        let alpha = flowerOn || gradient ? 0 : DitherArt.scrim(page, display, light: !dark, picture: picture)
         if loggedScrim != alpha {
             DitherArt.log.notice("scrim \(alpha) on \(String(describing: page), privacy: .public): reduce transparency \(display.reduceTransparency), increase contrast \(display.increaseContrast), dark \(dark)")
         }
@@ -473,7 +537,7 @@ public final class DitherArtView: NSView {
         CATransaction.commit()
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // The veil follows the column through a live resize, so it never animates.
-        let veil = flowerOn || picture ? 0 : DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
+        let veil = flowerOn || gradient || picture ? 0 : DitherArt.veil(page, reduceTransparency: display.reduceTransparency)
         if veil > 0, bounds.width >= 1, let front, let column = Self.columns.object(forKey: front)?.rectValue {
             let lane = convert(column, from: front)
             let xs = (0...64).map { bounds.width * CGFloat($0) / 64 }
@@ -522,7 +586,24 @@ public final class DitherArtView: NSView {
         if flowerSet != nil || flowerWanted != nil || !flowerHost.isHidden { flowerContent = nil; dropFlower() }
         flowerCodeSets = []
         let request: DitherArt.Request
-        do {
+        if ThemeRuntime.ditherGradient {
+            art.magnificationFilter = .nearest
+            // Only the new-thread page shows it, so no other page holds its frames.
+            let canvas = gradientCanvas()
+            guard page == .hero, canvas.width > 0, canvas.height > 0 else {
+                debounce?.cancel()
+                shown = nil; pending = nil
+                art.contents = nil
+                dropGradient()
+                return
+            }
+            // No picture: the canvas covers the top of the panel, where the cells are; the ground shows below it.
+            let accent = palette.primary
+            request = DitherArt.Request(url: nil, width: canvas.width, height: canvas.height,
+                                        background: [background.srgb.x, background.srgb.y, background.srgb.z], scale: scale,
+                                        dark: dark, tint: [accent.srgb.x, accent.srgb.y, accent.srgb.z],
+                                        frames: ThemeRuntime.ditherGradientAnimates ? Int(DitherArt.gradientPeriod * DitherArt.gradientFPS) : 1)
+        } else {
             let desktop = desktopPicture(for: window.screen)
             let url = ThemeRuntime.ditherPicture ?? desktop
             let fallbacks = [desktop, DitherArt.defaultDesktop].compactMap { $0 }.filter { $0 != url }
@@ -553,14 +634,15 @@ public final class DitherArtView: NSView {
         debounce?.cancel()
         // A live resize lands here every frame; the last size renders, the old art scales with the panel meanwhile.
         if rendersInlineForTesting {
-            show(request, image: Self.render(request))
+            let (image, frames) = Self.render(request)
+            show(request, image: image, frames: frames)
             return
         }
         let work = DispatchWorkItem { [weak self] in
             DispatchQueue.global(qos: .utility).async {
-                let image = Self.render(request)
+                let (image, frames) = Self.render(request)
                 DispatchQueue.main.async {
-                    MainActor.assumeIsolated { self?.show(request, image: image) }
+                    MainActor.assumeIsolated { self?.show(request, image: image, frames: frames) }
                 }
             }
         }
@@ -603,24 +685,43 @@ public final class DitherArtView: NSView {
     var holdsFlowerJobsForTesting = false
     var heldFlowerJobsForTesting: [() -> Void] = []
 
-    /// The picture's art. Runs on any thread.
-    private nonisolated static func render(_ request: DitherArt.Request) -> DitherArtImage {
-        DitherArtImage(image: DitherArt.render(request))
+    /// The picture's art, or Gradient's frames and the first of them. Runs on any thread.
+    private nonisolated static func render(_ request: DitherArt.Request) -> (DitherArtImage, DitherArtFrames) {
+        let frames = DitherArtFrames(images: request.tint == nil ? []
+            : DitherArt.gradientFrames(width: request.width, height: request.height, frames: request.frames))
+        return (DitherArtImage(image: request.tint == nil ? DitherArt.render(request) : frames.images.first), frames)
     }
 
-    private func show(_ request: DitherArt.Request, image: DitherArtImage) {
+    private func show(_ request: DitherArt.Request, image: DitherArtImage, frames: DitherArtFrames) {
         guard pending == request else { return }
         pending = nil
         rendersForTesting += 1
         // A render that failed isn't remembered, so the next refresh tries again.
         shown = image.image == nil ? nil : request
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        art.mask = nil
-        art.backgroundColor = nil
-        art.contents = image.image
+        dropGradient()
+        if let tint = request.tint {
+            art.contents = nil
+            art.backgroundColor = DitherArt.gradientColor(tint: tint, background: request.background, dark: request.dark)
+            gradientFrames = frames.images
+            gradientMask.contents = image.image
+            art.mask = gradientMask
+        } else {
+            art.mask = nil
+            art.backgroundColor = nil
+            art.contents = image.image
+        }
         placeArt()
         CATransaction.commit()
         syncMotion()
+    }
+
+    /// Renders what the panel shows now on this thread, dropping a render that was waiting, for offscreen pictures.
+    func renderNowForTesting() {
+        debounce?.cancel(); debounce = nil
+        pending = nil; shown = nil
+        rendersInlineForTesting = true
+        refresh()
     }
 
     var contentsForTesting: CGImage? { art.contents.map { $0 as! CGImage } }
@@ -1559,6 +1660,7 @@ extension DitherArtView {
 }
 
 private struct DitherArtImage: @unchecked Sendable { let image: CGImage? }
+private struct DitherArtFrames: @unchecked Sendable { let images: [CGImage] }
 private final class EmphasisBox { let emphasis: DitherArtView.Emphasis; init(emphasis: DitherArtView.Emphasis) { self.emphasis = emphasis } }
 
 /// The art's rendering. Touches no AppKit view, so it runs on any thread.
@@ -1673,16 +1775,76 @@ public enum DitherArt {
         var textDim = TextDim.standard
         /// Picture's cell in points, from the "Dot size" setting at the window's scale.
         var dot: CGFloat = DitherDotSize.medium.points(scale: 2)
+        /// Gradient (`ThemeRuntime.ditherGradient`): no picture, cells in this sRGB accent across the top; the canvas
+        /// is in `gradientUnit`s.
+        var tint: [Double]?
+        /// Gradient's frame count: the loop, or 1 when Animate background is off.
+        var frames = 1
+
+        init(url: URL?, width: Int, height: Int, background: [Double], scale: CGFloat, fallbacks: [URL] = [], blur: Bool = false,
+             dark: Bool = true, tint: [Double]? = nil, frames: Int = 1) {
+            self.url = url; self.width = width; self.height = height; self.background = background; self.scale = scale
+            self.fallbacks = fallbacks; self.blur = blur; self.dark = dark; self.tint = tint; self.frames = frames
+        }
 
         /// Points per canvas pixel.
-        var unit: CGFloat { blur ? DitherArt.blurPixel : dot }
+        var unit: CGFloat { tint != nil ? DitherArt.gradientUnit : blur ? DitherArt.blurPixel : dot }
+    }
+
+    /// How far down the panel Gradient's canvas reaches, in points: half the panel, as Capy's field fades out by about
+    /// 45% down, and never closer than `gradientClearance` to the top of the new thread's composer group, so the
+    /// field is plain ground well above the composer however short the window is.
+    nonisolated static func gradientHeight(panel: CGFloat, groupTop: CGFloat?) -> CGFloat {
+        let half = panel * gradientReach
+        guard let groupTop else { return half }
+        return max(0, min(half, groupTop - gradientClearance))
+    }
+
+    /// The share of the panel's height Gradient's canvas covers from the top.
+    nonisolated static let gradientReach: CGFloat = 0.5
+    /// Plain ground between the canvas's foot and the composer group's top, in points. The field has thinned to
+    /// nothing a little before the foot (`gradientFloor`), so the ground runs further still.
+    nonisolated static let gradientClearance: CGFloat = 24
+
+    /// Gradient's frames: one alpha mask per frame, a cell per pixel, on where the field beats the cell's Bayer
+    /// threshold, the way Capy's cells switch on and off on a fixed grid. One frame when `frames` is 1. The field is a
+    /// row profile times a falloff down the canvas (`gradientFall`), so a frame costs one multiply per cell.
+    nonisolated static func gradientFrames(width w: Int, height h: Int, frames: Int) -> [CGImage] {
+        guard w > 0, h > 0, frames > 0 else { return [] }
+        let fall = (0..<h).map { y -> Double in gradientFall((Double(y) + 0.5) / Double(h)) }
+        var out: [CGImage] = []
+        out.reserveCapacity(frames)
+        var row = [Double](repeating: 0, count: w)
+        for i in 0..<frames {
+            let t = Double(i) / Double(frames)
+            for x in 0..<w { row[x] = gradientField((Double(x) + 0.5) / Double(w), t) }
+            guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
+                  let data = ctx.data?.bindMemory(to: UInt8.self, capacity: w * h) else { return [] }
+            // Row 0 of the buffer is the top of the canvas.
+            for y in 0..<h {
+                let b = (y & 7) * 8, f = fall[y]
+                for x in 0..<w {
+                    data[y * w + x] = row[x] * f - gradientFloor > (Double(bayer[b + (x & 7)]) + 0.5) / 64 ? 255 : 0
+                }
+            }
+            guard let image = ctx.makeImage() else { return [] }
+            out.append(image)
+        }
+        return out
+    }
+
+    /// Gradient's one cell color: the accent mixed into the ground, dim like Capy's navy (#26314b at most). Light
+    /// takes 0.24: at 0.32 (#abd3cf, 1.5:1) the denser field of 2026-11-27 read as a loud teal slab over the
+    /// off-white card, far heavier than dark's 0.36 on near-black; at 0.22 it barely showed.
+    nonisolated static func gradientColor(tint: [Double], background: [Double], dark: Bool) -> CGColor {
+        let share = dark ? 0.36 : 0.24
+        let c = (0..<3).map { background[$0] + (tint[$0] - background[$0]) * share }
+        return CGColor(srgbRed: c[0], green: c[1], blue: c[2], alpha: 1)
     }
 
     /// Gradient's cell, in points: Capy's binary dither cells measured 6px at 2x in the user's recording.
     public nonisolated static let gradientUnit: CGFloat = 3
-    /// How much of the panel Gradient's canvas covers from the top: its full width and the top half, where Capy's
-    /// field moves (the user's recording, 2026-11-21).
-    nonisolated static let gradientReach = CGSize(width: 1, height: 0.5)
     /// The loop: 12 s at 8 frames a second. Capy's field moves at about 12 cells a second at its fastest, so a cell
     /// flips at most once a frame or so.
     nonisolated static let gradientPeriod: Double = 12
@@ -1696,8 +1858,15 @@ public enum DitherArt {
     nonisolated static let lobes: [Lobe] = [
         Lobe(centre: 0.06, travel: 0.06, phase: 0, width: 0.22, strength: 0.75, swell: 0.25, turns: 1, swellPhase: 1),
         Lobe(centre: 0.4, travel: 0.16, phase: 2, width: 0.18, strength: 0.55, swell: 0.45, turns: 2, swellPhase: 0.5),
-        Lobe(centre: 0.84, travel: 0.1, phase: 4, width: 0.2, strength: 0.5, swell: 0.5, turns: 1, swellPhase: 3.5),
+        Lobe(centre: 0.84, travel: 0.1, phase: 4, width: 0.2, strength: 0.4, swell: 0.5, turns: 1, swellPhase: 3.5),
     ]
+
+    /// The field's strength down the canvas, `y` 0 at the top to 1 at the foot: dense under the top edge and thinning
+    /// faster than linear, as Capy's does (capy-real-dark-new-thread.png).
+    nonisolated static func gradientFall(_ y: Double) -> Double { pow(max(0, 1 - y), 1.5) }
+    /// Taken off the field before the threshold, so its last rows are empty ground instead of a sparse, even row of
+    /// cells that ends on a hard line at the canvas's foot.
+    nonisolated static let gradientFloor: Double = 0.04
 
     /// Gradient's field at `u` across the canvas (0 left, 1 right) and loop time `t` (0...1), 0 to 1.
     nonisolated static func gradientField(_ u: Double, _ t: Double) -> Double {

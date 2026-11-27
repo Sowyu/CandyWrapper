@@ -18,7 +18,8 @@ public enum BackdropMarks {
     /// darkest (light), without the chat column's veil, since marks sit beside the column. Nil on a solid panel.
     nonisolated static func worstBackground(dark: Bool) -> Double? {
         let background = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background
-        if ThemeRuntime.isDither(dark: dark) {
+        // Gradient leaves a thread on plain ground.
+        if ThemeRuntime.isDither(dark: dark), !ThemeRuntime.ditherGradient {
             // Picture lays no dim, so its marks keep the default dim's strength whatever the slider says.
             let picture = !ThemeRuntime.ditherBlur
             return DitherArt.worstBackground(background, dark: dark, dim: picture ? DitherArt.defaultDim : Double(ThemeRuntime.ditherDim), veiled: false)

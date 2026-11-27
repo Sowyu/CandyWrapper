@@ -25,11 +25,11 @@ import T3Protocol
         // The theme picker turns Redesign on: the switch follows and the rows wake.
         lib.setTheme(ThemeDefinition.dither.id)
         #expect(page.master.isOn)
-        // Every row wakes. The default Background is Picture, so Flower's Animate background hides and Picture's rows show.
+        // Every row wakes. Gradient is the only background, so Animate background shows and the removed rows are gone.
         #expect(page.gated.allSatisfy { $0.inertReason == nil })
         func hidden(_ id: String) -> Bool? { page.anchor(id)?.isHidden }
-        #expect(hidden("redesign-gradient-animate") == true && hidden("redesign-ink") == false && hidden("redesign-dot-size") == false)
-        #expect(hidden("redesign-text-dim") == false && !page.useIn.isHidden)
+        #expect(hidden("redesign-gradient-animate") == false && !page.useIn.isHidden)
+        for gone in Self.removedRows { #expect(page.anchor(gone) == nil, "\(gone)") }
         // The switch turns it off, and on again: the picker follows.
         page.master.onChange?(false)
         #expect(!lib.isRedesignOn && !page.master.isOn)
@@ -79,36 +79,34 @@ import T3Protocol
         let old = ClientSettings(decoding: .object(["glassOpacity": .number(60)]))
         #expect(!old.bool("redesignStackedPicker"))
         #expect(!old.bool("redesignPickerAccount"))
-        // Background is Dither, as 1.15.1 drew it, and Blur reaches the theme runtime.
-        #expect(old.string("redesignBackground") == "dither")
-        #expect(!library().runtimeInput(client: old).0.ditherBlur)
-        let blur = ClientSettings(decoding: .object(["redesignBackground": .string("blur")]))
-        #expect(library().runtimeInput(client: blur).0.ditherBlur)
-        // 1.16.0's Gradient still loads, and shows Flower, whose field it became.
-        let gradient = ClientSettings(decoding: .object(["redesignBackground": .string("gradient")]))
-        #expect(gradient.string("redesignBackground") == "gradient")
-        #expect(library().runtimeInput(client: gradient).0.ditherFlower)
-        #expect(!library().runtimeInput(client: gradient).0.ditherBlur)
-        // Flower reaches the runtime alone; "Animate background" keeps Gradient's stored key.
-        let flower = ClientSettings(decoding: .object(["redesignBackground": .string("flower"), "redesignGradientAnimate": .bool(false)]))
-        #expect(flower.string("redesignBackground") == "flower")
-        let flowerInput = library().runtimeInput(client: flower).0
-        #expect(flowerInput.ditherFlower && !flowerInput.ditherBlur)
-        #expect(!flowerInput.ditherGradientAnimates)
+        // Every stored background draws Gradient, and only "Animate background" reaches the runtime from it.
+        for stored in ["dither", "blur", "gradient", "flower"] {
+            let client = ClientSettings(decoding: .object(["redesignBackground": .string(stored), "redesignGradientAnimate": .bool(false)]))
+            let input = library().runtimeInput(client: client).0
+            #expect(input.ditherGradient && !input.ditherBlur && !input.ditherFlower, "\(stored)")
+            #expect(!input.ditherGradientAnimates, "\(stored)")
+        }
+        #expect(library().runtimeInput(client: old).0.ditherGradientAnimates)
     }
 
-    /// A 1.16.0 settings file with Background set to Gradient loads without error, as Flower, and is saved so once.
-    @Test func gradientFromSixteenLoadsAsFlower() throws {
-        let defaults = try #require(UserDefaults(suiteName: "cw.gradient-move.\(UUID().uuidString)"))
-        let saved = #"{"redesignBackground":"gradient","redesignGradientAnimate":true,"ditherAccent":"violet"}"#
-        defaults.set(Data(saved.utf8), forKey: ClientSettingsStore.defaultsKey)
-        let store = ClientSettingsStore(defaults: defaults)
-        #expect(!store.readFailed)
-        #expect(store.current.string("redesignBackground") == "flower")
-        #expect(store.current.string("ditherAccent") == "violet")
-        let stored = try #require(defaults.data(forKey: ClientSettingsStore.defaultsKey).flatMap { try? JSONValue(parsing: $0) })
-        #expect(stored.objectValue?["redesignBackground"] == .string("flower"))
+    /// A settings file with any old Background loads without error and keeps the stored value, which nothing reads.
+    @Test func storedBackgroundsStayInPlace() throws {
+        for value in ["dither", "blur", "gradient", "flower"] {
+            let defaults = try #require(UserDefaults(suiteName: "cw.background-kept.\(UUID().uuidString)"))
+            let saved = #"{"redesignBackground":"\#(value)","redesignGradientAnimate":true,"ditherAccent":"violet"}"#
+            defaults.set(Data(saved.utf8), forKey: ClientSettingsStore.defaultsKey)
+            let store = ClientSettingsStore(defaults: defaults)
+            #expect(!store.readFailed)
+            #expect(store.current.string("redesignBackground") == value)
+            #expect(store.current.string("ditherAccent") == "violet")
+            let stored = try #require(defaults.data(forKey: ClientSettingsStore.defaultsKey).flatMap { try? JSONValue(parsing: $0) })
+            #expect(stored.objectValue?["redesignBackground"] == .string(value))
+        }
     }
+
+    /// The rows that only served Picture, Blur and Flower (the user, 2026-11-27: "lets just only do the gradient theme").
+    static let removedRows = ["redesign-picture", "redesign-background", "redesign-ink", "redesign-dot-size", "redesign-tint",
+                              "redesign-thread-flower", "redesign-text-dim", "ignore-reduce-transparency"]
 
     /// A settings file from before the Collapse composer on scroll row went away still loads, and the key drops.
     @Test func aSavedCollapseOnScrollIsIgnored() throws {
@@ -122,13 +120,14 @@ import T3Protocol
     }
 
     @Test func searchFindsTheTabAndEveryRow() {
-        let ids = ["redesign", "redesign-picture", "redesign-text-dim", "accent-color", "ignore-reduce-transparency",
-                   "redesign-stacked-picker", "redesign-picker-account", "redesign-background", "redesign-gradient-animate", "redesign-tint", "redesign-sidebar-rows"]
+        let ids = ["redesign", "accent-color", "redesign-gradient-animate", "redesign-project-avatars", "redesign-reading-width",
+                   "redesign-inset-panel", "redesign-sidebar-rows", "redesign-stacked-picker", "redesign-picker-account",
+                   "redesign-legacy-compact-send"]
         #expect(SettingsSearch.search("redesign").first?.id == "redesign")
-        for word in ["flower", "lotus"] {
-            #expect(SettingsSearch.search(word).contains { $0.id == "redesign-background" }, "\(word)")
+        for word in ["background", "dither", "halftone"] {
             #expect(SettingsSearch.search(word).contains { $0.id == "redesign-gradient-animate" }, "\(word)")
         }
+        for gone in Self.removedRows { #expect(SettingsSearch.item(gone) == nil, "\(gone)") }
         for id in ids {
             let item = SettingsSearch.item(id)
             #expect(item?.to == .redesign, "\(id)")
@@ -140,24 +139,17 @@ import T3Protocol
         for id in ids { #expect(page.anchor(id) != nil, "\(id) on the tab") }
     }
 
-    @Test func dimBehindTextSearchWords() {
-        for word in ["dim", "text", "column", "band", "readable"] {
-            #expect(SettingsSearch.search(word).contains { $0.id == "redesign-text-dim" }, "\(word)")
-        }
-    }
-
-    @Test func dimBehindTextPositionPerBackground() {
-        // A settings file saved before the setting loads at the default.
-        #expect(ClientSettings(decoding: .object(["redesignBackground": .string("flower")])).int("redesignTextDim") == TextDim.standard)
-        var c = ClientSettings(decoding: nil)
-        #expect(RedesignSettingsView.textDimPosition(c) == TextDim.standard)
-        c.apply(["redesignTextDim": .number(20)])
-        #expect(RedesignSettingsView.textDimPosition(c) == 20)
-        // Blur shows its own saved dim, mapped onto the same track.
-        c.apply(["redesignBackground": .string("blur")])
-        #expect(RedesignSettingsView.textDimPosition(c) == TextDim.standard)
-        c.apply(["ditherBackgroundDim": .number(90)])
-        #expect(RedesignSettingsView.textDimPosition(c) == 100)
+    /// The page reads top to bottom: the switch, the look, the layout, the sidebar, the model picker, then Legacy.
+    @Test func sectionsInOrder() {
+        let page = RedesignSettingsView(context: SettingsPagesFidelityTests.context(), library: library())
+        page.frame = NSRect(x: 0, y: 0, width: 800, height: page.height(forWidth: 800))
+        page.layoutSubtreeIfNeeded()
+        let order = ["redesign", "accent-color", "redesign-gradient-animate", "redesign-project-avatars", "redesign-reading-width",
+                     "redesign-inset-panel", "redesign-sidebar-rows", "redesign-stacked-picker", "redesign-picker-account",
+                     "redesign-legacy-compact-send"]
+        let ys = order.compactMap { id in page.anchor(id).map { page.convert($0.bounds, from: $0).minY } }
+        #expect(ys.count == order.count)
+        #expect(ys == (page.isFlipped ? ys.sorted() : ys.sorted(by: >)))
     }
 
     @Test func movedRowsLeaveTheirOldPages() {

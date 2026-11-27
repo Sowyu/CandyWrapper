@@ -29,8 +29,8 @@ struct RedesignBaselineTests {
             var input = ThemeRuntimeInput(
                 light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
                 dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
-            input.ditherLight = true; input.ditherDark = true
-            input.ditherPicture = ComposerAttachmentsFidelityTests.fixture.path
+            // Gradient held at its first frame, as Animate background off draws it.
+            input.ditherLight = true; input.ditherDark = true; input.ditherGradient = true; input.ditherGradientAnimates = false
             ThemeRuntime.apply(input); FontRuntime.apply(.init())
             Motion.reducedOverride = true; SettingsPanelMotion.durationMs = 0
             NSApplication.shared.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -445,62 +445,14 @@ struct RedesignBaselineTests {
             nav.t3Connect = .signedOut
             try capture("settings-modal", AppRouteModalView(label: "Settings", content: settings, navigation: nav), NSSize(width: 1100, height: 780))
             try capture("usage-modal", AppRouteModalView(label: "Usage", content: Self.usagePage(), navigation: nil), NSSize(width: 1100, height: 780))
-            // Tint from picture on (every other image runs with it off): the fixture picture's color in the surfaces.
-            input.ditherTintFromPicture = true
-            input.pictureTint = PictureTint.tint(of: try #require(DitherArt.picture(ComposerAttachmentsFidelityTests.fixture, maxPixels: 64)))
-            ThemeRuntime.apply(input)
-            let tintThread = ComposerFidelityTests.panel(width: 844, dark: dark)
-            tintThread.timeline.context.now = { Self.now }
-            tintThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
-            tintThread.layoutSubtreeIfNeeded(); tintThread.timeline.scroll(toFraction: 0)
-            try capture("thread-markdown-top-tint", tintThread, panelSize)
-            input.ditherTintFromPicture = false; input.pictureTint = nil
-            ThemeRuntime.apply(input)
-            // Background set to Blur: the same picture blurred, under a thread, the new-thread page, the sidebar and Settings.
-            input.ditherBlur = true
-            ThemeRuntime.apply(input)
-            defer { input.ditherBlur = false; ThemeRuntime.apply(input) }
-            let blurThread = ComposerFidelityTests.panel(width: 844, dark: dark)
-            blurThread.timeline.context.now = { Self.now }
-            blurThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
-            blurThread.layoutSubtreeIfNeeded(); blurThread.timeline.scroll(toFraction: 0)
-            try capture("thread-markdown-top-blur", blurThread, panelSize)
-            let blurDraft = ComposerFidelityTests.panel(width: 844, dark: dark)
-            blurDraft.setDraft(projectTitle: "demo-repo")
-            blurDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
-            try capture("composer-empty-blur", blurDraft, panelSize)
-            try capture("sidebar-many-threads-blur", sidebar, NSSize(width: 280, height: 900))
-            // The Redesign page with Background set to Blur: Picture's inks and dot size leave the page.
-            let client = context.client
-            context.client = ClientSettings(decoding: .object(["redesignBackground": .string("blur")]))
-            let blurCard = Self.settingsCard(.redesign, context: context)
-            context.client = client
-            try capture("settings-redesign-blur", blurCard, blurCard.frame.size)
-            // Background set to Flower: the lotus above the new thread's composer and beside a wide thread's column,
-            // held at the open flower (Animate off renders that one frame).
-            input.ditherBlur = false; input.ditherFlower = true; input.ditherGradientAnimates = false
-            ThemeRuntime.apply(input)
-            defer { input.ditherFlower = false; input.ditherGradientAnimates = true; ThemeRuntime.apply(input) }
-            let flowerDraft = ComposerFidelityTests.panel(width: 1100, dark: dark)
-            flowerDraft.setDraft(projectTitle: "demo-repo")
-            flowerDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
-            try capture("composer-empty-flower", flowerDraft, NSSize(width: 1100, height: 780))
-            let flowerThread = ComposerFidelityTests.panel(width: 1300, dark: dark)
-            flowerThread.timeline.context.now = { Self.now }
-            flowerThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
-            flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
-            try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
-            // "Flower on a thread" set to Small: the look before ec3a4e1d.
-            input.threadFlower = .small
-            ThemeRuntime.apply(input)
-            defer { input.threadFlower = .large; ThemeRuntime.apply(input) }
-            let smallThread = ComposerFidelityTests.panel(width: 1300, dark: dark)
-            smallThread.timeline.context.now = { Self.now }
-            smallThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
-            smallThread.layoutSubtreeIfNeeded(); smallThread.timeline.scroll(toFraction: 0)
-            try capture("thread-markdown-top-flower-small", smallThread, NSSize(width: 1300, height: 780))
+            // The new-thread page at a full window's size: Gradient's cells across the top, plain ground well above the
+            // composer group (Capy's new-thread page).
+            let gradientDraft = ComposerFidelityTests.panel(width: 1100, dark: dark)
+            gradientDraft.setDraft(projectTitle: "demo-repo")
+            gradientDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
+            try capture("composer-empty-gradient", gradientDraft, NSSize(width: 1100, height: 780))
         }
-        #expect(count == 206)
+        #expect(count == 192)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -702,26 +654,8 @@ struct RedesignBaselineTests {
                 image.set(key: "baseline-" + (image.key ?? "image"), fallbackText: "", loader: nil, preview: thumbnail)
             }
             v.displayIfNeeded()
-            if let art = v as? DitherArtView, ThemeRuntime.ditherFlower {
-                // The open flower, rendered now on this thread.
-                art.rendersInlineForTesting = true
-                art.dropFlower()
-                art.refresh()
-            } else if let art = v as? DitherArtView, let layer = art.layer?.sublayers?.first {
-                let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false), bg = palette.background.srgb
-                let blur = ThemeRuntime.ditherBlur, unit = blur ? DitherArt.blurPixel : ThemeRuntime.ditherDotSize.points(scale: 2)
-                layer.magnificationFilter = blur ? .linear : .nearest
-                layer.frame = art.bounds
-                // The page's shape, text colors and "Dim behind text" as the app passes them, so a thread's baseline
-                // shows the reading column's darkening the app shows.
-                let fg = palette.foreground.srgb, muted = palette.mutedForeground.srgb
-                layer.contents = DitherArt.render(.init(url: ComposerAttachmentsFidelityTests.fixture,
-                    width: Int(ceil(art.bounds.width / unit)), height: Int(ceil(art.bounds.height / unit)),
-                    background: [bg.x, bg.y, bg.z], scale: 2, blur: blur, dark: dark,
-                    shape: blur ? .plain : art.pictureShape(cell: unit),
-                    text: blur ? [] : [fg.x, fg.y, fg.z, muted.x, muted.y, muted.z],
-                    textDim: ThemeRuntime.ditherTextDim, dot: unit))
-            }
+            // Gradient's still frame on the new-thread page, rendered now on this thread; every other page is plain ground.
+            if let art = v as? DitherArtView { art.renderNowForTesting() }
             if let scroller = v as? ScrollAreaScroller { scroller.isHidden = true }
             v.subviews.forEach(display)
         }

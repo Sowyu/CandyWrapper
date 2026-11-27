@@ -54,7 +54,10 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var ditherBlur = false
     /// Redesign's "Background" is Flower: no picture, a dithered lotus over a field of accent dots.
     public var ditherFlower = false
-    /// Flower's lotus and field move (the "Animate background" setting, stored as `redesignGradientAnimate`).
+    /// Redesign's background is Gradient: accent cells across the top of the new-thread page, plain ground everywhere
+    /// else (the user, 2026-11-27: "lets just only do the gradient theme"). `ThemeLibrary` always sets it.
+    public var ditherGradient = false
+    /// Gradient's and Flower's motion (the "Animate background" setting, stored as `redesignGradientAnimate`).
     public var ditherGradientAnimates = true
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
@@ -108,7 +111,9 @@ public enum ThemeRuntime {
     /// Redesign's "Background" is Flower: a large dithered lotus rising from the bottom of the page over a field of
     /// accent dots, thinned behind the reading column (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherFlower = false
-    /// The "Animate background" setting, for Flower.
+    /// Redesign's background is Gradient: accent cells on the new-thread page, plain ground everywhere else (`DitherArtView`).
+    nonisolated(unsafe) public private(set) static var ditherGradient = false
+    /// The "Animate background" setting, for Gradient and Flower.
     nonisolated(unsafe) public private(set) static var ditherGradientAnimates = true
     /// Picture's "Ink" setting.
     nonisolated(unsafe) public private(set) static var ditherInk = DitherInk.auto
@@ -150,7 +155,7 @@ public enum ThemeRuntime {
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
             || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
             || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
-            || ((next.ditherBlur != old.ditherBlur || next.ditherFlower != old.ditherFlower
+            || ((next.ditherBlur != old.ditherBlur || next.ditherFlower != old.ditherFlower || next.ditherGradient != old.ditherGradient
                  || next.ditherTintFromPicture != old.ditherTintFromPicture || next.pictureTint != old.pictureTint)
                 && (next.ditherLight || next.ditherDark)) {
             let resolved = resolve(next)
@@ -171,8 +176,10 @@ public enum ThemeRuntime {
             ditherBlur = next.ditherBlur
             changed = true
         }
-        if next.ditherGradientAnimates != old.ditherGradientAnimates || next.ditherFlower != old.ditherFlower {
+        if next.ditherGradientAnimates != old.ditherGradientAnimates || next.ditherFlower != old.ditherFlower
+            || next.ditherGradient != old.ditherGradient {
             ditherFlower = next.ditherFlower
+            ditherGradient = next.ditherGradient
             ditherGradientAnimates = next.ditherGradientAnimates
             changed = true
         }
@@ -321,6 +328,11 @@ public enum ThemeRuntime {
             // Dither: the main panel's lines become white overlays over its art; its cards, bubbles and popovers stay
             // opaque, as do the sidebar and the panel's own background.
             // Its muted text keeps 4.5:1 over the brightest dot behind the chat column, in any theme's colors.
+            // Gradient: a thread and every page but the new thread sit on plain ground, and the new thread's cells fade
+            // out well above its text, so the theme's own text colors hold their floors (redesign-contrast-2026-11-27).
+            if !sidebar, input.ditherGradient, dark ? input.ditherDark : input.ditherLight {
+                return WindowGlass.frosted(palette, dark: dark)
+            }
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
                 // Picture lays no dim, so its muted text keeps the colors of the default 35%; "Background dim"
                 // changes nothing there. Its render holds the text's floor behind the column (`PictureInk.textBound`).
@@ -342,7 +354,7 @@ public enum ThemeRuntime {
         }
         // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Flower has no picture.
         func tinted(_ palette: Palette, dark: Bool) -> Palette {
-            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherFlower,
+            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherFlower, !input.ditherGradient,
                   dark ? input.ditherDark : input.ditherLight else { return palette }
             return PictureTint.apply(tint, to: palette)
         }

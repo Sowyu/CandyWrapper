@@ -651,9 +651,8 @@ extension SettingsController {
         labels += client("menuBarItemEnabled", "Menu bar icon") + client("trackpadHaptics", "Trackpad haptics")
         labels += client("messageRailHaptic", "Message rail ticks") + client("tooltips", "Tooltips")
         labels += c.isDefault("titleRewriteModel") && c.isDefault("titleRewriteOptions") ? [] : ["Title rewrite model"]
-        labels += c.isDefault("redesignTextDim") && c.isDefault("ditherBackgroundDim") ? [] : ["Dim behind text"]
         labels += client("redesignReadingWidth", "Reading width")
-        labels += client("redesignDotSize", "Picture dot size") + client("redesignPickerPaneWidth", "Model picker details width")
+        labels += client("redesignPickerPaneWidth", "Model picker details width")
         labels += server("textGenerationModelSelection", "Text generation model")
         labels += server("threadTitleInstructions", "Thread title instructions")  // SettingsPanels.tsx:520-522
         return labels
@@ -688,7 +687,7 @@ extension SettingsController {
                           "toolCallVisibility", "confirmThreadUnpin", "confirmThreadArchive", "confirmThreadDelete", "confirmQuit",
                           "confirmTerminalClose", "language",
                           "menuBarItemEnabled", "trackpadHaptics", "messageRailHaptic", "tooltips", "titleRewriteModel", "titleRewriteOptions",
-                          "redesignTextDim", "ditherBackgroundDim", "redesignReadingWidth", "redesignDotSize", "redesignPickerPaneWidth"]
+                          "redesignReadingWidth", "redesignPickerPaneWidth"]
         ClientSettingsStore.shared.update(Dictionary(uniqueKeysWithValues: clientKeys.map { ($0, ClientSettings.fields[$0]!.defaultValue) }))
         let s = pageContext.scope.values
         var patch: [String: JSONValue] = [:]

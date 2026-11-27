@@ -71,9 +71,9 @@ public struct ClientSettings: Equatable, Sendable {
         "redesignTextDim": SettingSpec(.int(0...100), .number(70)),  // CandyWrapper only: Redesign's "Dim behind text" for Picture and Flower; Blur keeps ditherBackgroundDim
         "ignoreReduceTransparency": SettingSpec(.bool, .bool(false)),  // CandyWrapper only: Redesign ignores macOS's Reduce Transparency
         "ditherAccent": SettingSpec(.string(maxLength: 32), .string("teal")),  // CandyWrapper only: Redesign's accent, a DitherAccent id
-        "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient", "flower"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, or a dithered lotus over accent dots; "gradient" (1.16.0) loads as "flower"
+        "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient", "flower"]), .string("dither")),  // CandyWrapper only: Redesign's background before 2026-11-27, read by nothing since Gradient became the only one. It and the Picture, Blur and Flower keys around it stay so saved files load and keep their values
         "redesignProjectAvatars": SettingSpec(.literals(["sprites", "letters"]), .string("sprites")),  // CandyWrapper only: Redesign's generated project and account avatars, pixel sprites or T3's letters
-        "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient and Flower backgrounds move ("Animate background")
+        "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient background moves ("Animate background")
         "redesignThreadFlower": SettingSpec(.literals(["large", "small"]), .string("large")),  // CandyWrapper only: Redesign's Flower on a thread, the whole lotus beside the column or the smaller one from before (LotusArt.ThreadLook)
         "redesignTintFromPicture": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's surfaces lean toward the picture's color
         "redesignInsetPanel": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's content as one rounded card inset from the window, with a top row in place of the floating header pills
