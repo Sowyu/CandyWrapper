@@ -854,13 +854,16 @@ extension DitherArtView {
     }
 
     /// The front page's stage: its content area, and the floor's top, in this view's top-left space.
-    private func flowerStage(_ page: DitherArt.Page, _ front: NSView?) -> (kind: LotusArt.Kind, content: CGRect, floorTop: CGFloat?)? {
+    func flowerStage(_ page: DitherArt.Page, _ front: NSView?) -> (kind: LotusArt.Kind, content: CGRect, field: CGRect, floorTop: CGFloat?)? {
         guard page == .hero || page == .thread, let front, let box = Self.stages.object(forKey: front) else { return nil }
         let l = convert(box.content, from: front)
         let floor = box.floorTop.map { bounds.height - convert(NSPoint(x: 0, y: $0), from: front).y }
         // The page starts under the window's band, but the panel, and the art, run to the window's top: the flower and
         // its field fill the panel from there (the user, 2026-11-21: "it should fully commit even at the top").
-        return (box.kind, CGRect(x: l.minX, y: 0, width: l.width, height: bounds.height - l.minY), floor)
+        // The field runs on to the art's right and bottom edges, behind the floating drawer and right panel, where
+        // Picture's art runs (the user, 2026-11-26: "the background isnt showing underneath (its the flower one)").
+        let content = CGRect(x: l.minX, y: 0, width: l.width, height: bounds.height - l.minY)
+        return (box.kind, content, CGRect(x: l.minX, y: 0, width: max(l.width, bounds.width - l.minX), height: bounds.height), floor)
     }
 
     func refreshFlower(palette: Palette, dark: Bool) {
@@ -883,7 +886,7 @@ extension DitherArtView {
         flowerContent = stage.content
         flowerKind = stage.kind
         flowerOpening = stage.kind == .hero ? stage.floorTop.flatMap { LotusArt.opening(content: stage.content, floorTop: $0, cell: DitherArt.gradientUnit) } : nil
-        guard let full = LotusArt.fullCanvas(content: stage.content, cell: DitherArt.gradientUnit) else { dropFlower(); return }
+        guard let full = LotusArt.fullCanvas(content: stage.content, field: stage.field, cell: DitherArt.gradientUnit) else { dropFlower(); return }
         flowerTarget = FlowerKey(placement: target, full: full, dark: dark)
         flowerFloorTop = stage.floorTop
         flowerResizing = resizing

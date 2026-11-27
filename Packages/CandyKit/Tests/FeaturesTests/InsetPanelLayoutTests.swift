@@ -53,4 +53,66 @@ import Testing
         #expect(drawer.maxY == card().maxY - s && drawer.minX == card().minX + s && drawer.maxX == card().maxX - s)
         #expect(right.minX - card().maxX == s)
     }
+
+    enum Background: CaseIterable { case picture, blur, flower }
+
+    /// Every Background runs behind the floating drawer, and with the inset panel off behind the right panel too
+    /// (the user, 2026-11-26: "the background isnt showing underneath (its the flower one)"). The lotus itself stays
+    /// above the drawer's card and left of the right panel.
+    @Test(arguments: Background.allCases, [false, true])
+    func artRunsBehindTheFloatingCards(background: Background, inset: Bool) throws {
+        let previous = ThemeRuntime.input, duration = SettingsPanelMotion.durationMs, motion = Motion.reducedOverride
+        defer { ThemeRuntime.apply(previous); SettingsPanelMotion.durationMs = duration; Motion.reducedOverride = motion }
+        var input = ThemeRuntimeInput(
+            light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
+            dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
+        input.ditherLight = true; input.ditherDark = true; input.insetPanel = inset
+        input.ditherBlur = background == .blur; input.ditherFlower = background == .flower
+        ThemeRuntime.apply(input)
+        SettingsPanelMotion.durationMs = 0; Motion.reducedOverride = true
+
+        let suite = "art-behind-cards-tests"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let panel = ComposerFidelityTests.panel(width: 1200, dark: true)
+        panel.referenceViewportWidth = 1440
+        let layout = SidebarLayoutView(sidebarContent: DSView(), mainContent: panel, defaults: defaults, viewport: 1440)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = layout
+        defer { window.contentView = nil; DitherArtView.setEmphasis(nil, from: panel) }
+        func arts(_ v: NSView) -> [DitherArtView] { (v as? DitherArtView).map { [$0] } ?? v.subviews.flatMap(arts) }
+        let art = try #require(arts(layout).first)
+        art.holdsFlowerJobsForTesting = true
+        panel.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+        DitherArtView.setEmphasis(.thread, from: panel)
+        panel.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
+        panel.setTerminal(open: true, height: 200)
+        for _ in 0..<2 { layout.layoutSubtreeIfNeeded() }
+        art.refresh()
+
+        let drawer = art.convert(panel.terminalDrawer.frame, from: panel)
+        let right = art.convert(panel.rightPanel.frame, from: panel)
+        #expect(!panel.terminalDrawer.isHidden && !panel.rightPanel.isHidden)
+        // The cards the art runs behind: the drawer always; the right panel only off the inset, where it sits over the
+        // art rather than beside the thread's card.
+        let behind = inset ? [drawer] : [drawer, right]
+        if background == .flower {
+            let target = try #require(art.flowerTarget)
+            let cell = DitherArt.gradientUnit
+            func rect(_ p: LotusArt.Placement) -> CGRect {
+                CGRect(x: CGFloat(p.originX) * cell, y: art.bounds.height - CGFloat(p.originY + p.height) * cell,
+                       width: CGFloat(p.width) * cell, height: CGFloat(p.height) * cell)
+            }
+            let field = rect(target.full), lotus = rect(target.placement)
+            for card in behind { #expect(field.contains(card), "field \(field) card \(card)") }
+            // The lotus ends at the drawer's top edge and left of the right panel (the art isn't flipped).
+            #expect(lotus.minY >= drawer.maxY - cell, "lotus \(lotus) drawer \(drawer)")
+            #expect(lotus.maxX <= right.minX + cell, "lotus \(lotus) panel \(right)")
+        } else {
+            #expect(art.requestForTesting != nil)
+            for card in behind { #expect(art.bounds.contains(card), "art \(art.bounds) card \(card)") }
+        }
+    }
 }
