@@ -34,7 +34,7 @@ struct ComposerRedesignPolishTests {
             let tiles = composer.imageShelf.frame
             #expect(!composer.imageShelf.isHidden)
             #expect(composer.bounds.contains(tiles), "tiles \(tiles) outside the composer \(composer.bounds)")
-            #expect(tiles.height >= 64)
+            #expect(tiles.height >= RedesignTokens.Composer.tile)
             // Above the editor: the shelf ends before the text starts (the composer is flipped).
             let editor = composer.subviews.first { $0 is NSScrollView }
             #expect(editor.map { tiles.maxY <= $0.frame.minY + 4 } ?? false)

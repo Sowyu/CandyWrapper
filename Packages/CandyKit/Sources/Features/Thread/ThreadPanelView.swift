@@ -2104,12 +2104,13 @@ public final class ThreadPanelView: DSView {
     }
 
     /// Redesign's new-thread page: the composer's top when the group (the context row, then the composer,
-    /// `DitherPill.gap` apart) has its middle `RedesignTokens.Draft.centre` of the way down from `top` to `bottom`.
+    /// `RedesignTokens.Draft.rowGap` apart) has its middle `RedesignTokens.Draft.centre` of the way down from `top` to
+    /// `bottom`.
     static func draftComposerY(top: CGFloat, bottom: CGFloat, composer: CGFloat) -> CGFloat {
-        let pill = DitherPill.height, gap = DitherPill.gap
+        let pill = DitherPill.height, gap = RedesignTokens.Draft.rowGap
         let group = pill + gap + composer
         let groupTop = top + (bottom - top) * RedesignTokens.Draft.centre - group / 2
-        return (max(top + gap, groupTop) + pill + gap).rounded()
+        return (max(top + DitherPill.gap, groupTop) + pill + gap).rounded()
     }
 
     private var ditherDockViews: [ComposerBannerView?] {
@@ -2129,7 +2130,10 @@ public final class ThreadPanelView: DSView {
     /// panel, tasks, wide notices, the queue). The checkout and branch pills float `DitherPill.gap` below it, from its
     /// left edge, where T3's strip sits. The composer never moves for any of them; they fade in and out.
     private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x column: CGFloat, width lane: CGFloat, height: CGFloat) {
-        let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
+        let gap = DitherPill.gap, pillH = DitherPill.height
+        // The new-thread page's row sits closer, Capy's scale (`RedesignTokens.Draft`).
+        let spacing = isDraft ? RedesignTokens.Draft.rowSpacing : DitherPill.spacing
+        let rowGap = RedesignTokens.Draft.rowGap
         let overlap = ComposerBannerView.overlap
         // The new-thread page is one group, after Capy's: the project and machine row on the composer's top left and
         // the composer, `gap` apart, narrower than a thread's column and centred across. Its starter actions live in
@@ -2169,7 +2173,7 @@ public final class ThreadPanelView: DSView {
         // quiet control at the row's right end (`DitherNoticeControlView`).
         var draftRow: (y: CGFloat, end: CGFloat)?
         if isDraft {
-            let rowY = y - gap - pillH
+            let rowY = y - rowGap - pillH
             var left = px
             let w = hero.chipsWidth
             hero.frame = NSRect(x: px, y: rowY, width: w, height: pillH)
@@ -2183,7 +2187,7 @@ public final class ThreadPanelView: DSView {
             top = rowY
         }
         // The art keeps clear of the whole group: Picture's dots thin around it and Flower's lotus stays under it.
-        let group = composer.frame.union(NSRect(x: x, y: y - gap - pillH, width: width, height: pillH))
+        let group = composer.frame.union(NSRect(x: x, y: y - rowGap - pillH, width: width, height: pillH))
         DitherArtView.setComposer(isDraft && composerShown && chat > 0 ? group : nil, from: self)
 
         // The banner stack's items: notices become pills, the rest cards. The stack only runs their exits.

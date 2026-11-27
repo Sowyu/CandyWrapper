@@ -59,7 +59,8 @@ public final class DraftHeroView: DSView, HoverSyncPointerClient {
         super.init(frame: frameRect)
         clipsToBounds = true
         addSubview(projectAnchor)
-        chipIcon.scale = 14 / 16
+        // The chip is always the context row's quiet control, at the row's glyph size.
+        chipIcon.scale = RedesignTokens.Draft.rowGlyph / 16
         projectChip.action = { [weak self] in
             guard let self else { return }
             self.onPickProject?(self.projectChip)

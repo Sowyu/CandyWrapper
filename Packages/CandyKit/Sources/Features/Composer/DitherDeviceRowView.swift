@@ -61,8 +61,13 @@ public final class DitherDeviceRowView: ControlView {
     public override var intrinsicContentSize: NSSize {
         var w = Self.pad + 14 + 6 + textWidth
         if showsStatusDot { w += 6 + 6 }
-        return NSSize(width: w + 6 + 12 + Self.pad, height: DitherPill.height)
+        return NSSize(width: w + 6 + chevronSize + Self.pad, height: DitherPill.height)
     }
+
+    /// On the new-thread page the row takes the context row's smaller scale (`RedesignTokens.Draft`); under a thread's
+    /// composer it keeps 13pt beside the ring's figure.
+    private var glyphSize: CGFloat { opensDown ? RedesignTokens.Draft.rowGlyph : 14 }
+    private var chevronSize: CGFloat { opensDown ? RedesignTokens.Draft.rowChevron : 12 }
 
     /// Space between the pill's edges and the glyph on the left, the chevron on the right: the chips' (`DitherPill.pad`).
     private static let pad = DitherPill.pad
@@ -88,9 +93,10 @@ public final class DitherDeviceRowView: ControlView {
         super.layout()
         let midY = bounds.height / 2
         pill.frame = bounds
-        icon.frame = NSRect(x: Self.pad, y: midY - 7, width: 14, height: 14)
+        let g = glyphSize, c = chevronSize
+        icon.frame = NSRect(x: Self.pad + 14 - g, y: midY - g / 2, width: g, height: g)
         // Narrow rows give the text what is left after the dot and chevron.
-        let tail: CGFloat = (showsStatusDot ? 12 : 0) + 6 + 12 + Self.pad
+        let tail: CGFloat = (showsStatusDot ? 12 : 0) + 6 + c + Self.pad
         let textX = Self.pad + 14 + 6
         label.frame = NSRect(x: textX, y: midY - 8, width: max(0, min(textWidth, bounds.width - textX - tail)), height: 16)
         var x = label.frame.maxX
@@ -102,7 +108,7 @@ public final class DitherDeviceRowView: ControlView {
             x += 12
         }
         CATransaction.commit()
-        chevron.frame = NSRect(x: x + 6, y: midY - 6, width: 12, height: 12)
+        chevron.frame = NSRect(x: x + 6, y: midY - c / 2, width: c, height: c)
     }
 
     public override func stateDidChange(from old: State) {
@@ -122,7 +128,13 @@ public final class DitherDeviceRowView: ControlView {
 
     private func restyle() {
         let lit = state.hoverOrPressed
-        let rest = quiet ? Themed.color(\.foreground, RedesignTokens.Text.quiet) : Themed.color(\.mutedForeground)
+        // On the new-thread page the row is bare text on the page's ground. Under a thread's composer the thread's
+        // text passes behind the row, so the label keeps its patch of ground there.
+        pill.isHidden = quiet && opensDown
+        let font = DSFont.ui(opensDown ? RedesignTokens.Draft.rowText : 13)
+        if label.font != font { label.font = font; invalidateIntrinsicContentSize() }
+        let strength = opensDown ? RedesignTokens.Text.faint(dark: effectiveAppearance.isDark) : RedesignTokens.Text.quiet
+        let rest = quiet ? Themed.color(\.foreground, strength) : Themed.color(\.mutedForeground)
         label.color = lit ? Themed.color(\.foreground) : rest
         icon.strokeColor = lit ? Themed.color(\.foreground, 0.85) : rest
         chevron.strokeColor = lit ? Themed.color(\.foreground, 0.85) : rest
