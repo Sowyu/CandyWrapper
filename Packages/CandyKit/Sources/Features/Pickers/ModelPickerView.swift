@@ -1388,6 +1388,7 @@ final class NewBadgeView: DSView {
         label.text = "NEW"
         label.smoothsFont = false
         label.font = DSFont.ui(10, weight: .bold)
+        label.keepsWeight = true
         label.tracking = 0.25
         label.lineHeight = 10
         addSubview(label)

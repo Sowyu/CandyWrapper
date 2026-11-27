@@ -85,12 +85,14 @@ final class ModelDetailPaneView: DSView {
     static let pad: CGFloat = 16, gap: CGFloat = 16, labelGap: CGFloat = 8, pitch: CGFloat = 24, inputIcon: CGFloat = 16
     /// The plain-terms row's label, for readers to whom a price per 1M tokens means little (the user, 2026-11-21).
     static let exampleLabel = "1,000 words in and out"
+    /// The description's lines; the rest is in its tooltip.
+    static let aboutLines = 2
 
     private(set) var content: ModelDetailContent?
     private var card: DitherProviderCardView?
     private let cardLine = CALayer()
     private var icon: NSView?
-    private let name = LabelView("", font: DSFont.ui(14, weight: RedesignTokens.Weight.heaviest))
+    private let name = LabelView("", font: DSFont.ui(14, weight: .semibold))
     private let provider = LabelView("", font: DSFont.ui(12))
     private let about = TextBlockView()
     private let priceCaption = LabelView("Price per 1M tokens", font: DSFont.ui(12))
@@ -123,8 +125,9 @@ final class ModelDetailPaneView: DSView {
         for l in [cardLine, bottomFade] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull(), "colors": NSNull()]; layer?.addSublayer(l) }
         bottomFade.zPosition = 10
         for l in [name, provider, priceCaption] { l.smoothsFont = false }
+        name.keepsWeight = true
         name.lineHeight = 20; provider.lineHeight = 16; priceCaption.lineHeight = 16
-        // The whole description shows; `layout` clamps it only when the host's height cannot hold every line.
+        // Two lines show (`aboutLines`); the tooltip holds the rest.
         about.font = DSFont.ui(13); about.lineHeight = 20; about.smoothsFont = false
         emptyLabel.lineHeight = 20; emptyLabel.alignment = .center; emptyLabel.smoothsFont = false
         for v in [name, provider, about, priceCaption, emptyLabel] as [NSView] { addSubview(v) }
@@ -161,7 +164,7 @@ final class ModelDetailPaneView: DSView {
         about.text = content.description ?? ""
         about.isHidden = content.description == nil
         let credit = ModelNotes.source.map { "From \($0.name) (\($0.licence) licence), fetched \($0.fetched)." }
-        about.setTooltip(credit)
+        about.setTooltip([content.description, credit].compactMap { $0 }.joined(separator: "\n\n"))
         about.setAccessibilityLabel(content.description)
         priceRows = content.prices.isEmpty ? [row("No price known", "", credit: nil)] : content.prices.map { row($0.label, $0.value, credit: nil) }
         if let example = content.example {
@@ -207,9 +210,9 @@ final class ModelDetailPaneView: DSView {
         guard let content else { return y + Self.pad }
         y += Self.pad + 20 + 16
         if let d = content.description {
-            // Measures every line, whatever clamp the last layout left on the view.
+            // Measures the two lines the card shows.
             let old = about.text, oldMax = about.maxLines
-            about.text = d; about.maxLines = 0
+            about.text = d; about.maxLines = Self.aboutLines
             y += Self.gap + about.height(forWidth: width - 2 * Self.pad)
             about.text = old; about.maxLines = oldMax
         }
@@ -265,9 +268,9 @@ final class ModelDetailPaneView: DSView {
         provider.frame = NSRect(x: x + 24, y: y + 20, width: max(0, w - 24), height: 16)
         y += 36
         if !about.isHidden {
-            // The whole description, ending on its own word: when the host caps the popup the card scrolls instead.
-            // Clamping it left "Fast Claude model for responsive..." on the new-thread page (C7, round 2).
-            about.maxLines = 0
+            // Two lines, as before 1.20 (the user, 2026-11-27: "put it back to how it used to be"); the tooltip and
+            // VoiceOver get the whole description.
+            about.maxLines = Self.aboutLines
             let h = about.height(forWidth: w)
             about.frame = NSRect(x: x, y: y + Self.gap, width: w, height: h)
             y += Self.gap + h

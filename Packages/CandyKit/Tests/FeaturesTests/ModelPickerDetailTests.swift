@@ -411,8 +411,8 @@ import T3Store
         }
     }
 
-    /// Short of room the details card scrolls and keeps the whole description, never one clamped line (C7, round 2).
-    @Test func aShortDetailsCardScrollsInsteadOfClamping() throws {
+    /// Short of room the details card scrolls; the description keeps two lines, as before 1.20 (the user, 2026-11-27).
+    @Test func aShortDetailsCardScrollsWithATwoLineDescription() throws {
         try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
             let pane = ModelDetailPaneView(frame: NSRect(x: 0, y: 0, width: ModelDetailPaneView.width, height: 160))
             let long = String(repeating: "Fast model for responsive assistance and lightweight agents. ", count: 3)
@@ -422,7 +422,7 @@ import T3Store
                       card: nil)
             pane.layoutSubtreeIfNeeded()
             let about = try #require(pane.subviews.compactMap { $0 as? TextBlockView }.first)
-            #expect(about.maxLines == 0 && about.frame.height > 40)
+            #expect(about.maxLines == 2 && about.frame.height == 40)
             #expect(pane.maxScroll > 0)
         }
     }

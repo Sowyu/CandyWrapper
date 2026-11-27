@@ -100,6 +100,9 @@ public final class LabelView: DSView {
     /// Core Text font smoothing (stem darkening). Chromium draws text on transparent composited
     /// layers (backdrop-filter surfaces such as the composer) without it, so those labels turn it off.
     public var smoothsFont = true { didSet { if smoothsFont != oldValue { needsDisplay = true } } }
+    /// Draws `font`'s own weight in Redesign too, past the 500 cap: the model picker's name and NEW badge (the user,
+    /// 2026-11-27, on the capped picker: "the text is just borked put it back to how it used to be").
+    public var keepsWeight = false { didSet { if keepsWeight != oldValue { invalidate() } } }
     /// Text appended after `text` in the semibold weight of `font` (a `<span class="font-semibold">`).
     public var emphasizedSuffix: String? { didSet { if emphasizedSuffix != oldValue { invalidate() } } }
     /// UTF-16 offsets drawn semibold in `highlightColor` (a fuzzy match's `<strong>` characters).
@@ -172,7 +175,7 @@ public final class LabelView: DSView {
     }
 
     /// `font` as drawn here: Redesign's chrome stops at 500 (`RedesignTokens.Weight`).
-    private var drawnFont: NSFont { RedesignTokens.Weight.chrome(font, dark: effectiveAppearance.isDark) }
+    private var drawnFont: NSFont { keepsWeight ? font : RedesignTokens.Weight.chrome(font, dark: effectiveAppearance.isDark) }
     private var emphasisWeight: NSFont.Weight { RedesignTokens.Weight.chrome(.semibold, dark: effectiveAppearance.isDark) }
 
     public override func viewDidChangeEffectiveAppearance() {
