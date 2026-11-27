@@ -39,10 +39,10 @@ struct RedesignDraftPageTests {
         panel.hero.offersScratch = true
         panel.layoutSubtreeIfNeeded()
         let composer = panel.composer.frame, project = panel.hero.frame, machine = panel.deviceRow.frame
-        let gap = RedesignTokens.Draft.rowGap
+        let gap = DitherPill.gap
         // The project and the machine share one row on the composer's top left, quiet: no rim.
         #expect(project.minX == composer.minX && project.maxY == composer.minY - gap)
-        #expect(machine.minY == project.minY && machine.minX == project.minX + panel.hero.chipsWidth + RedesignTokens.Draft.rowSpacing)
+        #expect(machine.minY == project.minY && machine.minX == project.minX + panel.hero.chipsWidth + DitherPill.spacing)
         #expect(panel.deviceRow.opensDown && panel.deviceRow.quiet && panel.hero.projectChip.quiet)
         // Narrower than a thread's column, centred across the panel.
         #expect(composer.width <= RedesignTokens.Draft.width)
@@ -92,10 +92,10 @@ struct RedesignDraftPageTests {
 
     @Test func draftGroupCentresOnCapysLine() {
         let y = ThreadPanelView.draftComposerY(top: 0, bottom: 1000, composer: 100)
-        let groupTop = y - RedesignTokens.Draft.rowGap - DitherPill.height
+        let groupTop = y - DitherPill.gap - DitherPill.height
         #expect(abs((groupTop + y + 100) / 2 - 1000 * RedesignTokens.Draft.centre) <= 1)
         // Never above the room's top.
-        #expect(ThreadPanelView.draftComposerY(top: 40, bottom: 120, composer: 100) - RedesignTokens.Draft.rowGap - DitherPill.height >= 40)
+        #expect(ThreadPanelView.draftComposerY(top: 40, bottom: 120, composer: 100) - DitherPill.gap - DitherPill.height >= 40)
     }
 
 
@@ -191,7 +191,7 @@ struct RedesignDraftPageTests {
         if notices == 0 {
             #expect(stash.maxX == composer.maxX - DitherPill.inset)
         } else {
-            #expect(stash.maxX + RedesignTokens.Draft.rowSpacing == panel.draftNotices.frame.minX, "Stash sits before the notices")
+            #expect(stash.maxX + DitherPill.spacing == panel.draftNotices.frame.minX, "Stash sits before the notices")
             #expect(panel.draftNotices.frame.maxX == composer.maxX - DitherPill.inset)
         }
         #expect(panel.stashBadge.showsTitle)
@@ -229,7 +229,7 @@ struct RedesignDraftPageTests {
         panel.layoutSubtreeIfNeeded()
         let row = panel.hero.frame, machine = panel.deviceRow.frame
         #expect(machine != inThread)
-        #expect(machine.minY == row.minY && machine.minX == row.minX + panel.hero.chipsWidth + RedesignTokens.Draft.rowSpacing)
+        #expect(machine.minY == row.minY && machine.minX == row.minX + panel.hero.chipsWidth + DitherPill.spacing)
         #expect(panel.stashBadge.frame.minY == row.minY)
         for view in [panel.deviceRow, panel.stashBadge] as [NSView] {
             #expect((view.layer?.animationKeys() ?? []).isEmpty, "\(type(of: view)) animates as the page shows")
@@ -242,23 +242,5 @@ struct RedesignDraftPageTests {
         panel.layoutSubtreeIfNeeded()
         #expect(panel.deviceRow.frame.minY > panel.composer.frame.maxY)
         #expect((panel.deviceRow.layer?.animationKeys() ?? []).isEmpty)
-    }
-
-    /// The new-thread page's row is bare text on the page's ground, at the row's smaller scale; under a thread's
-    /// composer, where thread text passes behind it, the machine keeps its patch of ground.
-    @Test func draftRowIsBareTextAtTheRowsScale() throws {
-        let previous = ThemeRuntime.input
-        defer { ThemeRuntime.apply(previous) }
-        let (panel, window) = try panel(draft: true)
-        defer { window.contentView = nil }
-        func patches(_ view: NSView) -> [DitherPillSurface] { view.subviews.compactMap { $0 as? DitherPillSurface }.filter { !$0.isHidden } }
-        #expect(patches(panel.hero.projectChip).isEmpty && patches(panel.deviceRow).isEmpty)
-        let label = try #require(panel.deviceRow.subviews.compactMap { $0 as? LabelView }.first)
-        #expect(label.font.pointSize == RedesignTokens.Draft.rowText)
-        let projection = try ThreadPreview.projection(titled: ThreadPreview.markdownThread)
-        panel.setDraft(projectTitle: nil)
-        panel.setProjection(projection, projectTitle: "Sandbox", workspaceRoot: nil)
-        panel.layoutSubtreeIfNeeded()
-        #expect(patches(panel.deviceRow).count == 1, "the thread's row keeps its patch")
     }
 }

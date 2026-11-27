@@ -162,38 +162,10 @@ public enum RedesignTokens {
     /// The new-thread page, after Capy's: the project and machine row, the composer and the starter actions form one
     /// group, narrower than the thread's column and centred a little above the card's middle.
     public enum Draft {
-        /// The group's widest. Capy's composer is 617 wide in a 1245pt panel (the user's screenshot, 2026-11-26).
-        public static let width: CGFloat = 616
+        /// The group's widest.
+        public static let width: CGFloat = 640
         /// Where the group's middle sits, as a share of the card's height under the top row. Capy's is 0.45.
         public static let centre: CGFloat = 0.45
-        /// Between the context row's 30pt controls and the composer. Their 22pt hover fill then ends 6pt above the
-        /// composer and the row's text sits 17pt above it, as Capy's does.
-        public static let rowGap: CGFloat = 2
-        /// Between the row's controls. With the controls' own 8pt pads a chevron ends 18pt before the next glyph
-        /// (Capy 15).
-        public static let rowSpacing: CGFloat = 2
-        /// The row's text and glyphs: Capy's 12pt labels with 10pt glyphs, a step under the composer's text.
-        public static let rowText: CGFloat = 12
-        public static let rowGlyph: CGFloat = 12
-        public static let rowChevron: CGFloat = 10
-    }
-
-    /// The Redesign composer's inside, the same on the new-thread page and in a thread, measured in Capy's prompt bar
-    /// (2026-11-26): the text 14pt in from the left and 12 from the top, the 24pt controls 6 from the bottom and the
-    /// sides, and the prompt line 2pt above them.
-    public enum Composer {
-        public static let textInset: CGFloat = 14
-        public static let textTop: CGFloat = 12
-        public static let control: CGFloat = 24
-        public static let edge: CGFloat = 6
-        public static let rowGap: CGFloat = 2
-        /// The new-thread page's empty prompt area, so the empty composer is 100pt tall, Capy's 101.
-        public static let draftEditor: CGFloat = 56
-        /// The footer controls' labels, the model and the access mode.
-        public static let label: CGFloat = 12
-        /// An attached picture's tile, the gap between tiles and the gap under the last row.
-        public static let tile: CGFloat = 48
-        public static let tileGap: CGFloat = 8
     }
 
     /// The thread beside the right panel. T3 keeps the chat column 360px wide, which in a Redesign card leaves a
@@ -216,9 +188,6 @@ public enum RedesignTokens {
     public enum Text {
         /// A label at rest: between the muted color and the full text color.
         public static let quiet: CGFloat = 0.72
-        /// Quieter still, for the new-thread page's context row (Capy draws it near 4:1): the text color at the
-        /// strength that keeps 5:1 on the ground, 0.52 in dark and 0.64 in light.
-        public static func faint(dark: Bool) -> CGFloat { dark ? 0.52 : 0.64 }
     }
 
     /// The message rail's strips on the plain ground.

@@ -39,17 +39,6 @@ struct RedesignContrastFloorTests {
         }
     }
 
-    /// The new-thread page's context row draws the text color at `Text.faint` on the ground (its feathered patch).
-    @Test func faintRowTextKeepsMutedFloor() {
-        let palettes = ThemeRuntime.resolve(redesign())
-        for dark in [true, false] {
-            let p = dark ? palettes.dark : palettes.light
-            let a = Double(RedesignTokens.Text.faint(dark: dark)), ground = rgb(p.background)
-            let text = rgb(p.foreground) * a + ground * (1 - a)
-            #expect(ratio(text, ground) >= 4.5, "\(dark ? "dark" : "light")")
-        }
-    }
-
     @Test func textOnEveryAccentReads() {
         for accent in DitherAccent.all {
             for dark in [true, false] {

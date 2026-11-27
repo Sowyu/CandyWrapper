@@ -332,26 +332,18 @@ public final class ComposerImageShelfView: DSView {
     public var onExpand: ((String) -> Void)?
     private var views: [TileView] = []
 
-    /// Redesign's tiles follow the composer's smaller scale (`RedesignTokens.Composer.tile`).
-    private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
-    private var side: CGFloat { redesign ? RedesignTokens.Composer.tile : Self.side }
-    private var spacing: CGFloat { redesign ? RedesignTokens.Composer.tileGap : Self.gap }
-    /// Under the last row, before the text.
-    public var marginBottom: CGFloat { redesign ? RedesignTokens.Composer.tileGap : Self.marginBottom }
-
-    /// Rows that fit `width`, with the margin under them; 0 without images.
+    /// Rows that fit `width`, with the 12pt margin; 0 without images.
     public func preferredHeight(width: CGFloat) -> CGFloat {
         guard !tiles.isEmpty else { return 0 }
-        return tileFrames(width: width).map(\.maxY).max().map { $0 + marginBottom } ?? 0
+        return tileFrames(width: width).map(\.maxY).max().map { $0 + Self.marginBottom } ?? 0
     }
     private func tileFrames(width: CGFloat) -> [CGRect] {
         var x: CGFloat = 0, y: CGFloat = 0, height: CGFloat = 0
-        let side = side, spacing = spacing
         return tiles.map { tile in
-            let size = tile.source == nil ? CGSize(width: side, height: side) : CGSize(width: min(208, width), height: 112)
-            if x > 0 && x + size.width > width { x = 0; y += height + spacing; height = 0 }
+            let size = tile.source == nil ? CGSize(width: 64, height: 64) : CGSize(width: min(208, width), height: 112)
+            if x > 0 && x + size.width > width { x = 0; y += height + Self.gap; height = 0 }
             let frame = CGRect(origin: CGPoint(x: x, y: y), size: size)
-            x += size.width + spacing; height = max(height, size.height)
+            x += size.width + Self.gap; height = max(height, size.height)
             return frame
         }
     }
@@ -496,7 +488,7 @@ public final class ComposerImageShelfView: DSView {
                 HoverReveal.withoutAnimation { revealRemove() }
                 needsLayout = true
             }
-            layer?.cornerRadius = redesign ? RedesignTokens.Radius.control : ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
+            layer?.cornerRadius = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
             layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
             layer?.borderColor = (redesign && failed ? Themed.color(\.destructive) : Themed.color(\.border, 0.8)).cgColor(in: self)
             if failed { progressStrip.isHidden = !redesign }
