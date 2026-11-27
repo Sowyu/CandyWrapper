@@ -219,7 +219,7 @@ private final class ModernQueuedRowView: DSView {
                 tile.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(expandThumbnail(_:))))
                 tile.setAccessibilityRole(.button)
                 tile.setAccessibilityLabel(names[id] ?? "Image")
-                tile.toolTip = names[id] ?? "Image"
+                tile.setTooltip(names[id] ?? "Image")
                 // An image glyph until the picture loads, or if it never does, so the tile never reads as an empty square.
                 let glyph = IconView(name: .image, size: 14)
                 glyph.strokeColor = Themed.color(\.mutedForeground)

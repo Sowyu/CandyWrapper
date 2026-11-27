@@ -82,7 +82,9 @@ struct TerminalDrawerCardTests {
         }
         for view in panel.subviews where !view.isHidden && view !== drawer && view !== panel.terminalResize
             && view !== panel.rightPanel && view !== panel.timeline && view.frame.height > 0 && view.frame.width > 0
-            && !(view is RightPanelResizeView) && !(view is ToastViewport) && view.layer?.zPosition ?? 0 < 20 && view.frame != panel.bounds {
+            && !(view is RightPanelResizeView) && !(view is ToastViewport) && view.layer?.zPosition ?? 0 < 20 && view.frame != panel.bounds
+            // The drawer's own shadow lies exactly under the card, since the card floats over the thread's background.
+            && String(describing: type(of: view)) != "CardShadowView" {
             #expect(!view.frame.intersects(card), "\(type(of: view)) \(view.frame) overlaps the card \(card)")
         }
     }
