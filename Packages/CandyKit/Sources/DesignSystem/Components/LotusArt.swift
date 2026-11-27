@@ -981,13 +981,13 @@ public enum LotusArt {
     /// full strength along the top edge (the user: "it should fully commit even at the top") and thinning toward the
     /// bottom, where the flower is, to `fieldFloor` of it. 1 where a dot shows, one byte a cell of `full`, on the same
     /// Bayer grid as the flower, at loop time `t` (0...1).
-    public static func field(_ full: Placement, t: Double, dark: Bool = true) -> [UInt8] {
+    public static func field(_ full: Placement, t: Double, dark: Bool = true, look: ThreadLook? = nil) -> [UInt8] {
         let w = full.width, h = full.height
         var out = [UInt8](repeating: 0, count: w * h)
         let row = (0..<w).map { DitherArt.gradientField((Double($0) + 0.5) / Double(w), t) * fieldDensity }
         let least = fieldLeast(dark: dark)
         for y in 0..<h {
-            let fall = 1 - (1 - fieldFloor(dark: dark)) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
+            let fall = 1 - (1 - fieldFloor(dark: dark, look: look)) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
             for x in 0..<w where Swift.max(row[x] * fall, least) > (Double(DitherArt.bayer[b + ((x + full.originX) & 7)]) + 0.5) / 64 {
                 out[y * w + x] = 1
             }
@@ -999,8 +999,8 @@ public enum LotusArt {
     public static let fieldDensity = 0.5
     /// The field's strength at the bottom edge, as a share of the top's. Both run out to none, so the dots fade down the
     /// page instead of tiling it to the foot: dark's 0.35 left an even grid behind the lotus and the composer that
-    /// read as graph paper (round-1 review, W6).
-    static func fieldFloor(dark: Bool) -> Double { 0 }
+    /// read as graph paper (round-1 review, W6). A Small thread (`ThreadLook`) keeps dark's 0.35.
+    static func fieldFloor(dark: Bool, look: ThreadLook? = nil) -> Double { dark && look == .small ? 0.35 : 0 }
     /// The field's least density. Light kept 0.14 from the 1.17.0 walk, so the bare gaps beside the petals didn't look
     /// cut out, but that floor tiled the whole canvas in an even grid of dots like graph paper (round-1 review, W6).
     static func fieldLeast(dark: Bool) -> Double { 0 }
@@ -1069,16 +1069,35 @@ public enum LotusArt {
     public static func spot(in content: CGRect, thread: ThreadStage? = nil) -> Spot? {
         guard content.width >= 1, content.height >= 1,
               [content.minX, content.minY, content.width, content.height].allSatisfy({ $0.isFinite && abs($0) <= 1e7 }) else { return nil }
-        if let thread { return threadSpot(in: content, column: thread.column) }
+        if let thread, thread.look == .large { return threadSpot(in: content, column: thread.column) }
         let unit = Swift.max(content.width, content.height * referenceAspect)
         return Spot(centre: CGPoint(x: content.minX + composition.x * content.width, y: content.minY + composition.y * content.height),
                     radius: composition.radius * unit)
     }
 
-    /// What a thread's lotus places itself by: the reading column's span across the content area, points.
+    /// What a thread's lotus places itself by: the reading column's span across the content area, points, and the look.
     public struct ThreadStage: Hashable, Sendable {
         public var column: ClosedRange<CGFloat>?
-        public init(column: ClosedRange<CGFloat>?) { self.column = column }
+        public var look: ThreadLook
+        public init(column: ClosedRange<CGFloat>?, look: ThreadLook = .large) { self.column = column; self.look = look }
+    }
+
+    /// Settings > Redesign > Flower on a thread (`redesignThreadFlower`; the user, 2026-11-27: "make old and new a
+    /// toggle they both look good"). Large is the whole lotus beside the column (`threadSpot`). Small is what a thread
+    /// drew before ec3a4e1d: the new thread's resting composition, dark's field thinning to 0.35 at the foot, and the
+    /// dots behind the column thinned to 30% (6% in light) over a 240pt (480pt) ease. The new thread's page draws the
+    /// same with either.
+    public enum ThreadLook: String, Hashable, Sendable, CaseIterable {
+        case large, small
+        public init(setting: String?) { self = setting == "small" ? .small : .large }
+    }
+
+    /// How the dots behind a thread's column thin for `look`: the share kept over the column and the ease beside it.
+    public static func columnShape(_ look: ThreadLook, dark: Bool, lotusLeft: CGFloat, column: ClosedRange<CGFloat>) -> (keep: Float, reach: CGFloat) {
+        switch look {
+        case .large: (columnKeep, columnEase(lotusLeft: lotusLeft, column: column))
+        case .small: (dark ? 0.3 : 0.06, dark ? 240 : 480)
+        }
     }
 
     /// A thread's lotus, whole and at rest (round-1 review, W6: the new thread's low, cropped composition left only
@@ -1243,14 +1262,14 @@ public enum LotusArt {
     }
 
     /// Packed codes on `flower` (a canvas inside `full`) over the field at `t`, as the images that show, across the cores.
-    public static func images(_ packed: [[UInt8]], flower: Placement, full: Placement, t: Double, dark: Bool,
+    public static func images(_ packed: [[UInt8]], flower: Placement, full: Placement, t: Double, dark: Bool, look: ThreadLook? = nil,
                               stop: (@Sendable () -> Bool)? = nil) -> [CGImage]? {
-        each(packed.count, parallel: true, stop: stop) { i in frame(packed: packed[i], flower: flower, full: full, t: t, dark: dark) }
+        each(packed.count, parallel: true, stop: stop) { i in frame(packed: packed[i], flower: flower, full: full, t: t, dark: dark, look: look) }
     }
 
     /// One shown frame from packed codes: `image(compose(codes: unpack(packed), …, field: field(full, t:, dark:)))` in
     /// one pass, written straight into the image's buffer. The turn shows one ten times a second on the main thread.
-    public static func frame(packed: [UInt8], flower: Placement, full: Placement, t: Double, dark: Bool) -> CGImage? {
+    public static func frame(packed: [UInt8], flower: Placement, full: Placement, t: Double, dark: Bool, look: ThreadLook? = nil) -> CGImage? {
         let w = full.width, h = full.height
         guard w > 0, h > 0, packed.count * 4 >= flower.width * flower.height,
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
@@ -1262,7 +1281,7 @@ public enum LotusArt {
         let alphas = codeAlpha
         packed.withUnsafeBufferPointer { pk in
             for y in 0..<h {
-                let fall = 1 - (1 - fieldFloor(dark: dark)) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
+                let fall = 1 - (1 - fieldFloor(dark: dark, look: look)) * (Double(y) + 0.5) / Double(h), b = ((y + full.originY) & 7) * 8
                 let fy = y - dy, inFlower = fy >= 0 && fy < flower.height
                 for x in 0..<w {
                     let k = y * w + x, fx = x - dx

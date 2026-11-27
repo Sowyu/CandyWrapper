@@ -901,6 +901,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         case let s where s.hasPrefix("thread:"):
                             let prefix = String(s.dropFirst("thread:".count))
                             if let id = sidebar?.snapshot?.threads.first(where: { $0.title.hasPrefix(prefix) })?.id { threads.open(id) }
+                        // `type:<text>` puts text in the visible composer a moment later, so the send button fills.
+                        case let s where s.hasPrefix("type:"):
+                            let text = String(s.dropFirst("type:".count))
+                            DispatchQueue.main.asyncAfter(deadline: .now() + delay / 4) { [weak window] in
+                                MainActor.assumeIsolated {
+                                    func composer(_ view: NSView) -> ComposerView? {
+                                        if let c = view as? ComposerView, !c.isHiddenOrHasHiddenAncestor { return c }
+                                        return view.subviews.lazy.compactMap(composer).first
+                                    }
+                                    if let content = window?.contentView, let c = composer(content) { c.text = text }
+                                }
+                            }
                         case let s where s.hasPrefix("scroll:"):
                             let fraction = CGFloat(Double(s.dropFirst("scroll:".count)) ?? 0)
                             DispatchQueue.main.asyncAfter(deadline: .now() + delay / 4) { [weak window] in

@@ -636,6 +636,9 @@ struct FlowerKey: Hashable, Sendable {
     var placement: LotusArt.Placement
     var full: LotusArt.Placement
     var dark: Bool
+    /// A thread's look ("Flower on a thread"), nil on the new thread's page. Part of the frames' identity, on disk
+    /// too, so one look never reads the other's frames even where their canvases match.
+    var look: LotusArt.ThreadLook? = nil
 }
 
 /// What the column mask and the glow were built from.
@@ -646,6 +649,7 @@ struct ColumnKey: Equatable {
     var dark: Bool
     /// "Dim behind text" (`TextDim`).
     var dim = TextDim.standard
+    var look: LotusArt.ThreadLook? = nil
 }
 
 /// Which frames a render makes.
@@ -756,7 +760,7 @@ struct FlowerDisk: Sendable {
 
     /// Swift prints every stored field of these value types, so two keys that differ anywhere get different names.
     private func file(_ key: FlowerKey, _ slot: FlowerCodes.Slot) -> URL {
-        let name = SHA256.hash(data: Data("\(key.placement)|\(key.dark)|\(slot)".utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+        let name = SHA256.hash(data: Data("\(key.placement)|\(key.dark)|\(key.look.map(\.rawValue) ?? "page")|\(slot)".utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent(name)
     }
 
@@ -868,7 +872,9 @@ extension DitherArtView {
 
     func refreshFlower(palette: Palette, dark: Bool) {
         let (page, front) = self.front
-        let thread = flowerStage(page, front).flatMap { $0.kind == .thread ? LotusArt.ThreadStage(column: flowerColumn()) : nil }
+        let thread = flowerStage(page, front).flatMap {
+            $0.kind == .thread ? LotusArt.ThreadStage(column: flowerColumn(), look: ThemeRuntime.threadFlower) : nil
+        }
         guard let stage = flowerStage(page, front),
               let target = LotusArt.canvas(content: stage.content, thread: thread, cell: DitherArt.gradientUnit) else {
             flowerContent = nil
@@ -888,7 +894,7 @@ extension DitherArtView {
         flowerKind = stage.kind
         flowerOpening = stage.kind == .hero ? stage.floorTop.flatMap { LotusArt.opening(content: stage.content, floorTop: $0, cell: DitherArt.gradientUnit) } : nil
         guard let full = LotusArt.fullCanvas(content: stage.content, field: stage.field, thread: thread, cell: DitherArt.gradientUnit) else { dropFlower(); return }
-        flowerTarget = FlowerKey(placement: target, full: full, dark: dark)
+        flowerTarget = FlowerKey(placement: target, full: full, dark: dark, look: thread?.look)
         flowerFloorTop = stage.floorTop
         flowerResizing = resizing
         // A drag's first step started a render for an area the drag has already left: it stops, and the set for where
@@ -966,12 +972,14 @@ extension DitherArtView {
         // "Dim behind text" scales the mask's depth; at 0 the flower runs at full strength behind the column.
         let dim = ThemeRuntime.ditherTextDim
         if dim <= 0 { column = nil }
-        let key = ColumnKey(placement: p, column: column, cap: cap, dark: dark, dim: dim)
+        let key = ColumnKey(placement: p, column: column, cap: cap, dark: dark, dim: dim, look: set.key.look)
         let glass = RedesignTokens.FlowerGlass.isOn(dark: dark)
         guard key != columnKey || (glass && glowKey != key) || (!glass && glowKey != nil) else { return }
-        let mask = column.map { LotusArt.columnMask(p, column: $0, cap: Self.flowerShare(cap, dim: dim), keep: Self.flowerShare(LotusArt.columnKeep, dim: dim),
-                                                    reach: LotusArt.columnEase(lotusLeft: CGFloat(set.key.placement.originX) * cell, column: $0),
-                                                    dark: dark, cell: cell) }
+        let mask = column.map { column in
+            let shape = LotusArt.columnShape(set.key.look ?? .large, dark: dark, lotusLeft: CGFloat(set.key.placement.originX) * cell, column: column)
+            return LotusArt.columnMask(p, column: column, cap: Self.flowerShare(cap, dim: dim), keep: Self.flowerShare(shape.keep, dim: dim),
+                                       reach: shape.reach, dark: dark, cell: cell)
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
         if key != columnKey {
@@ -1120,11 +1128,11 @@ extension DitherArtView {
     /// over the field without rendering.
     nonisolated static func flowerPhases(_ key: FlowerKey, _ parts: FlowerParts, opening: LotusArt.Opening? = nil, fieldT: Double = 0,
                                          job: FlowerJob, codes: FlowerCodes) -> AnyIterator<FlowerPhase> {
-        let p = key.placement, samples = flowerSamples, full = key.full, dark = key.dark
+        let p = key.placement, samples = flowerSamples, full = key.full, dark = key.dark, look = key.look
         // Every frame shows over the field as it stands when the job starts; the field holds still while they play.
         let stop: @Sendable () -> Bool = { job.cancelled }
         let images: ([[UInt8]], LotusArt.Placement) -> [CGImage]? = { packed, on in
-            LotusArt.images(packed, flower: on, full: full, t: fieldT, dark: dark, stop: stop)
+            LotusArt.images(packed, flower: on, full: full, t: fieldT, dark: dark, look: look, stop: stop)
         }
         var step = 0
         return AnyIterator {
@@ -1157,7 +1165,7 @@ extension DitherArtView {
                             [LotusArt.pack(LotusArt.codes(light: light, cover: cover, placement: p, dark: dark))]
                         }
                     }.flatMap { packed -> FlowerPhase? in
-                        LotusArt.frame(packed: packed[0], flower: p, full: full, t: fieldT, dark: dark)
+                        LotusArt.frame(packed: packed[0], flower: p, full: full, t: fieldT, dark: dark, look: look)
                             .map { FlowerPhase.open($0, LotusArt.unpack(packed[0], count: p.width * p.height)) }
                     }
                 case 1 where parts.contains(.bloom):
@@ -1453,7 +1461,7 @@ extension DitherArtView {
     func showFieldOnly() {
         guard let set = flowerSet, !fieldOnly else { return }
         let full = set.key.full
-        let shown = LotusArt.compose(codes: nil, flower: set.key.placement, full: full, field: LotusArt.field(full, t: fieldT, dark: set.key.dark),
+        let shown = LotusArt.compose(codes: nil, flower: set.key.placement, full: full, field: LotusArt.field(full, t: fieldT, dark: set.key.dark, look: set.key.look),
                                      fieldAlpha: LotusArt.fieldAlpha(dark: set.key.dark))
         CATransaction.begin(); CATransaction.setDisableActions(true)
         flowerMask.contents = LotusArt.image(shown, width: full.width, height: full.height)
@@ -1488,7 +1496,7 @@ extension DitherArtView {
         guard i != turnIndex || ft != fieldT || flowerMask.animation(forKey: "bloom") != nil else { return }
         turnIndex = i
         if animates { fieldT = ft }
-        guard let image = LotusArt.frame(packed: set.idle[i], flower: set.key.placement, full: set.key.full, t: fieldT, dark: set.key.dark)
+        guard let image = LotusArt.frame(packed: set.idle[i], flower: set.key.placement, full: set.key.full, t: fieldT, dark: set.key.dark, look: set.key.look)
         else { return }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         flowerMask.removeAnimation(forKey: "bloom")
@@ -1500,7 +1508,7 @@ extension DitherArtView {
     func recomposeOpen() {
         guard let set = flowerSet, !set.openCodes.isEmpty else { return }
         let full = set.key.full
-        let shown = LotusArt.compose(codes: set.openCodes, flower: set.key.placement, full: full, field: LotusArt.field(full, t: fieldT, dark: set.key.dark),
+        let shown = LotusArt.compose(codes: set.openCodes, flower: set.key.placement, full: full, field: LotusArt.field(full, t: fieldT, dark: set.key.dark, look: set.key.look),
                                      fieldAlpha: LotusArt.fieldAlpha(dark: set.key.dark))
         if let image = LotusArt.image(shown, width: full.width, height: full.height) { flowerSet?.open = image }
     }

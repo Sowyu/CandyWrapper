@@ -58,7 +58,7 @@ public final class ThemeLibrary {
     public func start() {
         migrateRemovedGlass()
         ClientSettingsStore.shared.observe { [weak self] keys in
-            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("redesignTextDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInsetPanel") || keys.contains("redesignInk") || keys.contains("redesignDotSize") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
+            if keys.contains("appearanceContrast") || keys.contains("glassOpacity") || keys.contains("ditherBackgroundDim") || keys.contains("redesignTextDim") || keys.contains("ditherAccent") || keys.contains("redesignBackground") || keys.contains("redesignGradientAnimate") || keys.contains("redesignThreadFlower") || keys.contains("redesignTintFromPicture") || keys.contains("redesignInsetPanel") || keys.contains("redesignInk") || keys.contains("redesignDotSize") || keys.contains("redesignInkColor") || keys.contains("ignoreReduceTransparency") || keys.contains("redesignProjectAvatars") || keys.contains("diffColorScheme") || keys.contains("hydration") || keys.contains("panelAnimationDurationMs") { self?.apply() }
         }
         SettingsFontRuntime.start()
         apply()
@@ -521,6 +521,7 @@ public final class ThemeLibrary {
         // Gradient's dots became Flower's field (2026-11-21); a 1.16.0 "gradient" shows Flower.
         input.ditherFlower = ["flower", "gradient"].contains(client.string("redesignBackground"))
         input.ditherGradientAnimates = client.bool("redesignGradientAnimate")
+        input.threadFlower = LotusArt.ThreadLook(setting: client.string("redesignThreadFlower"))
         input.ditherInk = DitherInk(mode: client.string("redesignInk"), color: client.string("redesignInkColor"))
         input.ditherDotSize = DitherDotSize(rawValue: client.string("redesignDotSize")) ?? .medium
         input.ignoreReduceTransparency = client.bool("ignoreReduceTransparency")

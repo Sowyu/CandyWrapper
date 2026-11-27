@@ -76,6 +76,8 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     /// setting defaults on; this input stays off unless `ThemeLibrary` passes the setting, so tests and fixtures draw
     /// the full-bleed layout unless they ask for the card.
     public var insetPanel = false
+    /// Redesign's "Flower on a thread" (`LotusArt.ThreadLook`).
+    public var threadFlower = LotusArt.ThreadLook.large
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -99,6 +101,8 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var ditherDim: CGFloat = 0.35
     /// "Dim behind text" for Picture and Flower (`TextDim`).
     nonisolated(unsafe) public private(set) static var ditherTextDim = TextDim.standard
+    /// "Flower on a thread": the lotus a thread draws (`LotusArt.ThreadLook`).
+    nonisolated(unsafe) public private(set) static var threadFlower = LotusArt.ThreadLook.large
     /// Redesign's "Background" is Blur: the picture blurred behind the whole window (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherBlur = false
     /// Redesign's "Background" is Flower: a large dithered lotus rising from the bottom of the page over a field of
@@ -195,9 +199,10 @@ public enum ThemeRuntime {
             changed = true
         }
         // "Dim behind text" changes only the art, which rebuilds its column mask or cap on the notification, so a drag
-        // never walks the view tree.
-        if next.textDim != old.textDim {
+        // never walks the view tree. So does "Flower on a thread": the art places and renders the other look.
+        if next.textDim != old.textDim || next.threadFlower != old.threadFlower {
             ditherTextDim = min(max(next.textDim, 0), 100)
+            threadFlower = next.threadFlower
             if !changed { NotificationCenter.default.post(name: didChange, object: nil); return }
         }
         guard changed else { return }

@@ -490,8 +490,17 @@ struct RedesignBaselineTests {
             flowerThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
+            // "Flower on a thread" set to Small: the look before ec3a4e1d.
+            input.threadFlower = .small
+            ThemeRuntime.apply(input)
+            defer { input.threadFlower = .large; ThemeRuntime.apply(input) }
+            let smallThread = ComposerFidelityTests.panel(width: 1300, dark: dark)
+            smallThread.timeline.context.now = { Self.now }
+            smallThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            smallThread.layoutSubtreeIfNeeded(); smallThread.timeline.scroll(toFraction: 0)
+            try capture("thread-markdown-top-flower-small", smallThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 204)
+        #expect(count == 206)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

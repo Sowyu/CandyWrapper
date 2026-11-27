@@ -256,6 +256,31 @@ struct FlowerArtTests {
 
     /// The frames render once a window: a return to the new thread, a replayed opening and a thread's second bloom
     /// compose the kept codes and render nothing; a thread shows the new thread's resting frame.
+    /// "Flower on a thread" takes effect at once: the thread's set changes look with the setting, never reusing the
+    /// other look's frames, Small sits where the new thread's lotus rests, and switching back reads the kept codes.
+    @Test func threadLookSwitchesAtOnce() throws {
+        try DitherArtView.$flowerSamples.withValue(1) {
+            let previous = ThemeRuntime.input, motion = Motion.reducedOverride
+            defer { ThemeRuntime.apply(previous); Motion.reducedOverride = motion }
+            Motion.reducedOverride = true
+            var (art, page, window, input) = try setUp()
+            defer { window.contentView = nil; DitherArtView.setEmphasis(nil, from: page); DitherArtView.clearFlowerStage(from: page) }
+            DitherArtView.setEmphasis(.thread, from: page)
+            stage(page, kind: .thread)
+            let large = try #require(art.flowerSet?.key)
+            #expect(large.look == .large)
+            input.threadFlower = .small
+            ThemeRuntime.apply(input)
+            let small = try #require(art.flowerSet?.key)
+            #expect(small.look == .small && small != large)
+            #expect(small.placement == LotusArt.canvas(content: try #require(art.flowerContent), cell: DitherArt.gradientUnit))
+            let rendered = art.flowerFramesRendered
+            input.threadFlower = .large
+            ThemeRuntime.apply(input)
+            #expect(art.flowerSet?.key == large && art.flowerFramesRendered == rendered)
+        }
+    }
+
     @Test func returnsAndThreadsRenderNoFrames() throws {
         try DitherArtView.$flowerSamples.withValue(1) { try rendersOnce() }
     }
