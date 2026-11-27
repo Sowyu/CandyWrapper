@@ -997,9 +997,10 @@ public enum LotusArt {
 
     /// The share of Gradient's density the field keeps, so the lotus stays the brighter, clearer thing.
     public static let fieldDensity = 0.5
-    /// The field's strength at the bottom edge, as a share of the top's. Light's runs out to none, so the dots fade
-    /// down the page instead of tiling it to the foot.
-    static func fieldFloor(dark: Bool) -> Double { dark ? 0.35 : 0 }
+    /// The field's strength at the bottom edge, as a share of the top's. Both run out to none, so the dots fade down the
+    /// page instead of tiling it to the foot: dark's 0.35 left an even grid behind the lotus and the composer that
+    /// read as graph paper (round-1 review, W6).
+    static func fieldFloor(dark: Bool) -> Double { 0 }
     /// The field's least density. Light kept 0.14 from the 1.17.0 walk, so the bare gaps beside the petals didn't look
     /// cut out, but that floor tiled the whole canvas in an even grid of dots like graph paper (round-1 review, W6).
     static func fieldLeast(dark: Bool) -> Double { 0 }
@@ -1031,8 +1032,8 @@ public enum LotusArt {
     /// The whole canvas: the field and the flower's every position on it. The flower sits by `content`; the field
     /// covers `content` and `field`, which on a thread runs on behind the cards floating over the art (the terminal
     /// drawer and the right panel), as Picture does.
-    public static func fullCanvas(content: CGRect, field: CGRect? = nil, cell: CGFloat = 3) -> Placement? {
-        guard cell.isFinite, cell >= 0.5, let spot = spot(in: content) else { return nil }
+    public static func fullCanvas(content: CGRect, field: CGRect? = nil, thread: ThreadStage? = nil, cell: CGFloat = 3) -> Placement? {
+        guard cell.isFinite, cell >= 0.5, let spot = spot(in: content, thread: thread) else { return nil }
         let area = field.map { $0.isEmpty || ![$0.minX, $0.minY, $0.maxX, $0.maxY].allSatisfy({ $0.isFinite && abs($0) <= 1e7 }) ? content : content.union($0) } ?? content
         let x0 = (area.minX / cell).rounded(.down), y0 = (area.minY / cell).rounded(.down)
         let x1 = (area.maxX / cell).rounded(.up), y1 = (area.maxY / cell).rounded(.up)
@@ -1062,19 +1063,63 @@ public enum LotusArt {
         public init(centre: CGPoint, radius: CGFloat) { self.centre = centre; self.radius = radius }
     }
 
-    /// The flower for a content area in points (top left origin, y down), or nil when the area is empty.
-    public static func spot(in content: CGRect) -> Spot? {
+    /// The flower for a content area in points (top left origin, y down), or nil when the area is empty. `thread`
+    /// places a thread's lotus (`threadSpot`) beside its reading column instead of the new thread's resting
+    /// composition.
+    public static func spot(in content: CGRect, thread: ThreadStage? = nil) -> Spot? {
         guard content.width >= 1, content.height >= 1,
               [content.minX, content.minY, content.width, content.height].allSatisfy({ $0.isFinite && abs($0) <= 1e7 }) else { return nil }
+        if let thread { return threadSpot(in: content, column: thread.column) }
         let unit = Swift.max(content.width, content.height * referenceAspect)
         return Spot(centre: CGPoint(x: content.minX + composition.x * content.width, y: content.minY + composition.y * content.height),
                     radius: composition.radius * unit)
     }
 
+    /// What a thread's lotus places itself by: the reading column's span across the content area, points.
+    public struct ThreadStage: Hashable, Sendable {
+        public var column: ClosedRange<CGFloat>?
+        public init(column: ClosedRange<CGFloat>?) { self.column = column }
+    }
+
+    /// A thread's lotus, whole and at rest (round-1 review, W6: the new thread's low, cropped composition left only
+    /// static behind the composer). Its radius is `share` of the content's height, between `least` and `most`, about
+    /// the new thread's bloom at the same window. It stands in the free run between the top row (`top`) and the
+    /// composer (`reserve` from the bottom), against the card's right edge `gap` in. When the margin right of the column
+    /// holds it, it sits there, out of the column; narrower, it keeps its size and runs behind the column's right side,
+    /// where the column mask dims it to the text floors.
+    /// `low` is where it stands in the run, 0 at the top: high, so its crown clears the cards that fill a thread's
+    /// lower half; at 0.62 the table and code cards covered all but its right edge (2026-11-27, candidates A to C).
+    public static let threadLayout = (share: 0.22, least: CGFloat(110), most: CGFloat(230), top: CGFloat(64),
+                                      reserve: CGFloat(190), gap: CGFloat(24), low: 0.2)
+
+    static func threadSpot(in content: CGRect, column: ClosedRange<CGFloat>?) -> Spot? {
+        let t = threadLayout, e = reach
+        let width = CGFloat(e.left + e.right), height = CGFloat(e.up + e.down)
+        // A short window gives up a share of the top row and the composer's room instead of losing the lotus.
+        let top = content.minY + Swift.min(t.top, 0.12 * content.height), bottom = content.maxY - Swift.min(t.reserve, 0.3 * content.height)
+        guard bottom > top else { return nil }
+        var r = Swift.min(t.most, Swift.max(t.least, CGFloat(t.share) * content.height), (bottom - top) / height,
+                          (content.width - 2 * t.gap) / width)
+        guard r >= 60 else { return nil }
+        // The margin right of the column, if it holds a lotus at least `least` across.
+        var cx = content.maxX - t.gap - CGFloat(e.right) * r
+        if let column {
+            let margin = content.maxX - (column.upperBound + columnPad) - t.gap
+            // Flush right, as far from the column's dimming as the margin allows (`columnEase`).
+            if margin >= width * t.least {
+                r = Swift.min(r, margin / width)
+                cx = content.maxX - t.gap - CGFloat(e.right) * r
+            }
+        }
+        // Low in the free run, its base toward the composer.
+        let cy = top + (bottom - top - height * r) * CGFloat(t.low) + CGFloat(e.up) * r
+        return Spot(centre: CGPoint(x: cx, y: cy), radius: r)
+    }
+
     /// The canvas for a content area in points: the area's cells on the art's `cell` lattice that any bloom or idle
     /// frame can cover, so nothing outside the area renders or is stored. Nil when that is nothing.
-    public static func canvas(content: CGRect, cell: CGFloat = 3) -> Placement? {
-        guard cell.isFinite, cell >= 0.5, let spot = spot(in: content) else { return nil }
+    public static func canvas(content: CGRect, thread: ThreadStage? = nil, cell: CGFloat = 3) -> Placement? {
+        guard cell.isFinite, cell >= 0.5, let spot = spot(in: content, thread: thread) else { return nil }
         let x0 = Int((content.minX / cell).rounded(.down)), y0 = Int((content.minY / cell).rounded(.down))
         let x1 = Int((content.maxX / cell).rounded(.up)), y1 = Int((content.maxY / cell).rounded(.up))
         var p = placement(panelWidth: x1 - x0, panelHeight: y1 - y0, centreX: Double(spot.centre.x / cell) - Double(x0),
@@ -1235,15 +1280,20 @@ public enum LotusArt {
 
     // MARK: Behind the reading column
 
-    /// How the flower thins and dims behind a thread's reading column (the user, of the same problem on Picture: "more
-    /// blacker near the middle subtly so its not super obvious"): the share of dots kept over the column, and how far
-    /// beside it the effect eases out, in points. Light eases out over a much wider run, so no cut-out shape reads on
-    /// the pale ground.
-    public static let columnKeep: Float = 0.3
-    /// Light keeps far fewer: 30% of the lotus's dots, capped pale, read as grey static over the reply text when the
-    /// thread's lotus rises behind the column (round-1 review, W6 and W7).
-    public static let lightColumnKeep: Float = 0.06
-    public static func columnReach(dark: Bool) -> CGFloat { dark ? 240 : 480 }
+    /// How the flower dims behind a thread's reading column (the user, of the same problem on Picture: "more blacker
+    /// near the middle subtly so its not super obvious"): the share of dots kept over the column, and how far beside it
+    /// the effect eases out, in points. Every dot stays, dimmed to the text floors' cap, so the lotus keeps its outline
+    /// behind the text as a watermark: dropping 70% of them (94% in light) by hash read as static with no lotus in it
+    /// (round-1 review, W6). The ease is short, so the part of the lotus in the margin shows at full strength.
+    public static let columnKeep: Float = 1
+    public static let columnReach: CGFloat = 96
+    /// The ease beside the column for a lotus whose left edge is at `lotusLeft` (points, the art's x). A lotus wholly
+    /// in the margin gets only the gap between them, at least 24pt so the field's dots still fade, and shows at full
+    /// strength: the full 96pt paled its left half in light (2026-11-27, 1,700pt).
+    public static func columnEase(lotusLeft: CGFloat, column: ClosedRange<CGFloat>) -> CGFloat {
+        let gap = lotusLeft - (column.upperBound + columnPad)
+        return gap >= 0 ? Swift.min(columnReach, Swift.max(24, gap)) : columnReach
+    }
     /// How far past the column's sides the full effect holds, points.
     public static let columnPad: CGFloat = 20
 
@@ -1273,9 +1323,9 @@ public enum LotusArt {
     /// never lines up with the flower's own pattern. The flower's frames never change for it. `keep` is the share of
     /// dots kept over the column, `columnKeep` unless "Dim behind text" moved it (`TextDim`).
     public static func columnMask(_ p: Placement, column: ClosedRange<CGFloat>, cap: Float, keep columnKeep: Float = columnKeep,
-                                  dark: Bool, cell: CGFloat = 3) -> [UInt8] {
+                                  reach easeOut: CGFloat = columnReach, dark: Bool, cell: CGFloat = 3) -> [UInt8] {
         var out = [UInt8](repeating: 0, count: p.width * p.height)
-        let reach = Float(columnReach(dark: dark))
+        let reach = Float(Swift.max(easeOut, cell))
         let lo = Float(column.lowerBound - columnPad), hi = Float(column.upperBound + columnPad)
         var level = [Float](repeating: 1, count: p.width), keep = level
         for x in 0..<p.width {

@@ -303,18 +303,19 @@ struct FlowerArtTests {
         #expect(art.openingPlaying && art.flowerFramesRendered == rendered)
         land()
 
-        // A thread on the same area: the new thread's resting frame, no new still; its bloom renders once.
-        let open = try #require(art.flowerSet?.open)
+        // A thread on the same area: its own whole lotus beside the column, a new still and its bloom, rendered once.
+        let heroOpen = try #require(art.flowerSet?.open)
         DitherArtView.setEmphasis(.thread, from: page)
         stage(page, kind: .thread)
         DitherArtView.flowerOpened(from: page)
-        #expect(art.flowerSet?.open === open && art.flowerBloomingForTesting)
-        #expect(art.flowerFramesRendered == rendered + LotusArt.bloomPoses().count)
+        let open = try #require(art.flowerSet?.open)
+        #expect(open !== heroOpen && art.flowerBloomingForTesting)
+        #expect(art.flowerFramesRendered == rendered + 1 + LotusArt.bloomPoses().count)
         art.endBloom()
         #expect(art.flowerContentsForTesting === open)
         // The next thread blooms from the kept codes.
         DitherArtView.flowerOpened(from: page)
-        #expect(art.flowerBloomingForTesting && art.flowerFramesRendered == rendered + LotusArt.bloomPoses().count)
+        #expect(art.flowerBloomingForTesting && art.flowerFramesRendered == rendered + 1 + LotusArt.bloomPoses().count)
 
         // Animate off keeps no motion frames; the window going keeps none at all.
         var input = ThemeRuntime.input
@@ -404,15 +405,18 @@ struct FlowerArtTests {
         #expect(art.flowerJobsForTesting == 3)
         #expect(art.flowerIdlingForTesting)
 
-        // A thread opens on the same area: one job, its bloom.
+        // A thread opens on the same area: its own lotus. The stage starts a job for its still, which the bloom's
+        // request replaces before it runs (one cancel), so one still and one bloom render.
         var jobs = art.flowerJobsForTesting
+        let cancelsBefore = art.flowerCancelsForTesting
         DitherArtView.setEmphasis(.thread, from: page)
         stage(page, kind: .thread)
         DitherArtView.flowerOpened(from: page)
         drain()
         art.endBloom()
-        #expect(art.flowerJobsForTesting == jobs + 1)
-        #expect(art.flowerFramesRendered == heroFrames + LotusArt.bloomPoses().count)
+        #expect(art.flowerJobsForTesting == jobs + 2)
+        #expect(art.flowerCancelsForTesting <= cancelsBefore + 1)
+        #expect(art.flowerFramesRendered == heroFrames + 1 + LotusArt.bloomPoses().count)
 
         // Switching threads and back to the new thread: frames from the kept codes, one job a switch, none rendered.
         jobs = art.flowerJobsForTesting
@@ -425,8 +429,8 @@ struct FlowerArtTests {
         quiet()
         drain()
         #expect(art.flowerJobsForTesting == jobs + 3)
-        #expect(art.flowerFramesRendered == heroFrames + LotusArt.bloomPoses().count)
-        #expect(art.flowerCancelsForTesting == 2)
+        #expect(art.flowerFramesRendered == heroFrames + 1 + LotusArt.bloomPoses().count)
+        #expect(art.flowerCancelsForTesting == 3)
 
         // A drag: its first step starts a render, which the second stops; the shown frame scales through the rest and
         // one set renders when it ends.
