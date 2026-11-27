@@ -64,6 +64,9 @@ public enum ProvidersLogic {
         return rows
     }
 
+    /// Redesign's headline for a provider switched on here that the server reports as disabled.
+    public static let serverOffHeadline = "Off on this server"
+
     /// `getProviderSummary`.
     public static func summary(_ p: ServerProvider?) -> (headline: String, detail: String?) {
         guard let p else { return ("Checking provider status", "Waiting for the server to report installation and authentication details.") }
@@ -907,12 +910,20 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             self?.upsert(row, .object(o), env: env.id)
         }
         accent.isEnabled = !readOnly
-        let nameControl = SettingsControlGroup([accent, name], gap: 8)
-        nameControl.frame.size = NSSize(width: 28 + 8 + 224, height: 28)
+        // Redesign gives the accent button its own labelled row, so it never reads as a stray "+" by the name field.
+        let redesign = DesignGeometry.usesClassic(self)
+        let nameControl = redesign ? SettingsControlGroup([name], gap: 8) : SettingsControlGroup([accent, name], gap: 8)
+        nameControl.frame.size = NSSize(width: redesign ? 224 : 28 + 8 + 224, height: 28)
         let nameRow = SettingsRowView(title: "Display name", control: nameControl)
-        // Redesign keeps the provider's health on its own Status row too, so an error never reads as part of the name
-        // field; the bare accent button gets a tooltip naming it.
-        if DesignGeometry.usesClassic(self) { accent.setTooltip(row.instance["accentColor"] == nil ? "Add accent color" : "Accent color") }
+        var accentRow: SettingsRowView?
+        if redesign {
+            accent.setTooltip(row.instance["accentColor"] == nil ? "Add accent color" : "Accent color")
+            accent.setAccessibilityLabel("Accent color")
+            let accentControl = SettingsControlGroup([accent], gap: 8)
+            accentControl.frame.size = NSSize(width: 28, height: 28)
+            accentRow = SettingsRowView(title: "Accent color", detail: "Marks this provider's badge in pickers and the sidebar.",
+                                        control: accentControl)
+        }
         let status = SettingsRowView(title: "Status")
         // RedactedSensitiveText.tsx:47 uses 11pt mono at 1.5 line height. Baseline alignment
         // with the 12/16 status spans makes the account line 17pt tall.
@@ -921,7 +932,7 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             status.statusLineHeight = 17
         }
         status.status = statusLine(row, provider)
-        header.group.rows = [status, nameRow]
+        header.group.rows = [status, nameRow] + (accentRow.map { [$0] } ?? [])
         var sections: [NSView & SettingsGroupRow] = [header]
 
         // ProviderSettingsPanel.tsx:970-1014: a managed Codex instance gets the ChatGPT setup and its own
@@ -1439,7 +1450,9 @@ final class ProviderListRow: ControlView {
         version.text = ProvidersLogic.versionLabel(provider?.version) ?? ""
         version.lineHeight = 16
         // `liveProvider.enabled` is machine-wide; a project override can turn it on (ProviderInstanceCard.tsx:680-683).
-        let summary: (headline: String, detail: String?) = !on ? ("Disabled", nil) : effective == nil ? ProvidersLogic.summary(provider) : ProvidersLogic.summary(provider.map { var p = $0; p.enabled = true; return p })
+        var summary: (headline: String, detail: String?) = !on ? ("Disabled", nil) : effective == nil ? ProvidersLogic.summary(provider) : ProvidersLogic.summary(provider.map { var p = $0; p.enabled = true; return p })
+        // Redesign: a switch that is on beside "Disabled" read as a contradiction; the server's report is what's off.
+        if on, summary.headline == "Disabled", DesignGeometry.usesClassic(self) { summary.headline = ProvidersLogic.serverOffHeadline }
         status.text = summary.headline + (showsDot ? summary.detail.map { " · \($0)" } ?? "" : "")
         status.font = DSFont.ui(12)
         status.lineHeight = 18

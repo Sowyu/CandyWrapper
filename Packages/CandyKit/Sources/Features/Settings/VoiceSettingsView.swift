@@ -7,7 +7,14 @@ import DesignSystem
 public final class VoiceSettingsView: SettingsPageBase {
     public override init(context: SettingsPageContext) {
         super.init(context: context)
-        items = [SettingsNoticeView("Voice dictation isn't available in CandyWrapper yet.")]
+        // Redesign shows it as a state card like Archive's empty page, with what it will hold.
+        if ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark) {
+            let copy = StateCopy(title: "Dictation isn't here yet",
+                                 detail: "CandyWrapper's composer can't take dictation yet. Its microphone and language settings will appear here.")
+            items = [SettingsGroupView(rows: [KeybindingsSettingsView.EmptyMessageRow("Voice dictation isn't available in CandyWrapper yet.", redesign: copy)])]
+        } else {
+            items = [SettingsNoticeView("Voice dictation isn't available in CandyWrapper yet.")]
+        }
     }
     required init?(coder: NSCoder) { fatalError() }
 }

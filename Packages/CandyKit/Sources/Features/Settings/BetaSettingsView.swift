@@ -25,7 +25,7 @@ public struct ExperimentalToggle {
 public final class BetaSettingsView: SettingsPageBase {
     /// CandyWrapper's own experiments, one entry each. Redesign has its own page.
     public static let candyToggles: [ExperimentalToggle] = [
-        ExperimentalToggle(id: "thread-tabs", title: "Tabs", detail: "A tab strip at the top of the window for open threads and other pages. Cmd-click a thread to open it in a new tab.", needsRedesign: true, isOn: { ThreadTabsSetting.isOn }, set: { ThreadTabsSetting.set($0) }, observe: { ThreadTabsSetting.observe($0) }),
+        ExperimentalToggle(id: "thread-tabs", title: "Tabs", detail: "A tab strip at the top of the window for open threads and other pages. ⌘-click a thread to open it in a new tab.", needsRedesign: true, isOn: { ThreadTabsSetting.isOn }, set: { ThreadTabsSetting.set($0) }, observe: { ThreadTabsSetting.observe($0) }),
     ]
     private var unsubscribe: [() -> Void] = []
 

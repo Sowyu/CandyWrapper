@@ -436,7 +436,10 @@ public final class SettingsSectionView: DSView {
         needsLayout = true
     }
 
-    public func height(forWidth width: CGFloat) -> CGFloat { 28 + 10 + group.height(forWidth: width) }
+    /// Redesign drops the header row of a section with no title, such as a page's own toolbar under the page title.
+    private var headerless: Bool { title.isEmpty && headerAction == nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
+
+    public func height(forWidth width: CGFloat) -> CGFloat { (headerless ? 0 : 28 + 10) + group.height(forWidth: width) }
 
     public override var intrinsicContentSize: NSSize {
         NSSize(width: NSView.noIntrinsicMetric, height: bounds.width > 0 ? height(forWidth: bounds.width) : NSView.noIntrinsicMetric)
@@ -458,7 +461,7 @@ public final class SettingsSectionView: DSView {
             let s = action.intrinsicContentSize
             action.frame = NSRect(x: bounds.width - 16 - s.width, y: (28 - s.height) / 2, width: s.width, height: s.height)
         }
-        group.frame = NSRect(x: 0, y: 38, width: bounds.width, height: group.height(forWidth: bounds.width))
+        group.frame = NSRect(x: 0, y: headerless ? 0 : 38, width: bounds.width, height: group.height(forWidth: bounds.width))
     }
 }
 

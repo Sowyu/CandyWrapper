@@ -37,15 +37,16 @@ struct SettingsProjectDeleteTests {
         let plan = try #require(SettingsProjectList.deletion(key: "a:/Users/dev/code/harbor-docs", scope: List.scope(), threadCount: { _, _ in 0 }))
         #expect(plan.confirmTitle == "Delete project")
         // The question, where it lives, and one line on what goes and what stays.
-        #expect(plan.message.hasPrefix("Remove project \"harbor-docs\"?\n/Users/dev/code/harbor-docs"))
-        #expect(plan.message.hasSuffix("\nIts archived threads are deleted from this server for good. The files on disk and provider sessions stay."))
-        #expect(plan.message.split(separator: "\n").count == 3 && !plan.message.contains("T3 Code"))
+        #expect(plan.message.hasPrefix("Delete harbor-docs?\n/Users/dev/code/harbor-docs"))
+        #expect(plan.message.hasSuffix("\nIts archived threads are deleted from this server for good.\nThe files on disk and provider sessions stay."))
+        #expect(plan.message.split(separator: "\n").count == 4 && !plan.message.contains("T3 Code"))
     }
 
     @Test func projectWithThreadsCopy() throws {
         let plan = try #require(SettingsProjectList.deletion(key: "a:/Users/dev/code/basalt", scope: List.scope(), threadCount: { _, _ in 22 }))
         #expect(plan.confirmTitle == "Delete project and 22 threads")
-        #expect(plan.message.hasPrefix("Remove project \"Basalt\" and delete its 22 threads?\n"))
+        // O3: short enough to stay on one line at 1,000 px.
+        #expect(plan.message.hasPrefix("Delete Basalt and its 22 threads?\n"))
         #expect(plan.message.contains("Its threads and archived threads are deleted from this server for good."))
         let one = try #require(SettingsProjectList.deletion(key: "a:/Users/dev/code/quill", scope: List.scope(), threadCount: { _, _ in 1 }))
         #expect(one.confirmTitle == "Delete project and 1 thread")
