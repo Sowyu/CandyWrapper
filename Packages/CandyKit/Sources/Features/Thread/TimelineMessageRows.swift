@@ -1308,7 +1308,17 @@ final class UserMessageAttachmentsView: DSView {
         return h
     }
 
-    func setMediaVisible(_ visible: Bool) { mediaViews.forEach { $0.setVisible(visible) } }
+    private var mediaShown = true
+    func setMediaVisible(_ visible: Bool) {
+        mediaShown = visible
+        mediaViews.forEach { $0.setVisible(visible) }
+        rankImages()
+    }
+
+    /// Tells the image queues which attachment pictures are on screen, by attachment id as the app's loader asks.
+    private func rankImages() {
+        for cell in cells { if let key = cell.key { MediaPriority.mark(key, view: cell, visible: mediaShown) } }
+    }
 
     override func updateLayer() {
         for cell in cells {
@@ -1336,5 +1346,6 @@ final class UserMessageAttachmentsView: DSView {
             view.frame = NSRect(x: 0, y: y, width: bounds.width, height: height)
             y += height + 8
         }
+        rankImages()
     }
 }

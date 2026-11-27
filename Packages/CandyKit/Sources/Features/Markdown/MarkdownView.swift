@@ -233,9 +233,7 @@ public final class MarkdownView: DSView {
         let shown = mediaVisible && window != nil ? visibleRect : .zero
         for view in imageViews {
             guard let key = view.key, !key.hasPrefix("diagram-") else { continue }
-            let onScreen = !shown.isEmpty && view.frame.intersects(shown)
-            let recency = window != nil ? -view.convert(view.bounds, to: nil).minY : MediaPriority.rank(key).recency
-            MediaPriority.set(key, visible: onScreen, recency: recency)
+            MediaPriority.mark(key, view: view, visible: !shown.isEmpty && view.frame.intersects(shown))
         }
     }
     private var imageViews: [AsyncImageView] = []

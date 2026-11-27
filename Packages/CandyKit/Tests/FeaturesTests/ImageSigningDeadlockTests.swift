@@ -4,7 +4,7 @@ import Testing
 import T3Protocol
 @testable import Features
 
-/// The released 1.15.1 signed a Markdown image path inside a turn of `AssetURLLimit` and the app's `assetURL` signed
+/// The released 1.15.1 signed a Markdown image path inside a turn of `AssetURLLimit`, now `MediaFetchQueue.signing`, and the app's `assetURL` signed
 /// it again as a `media-file` resource, which waits for a second turn. Six images at once held all six turns while
 /// each waited for its second, so no image ever loaded.
 @MainActor @Suite(.serialized) struct ImageSigningDeadlockTests {
@@ -44,7 +44,7 @@ import T3Protocol
                 if now == last { idle += 1 } else { idle = 0; last = now }
             }
             if !Task.isCancelled {
-                signed.note = "stalled at \(signed.count) signed, \(await AssetURLLimit.shared.inFlight) turns in flight, \(await AssetURLLimit.shared.queued) queued"
+                signed.note = "stalled at \(signed.count) signed, \(await MediaFetchQueue.signing.inFlight) turns in flight, \(await MediaFetchQueue.signing.queued.count) queued"
                 signing.cancel()
             }
         }

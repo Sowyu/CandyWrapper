@@ -4652,7 +4652,7 @@ extension ComposerController {
             }
         }
         panel.model.attachmentImage = { [weak self] id, side, cover in
-            guard let source = await self?.attachmentSource(id) else { return nil }
+            guard let source = await self?.attachmentSource(id, queued: true) else { return nil }
             return await ComposerImageIO.thumbnail(source, side: side, cover: cover, measurementKey: id)
         }
         panel.model.onExpandImage = { [weak self] items, index in self?.presentPreview(items, index: index) }
@@ -5719,7 +5719,7 @@ extension ComposerController {
     /// A sent image's bytes on disk: the file it was sent from, else the server copy, fetched once
     /// through `assets.createUrl` (resource `attachment`) into the cache directory. T3 leans on the
     /// browser's cache for the same bytes (`private, max-age=3600`, apps/server/src/http.ts:420-423).
-    fileprivate func attachmentSource(_ attachmentId: String, environmentId: String? = nil) async -> URL? {
+    fileprivate func attachmentSource(_ attachmentId: String, environmentId: String? = nil, queued: Bool = false) async -> URL? {
         if let local = sentFiles[attachmentId], FileManager.default.fileExists(atPath: local.path) { return local }
         let safe = attachmentId.replacingOccurrences(of: "[^A-Za-z0-9_-]", with: "_", options: .regularExpression)
         let cached = Self.attachmentCacheDirectory.appendingPathComponent(safe)
@@ -5733,10 +5733,13 @@ extension ComposerController {
             do {
                 ImageTiming.mark("fetch", attachmentId)
                 await ImageTiming.simulateLink()
-                let result = try await supervisor.request("assets.createUrl", payload: .object([
-                    "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])]))
-                guard case .string(let relative)? = result["relativeUrl"], let url = URL(string: relative, relativeTo: base)?.absoluteURL else { return nil }
-                let (temp, response) = try await URLSession.shared.download(from: url)
+                let sign = { try? await supervisor.request("assets.createUrl", payload: .object([
+                    "resource": .object(["_tag": .string("attachment"), "attachmentId": .string(attachmentId)])])) }
+                // The timeline's pictures wait their turn with reply images, on screen first; a click asks at once.
+                let result = queued ? await MarkdownImages.withSigningTurn(attachmentId, sign) : await sign()
+                guard case .string(let relative)? = result?["relativeUrl"], let url = URL(string: relative, relativeTo: base)?.absoluteURL else { return nil }
+                let fetch = { try? await URLSession.shared.download(from: url) }
+                guard let (temp, response) = queued ? await MarkdownImages.withDownloadTurn(attachmentId, fetch) : await fetch() else { return nil }
                 guard ((response as? HTTPURLResponse)?.statusCode ?? 0) / 100 == 2 else { return nil }
                 if ImageTiming.slowLink != nil {
                     await ImageTiming.simulateLink(bytes: (try? temp.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)

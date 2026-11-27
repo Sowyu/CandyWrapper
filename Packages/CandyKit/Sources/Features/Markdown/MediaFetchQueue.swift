@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Where a reply image stands for loading order: on screen first, then the rest, most recent first. Markdown views
 /// update it as the timeline scrolls; the fetch queue reads it each time a download slot frees.
@@ -22,6 +22,17 @@ enum MediaPriority {
     static func rank(_ key: String) -> Rank { lock.withLock { ranks[key] } ?? .background }
 
     static func forget(_ key: String) { lock.withLock { ranks[key] = nil } }
+
+    /// Ranks one image view: on screen when `visible` and in a window, recency by its height in the window, so the
+    /// lowest picture of a thread opened at its end goes first. Outside a window it keeps its last recency.
+    @MainActor static func mark(_ key: String, view: NSView, visible: Bool) {
+        let inWindow = view.window != nil
+        set(key, visible: visible && inWindow, recency: inWindow ? -view.convert(view.bounds, to: nil).minY : rank(key).recency)
+    }
+
+    /// The key `MarkdownImages.signedURL(resource:)` ranks a sign by when the resource alone does not name it, like a
+    /// tool output whose gallery tile ranks under its own key.
+    @TaskLocal static var signingKey: String?
 }
 
 /// Downloads of reply images over one link. Over a slow remote link parallel transfers only split the bandwidth, so a
@@ -31,6 +42,12 @@ enum MediaPriority {
 actor MediaFetchQueue {
     // ponytail: a fixed 50 ms gather before the first slot; tie it to the sign round trip if fast links notice it
     static let shared = MediaFetchQueue(limit: 2, gather: .milliseconds(50))
+    /// `ASSET_URL_MAX_IN_FLIGHT` (client-runtime state/assets.ts at 4928, #27440): a thread with hundreds of images asks
+    /// for hundreds of signed URLs at once, and over a slow remote they all wait on one socket and read as stalled, so
+    /// at most 6 `assets.createUrl` calls run at a time. T3 hands its permits out in arrival order. The timeline lays its
+    /// rows out top down, so here they go in `MediaPriority` order too, or the pictures on screen at a thread's end
+    /// signed last.
+    static let signing = MediaFetchQueue(limit: 6, gather: .milliseconds(50))
     private let limit: Int
     /// How long a free slot waits for more requests before it picks one. A thread opens with all its images asking at
     /// once, in the order their signs came back; without the pause, the first two to sign took the slots ahead of the
@@ -44,7 +61,7 @@ actor MediaFetchQueue {
     init(limit: Int, gather: Duration = .zero) { self.limit = limit; self.gather = gather }
 
     /// Waits for a slot; false when the caller was cancelled before it. Pair a true with `release`.
-    func acquire(_ key: String) async -> Bool {
+    func acquire(_ key: String = "") async -> Bool {
         if Task.isCancelled { return false }
         if running < limit, waiting.isEmpty, gather == .zero { running += 1; return true }
         let id = UUID()

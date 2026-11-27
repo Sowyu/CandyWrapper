@@ -62,7 +62,7 @@ enum MarkdownImageSource: Equatable, Sendable {
 public enum MarkdownImages {
     /// A signed URL for a host file (`assets.createUrl`, resource `media-file` on the open thread) and the
     /// pixel size the server read from its header. Set by the app; nil without an open thread. It must sign through
-    /// `signedURL(resource:)`, the one place that takes a turn of `AssetURLLimit`.
+    /// `signedURL(resource:)`, the one place that takes a turn of `MediaFetchQueue.signing`.
     public static var assetURL: ((_ path: String) async -> SignedAsset?)?
     /// A signed URL and pixel size for any `assets.createUrl` resource on the open thread's environment
     /// (`useAssetUrlState`, apps/web/src/assets/assetUrls.ts:20-41). Set by the app.
@@ -71,7 +71,7 @@ public enum MarkdownImages {
     /// (`fileRevision`, contracts assets.ts:103), absent on older servers and for resources that are not host files.
     public typealias SignedAsset = (url: URL, size: CGSize?, revision: String?)
     /// How long `resourceURL` waits for `assets.createUrl` before it gives up. T3 sets no limit and lets an unmounted
-    /// image interrupt the call, but a reply that stays on screen would keep its turn of `AssetURLLimit` forever.
+    /// image interrupt the call, but a reply that stays on screen would keep its turn of `MediaFetchQueue.signing` forever.
     // ponytail: one fixed limit for loopback and T3 Connect; scale it by route if slow relays fail images that would have loaded
     public static let signingTimeout: Duration = .seconds(30)
     /// CandyWrapper's kept copy of an image a tool item viewed (`AgentImageCache`), for when the file is gone. Set by the app.
@@ -353,7 +353,7 @@ public enum MarkdownImages {
         encoder.outputFormatting = .sortedKeys
         let id = "asset|" + ((try? encoder.encode(resource)).map { String(decoding: $0, as: UTF8.self) } ?? key)
         return sharedDownload(id) { MarkdownImageDownload(grace: .seconds(2)) {
-            guard let asset = await signAsset(resource) else { return nil }
+            guard let asset = await MediaPriority.$signingKey.withValue(key, operation: { await signAsset(resource) }) else { return nil }
             if let size = asset.size { await record(size, for: key) }
             return await queuedTransfer(key: key, url: asset.url)
         } }
@@ -365,20 +365,41 @@ public enum MarkdownImages {
         func first() -> Bool { lock.withLock { defer { done = true }; return !done } }
     }
 
-    /// Takes no turn of `AssetURLLimit`: the app's `assetURL` signs through `signedURL(resource:)`, which takes it.
+    /// Takes no turn of `MediaFetchQueue.signing`: the app's `assetURL` signs through `signedURL(resource:)`, which takes it.
     /// Taking one here as well held six turns while six images each waited for a second one, forever.
     static func signedURL(_ path: String) async -> SignedAsset? {
         await assetURL?(path)
     }
 
+    /// Waits for a turn in `MediaPriority` order: a host file ranks under its `media-file:` key, anything else under
+    /// `MediaPriority.signingKey`.
     public static func signedURL(resource: JSONValue) async -> SignedAsset? {
-        guard let resourceURL, await AssetURLLimit.shared.acquire() else { return nil }
+        let path = resource["_tag"]?.stringValue == "media-file" ? resource["path"]?.stringValue : nil
+        let key = MediaPriority.signingKey ?? path.map { MarkdownImageSource.workspaceFile($0).key } ?? ""
+        guard let resourceURL, await MediaFetchQueue.signing.acquire(key) else { return nil }
         let name = resource["path"]?.stringValue.map { ($0 as NSString).lastPathComponent } ?? ""
         ImageTiming.mark("sign", name)
         await SlowLink.roundTrip()
         let result = await resourceURL(resource)
         ImageTiming.mark("signed", name)
-        await AssetURLLimit.shared.release()
+        await MediaFetchQueue.signing.release()
+        return result
+    }
+
+    /// Runs `body` with a turn of `MediaFetchQueue.signing` taken in `MediaPriority` order for `key`, for a sign that
+    /// does not go through `signedURL(resource:)`, like the app's user attachments. Nil when cancelled while waiting.
+    public static func withSigningTurn<T: Sendable>(_ key: String, _ body: () async -> T?) async -> T? {
+        guard await MediaFetchQueue.signing.acquire(key) else { return nil }
+        let result = await body()
+        await MediaFetchQueue.signing.release()
+        return result
+    }
+
+    /// Runs `body` with one of `MediaFetchQueue.shared`'s download slots, in `MediaPriority` order for `key`.
+    public static func withDownloadTurn<T: Sendable>(_ key: String, _ body: () async -> T?) async -> T? {
+        guard await MediaFetchQueue.shared.acquire(key) else { return nil }
+        let result = await body()
+        await MediaFetchQueue.shared.release()
         return result
     }
 
@@ -532,43 +553,4 @@ enum MarkdownFavicons {
         }
         return .loading
     }
-}
-
-/// `ASSET_URL_MAX_IN_FLIGHT` (client-runtime state/assets.ts at 4928, #27440): a thread with hundreds of images asks
-/// for hundreds of signed URLs at once, and over a slow remote they all wait on one socket and read as stalled, so
-/// at most 6 `assets.createUrl` calls run at a time. A caller cancelled while it waits gives its turn back.
-// ponytail: one limit for every machine where T3 keeps one per environment; key it by environment if two remotes load images at once
-actor AssetURLLimit {
-    static let shared = AssetURLLimit(limit: 6)
-    private let limit: Int
-    private var running = 0
-    private var waiting: [(id: UUID, resume: CheckedContinuation<Bool, Never>)] = []
-
-    init(limit: Int) { self.limit = limit }
-
-    /// Waits for a turn; false when the caller was cancelled before it. Pair a true with `release`.
-    func acquire() async -> Bool {
-        if Task.isCancelled { return false }
-        if running < limit { running += 1; return true }
-        let id = UUID()
-        return await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                if Task.isCancelled { continuation.resume(returning: false) } else { waiting.append((id, continuation)) }
-            }
-        } onCancel: {
-            Task { await self.cancel(id) }
-        }
-    }
-
-    private func cancel(_ id: UUID) {
-        guard let index = waiting.firstIndex(where: { $0.id == id }) else { return }
-        waiting.remove(at: index).resume.resume(returning: false)
-    }
-
-    func release() {
-        if waiting.isEmpty { running -= 1 } else { waiting.removeFirst().resume.resume(returning: true) }
-    }
-
-    var inFlight: Int { running }
-    var queued: Int { waiting.count }
 }

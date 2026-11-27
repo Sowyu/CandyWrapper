@@ -477,6 +477,7 @@ final class WorkDetailView: DSView {
             view.requestedSide = Int((max(min(bounds.width, MarkdownStyle.imageMaxWidth), Self.imageMaxHeight) * (window?.backingScaleFactor ?? 2)).rounded(.up))
             let failed = MarkdownImages.failed.contains(image.key)
             view.set(key: image.key, fallbackText: failed ? MarkdownImages.unavailableLabel(image.alt) : "", loader: image.loader)
+            MediaPriority.mark(image.key, view: view, visible: true)
             view.setAccessibilityLabel("Preview " + image.alt)
         }
         for (key, view) in imageViews where !kept.contains(key) {
