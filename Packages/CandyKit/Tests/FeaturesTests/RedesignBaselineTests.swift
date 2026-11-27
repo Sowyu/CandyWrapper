@@ -462,7 +462,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 182)
+        #expect(count == 194)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
