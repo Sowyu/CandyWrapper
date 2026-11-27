@@ -74,6 +74,7 @@ public struct ClientSettings: Equatable, Sendable {
         "redesignBackground": SettingSpec(.literals(["dither", "blur", "gradient", "flower"]), .string("dither")),  // CandyWrapper only: Redesign's picture dithered or blurred behind the whole window, or a dithered lotus over accent dots; "gradient" (1.16.0) loads as "flower"
         "redesignProjectAvatars": SettingSpec(.literals(["sprites", "letters"]), .string("sprites")),  // CandyWrapper only: Redesign's generated project and account avatars, pixel sprites or T3's letters
         "redesignGradientAnimate": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's Gradient and Flower backgrounds move ("Animate background")
+        "redesignThreadFlower": SettingSpec(.literals(["large", "small"]), .string("large")),  // CandyWrapper only: Redesign's Flower on a thread, the whole lotus beside the column or the smaller one from before (LotusArt.ThreadLook)
         "redesignTintFromPicture": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's surfaces lean toward the picture's color
         "redesignInsetPanel": SettingSpec(.bool, .bool(true)),  // CandyWrapper only: Redesign's content as one rounded card inset from the window, with a top row in place of the floating header pills
         "redesignInk": SettingSpec(.literals(["auto", "accent", "custom"]), .string("auto")),  // CandyWrapper only: where Redesign's Picture takes its two inks

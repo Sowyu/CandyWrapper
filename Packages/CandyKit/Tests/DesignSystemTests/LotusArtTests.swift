@@ -331,4 +331,24 @@ struct LotusColumnTests {
         let m = LotusArt.columnMask(p, column: column, cap: 0.2, reach: LotusArt.columnEase(lotusLeft: 960, column: column), dark: false)
         #expect((0..<p.height).allSatisfy { m[$0 * p.width] == 255 })
     }
+
+    /// "Flower on a thread", Small: what a thread drew before ec3a4e1d. The new thread's resting composition, whatever
+    /// the column, dark's field thinning to 0.35 at the foot, and the dots behind the column thinned to 30% (6% in
+    /// light) over 240pt (480pt). Large is `threadSpot` and the page's own field.
+    @Test(arguments: LotusPlacementTests.windows) func smallThreadLotusIsTheRestingComposition(_ w: LotusPlacementTests.Window) throws {
+        let c = w.content, column = (c.midX - 368)...(c.midX + 368)
+        #expect(LotusArt.spot(in: c, thread: .init(column: column, look: .small)) == LotusArt.spot(in: c))
+        #expect(LotusArt.canvas(content: c, thread: .init(column: column, look: .small)) == LotusArt.canvas(content: c))
+        #expect(LotusArt.spot(in: c, thread: .init(column: column, look: .large)) == LotusArt.threadSpot(in: c, column: column))
+    }
+
+    @Test func smallThreadKeepsItsOldFieldAndColumn() {
+        #expect(LotusArt.fieldFloor(dark: true, look: .small) == 0.35)
+        #expect(LotusArt.fieldFloor(dark: false, look: .small) == 0)
+        #expect(LotusArt.fieldFloor(dark: true, look: .large) == 0 && LotusArt.fieldFloor(dark: true) == 0)
+        let column: ClosedRange<CGFloat> = 300...900
+        #expect(LotusArt.columnShape(.small, dark: true, lotusLeft: 960, column: column) == (0.3, 240))
+        #expect(LotusArt.columnShape(.small, dark: false, lotusLeft: 960, column: column) == (0.06, 480))
+        #expect(LotusArt.columnShape(.large, dark: true, lotusLeft: 960, column: column) == (LotusArt.columnKeep, 40))
+    }
 }

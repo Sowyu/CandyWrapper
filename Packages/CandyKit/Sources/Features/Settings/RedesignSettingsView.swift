@@ -62,9 +62,9 @@ public final class RedesignSettingsView: SettingsPageBase {
                                    key: "redesignGradientAnimate", reset: "animate background", title: "Animate background")
         let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
-        let ink = inkRow(), dots = dotSizeRow()
+        let ink = inkRow(), dots = dotSizeRow(), threadFlower = threadFlowerRow()
         // Background first, then only the rows the chosen background uses; the binder below hides the rest.
-        let background: [SettingsRowView] = [backgroundRow(), picture, ink, dots, tint, animate, dim]
+        let background: [SettingsRowView] = [backgroundRow(), picture, ink, dots, tint, animate, threadFlower, dim]
         let look: [SettingsRowView] = [accentRow(), avatarsRow(), reading]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
@@ -90,7 +90,7 @@ public final class RedesignSettingsView: SettingsPageBase {
             // its tint for the two that draw it.
             let mode = self.client.string("redesignBackground") == "gradient" ? "flower" : self.client.string("redesignBackground")
             let shown: [(SettingsRowView, Bool)] = [(picture, mode != "flower"), (tint, mode != "flower"), (ink, mode == "dither"),
-                                                     (dots, mode == "dither"), (animate, mode == "flower")]
+                                                     (dots, mode == "dither"), (animate, mode == "flower"), (threadFlower, mode == "flower")]
             var changed = false
             for (r, show) in shown where r.isHidden == show { r.isHidden = !show; changed = true }
             let readingOff = off ?? Self.readingWidthReason(self.client.string("chatWidth"))
@@ -162,6 +162,27 @@ public final class RedesignSettingsView: SettingsPageBase {
         toggle.setAccessibilityLabel("Sidebar rows")
         let r = row("redesign-sidebar-rows", title: "Sidebar rows",
                     detail: "Show each thread's environment and provider on a second line, or keep each thread to one line.",
+                    control: toggle)
+        toggle.onChange = { [weak self, weak toggle] i in
+            guard let self else { return }
+            guard let i else { toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0; return }
+            self.context.writeClient?([key: .string(values[i])])
+        }
+        binder.add { [weak self, weak toggle] in
+            guard let self else { return }
+            toggle?.selectedIndex = values.firstIndex(of: self.client.string(key)) ?? 0
+        }
+        return r
+    }
+
+    /// The lotus a thread draws under Flower (`LotusArt.ThreadLook`; the user, 2026-11-27: "make old and new a toggle
+    /// they both look good"): the whole lotus beside the column, the default, or the smaller one from before.
+    private func threadFlowerRow() -> SettingsRowView {
+        let key = "redesignThreadFlower", values = ["large", "small"]
+        let toggle = ToggleGroupView(variant: .segmented, items: [("Large", nil), ("Small", nil)], selected: 0)
+        toggle.setAccessibilityLabel("Flower on a thread")
+        let r = row("redesign-thread-flower", title: "Flower on a thread",
+                    detail: "Show a whole lotus beside the conversation, or a smaller one that fades behind the text.",
                     control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
