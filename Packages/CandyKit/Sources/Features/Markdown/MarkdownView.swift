@@ -1625,6 +1625,29 @@ public final class MarkdownView: DSView {
     /// checked is a solid box with a check stroked at 16% of its size.
     private func drawCheckbox(_ rect: CGRect, checked: Bool, dark: Bool, in ctx: CGContext) {
         func gray(_ v: CGFloat) -> CGColor { CGColor(srgbRed: v / 255, green: v / 255, blue: v / 255, alpha: 1) }
+        if ThemeRuntime.isDither(dark: dark), ThreadDesign.layoutUses3814 == nil {
+            // Redesign: a done task is an accent box with its check, an open one a muted outline, so neither reads as disabled.
+            let radius = RedesignTokens.Radius.joined
+            if checked {
+                ctx.setFillColor(Themed.color(\.primary).cgColor(in: self))
+                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+                ctx.fillPath()
+                let w = rect.width, h = rect.height
+                ctx.move(to: CGPoint(x: rect.minX + w * 0.25, y: rect.minY + h * 0.5))
+                ctx.addLine(to: CGPoint(x: rect.minX + w * 0.43, y: rect.minY + h * 0.68))
+                ctx.addLine(to: CGPoint(x: rect.minX + w * 0.77, y: rect.minY + h * 0.32))
+                ctx.setStrokeColor(Themed.color(\.primaryForeground).cgColor(in: self))
+                ctx.setLineWidth(1.5)
+                ctx.setLineCap(.round); ctx.setLineJoin(.round)
+                ctx.strokePath()
+            } else {
+                ctx.setStrokeColor(Themed.color(\.mutedForeground).cgColor(in: self))
+                ctx.setLineWidth(1)
+                ctx.addPath(CGPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), cornerWidth: radius - 0.5, cornerHeight: radius - 0.5, transform: nil))
+                ctx.strokePath()
+            }
+            return
+        }
         let outer = CGPath(roundedRect: rect, cornerWidth: 2, cornerHeight: 2, transform: nil)
         if checked {
             ctx.setFillColor(gray(dark ? 0x88 : 0xd9))

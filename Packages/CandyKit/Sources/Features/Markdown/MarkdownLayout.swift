@@ -48,7 +48,8 @@ enum MarkdownStyle {
     static let itemGap: CGFloat = 4
     /// Inline code: 12px mono, `padding: 0.1rem 0.35rem`, 1px border, 6px radius.
     static var chipFontSize: CGFloat { ThreadDesign.uses3814 ? 11.9 : 12 }
-    static var chipPaddingX: CGFloat { ThreadDesign.uses3814 ? 11.9 * 0.35 : 5.6 }
+    /// Redesign's fill-only chip takes the 4pt grid's step, so punctuation after code doesn't drift off it.
+    static var chipPaddingX: CGFloat { ThreadDesign.uses3814 ? 11.9 * 0.35 : ThreadDesign.redesign ? RedesignTokens.Space.xs : 5.6 }
     static var chipPaddingY: CGFloat { ThreadDesign.uses3814 ? 11.9 * 0.1 : 1.6 }
     static var chipRadius: CGFloat { ThreadDesign.uses3814 ? 4 : 6 }
     /// Code blocks: 13px mono at `leading-snug`, `padding: 0.8rem 0.9rem`, 30px header.
@@ -1157,7 +1158,15 @@ private struct Builder {
         case .caution: ("Caution", .octagonAlert, "red-500", "red-600", "red-400")
         }
         let indent: CGFloat = 2 + 12
-        let titleColor = Themed.base(light, dark: dark)
+        // Redesign keeps color for the accent and the states that need the user: Note, Insight, Tip and Important
+        // take the accent, Warning and Caution the warning and error colors (round-0 review, X3).
+        let redesignColor: NSColor? = switch kind {
+        case _ where !ThreadDesign.redesign: nil
+        case .warning: Themed.color(\.warning)
+        case .caution: Themed.color(\.destructive)
+        default: Themed.color(\.primary)
+        }
+        let titleColor = redesignColor ?? Themed.base(light, dark: dark)
         // Title: a flex <p> (so 10.4px margins) with a 14px icon, a 6px gap and the medium-weight label.
         // Find skips the title (`data-thread-find-ignore`, ChatMarkdown.tsx:2837).
         var title = text([InlineRun(text: label)], width: width - indent - 14 - 6, size: body.size, weight: .medium,
@@ -1177,7 +1186,7 @@ private struct Builder {
         // The root zeroes the alert's own margin, but its last paragraph's margin still collapses through it
         // (index.css:1869-1881). The assistant meta gap then collapses with that margin too.
         if ThreadDesign.uses3814 { box.innerBottom = children.isEmpty ? title.bottom : body.bottom }
-        box.items.append(.box(CGRect(x: 0, y: 0, width: 2, height: titleAndBody.height), fill: Themed.base(border, kind == .insight ? 1 : 0.7), border: nil, radius: 0))
+        box.items.append(.box(CGRect(x: 0, y: 0, width: 2, height: titleAndBody.height), fill: redesignColor ?? Themed.base(border, kind == .insight ? 1 : 0.7), border: nil, radius: 0))
         box.add(titleAndBody, at: CGPoint(x: indent, y: 0))
         return box
     }
@@ -1413,7 +1422,10 @@ private struct Builder {
 
     mutating func codeBlock(language: String, title: String?, code: String, width: CGFloat, wraps: Bool, viewToggle: Bool = false,
                             plain: Bool = false, textColor: NSColor? = nil) -> Box {
-        let p = MarkdownStyle.codePadding
+        // Redesign puts the code on the header's 12pt edge and 4pt under it, so a one-line command isn't a tall card.
+        let redesign = ThreadDesign.redesign
+        let p = redesign ? (x: RedesignTokens.Space.m, y: RedesignTokens.Space.m) : MarkdownStyle.codePadding
+        let padTop = redesign ? RedesignTokens.Space.xs : p.y
         let font = DSFont.mono(MarkdownStyle.codeFontSize)
         let string = Self.coloredCode(code, language: language, font: font, plain: plain || textColor != nil, color: textColor)
         let inner = width - 2 - 2 * p.x
@@ -1421,7 +1433,7 @@ private struct Builder {
         // Chromium's scroll width counts both inline paddings; the classic scrollbar takes its 7px below them.
         let contentWidth = textBox.usedWidth + 2 * p.x
         let overflows = !wraps && contentWidth > width - 2 + 1.0 / 64
-        let height = 1 + MarkdownStyle.codeHeader + p.y + textBox.height + p.y + (overflows ? MarkdownStyle.codeScrollbar : 0) + 1
+        let height = 1 + MarkdownStyle.codeHeader + padTop + textBox.height + p.y + (overflows ? MarkdownStyle.codeScrollbar : 0) + 1
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin, height: height)
         let frame = CGRect(x: 0, y: 0, width: width, height: height)
         // Light: 1px border at 70% on --secondary. Dark: a transparent border on --input at 32%.
@@ -1436,15 +1448,17 @@ private struct Builder {
         // `MarkdownCodeBlockTitleContent` (ChatMarkdown.tsx:801-840): a fence title shows its file icon and the title; a bare
         // language shows only the icon of a file in that language (`syntheticFileNameForLanguageId`, pierre-icons.ts:123-169),
         // or the language's name when no specific icon exists.
-        let titleFont = DSFont.mono(11)
+        // Redesign names the language beside its icon in muted 12pt, so the header row says what the block is.
+        let titleFont = redesign ? DSFont.ui(12) : DSFont.mono(11)
         let iconPath = title ?? Self.syntheticFileName(language: language)
         let showsIcon = title != nil || FileTypeIcon.token(for: iconPath) != "default"
         if showsIcon { box.items.append(.fileIcon(iconPath, CGRect(x: 1 + 12, y: 1 + 6 + 5, width: 14, height: 14))) }
-        let labelX: CGFloat = title != nil ? 1 + 12 + 14 + 6 : 1 + 12
+        let labelX: CGFloat = title != nil || (redesign && showsIcon) ? 1 + 12 + 14 + 6 : 1 + 12
         // Find skips the header (`THREAD_FIND_IGNORE_PROPS`, ChatMarkdown.tsx:746, 959).
-        let label = NSAttributedString(string: title ?? (showsIcon ? "" : language), attributes: [
-            .font: titleFont, .foregroundColor: Themed.color(\.contrastForeground, 0.72), .markdownFindText: ""])
-        let labelLine = 11 * 1.375
+        let label = NSAttributedString(string: title ?? (!redesign ? (showsIcon ? "" : language) : Self.languageName(language)), attributes: [
+            .font: titleFont, .foregroundColor: redesign ? Themed.color(\.mutedForeground) : Themed.color(\.contrastForeground, 0.72),
+            .markdownFindText: ""])
+        let labelLine = redesign ? 16 : 11 * 1.375
         let command = runsShell ? Self.runnableCommand(language: language, code: code) : nil
         let actions: CGFloat = 50 + (command == nil ? 0 : 26) + (viewToggle ? 26 : 0)
         if label.length > 0 {
@@ -1466,13 +1480,26 @@ private struct Builder {
                                       action: .runShell(command)))
         }
         box.controls.append(.init(frame: CGRect(x: x - 26, y: 1 + 6, width: 24, height: 24), icon: .textWrap,
-                                  variant: wraps ? .secondary : .ghostMuted, action: .toggleWrap(codeIndex - 1)))
+                                  // Redesign shows wrap's on state as a full-strength icon, without the chip copy lacks.
+                                  variant: wraps ? (redesign ? .ghost : .secondary) : .ghostMuted, action: .toggleWrap(codeIndex - 1)))
         box.controls.append(.init(frame: CGRect(x: copyX, y: 1 + 6, width: 24, height: 24), icon: .copy, variant: .ghostMuted, action: .copy(MarkdownCodeCopy.text(code))))
         let body = CGRect(x: 1, y: 1 + MarkdownStyle.codeHeader, width: width - 2, height: height - 2 - MarkdownStyle.codeHeader)
         if !wraps { box.items.append(.scroll(codeIndex: codeIndex - 1, viewport: body, contentWidth: overflows ? contentWidth : body.width)) }
-        box.items.append(.text(textBox, CGPoint(x: 1 + p.x, y: 1 + MarkdownStyle.codeHeader + p.y)))
+        box.items.append(.text(textBox, CGPoint(x: 1 + p.x, y: 1 + MarkdownStyle.codeHeader + padTop)))
         if !wraps { box.items.append(.endClip) }
         return box
+    }
+
+    /// The name Redesign's code header shows for a fence's language id, or the id itself.
+    static func languageName(_ language: String) -> String {
+        let names = ["bash": "Shell", "sh": "Shell", "zsh": "Shell", "shell": "Shell", "shellscript": "Shell", "fish": "Fish",
+                     "py": "Python", "python": "Python", "ts": "TypeScript", "typescript": "TypeScript", "tsx": "TSX",
+                     "js": "JavaScript", "javascript": "JavaScript", "jsx": "JSX", "swift": "Swift", "rust": "Rust", "rs": "Rust",
+                     "go": "Go", "rb": "Ruby", "ruby": "Ruby", "json": "JSON", "yaml": "YAML", "yml": "YAML", "toml": "TOML",
+                     "html": "HTML", "css": "CSS", "sql": "SQL", "md": "Markdown", "markdown": "Markdown", "diff": "Diff",
+                     "c": "C", "cpp": "C++", "csharp": "C#", "cs": "C#", "java": "Java", "kotlin": "Kotlin", "kt": "Kotlin",
+                     "text": "Text", "txt": "Text", "plaintext": "Text", "dockerfile": "Dockerfile", "powershell": "PowerShell"]
+        return names[language.lowercased()] ?? language
     }
 
     /// `syntheticFileNameForLanguageId` (pierre-icons.ts:123-169).
@@ -1571,6 +1598,7 @@ private struct Builder {
         var box = Box(top: MarkdownStyle.blockMargin, bottom: MarkdownStyle.blockMargin)
         var y: CGFloat = 0
         let rule = Themed.color(\.contrastBorder, 0.6)
+        var headerHeight = line
         for (r, row) in ([table.header] + table.rows).enumerated() {
             let padY: CGFloat = r == 0 ? 8.8 : 7.2
             var x: CGFloat = 0
@@ -1581,7 +1609,8 @@ private struct Builder {
                 let inline = cellString(runs, header: r == 0, column: c)
                 let s = inline.string, chips = inline.code
                 let displayed = s
-                let padding = MarkdownLayout.tableCellPadding(c, of: columns)
+                var padding = MarkdownLayout.tableCellPadding(c, of: columns)
+                if r == 0, c == columns - 1 { padding.total += MarkdownLayout.tableCopyReserve }
                 let cellFont = MarkdownStyle.font(size, weight: r == 0 ? .semibold : .regular)
                 let textBox = boxes.make(displayed, width: widths[c] - padding.total, lineHeight: line, strut: MarkdownStyle.font(size),
                                          chipRanges: chips, chipFont: DSFont.mono(MarkdownStyle.chipFontSize),
@@ -1600,8 +1629,12 @@ private struct Builder {
                 x += widths[c]
             }
             for (cell, cx) in cells { box.add(cell, at: CGPoint(x: cx, y: y + padY)) }
+            if r == 0 { headerHeight = rowHeight }
             y += padY * 2 + rowHeight
-            box.items.append(.box(CGRect(x: 0, y: y, width: tableWidth, height: 1), fill: rule, border: nil, radius: 0))
+            // Redesign's card rim closes the table, so its last row draws no rule against it.
+            if !(ThreadDesign.redesign && r == table.rows.count) {
+                box.items.append(.box(CGRect(x: 0, y: y, width: tableWidth, height: 1), fill: rule, border: nil, radius: 0))
+            }
             y += 1
         }
         // Negative scroll IDs keep table and code state separate while sharing the input and scrollbar paths.
@@ -1612,7 +1645,15 @@ private struct Builder {
             box.items.insert(.box(viewport, fill: RedesignTokens.Card.fill, border: RedesignTokens.Card.border, radius: RedesignTokens.Card.radius), at: 0)
         }
         y = viewport.maxY
-        // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449), Redesign too.
+        // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449). Redesign draws it
+        // inside the card at the header row's right, on the cells' edge inset, unless the table scrolls under it.
+        if ThreadDesign.redesign, tableWidth <= width {
+            let edge = RedesignTokens.Space.m, header = 8.8 * 2 + headerHeight
+            box.controls.append(.init(frame: CGRect(x: width - edge - 24, y: ((header - 24) / 2).rounded(), width: 24, height: 24), icon: .copy,
+                                      variant: .ghostMuted, action: .copyTable(table)))
+            box.height = y
+            return box
+        }
         box.controls.append(.init(frame: CGRect(x: width - 24, y: y + 2, width: 24, height: 24), icon: .copy, variant: .ghostMuted,
                                   action: .copyTable(table)))
         box.height = y + 2 + 24
@@ -1719,10 +1760,13 @@ extension MarkdownLayout {
         return (lead, lead + trail)
     }
 
+    /// Redesign puts the table's Copy in its header row, at the right, so the last header cell keeps room for it.
+    static var tableCopyReserve: CGFloat { ThreadDesign.redesign ? 24 + RedesignTokens.Space.xs : 0 }
+
     static func tableWidths(_ rows: [[NSAttributedString]], columns: Int, width: CGFloat,
                             natural: (NSAttributedString) -> CGFloat) -> (widths: [CGFloat], tableWidth: CGFloat) {
         var mins = [CGFloat](repeating: 0, count: columns), maxs = mins
-        for row in rows {
+        for (r, row) in rows.enumerated() {
             for (c, cell) in row.enumerated() where c < columns {
                 var hasFormula = false
                 var formulaWidth: CGFloat = 0
@@ -1733,7 +1777,7 @@ extension MarkdownLayout {
                     }
                 }
                 let cap: CGFloat = hasFormula ? .infinity : 384
-                let padding = tableCellPadding(c, of: columns).total
+                let padding = tableCellPadding(c, of: columns).total + (r == 0 && c == columns - 1 ? tableCopyReserve : 0)
                 // A cell that opens with inline code reserves its leading padding as the first line's indent,
                 // which the natural width leaves out.
                 let indent = cell.length > 0 ? (cell.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.firstLineHeadIndent ?? 0 : 0
