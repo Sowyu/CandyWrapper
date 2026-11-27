@@ -42,45 +42,19 @@ public struct ThemeRuntimeInput: Equatable, Sendable {
     public var contrast: Int
     public var glassOpacity: Int
     public var blueOrangeDiff = false
-    /// The Dither theme on each side and its picture (nil for the desktop picture).
+    /// Redesign on each side. Its background is Gradient, the only one since 2026-11-27 (`DitherArtView`).
     public var ditherLight = false
     public var ditherDark = false
-    public var ditherPicture: String?
-    /// How much the background dims the art behind an open thread, 0 to 90 (percent).
-    public var ditherDim = 35
-    /// "Dim behind text" for Picture and Flower, 0 to 100 (`TextDim`). Blur's position is `ditherDim`.
-    public var textDim = TextDim.standard
-    /// Redesign's "Background": the picture blurred behind the whole window instead of dithered in the main panel.
-    public var ditherBlur = false
-    /// Redesign's "Background" is Flower: no picture, a dithered lotus over a field of accent dots.
-    public var ditherFlower = false
-    /// Redesign's background is Gradient: accent cells across the top of the new-thread page, plain ground everywhere
-    /// else (the user, 2026-11-27: "lets just only do the gradient theme"). `ThemeLibrary` always sets it.
-    public var ditherGradient = false
-    /// Gradient's and Flower's motion (the "Animate background" setting, stored as `redesignGradientAnimate`).
+    /// Gradient's motion (the "Animate background" setting, stored as `redesignGradientAnimate`).
     public var ditherGradientAnimates = true
     /// Redesign's accent, a `DitherAccent` id.
     public var ditherAccent = DitherAccent.teal.id
-    /// Picture's "Ink": where its two inks come from (`DitherInk`).
-    public var ditherInk = DitherInk.auto
-    /// Picture's "Dot size" (`DitherDotSize`).
-    public var ditherDotSize = DitherDotSize.medium
-    /// "Ignore Reduce Transparency": Redesign draws as if macOS's Reduce Transparency were off.
-    public var ignoreReduceTransparency = false
     /// Redesign's "Project avatars": pixel sprites (on) or T3's letters.
     public var projectSprites = true
-    /// Redesign's "Tint from picture": its neutral surfaces lean toward `pictureTint` (`PictureTint`) under Picture
-    /// and Blur. The setting defaults on; this input stays off unless `ThemeLibrary` passes the setting, so tests and
-    /// fixtures that build an input draw the untinted palette.
-    public var ditherTintFromPicture = false
-    /// The picture's tint as an OKLab a and b, computed once per picture (`PictureTint.sync`), or nil before then.
-    public var pictureTint: SIMD2<Double>?
     /// Redesign's "Inset panel": the content is one rounded card inset from the window (`SidebarLayoutView`). The
     /// setting defaults on; this input stays off unless `ThemeLibrary` passes the setting, so tests and fixtures draw
     /// the full-bleed layout unless they ask for the card.
     public var insetPanel = false
-    /// Redesign's "Flower on a thread" (`LotusArt.ThreadLook`).
-    public var threadFlower = LotusArt.ThreadLook.large
 
     public init(light: ThemeRuntimeHalf? = nil, dark: ThemeRuntimeHalf? = nil, contrast: Int = 100, glassOpacity: Int = 80) {
         self.light = light; self.dark = dark; self.contrast = contrast; self.glassOpacity = glassOpacity
@@ -100,38 +74,14 @@ public enum ThemeRuntime {
     nonisolated(unsafe) public private(set) static var generation = 0
     /// `--glass-opacity` as a fraction (0.1...1; T3 stops at 0.4).
     nonisolated(unsafe) public private(set) static var glassOpacity: CGFloat = 0.8
-    /// Redesign's dim over the art behind an open thread (the "Background dim" setting).
-    nonisolated(unsafe) public private(set) static var ditherDim: CGFloat = 0.35
-    /// "Dim behind text" for Picture and Flower (`TextDim`).
-    nonisolated(unsafe) public private(set) static var ditherTextDim = TextDim.standard
-    /// "Flower on a thread": the lotus a thread draws (`LotusArt.ThreadLook`).
-    nonisolated(unsafe) public private(set) static var threadFlower = LotusArt.ThreadLook.large
-    /// Redesign's "Background" is Blur: the picture blurred behind the whole window (`DitherArtView`).
-    nonisolated(unsafe) public private(set) static var ditherBlur = false
-    /// Redesign's "Background" is Flower: a large dithered lotus rising from the bottom of the page over a field of
-    /// accent dots, thinned behind the reading column (`DitherArtView`).
-    nonisolated(unsafe) public private(set) static var ditherFlower = false
-    /// Redesign's background is Gradient: accent cells on the new-thread page, plain ground everywhere else (`DitherArtView`).
-    nonisolated(unsafe) public private(set) static var ditherGradient = false
-    /// The "Animate background" setting, for Gradient and Flower.
+    /// The "Animate background" setting, for Gradient (`DitherArtView`).
     nonisolated(unsafe) public private(set) static var ditherGradientAnimates = true
-    /// Picture's "Ink" setting.
-    nonisolated(unsafe) public private(set) static var ditherInk = DitherInk.auto
-    /// Picture's "Dot size" setting.
-    nonisolated(unsafe) public private(set) static var ditherDotSize = DitherDotSize.medium
     /// Redesign's accent (the "Accent color" setting). Its palette roles arrive through the Dither half's colors.
     nonisolated(unsafe) public private(set) static var ditherAccent = DitherAccent.teal
     public private(set) static var input = ThemeRuntimeInput()
 
-    /// macOS's Reduce Transparency as CandyWrapper's Redesign art follows it: off while the user's
-    /// "Ignore Reduce Transparency" is on.
-    public static func reducesTransparency(system: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) -> Bool {
-        system && !input.ignoreReduceTransparency
-    }
-
-    /// Whether the main panel shows the Dither theme's picture in each appearance (`DitherArtView`).
+    /// Whether Redesign shows in each appearance, with Gradient in its main panel (`DitherArtView`).
     public private(set) static var dither = (light: false, dark: false)
-    public private(set) static var ditherPicture: URL?
     public nonisolated static func isDither(dark: Bool) -> Bool { dark ? ditherFlags.dark : ditherFlags.light }
     nonisolated(unsafe) private static var ditherFlags = (light: false, dark: false)
     /// This app's name where copy means the client: CandyWrapper under Redesign. The default themes keep T3's wording,
@@ -153,11 +103,7 @@ public enum ThemeRuntime {
         input = next
         var changed = false
         if next.light != old.light || next.dark != old.dark || next.contrast != old.contrast || next.blueOrangeDiff != old.blueOrangeDiff
-            || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark
-            || (next.ditherDim != old.ditherDim && (next.ditherLight || next.ditherDark))
-            || ((next.ditherBlur != old.ditherBlur || next.ditherFlower != old.ditherFlower || next.ditherGradient != old.ditherGradient
-                 || next.ditherTintFromPicture != old.ditherTintFromPicture || next.pictureTint != old.pictureTint)
-                && (next.ditherLight || next.ditherDark)) {
+            || next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark {
             let resolved = resolve(next)
             if !resolved.isSame(as: palettes) {
                 palettes = resolved
@@ -168,49 +114,21 @@ public enum ThemeRuntime {
             glassOpacity = CGFloat(min(max(next.glassOpacity, 10), 100)) / 100
             changed = true
         }
-        if next.ditherDim != old.ditherDim {
-            ditherDim = CGFloat(min(max(next.ditherDim, 0), 90)) / 100
-            changed = true
-        }
-        if next.ditherBlur != old.ditherBlur {
-            ditherBlur = next.ditherBlur
-            changed = true
-        }
-        if next.ditherGradientAnimates != old.ditherGradientAnimates || next.ditherFlower != old.ditherFlower
-            || next.ditherGradient != old.ditherGradient {
-            ditherFlower = next.ditherFlower
-            ditherGradient = next.ditherGradient
+        if next.ditherGradientAnimates != old.ditherGradientAnimates {
             ditherGradientAnimates = next.ditherGradientAnimates
-            changed = true
-        }
-        if next.ditherInk != old.ditherInk {
-            ditherInk = next.ditherInk
-            changed = true
-        }
-        if next.ditherDotSize != old.ditherDotSize {
-            ditherDotSize = next.ditherDotSize
             changed = true
         }
         if next.ditherAccent != old.ditherAccent {
             ditherAccent = DitherAccent.named(next.ditherAccent)
             changed = true
         }
-        if next.ignoreReduceTransparency != old.ignoreReduceTransparency { changed = true }
         if next.projectSprites != old.projectSprites { spritesOn = next.projectSprites; changed = true }
         if next.insetPanel != old.insetPanel { insetOn = next.insetPanel; changed = true }
-        if next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark || next.ditherPicture != old.ditherPicture {
+        if next.ditherLight != old.ditherLight || next.ditherDark != old.ditherDark {
             dither = (next.ditherLight, next.ditherDark)
             ditherFlags = dither
-            ditherPicture = next.ditherPicture.map { URL(filePath: $0) }
             if next.ditherLight || next.ditherDark { SmoothCorners.install() }
             changed = true
-        }
-        // "Dim behind text" changes only the art, which rebuilds its column mask or cap on the notification, so a drag
-        // never walks the view tree. So does "Flower on a thread": the art places and renders the other look.
-        if next.textDim != old.textDim || next.threadFlower != old.threadFlower {
-            ditherTextDim = min(max(next.textDim, 0), 100)
-            threadFlower = next.threadFlower
-            if !changed { NotificationCenter.default.post(name: didChange, object: nil); return }
         }
         guard changed else { return }
         generation += 1
@@ -218,14 +136,6 @@ public enum ThemeRuntime {
             if let view = window.contentView?.superview ?? window.contentView { refresh(view) }
         }
         NotificationCenter.default.post(name: didChange, object: nil)
-    }
-
-    /// The tint of the picture the art shows, from `PictureTint.sync`. Keeps every other input.
-    public static func setPictureTint(_ tint: SIMD2<Double>?) {
-        guard tint != input.pictureTint else { return }
-        var next = input
-        next.pictureTint = tint
-        apply(next)
     }
 
     /// Tells every view in the tree its colors changed, the same way AppKit tells them about light and dark.
@@ -286,8 +196,6 @@ public enum ThemeRuntime {
                 }
             })
         }
-        // The main panel's backgrounds, which Blur's scrim lays over the picture behind the sidebar too.
-        let grounds = (light: (light?.0 ?? Tokens.light).background, dark: (dark?.0 ?? Tokens.dark).background)
         func redesign(_ palette: Palette, dark: Bool, sidebar: Bool) -> Palette {
             // Redesign light: the sidebar's menu icons, which T3 mixes toward the sidebar, take the muted icon color
             // so they keep 3:1, and success takes `capyLightSuccess`. The diff counts ("+59 −1" in the header pill,
@@ -311,57 +219,19 @@ public enum ThemeRuntime {
                 let members = palette.members, icon = palette.iconMuted
                 palette = Palette(members: { Palette.memberNames[$0] == "--sidebar-icon-color" ? icon : members[$0] })
             }
-            // Blur: the sidebar sits on the picture too, so its muted text keeps 4.5:1 over the brightest (dark) or
-            // darkest (light) blurred pixel, which is never past the dots' reach.
-            if sidebar, input.ditherBlur, dark ? input.ditherDark : input.ditherLight {
-                // The scrim over the picture is the main panel's background, also behind the sidebar.
-                let ground = dark ? grounds.dark : grounds.light
-                let worst = WindowGlass.linear(DitherArt.worstBackground(ground, dark: dark,
-                                                                         dim: Double(min(max(input.ditherDim, 0), 90)) / 100, veiled: false))
-                let members = palette.members
-                return Palette(members: { i in
-                    let c = members[i]
-                    guard DitherArt.readableSidebarMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
-                    return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
-                })
-            }
-            // Dither: the main panel's lines become white overlays over its art; its cards, bubbles and popovers stay
-            // opaque, as do the sidebar and the panel's own background.
-            // Its muted text keeps 4.5:1 over the brightest dot behind the chat column, in any theme's colors.
-            // Gradient: a thread and every page but the new thread sit on plain ground, and the new thread's cells fade
-            // out well above its text, so the theme's own text colors hold their floors (redesign-contrast-2026-11-27).
-            if !sidebar, input.ditherGradient, dark ? input.ditherDark : input.ditherLight {
-                return WindowGlass.frosted(palette, dark: dark)
-            }
+            // The main panel's lines become white overlays (dark) or black ones (light); its cards, bubbles and popovers
+            // stay opaque, as do the sidebar and the panel's own background. Text keeps the theme's colors: a thread and
+            // every page but the new thread sit on plain ground, and the new thread's cells fade out well above its
+            // text, so they hold their floors (redesign-contrast-2026-11-27).
             if !sidebar, dark ? input.ditherDark : input.ditherLight {
-                // Picture lays no dim, so its muted text keeps the colors of the default 35%; "Background dim"
-                // changes nothing there. Its render holds the text's floor behind the column (`PictureInk.textBound`).
-                // Flower counts as Picture here: it does sit behind a thread's text, but a still mask thins and dims it
-                // behind the reading column so body text keeps 12:1 and muted 6:1 in dark, 4.5:1 in light
-                // (`LotusArt.columnCap`, `LotusArt.columnMask`).
-                let picture = !input.ditherBlur
-                let worst = WindowGlass.linear(DitherArt.worstBackground(palette.background, dark: dark,
-                                                                         dim: picture ? DitherArt.defaultDim : Double(min(max(input.ditherDim, 0), 90)) / 100))
-                let members = palette.members
-                let readable = Palette(members: { i in
-                    let c = members[i]
-                    guard DitherArt.readableMembers.contains(Palette.memberNames[i]), c.srgb.w >= 1 else { return c }
-                    return WindowGlass.readable(c, over: worst, ratio: 4.6, dark: dark)
-                })
-                return WindowGlass.frosted(readable, dark: dark)
+                return WindowGlass.frosted(palette, dark: dark)
             }
             return palette
         }
-        // Redesign under Picture or Blur: the neutral surfaces lean toward the picture's color. Flower has no picture.
-        func tinted(_ palette: Palette, dark: Bool) -> Palette {
-            guard let tint = input.pictureTint, input.ditherTintFromPicture, !input.ditherFlower, !input.ditherGradient,
-                  dark ? input.ditherDark : input.ditherLight else { return palette }
-            return PictureTint.apply(tint, to: palette)
-        }
-        return ThemePalettes(light: tinted(redesign(diff(light?.0 ?? Tokens.light, dark: false), dark: false, sidebar: false), dark: false),
-                             dark: tinted(redesign(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true, sidebar: false), dark: true),
-                             sidebarLight: tinted(redesign(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false, sidebar: true), dark: false),
-                             sidebarDark: tinted(redesign(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true, sidebar: true), dark: true))
+        return ThemePalettes(light: redesign(diff(light?.0 ?? Tokens.light, dark: false), dark: false, sidebar: false),
+                             dark: redesign(diff(dark?.0 ?? Tokens.dark, dark: true), dark: true, sidebar: false),
+                             sidebarLight: redesign(diff(light?.1 ?? Tokens.sidebarLight, dark: false), dark: false, sidebar: true),
+                             sidebarDark: redesign(diff(dark?.1 ?? Tokens.sidebarDark, dark: true), dark: true, sidebar: true))
     }
 
     private nonisolated static let parsedStandard = ThemeExpressions.standard.map { $0.map(parse) }
@@ -413,38 +283,3 @@ public extension ThemeCSSColor {
 public protocol ThemeRedrawingLayer: CALayer {}
 extension BoxDecorationLayer: ThemeRedrawingLayer {}
 extension PopupShadowLayer: ThemeRedrawingLayer {}
-
-/// The size of Redesign's Picture dots (the user, 2026-11-21, on 3pt dots on a 2x laptop: "i feel like the pixels
-/// might be a bit big"). Each lands on whole device pixels: Fine is 3 pixels at 2x and rounds up to 2pt at 1x, where
-/// 1.5pt would fall between pixels.
-public enum DitherDotSize: String, Hashable, Sendable, CaseIterable {
-    case fine, medium, coarse
-
-    /// The cell in points on a screen of `scale` pixels a point.
-    public func points(scale: CGFloat) -> CGFloat {
-        switch self {
-        case .fine: scale >= 2 ? 1.5 : 2
-        case .medium: 2
-        case .coarse: 3
-        }
-    }
-}
-
-/// Where Redesign's Picture takes its two inks: the picture's own hue (Auto), the accent, or a color the user picked,
-/// which becomes the light ink (`PictureInk.inks(light:)`).
-public enum DitherInk: Hashable, Sendable {
-    case auto, accent
-    case custom(SIMD3<Double>)
-
-    /// From the client settings `redesignInk` and `redesignInkColor` (#rrggbb). A Custom with no readable color is Auto.
-    public init(mode: String, color: String) {
-        switch mode {
-        case "accent": self = .accent
-        case "custom":
-            let hex = color.hasPrefix("#") ? String(color.dropFirst()) : color
-            guard hex.count == 6, let v = Int(hex, radix: 16) else { self = .auto; return }
-            self = .custom(SIMD3(Double((v >> 16) & 255), Double((v >> 8) & 255), Double(v & 255)) / 255)
-        default: self = .auto
-        }
-    }
-}

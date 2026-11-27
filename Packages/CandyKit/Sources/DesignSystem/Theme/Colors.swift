@@ -120,8 +120,8 @@ private final class ThemedColorCache: @unchecked Sendable {
         let key = isDark ? dark : light
         var alpha = isDark ? darkAlpha : lightAlpha
         // Redesign: T3's faint muted text (`text-muted-foreground/70`, a branch at `/40`) reads at full strength, since
-        // its muted grays already sit at the 4.5:1 floor over its art (`DitherArt.worstBackground`): light's everywhere,
-        // dark's muted text in the main panel.
+        // its muted grays are already set at the 4.5:1 floor (redesign-contrast-2026-11-27): light's everywhere, dark's
+        // muted text in the main panel.
         if alpha >= 0.35, alpha < 1, !isDark, ThemeRuntime.isDither(dark: false),
            WindowGlass.frostFullStrength.contains(key) { alpha = 1 }
         if alpha >= 0.35, alpha < 1, isDark, !sidebar, ThemeRuntime.isDither(dark: true), WindowGlass.ditherFullStrength.contains(key) { alpha = 1 }

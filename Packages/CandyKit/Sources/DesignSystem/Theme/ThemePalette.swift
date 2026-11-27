@@ -49,8 +49,8 @@ public struct ThemeDefinition: Equatable, Sendable {
 
     public var isBuiltIn: Bool { Self.builtIns.contains { $0.id == id } }
 
-    /// CandyWrapper's own theme, not in T3: the stock look with a dithered picture the user chose (the desktop picture
-    /// until they do) in the main panel (`DitherArtView`). Every other surface stays solid.
+    /// CandyWrapper's own theme, not in T3: Capy's palette, with Gradient's accent cells across the top of the new-thread
+    /// page (`DitherArtView`). Every surface is solid.
     public static let dither = ThemeDefinition(id: "candywrapper-dither", label: "Redesign (Experimental)", appearance: .light,
                                                colors: capyLightColors, variants: [.dark: capyDarkColors])
 
@@ -79,8 +79,7 @@ public struct ThemeDefinition: Equatable, Sendable {
     /// lit surface, as in Linear's light theme; cards, menus, the composer and inputs real white on it, separated by
     /// the 0.08 black rim and the light shadow; dividers a quiet #e3e3e0, since they carry no meaning; control
     /// outlines (`input`) #8a8a87 at 3:1 on the ground. Text #171717 is 16.9:1 on the ground. Muted text,
-    /// placeholders and labels stay at 4.5:1 over the darkest dot the light scrim allows (`DitherArt.lightScrim`),
-    /// 6.3:1 on the ground. The accent is dark enough for white labels (`DitherAccent.lightAccent`).
+    /// placeholders and labels are 6.3:1 on the ground. The accent is dark enough for white labels (`DitherAccent.lightAccent`).
     static let capyLightColors: [ThemeColorRole: String] = CandyTheme3669.lightColors.merging([
         .canvas: "#f8f8f7", .chrome: "#f1f1ef", .toolbar: "#f1f1ef", .toolbarBorder: "#e3e3e0", .toolbarControl: "#ffffff",
         .toolbarControlHover: "#0000000a", .surface: "#ffffff", .surfaceRaised: "#ffffff", .surfaceOverlay: "#ffffff",

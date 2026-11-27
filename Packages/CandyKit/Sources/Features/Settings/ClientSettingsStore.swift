@@ -24,7 +24,7 @@ public final class ClientSettingsStore {
         self.ephemeral = ephemeral
         var json = ephemeral ? nil : defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONValue(parsing: $0) }
         #if DEBUG
-        // `CANDY_CLIENT_SETTINGS='{"redesignBackground":"blur"}'` seeds a test app's in-memory settings, for snapshots.
+        // `CANDY_CLIENT_SETTINGS='{"redesignGradientAnimate":false}'` seeds a test app's in-memory settings, for snapshots.
         if ephemeral, let seed = ProcessInfo.processInfo.environment["CANDY_CLIENT_SETTINGS"].flatMap({ try? JSONValue(parsing: Data($0.utf8)) }) {
             json = seed
         }

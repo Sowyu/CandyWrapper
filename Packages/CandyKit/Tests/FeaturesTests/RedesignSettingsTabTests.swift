@@ -79,13 +79,12 @@ import T3Protocol
         let old = ClientSettings(decoding: .object(["glassOpacity": .number(60)]))
         #expect(!old.bool("redesignStackedPicker"))
         #expect(!old.bool("redesignPickerAccount"))
-        // Every stored background draws Gradient, and only "Animate background" reaches the runtime from it.
-        for stored in ["dither", "blur", "gradient", "flower"] {
-            let client = ClientSettings(decoding: .object(["redesignBackground": .string(stored), "redesignGradientAnimate": .bool(false)]))
-            let input = library().runtimeInput(client: client).0
-            #expect(input.ditherGradient && !input.ditherBlur && !input.ditherFlower, "\(stored)")
-            #expect(!input.ditherGradientAnimates, "\(stored)")
+        // Every stored background draws Gradient: only "Animate background" reaches the runtime, the same for each.
+        let inputs = ["dither", "blur", "gradient", "flower"].map { stored in
+            library().runtimeInput(client: ClientSettings(decoding: .object(["redesignBackground": .string(stored),
+                                                                              "redesignGradientAnimate": .bool(false)]))).0
         }
+        #expect(inputs.allSatisfy { $0 == inputs[0] && !$0.ditherGradientAnimates })
         #expect(library().runtimeInput(client: old).0.ditherGradientAnimates)
     }
 

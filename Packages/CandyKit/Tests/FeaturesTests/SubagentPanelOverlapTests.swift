@@ -27,8 +27,6 @@ struct SubagentPanelOverlapTests {
             light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
             dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!), glassOpacity: 10)
         input.ditherLight = true; input.ditherDark = true
-        input.ditherDim = 20
-        input.ditherPicture = nil
         ThemeRuntime.apply(input)
         #expect(ThemeRuntime.isDither(dark: true))
 

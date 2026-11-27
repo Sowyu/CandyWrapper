@@ -30,7 +30,7 @@ struct RedesignBaselineTests {
                 light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
                 dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
             // Gradient held at its first frame, as Animate background off draws it.
-            input.ditherLight = true; input.ditherDark = true; input.ditherGradient = true; input.ditherGradientAnimates = false
+            input.ditherLight = true; input.ditherDark = true; input.ditherGradientAnimates = false
             ThemeRuntime.apply(input); FontRuntime.apply(.init())
             Motion.reducedOverride = true; SettingsPanelMotion.durationMs = 0
             NSApplication.shared.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)

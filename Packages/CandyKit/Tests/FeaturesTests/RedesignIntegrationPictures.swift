@@ -24,7 +24,6 @@ import T3Protocol
                 light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
                 dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
             input.ditherLight = true; input.ditherDark = true
-            input.ditherPicture = ComposerAttachmentsFidelityTests.fixture.path
             ThemeRuntime.apply(input)
             NSApplication.shared.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             func save(_ name: String, _ view: NSView, _ size: NSSize) throws {

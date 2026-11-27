@@ -7,7 +7,7 @@ import T3Protocol
 /// Settings > Redesign > Reading width, and the rows' fade above the composer group. Synchronous on the main actor, so
 /// the global theme and the shared settings are set and put back between other suites' tests.
 @MainActor @Suite struct ReadingWidthTests {
-    private func withRedesign(dark: Bool = true, flower: Bool = false, _ body: () throws -> Void) rethrows {
+    private func withRedesign(dark: Bool = true, _ body: () throws -> Void) rethrows {
         let previous = ThemeRuntime.input
         let saved = ClientSettingsStore.shared.current
         defer {
@@ -18,7 +18,7 @@ import T3Protocol
             light: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!),
             dark: ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!))
         input.ditherLight = true; input.ditherDark = true
-        input.ditherFlower = flower; input.ditherGradientAnimates = false
+        input.ditherGradientAnimates = false
         ThemeRuntime.apply(input)
         ClientSettingsStore.shared.update(["redesignReadingWidth": .number(864), "chatWidth": .string("comfortable")])
         try body()

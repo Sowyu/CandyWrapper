@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct RedesignContrastFloorTests {
     private func ratio(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> Double {
-        PictureInk.contrast(PictureInk.luminance(a), PictureInk.luminance(b))
+        OKLCH.contrast(OKLCH.luminance(a), OKLCH.luminance(b))
     }
     private func rgb(_ t: TokenColor) -> SIMD3<Double> { SIMD3(t.srgb.x, t.srgb.y, t.srgb.z) }
     private func rgb(_ hex: String) -> SIMD3<Double> { let c = DitherAccent.rgb(hex); return SIMD3(c.0, c.1, c.2) }

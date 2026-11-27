@@ -52,8 +52,8 @@ public struct DitherAccent: Equatable, Sendable {
     /// The chosen accent as Redesign draws it, resolved per appearance, for drawing outside the palette's roles.
     public static var current: NSColor { NSColor(name: nil) { Self.color(ThemeRuntime.ditherAccent.accent(dark: $0.isDark)) } }
 
-    /// Light's accent: `accent` darkened in its own hue until white on it reads at 4.6:1, which also keeps it 3:1
-    /// over the darkest art dot light allows (#d7d7d7, `DitherArt.lightScrim`) for the focus ring. Teal gives #07837a.
+    /// Light's accent: `accent` darkened in its own hue until white on it reads at 4.6:1, which also keeps it 3:1 on
+    /// the ground and on #d7d7d7 for the focus ring. Teal gives #07837a.
     static func lightAccent(_ accent: String) -> String {
         func lin(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
         func gamma(_ c: Double) -> Double { c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1 / 2.4) - 0.055 }

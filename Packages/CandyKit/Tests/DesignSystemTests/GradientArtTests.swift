@@ -17,7 +17,7 @@ struct GradientArtTests {
     private func redesign() -> ThemeRuntimeInput {
         var input = ThemeRuntimeInput(light: ThemeDefinition.dither.colors(for: .light).map { ThemeRuntimeHalf(colors: $0) },
                                       dark: ThemeDefinition.dither.colors(for: .dark).map { ThemeRuntimeHalf(colors: $0) })
-        input.ditherLight = true; input.ditherDark = true; input.ditherGradient = true
+        input.ditherLight = true; input.ditherDark = true
         return input
     }
 
@@ -75,12 +75,12 @@ struct GradientArtTests {
         DitherArtView.setEmphasis(.hero, from: page)
         defer { DitherArtView.setEmphasis(nil, from: page) }
         let request = try #require(art.requestForTesting)
-        #expect(request.url == nil && request.tint != nil)
+        #expect(request.tint.count == 3)
         #expect(request.width == Int((art.bounds.width / DitherArt.gradientUnit).rounded(.up)))
         #expect(request.frames == Int(DitherArt.gradientPeriod * DitherArt.gradientFPS))
         #expect(art.gradientFrameCountForTesting == request.frames)
         #expect(art.gradientAnimatingForTesting)
-        #expect(art.scrimAlphaForTesting == 0)
+        #expect(art.showsCellsForTesting)
 
         art.windowIsActiveOverride = false; art.syncMotion()
         #expect(!art.gradientAnimatingForTesting)
@@ -92,13 +92,13 @@ struct GradientArtTests {
         Motion.reducedOverride = false; art.syncMotion()
         #expect(art.gradientAnimatingForTesting)
 
-        // A thread takes the page: the frames go too, and the ground is plain with no scrim.
+        // A thread takes the page: the frames go too, and the ground is plain.
         for other in [DitherArtView.Emphasis.thread, .settings, .page] {
             DitherArtView.setEmphasis(other, from: page)
             #expect(!art.gradientAnimatingForTesting, "\(other)")
             #expect(art.requestForTesting == nil, "\(other)")
             #expect(art.gradientFrameCountForTesting == 0, "\(other)")
-            #expect(art.scrimAlphaForTesting == 0, "\(other)")
+            #expect(!art.showsCellsForTesting, "\(other)")
         }
         DitherArtView.setEmphasis(.hero, from: page)
         #expect(art.gradientAnimatingForTesting)

@@ -517,7 +517,6 @@ public final class ThemeLibrary {
         input.blueOrangeDiff = client.string("diffColorScheme") == "blue-orange"
         // Gradient is Redesign's one background (the user, 2026-11-27: "lets just only do the gradient theme"). A stored
         // `redesignBackground`, picture, ink, dot size, dim, tint or thread flower stays in the settings and is ignored.
-        input.ditherGradient = true
         input.ditherGradientAnimates = client.bool("redesignGradientAnimate")
         input.projectSprites = client.string("redesignProjectAvatars") != "letters"
         input.insetPanel = client.bool("redesignInsetPanel")
@@ -532,9 +531,8 @@ public final class ThemeLibrary {
         for a in ThemeAppearance.allCases {
             guard let id = owner(of: a), let d = definition(id) else { continue }
             if d.isDither {
-                // Dither wears its own palette (after Capy), with its picture in the main panel.
+                // Dither wears its own palette (after Capy), with Gradient in the main panel.
                 if a == .light { input.ditherLight = true } else { input.ditherDark = true }
-                input.ditherPicture = DitherPicture.path
                 var colors = d.colors(for: a) ?? d.colors
                 // Teal is the palette's own; another accent replaces its roles once, so every accent use follows.
                 if accent != .teal { colors.merge(accent.colors(dark: a == .dark)) { $1 } }

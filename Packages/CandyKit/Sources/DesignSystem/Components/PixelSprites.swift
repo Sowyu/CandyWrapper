@@ -99,8 +99,8 @@ public enum PixelSprites {
     nonisolated static func inks(_ h: Double, dark: Bool, grey: Bool) -> (ground: SIMD3<Double>, dots: SIMD3<Double>, sprite: SIMD3<Double>) {
         let k = grey ? 0.0 : 1.0
         return dark
-            ? (PictureInk.srgb(oklch: 0.25, 0.04 * k, h), PictureInk.srgb(oklch: 0.40, 0.09 * k, h), PictureInk.srgb(oklch: 0.88, 0.09 * k, h))
-            : (PictureInk.srgb(oklch: 0.94, 0.03 * k, h), PictureInk.srgb(oklch: 0.84, 0.07 * k, h), PictureInk.srgb(oklch: 0.42, 0.13 * k, h))
+            ? (OKLCH.srgb(oklch: 0.25, 0.04 * k, h), OKLCH.srgb(oklch: 0.40, 0.09 * k, h), OKLCH.srgb(oklch: 0.88, 0.09 * k, h))
+            : (OKLCH.srgb(oklch: 0.94, 0.03 * k, h), OKLCH.srgb(oklch: 0.84, 0.07 * k, h), OKLCH.srgb(oklch: 0.42, 0.13 * k, h))
     }
 
     /// How much of its gradient the ground's dots may cover at `points`: none below 20pt, where only a ring of part
