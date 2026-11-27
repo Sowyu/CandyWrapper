@@ -89,7 +89,27 @@ struct TerminalDrawerCardTests {
         }
     }
 
-    @Test func splitPanesMeetOnAHairlineInsideTheCard() {
+    static func descendants(of view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap(descendants) }
+
+    /// The card's top row names the active terminal at its left, so the actions sit in a header.
+    @Test func cardTitleNamesTheActiveTerminal() {
+        Motion.reducedOverride = true
+        defer { Motion.reducedOverride = nil }
+        let (panel, _, done) = makePanel(width: 1400)
+        defer { done() }
+        panel.setTerminal(open: true, height: 260)
+        panel.terminalDrawer.title = "Terminal 1"
+        for _ in 0..<2 { panel.layoutSubtreeIfNeeded() }
+        let drawer = panel.terminalDrawer
+        let label = Self.descendants(of: drawer).compactMap { $0 as? LabelView }.first { $0.text == "Terminal 1" && !$0.isHidden }
+        #expect(label != nil)
+        if let label {
+            #expect(label.frame.midY == drawer.actions.frame.midY)
+            #expect(label.frame.maxX <= drawer.actions.frame.minX)
+        }
+    }
+
+    @Test func splitPanesMeetOnAHairlineInsideTheCard() throws {
         Motion.reducedOverride = true
         defer { Motion.reducedOverride = nil }
         let (panel, _, done) = makePanel(width: 1400)
@@ -107,7 +127,14 @@ struct TerminalDrawerCardTests {
         #expect(drawer.grid.frame.maxX == drawer.list.frame.minX)
         #expect(!drawer.actions.isHidden && drawer.bounds.contains(drawer.actions.frame))
         // The action row is reserved: each pane's first line and the list start under the buttons, never beneath them.
-        #expect(drawer.actions.frame.maxY <= drawer.grid.frame.minY && drawer.actions.frame.maxY <= drawer.list.frame.minY)
+        #expect(drawer.actions.frame.maxY <= drawer.grid.frame.minY)
+        // The list runs to the card's top under the actions, and its first row starts right under them: one row's
+        // height of gap, not two (round 0's empty band above "Side by side").
+        #expect(drawer.list.frame.minY == 0 && drawer.list.frame.maxY == drawer.bounds.maxY)
+        drawer.list.layoutSubtreeIfNeeded()
+        let rows = Self.descendants(of: drawer.list).filter { $0 is TerminalListAsideView.Row }
+        let firstRow = try #require(rows.map { $0.convert($0.bounds, to: drawer).minY }.min())
+        #expect(firstRow >= drawer.actions.frame.maxY && firstRow - drawer.actions.frame.maxY <= RedesignTokens.Space.m, "\(firstRow)")
         #expect(drawer.grid.frame.minY == CardTopRow(width: drawer.bounds.width, pill: .zero, trailing: [drawer.actions.intrinsicContentSize]).height)
         let first = a.superview!.frame, second = b.superview!.frame
         #expect(first.maxX == second.minX, "panes \(first) \(second)")
