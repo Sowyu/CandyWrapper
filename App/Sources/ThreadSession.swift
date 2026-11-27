@@ -1313,7 +1313,7 @@ final class ThreadController {
             guard let self, let env = self.openThreadId?.environmentId, let shell = self.environments.session(env) else { return nil }
             let reply: JSONValue
             do {
-                // A call the server never answers would keep its turn of `AssetURLLimit` forever. Giving up sends
+                // A call the server never answers would keep its turn of `MediaFetchQueue.signing` forever. Giving up sends
                 // `Interrupt`, and the image shows "Image unavailable" like a failed one.
                 reply = try await shell.supervisor.request("assets.createUrl", payload: .object(["resource": resource]),
                                                            timeout: MarkdownImages.signingTimeout)

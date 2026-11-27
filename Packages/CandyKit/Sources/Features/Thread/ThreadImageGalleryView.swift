@@ -197,6 +197,8 @@ public final class ThreadImageGalleryView: DSView {
         reveal.isHidden = image.map { !(canReveal?($0) ?? false) } ?? true
         if gridShown { picture.set(key: nil, fallbackText: "", loader: nil) }
         if let image {
+            // The picture shown large goes ahead of the timeline's in the sign and download queues.
+            for key in [image.key] + (image.stored.map { [$0.key] } ?? []) { MediaPriority.mark(key, view: picture, visible: true) }
             picture.set(key: image.pixelKey, fallbackText: "Image unavailable",
                         loader: Self.loader(image, onHash: { [weak self] hash in self?.onHash?(image, hash) }) { [weak self] in self?.onFailed?(image) },
                         preview: ImageDecodeCache.preview(for: image.pixelKey), loadingText: "Loading…")

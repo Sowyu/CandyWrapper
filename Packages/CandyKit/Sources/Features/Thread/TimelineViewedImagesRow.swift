@@ -89,6 +89,7 @@ final class ViewedImagesRowView: TimelineRowView {
             view.layer?.borderColor = Themed.color(\.border, 0.4).cgColor(in: self)
             view.layer?.borderWidth = settled || redesign ? 0 : 1
             view.set(key: viewKey, fallbackText: "", loader: isPending ? Self.held : image.loader)
+            MediaPriority.mark(image.key, view: view, visible: true)
             view.setAccessibilityLabel(isPending ? "Loading image" : "Preview " + image.alt)
         }
         for (key, view) in imageViews where !kept.contains(key) {
@@ -170,6 +171,7 @@ final class ViewedImagesRowView: TimelineRowView {
     }
 
     private func release() {
+        for (key, view) in imageViews where !key.hasPrefix("pending:") { MediaPriority.mark(key, view: view, visible: false) }
         imageViews.values.forEach { $0.removeFromSuperview() }
         imageViews = [:]
     }

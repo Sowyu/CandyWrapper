@@ -102,7 +102,17 @@ final class UserMediaBlockView: DSView {
         model?.onExpandImage?(items, index)
     }
 
-    func setMediaVisible(_ visible: Bool) { videoViews.forEach { $0.setVisible(visible) } }
+    private var mediaShown = true
+    func setMediaVisible(_ visible: Bool) {
+        mediaShown = visible
+        videoViews.forEach { $0.setVisible(visible) }
+        rankImages()
+    }
+
+    /// Tells the image queues which pictures are on screen, by attachment id as the app's loader asks.
+    private func rankImages() {
+        for cell in cells { if let key = cell.key { MediaPriority.mark(key, view: cell, visible: mediaShown) } }
+    }
 
     /// The block's size in a lane that leaves it `maxWidth`.
     func size(maxWidth: CGFloat) -> CGSize {
@@ -207,6 +217,7 @@ final class UserMediaBlockView: DSView {
                 view.frame = NSRect(x: 0, y: cell.bounds.height - 60, width: cell.bounds.width, height: 60)
             }
         }
+        rankImages()
     }
 
     /// Rounds `view` to the block's shape. A joined corner needs a mask, which `render(in:)` snapshots don't draw;
