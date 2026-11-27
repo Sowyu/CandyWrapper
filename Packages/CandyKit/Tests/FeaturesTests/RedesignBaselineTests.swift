@@ -556,9 +556,15 @@ struct RedesignBaselineTests {
                 let blur = ThemeRuntime.ditherBlur, unit = blur ? DitherArt.blurPixel : ThemeRuntime.ditherDotSize.points(scale: 2)
                 layer.magnificationFilter = blur ? .linear : .nearest
                 layer.frame = art.bounds
+                // The page's shape, text colors and "Dim behind text" as the app passes them, so a thread's baseline
+                // shows the reading column's darkening the app shows.
+                let fg = palette.foreground.srgb, muted = palette.mutedForeground.srgb
                 layer.contents = DitherArt.render(.init(url: ComposerAttachmentsFidelityTests.fixture,
                     width: Int(ceil(art.bounds.width / unit)), height: Int(ceil(art.bounds.height / unit)),
-                    background: [bg.x, bg.y, bg.z], scale: 2, blur: blur, dark: dark, dot: unit))
+                    background: [bg.x, bg.y, bg.z], scale: 2, blur: blur, dark: dark,
+                    shape: blur ? .plain : art.pictureShape(cell: unit),
+                    text: blur ? [] : [fg.x, fg.y, fg.z, muted.x, muted.y, muted.z],
+                    textDim: ThemeRuntime.ditherTextDim, dot: unit))
             }
             if let scroller = v as? ScrollAreaScroller { scroller.isHidden = true }
             v.subviews.forEach(display)

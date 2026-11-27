@@ -42,9 +42,10 @@ public enum WindowGlass {
 
     /// Light fills and lines that T3 paints opaque, a step off the background. In light, each becomes the black
     /// overlay that paints the same color over the stock background, so it tints whatever sits on the art.
-    /// Dark already paints these as white overlays.
+    /// Dark already paints these as white overlays. The user bubble (`--message-surface`) and inline code (`--muted`)
+    /// stay opaque: as overlays the picture's dots showed through their text (round-0 review, W7 and T1).
     nonisolated static let tintMembers: Set<String> = [
-        "--accent", "--muted", "--secondary", "--message-surface", "--sidebar-control-surface", "--toolbar-control-hover",
+        "--accent", "--secondary", "--sidebar-control-surface", "--toolbar-control-hover",
         "--sidebar-row-hover", "--border", "--contrast-border", "--sidebar-border", "--contrast-sidebar-border",
         "--input", "--contrast-input", "--toolbar-border", "--contrast-toolbar-border",
     ]
