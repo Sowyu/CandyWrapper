@@ -61,7 +61,7 @@ public final class SnapShotSettingsView: ScopedSettingsPage {
             let selection = self.client.bool("snapShotPlaySound") ? self.client.string("snapShotSound") : "off"
             sound?.selectedIndex = sounds.firstIndex { $0.0 == selection }
         }
-        let s = section("snap-shot", "SnapShots", [enabledRow, text, shortcut, soundRow, flash, animations])
+        let s = section("snap-shot", RedesignCopy.mac("SnapShots", "Snapshots"), [enabledRow, text, shortcut, soundRow, flash, animations])
         binder.add { [weak s] in s?.group.rows = s?.group.rows ?? [] }
         return s
     }

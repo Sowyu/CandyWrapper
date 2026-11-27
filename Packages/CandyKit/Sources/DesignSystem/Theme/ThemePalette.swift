@@ -91,8 +91,8 @@ public struct ThemeDefinition: Equatable, Sendable {
         .messageSurface: "#ededeb", .messageForeground: "#171717", .messageAction: "#07837a",
         .messageActionForeground: "#ffffff", .messageActionHover: "#06736c", .codeBackground: "#f3f3f1",
         .sidebar: "#f1f1ef", .sidebarForeground: "#171717", .sidebarMutedForeground: "#5c5c5a",
-        .sidebarControlSurface: "#ffffff", .sidebarRowHover: "#0000000a", .sidebarRowActive: "#00000012",
-        .sidebarRowSelected: "#00000012", .sidebarBorder: "#f1f1ef", .warningForeground: "#983d00", .errorForeground: "#a80005",
+        .sidebarControlSurface: "#ffffff", .sidebarRowHover: "#0000000a", .sidebarRowActive: "#0000001f",
+        .sidebarRowSelected: "#0000001f", .sidebarBorder: "#f1f1ef", .warningForeground: "#983d00", .errorForeground: "#a80005",
         .update: "#07837a", .updateForeground: "#07837a", .updateSurface: "#e1f0ef", .terminalBackground: "#ffffff",
     ]) { $1 }
 

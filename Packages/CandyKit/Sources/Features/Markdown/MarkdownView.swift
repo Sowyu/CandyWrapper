@@ -1567,6 +1567,18 @@ public final class MarkdownView: DSView {
                     ctx.fillPath()
                     ctx.restoreGState()
                 }
+                if inlineFormula, let thumb = Self.codeThumb(viewport, width, codeOffset(index, viewport, width)) {
+                    // A 2pt track and thumb just under a too-wide inline formula: the edge fade alone read as a hard
+                    // clip (T8, Sol and Gemini, round 2). It sits in the line gap, so nothing moves.
+                    let track = CGRect(x: viewport.minX, y: viewport.maxY + 1, width: viewport.width, height: 2)
+                    ctx.setFillColor(Themed.color(\.contrastBorder, 0.4).cgColor(in: self))
+                    ctx.addPath(CGPath(roundedRect: track, cornerWidth: 1, cornerHeight: 1, transform: nil))
+                    ctx.fillPath()
+                    ctx.setFillColor(Themed.color(\.mutedForeground).cgColor(in: self))
+                    let bar = CGRect(x: thumb.minX, y: track.minY, width: thumb.width, height: 2)
+                    ctx.addPath(CGPath(roundedRect: bar, cornerWidth: 1, cornerHeight: 1, transform: nil))
+                    ctx.fillPath()
+                }
                 ctx.clip(to: viewport)
                 ctx.translateBy(x: -codeOffset(index, viewport, width), y: 0)
             case .endClip:

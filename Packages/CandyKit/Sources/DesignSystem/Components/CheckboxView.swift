@@ -14,7 +14,7 @@ public class ChoiceView: ControlView {
     public final var onChange: (@MainActor (Value) -> Void)?
 
     let round: Bool
-    private let decoration = BoxDecorationLayer()
+    let decoration = BoxDecorationLayer()
     private let mark = CAShapeLayer()
     private let focusDecoration = BoxDecorationLayer()
 
@@ -89,6 +89,11 @@ public class ChoiceView: ControlView {
             box.border = isInvalid
                 ? Themed.color(\.destructive, state.focusVisible ? 0.64 : 0.36)
                 : Themed.color(\.contrastInput)
+            if !isInvalid, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+                // An empty box or radio is all edge, so Redesign gives it the off switch's 3:1 control edge: dark's
+                // input color read 1.3:1 and the question's radios looked disabled (C6, round 2).
+                box.border = effectiveAppearance.isDark ? RedesignTokens.Control.offTrackDark : RedesignTokens.Control.offTrackLight
+            }
             box.fill = Themed.color(light: \.background, 1, dark: \.contrastInput, 0.32)
             box.backgroundClip = .paddingInLight
             if state.enabled && !isInvalid {

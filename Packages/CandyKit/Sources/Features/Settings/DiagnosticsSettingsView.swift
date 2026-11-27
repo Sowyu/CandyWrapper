@@ -256,7 +256,7 @@ public final class DiagnosticsSettingsView: ScopedSettingsPage {
                             "Total resident memory across live child processes of the current server process. The desktop shell and other parent processes are not included.", .normal),
                            ("Server PID", n(p, "serverPid").map { "\(Int($0))" } ?? "...", nil, .normal)]),
         ] + errorRows([optionValue(p?["error"])?["message"]?.stringValue, errors["process"]]) + [
-            DiagnosticsTableView(headers: ["Name", "CPU", "Memory", "Command", "PID", "Type", "Kill"],
+            DiagnosticsTableView(headers: ["Name", "CPU", "Memory", "Command", "PID", "Type", RedesignCopy.mac("Kill", "Signal")],
                                  // Redesign: Memory and the INT and KILL pair get room for their whole header and buttons.
                                  widths: ThemeRuntime.isDither(dark: NSApp.effectiveAppearance.isDark)
                                     ? [0.20, 0.08, 0.12, 0.28, 0.08, 0.10, 0.14] : [0.24, 0.08, 0.10, 0.33, 0.08, 0.11, 0.06],
@@ -615,11 +615,13 @@ final class DiagnosticsTableView: DSView, SettingsGroupRow {
             var views: [NSView] = []
             for c in row {
                 if let signals = c.signals {
-                    let int = ButtonView("INT", variant: .ghostMuted, size: .micro)
+                    // Redesign draws the two signals as buttons with an edge: ghost, they read as plain text (G5, round 2).
+                    let outlined = RedesignCopy.isOn
+                    let int = ButtonView("INT", variant: outlined ? .outline : .ghostMuted, size: .micro)
                     int.setAccessibilityLabel("Send SIGINT")
                     _ = TooltipController.attach(to: int, text: "Send SIGINT")
                     int.action = { signals("SIGINT") }
-                    let kill = ButtonView("KILL", variant: .ghostDestructive, size: .micro)
+                    let kill = ButtonView("KILL", variant: outlined ? .destructiveOutline : .ghostDestructive, size: .micro)
                     kill.setAccessibilityLabel("Send SIGKILL")
                     _ = TooltipController.attach(to: kill, text: "Send SIGKILL")
                     kill.action = { signals("SIGKILL") }

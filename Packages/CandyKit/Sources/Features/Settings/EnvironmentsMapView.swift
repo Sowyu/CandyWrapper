@@ -29,7 +29,8 @@ public enum EnvironmentsMapText {
     public static func routeKind(_ kind: String) -> String {
         switch kind {
         case "relay": "T3 Connect"
-        case "loopback": "This device"
+        // Redesign: the route beside the "This device" node said "This device" again (G5, round 2).
+        case "loopback": RedesignCopy.word("This device", "Local")
         case "lan": "LAN"
         case "tailnet": "Tailscale"
         case "vpn": "VPN"
@@ -70,7 +71,8 @@ public enum EnvironmentsMapText {
         switch node.outgoing {
         case "loading": return "Loading links…"
         case "error": return "Links could not be loaded"
-        case "off": return "Linked environments is off"
+        // Redesign: short enough for the node's line, which cut T3's words to "Linked environments i..." (G5, round 2).
+        case "off": return RedesignCopy.word("Linked environments is off", "Links off")
         case "unknown": return "Links not readable from here"
         default: return linkCount == 0 ? "No links out" : linkCount == 1 ? "1 link out" : "\(linkCount) links out"
         }

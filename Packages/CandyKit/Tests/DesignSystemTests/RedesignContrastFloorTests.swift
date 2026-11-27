@@ -81,6 +81,19 @@ struct RedesignContrastFloorTests {
         }
     }
 
+    /// A file link in the accent reads at 4.5:1 on the ground, a card and the chip's muted fill, for every accent.
+    @Test func accentTextReadsOnItsChips() {
+        let palettes = ThemeRuntime.resolve(redesign())
+        for accent in DitherAccent.all {
+            for dark in [true, false] {
+                let p = dark ? palettes.dark : palettes.light
+                for ground in [p.background, p.card, p.muted] {
+                    #expect(ratio(rgb(accent.text(dark: dark)), rgb(ground)) >= 4.5, "\(accent.id) \(dark ? "dark" : "light") on \(ground)")
+                }
+            }
+        }
+    }
+
     @Test func destructiveFillKeepsWhiteAtFourAndAHalf() {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
@@ -89,6 +102,26 @@ struct RedesignContrastFloorTests {
             let fill = RedesignTokens.Destructive.fill(dark: dark).usingColorSpace(.sRGB)!
             let c = SIMD3(Double(fill.redComponent), Double(fill.greenComponent), Double(fill.blueComponent))
             #expect(ratio(c, SIMD3(1, 1, 1)) >= 4.5, "\(dark ? "dark" : "light") destructive \(c)")
+        }
+    }
+
+    /// An empty radio's edge keeps 3:1 on the card it sits on (C6, round 2).
+    @Test func emptyRadioEdgeReads() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        ThemeRuntime.apply(redesign())
+        for dark in [true, false] {
+            let radio = RadioView(checked: false)
+            radio.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            radio.restyle()
+            let border = try #require(radio.decoration.boxStyle.border)
+            var c = SIMD3<Double>(0, 0, 0)
+            radio.effectiveAppearance.performAsCurrentDrawingAppearance {
+                let s = border.usingColorSpace(.sRGB)!
+                c = SIMD3(Double(s.redComponent), Double(s.greenComponent), Double(s.blueComponent))
+            }
+            let card = rgb(dark ? ThemeRuntime.palettes.dark.card : ThemeRuntime.palettes.light.card)
+            #expect(ratio(c, card) >= 3, "\(dark ? "dark" : "light") radio edge \(c) on \(card)")
         }
     }
 

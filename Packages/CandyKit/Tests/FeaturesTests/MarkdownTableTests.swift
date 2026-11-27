@@ -83,14 +83,31 @@ struct MarkdownTableTests {
                 for box in boxes where box.text.hasPrefix("4 (") || box.text.hasPrefix("3 (") || box.text.hasPrefix("test_") {
                     #expect(box.lineCount == 1, "\(box.text) wraps at \(width)")
                 }
-                let viewport = try #require(layout.items.compactMap { item -> CGRect? in
-                    if case .scroll(let id, let viewport, _) = item, id < 0 { return viewport }
+                let (viewport, content) = try #require(layout.items.compactMap { item -> (CGRect, CGFloat)? in
+                    if case .scroll(let id, let viewport, let content) = item, id < 0 { return (viewport, content) }
                     return nil
                 }.first)
                 let copy = try #require(layout.controls.first { if case .copyTable = $0.action { true } else { false } })
-                #expect(viewport.contains(copy.frame), "Copy outside the card at \(width)")
+                #expect(copy.frame.maxX <= width && copy.frame.minY >= viewport.minY, "Copy outside the card at \(width)")
                 #expect(copy.frame.maxY < viewport.minY + 48, "Copy below the header row at \(width)")
+                // A table that scrolls stops short of Copy's column (T4, round 2).
+                if content > viewport.width { #expect(copy.frame.minX >= viewport.maxX, "Copy over scrolling cells at \(width)") }
             }
+        } }
+    }
+
+    /// A table that scrolls keeps its columns' natural widths, so a prose cell out of view doesn't wrap and leave its
+    /// row taller than the others (T4, Gemini, round 2).
+    @Test func aScrollingTableKeepsItsRowsEven() throws {
+        try ThreadDesign.$layoutUses3814.withValue(nil) { try withTheme(SmallFixes3Pictures.redesign(dark: true)) {
+            let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 360, height: 240))
+            view.messageID = "table-even-rows"
+            view.setMarkdown("| Test | Cases | Result | Time | Notes |\n|---|---|---|---|---|\n"
+                + "| test_c_to_f | 4 (0, 100, -40, 37) | ok | 0.001s | converts and checks the round trip |\n"
+                + "| test_kmh_to_mph | 3 (0, 10, 100) | ok | 0.002s | rounds to two places |")
+            let layout = view.layout(forWidth: 360)
+            let boxes = layout.items.compactMap { item -> MarkdownTextBox? in if case .text(let box, _) = item { box } else { nil } }
+            #expect(boxes.allSatisfy { $0.lineCount == 1 }, "\(boxes.filter { $0.lineCount > 1 }.map(\.text))")
         } }
     }
 

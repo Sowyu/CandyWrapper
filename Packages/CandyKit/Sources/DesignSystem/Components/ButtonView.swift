@@ -318,6 +318,12 @@ public final class ButtonView: ControlView {
                 look.icon = look.text
             }
         }
+        if variant == .outline || variant == .destructiveOutline, title?.isEmpty == false, !effectiveAppearance.isDark,
+           ThemeRuntime.isDither(dark: false), !state.hoverOrPressed {
+            // Light's control outline (#8a8a87, 3.4:1) drew every labelled secondary button as a heavy box (X2 and O4,
+            // round 2). Its label names it, so the edge steps back to `strongRim`; icon-only buttons keep 3:1.
+            look.box.border = Themed.black(RedesignTokens.Surface.strongRim)
+        }
         if variant == .glass, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             // Redesign draws no blur and ignores Glass opacity, so a glass button floating over content takes the
             // solid resting surface instead: at the user's 10% opacity its label sat straight on the text behind it.
