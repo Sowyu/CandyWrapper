@@ -245,14 +245,6 @@ public final class ComposerNoticeBannerView: ComposerBannerView {
         return ceil(w + actions + 6 + 4)
     }
 
-    /// Redesign's narrowest pill: the icon and the actions as icons, the title cut to nothing.
-    public var compactPillWidth: CGFloat {
-        var actions: CGFloat = dismiss.isHidden ? 0 : 4 + dismiss.intrinsicContentSize.width
-        for (i, b) in buttons.enumerated() { actions += 4 + (iconButtons[i] ?? b).intrinsicContentSize.width }
-        if actions > 0 { actions = max(actions, 4 + 48) }
-        return min(pillWidth, ceil(4 + 24 + 4 + actions + 4))
-    }
-
     private func titleWidth(_ text: String) -> CGFloat {
         measure.font = title.font
         measure.text = text

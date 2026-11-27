@@ -708,8 +708,8 @@ public final class ThreadPanelView: DSView {
     /// Redesign's machine and workspace row under the composer, in place of the checkout and ref pills.
     public let deviceRow = DitherDeviceRowView()
     public var showsDeviceRow = false { didSet { if showsDeviceRow != oldValue { needsLayout = true } } }
-    /// Redesign's starter actions under the new-thread page's composer.
-    public let starterRow = DitherStarterRowView()
+    /// Redesign's notices on the new-thread page: one quiet control at the project row's trailing end.
+    public let draftNotices = DitherNoticeControlView()
     /// The thread error banner over the top of the timeline (ChatView.tsx:11355-11375).
     public let errorBanner = ThreadErrorBannerView()
     /// The composer provider's status (ProviderStatusBanner.tsx), above the error banner in the
@@ -938,8 +938,8 @@ public final class ThreadPanelView: DSView {
         addSubview(contextStrip)
         deviceRow.isHidden = true
         addSubview(deviceRow)
-        starterRow.isHidden = true
-        addSubview(starterRow)
+        draftNotices.isHidden = true
+        addSubview(draftNotices)
         addSubview(commandMenu)
         addSubview(composer)
         // Empty and hidden until a subagent asks; in place so a change can ask the panel for a layout.
@@ -1812,7 +1812,7 @@ public final class ThreadPanelView: DSView {
         // Back from Redesign: everything docks again, the ring in the composer's footer.
         contextStrip.floatsAsPills = false
         deviceRow.isHidden = true
-        starterRow.isHidden = true
+        draftNotices.isHidden = true
         waitingIndicator.isHidden = true
         ringPill.isHidden = true
         lazySubagentPill.loaded?.isHidden = true
@@ -2078,37 +2078,13 @@ public final class ThreadPanelView: DSView {
                                      floorTop: floor, from: self)
     }
 
-    /// Redesign's new-thread page: the composer's top when the group (the context row, the composer and the starter
-    /// row, `DitherPill.gap` apart) has its middle `RedesignTokens.Draft.centre` of the way down from `top` to `bottom`.
-    /// The starter row's slot counts even while it is empty, so the composer never moves between drafts.
+    /// Redesign's new-thread page: the composer's top when the group (the context row, then the composer,
+    /// `DitherPill.gap` apart) has its middle `RedesignTokens.Draft.centre` of the way down from `top` to `bottom`.
     static func draftComposerY(top: CGFloat, bottom: CGFloat, composer: CGFloat) -> CGFloat {
         let pill = DitherPill.height, gap = DitherPill.gap
-        let group = pill + gap + composer + gap + pill
+        let group = pill + gap + composer
         let groupTop = top + (bottom - top) * RedesignTokens.Draft.centre - group / 2
         return (max(top + gap, groupTop) + pill + gap).rounded()
-    }
-
-    /// The draft's notices in `room` beside the project and machine, `spacing` apart: each at its natural width when
-    /// they all fit, else the widest give first, down to one shared cap, so a short notice keeps its whole title while a
-    /// long one shortens; none goes under its narrowest form. A notice that would not fit even at its narrowest gets 0
-    /// and stays hidden, from the last one back.
-    static func draftNoticeWidths(natural: [CGFloat], minimum: [CGFloat], room: CGFloat, spacing: CGFloat) -> [CGFloat] {
-        var count = natural.count
-        func need(_ widths: ArraySlice<CGFloat>) -> CGFloat { widths.reduce(0, +) + spacing * CGFloat(max(0, widths.count - 1)) }
-        while count > 0 && need(minimum.prefix(count)) > room { count -= 1 }
-        let shown = Array(zip(natural.prefix(count), minimum.prefix(count)))
-        func capped(_ cap: CGFloat) -> [CGFloat] { shown.map { n, m in max(min(m, n), min(n, cap)).rounded(.down) } }
-        var result = shown.map(\.0)
-        if need(result[...]) > room {
-            // The largest cap that fits, by bisection over the natural widths' range.
-            var lo: CGFloat = 0, hi = result.max() ?? 0
-            for _ in 0..<24 {
-                let mid = (lo + hi) / 2
-                if need(capped(mid)[...]) <= room { lo = mid } else { hi = mid }
-            }
-            result = capped(lo)
-        }
-        return result + Array(repeating: 0, count: natural.count - count)
     }
 
     private var ditherDockViews: [ComposerBannerView?] {
@@ -2128,8 +2104,9 @@ public final class ThreadPanelView: DSView {
     private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x column: CGFloat, width lane: CGFloat, height: CGFloat) {
         let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
         let overlap = ComposerBannerView.overlap
-        // The new-thread page is one group, after Capy's: the project and machine row on the composer's top left, the
-        // composer, and the starter actions under it, `gap` apart, narrower than a thread's column and centred across.
+        // The new-thread page is one group, after Capy's: the project and machine row on the composer's top left and
+        // the composer, `gap` apart, narrower than a thread's column and centred across. Its starter actions live in
+        // the project control's menu (New project, No project), so nothing sits under the composer.
         let width = isDraft ? min(lane, RedesignTokens.Draft.width) : lane
         let x = isDraft ? (column + (lane - width) / 2).rounded() : column
         // Pill rows sit inside the composer's corners; cards keep its full width.
@@ -2159,8 +2136,8 @@ public final class ThreadPanelView: DSView {
         deviceRow.quiet = isDraft
         hero.projectChip.quiet = true
 
-        // The draft's context row on the composer's top left: the project chip, then the machine. Its notices take the
-        // row's right end (`placeDraftNotices`).
+        // The draft's context row on the composer's top left: the project chip, then the machine. Its notices are one
+        // quiet control at the row's right end (`DitherNoticeControlView`).
         var draftRow: (y: CGFloat, end: CGFloat)?
         if isDraft {
             let rowY = y - gap - pillH
@@ -2176,17 +2153,8 @@ public final class ThreadPanelView: DSView {
             draftRow = (rowY, left)
             top = rowY
         }
-        starterRow.isScratch = hero.isScratch
-        starterRow.offersScratch = hero.offersScratch
-        let starterShown = isDraft && visible && !starterRow.isEmpty
-        starterRow.isHidden = !starterShown
-        if starterShown {
-            starterRow.frame = NSRect(x: x, y: y + height + gap, width: width, height: pillH)
-            shown.append(starterRow)
-        }
         // The art keeps clear of the whole group: Picture's dots thin around it and Flower's lotus stays under it.
-        var group = composer.frame.union(NSRect(x: x, y: y - gap - pillH, width: width, height: pillH))
-        if starterShown { group = group.union(starterRow.frame) }
+        let group = composer.frame.union(NSRect(x: x, y: y - gap - pillH, width: width, height: pillH))
         DitherArtView.setComposer(isDraft && composerShown && chat > 0 ? group : nil, from: self)
 
         // The banner stack's items: notices become pills, the rest cards. The stack only runs their exits.
@@ -2319,16 +2287,13 @@ public final class ThreadPanelView: DSView {
         var cursor = px
         // On the draft the notices share the context row's right end, trailing-aligned to the composer's edge, and
         // shorten through their narrow forms rather than wrap above the project chip (the user, 2026-11-26).
-        if let draftRow {
-            let widths = Self.draftNoticeWidths(natural: pills.map { min($0.1, pw) },
-                                                minimum: pills.map { ($0.0 as? ComposerNoticeBannerView)?.compactPillWidth ?? $0.1 },
-                                                room: px + pw - draftRow.end, spacing: spacing)
-            var x = px + pw - widths.filter { $0 > 0 }.reduce(0) { $0 + $1 + spacing } + spacing
-            for ((view, _), w) in zip(pills, widths) where w > 0 {
-                view.frame = NSRect(x: x, y: draftRow.y, width: w, height: pillH)
-                x += w + spacing
-                shown.append(view)
-            }
+        let draftNoticeViews = draftRow == nil ? [] : pills.compactMap { $0.0 as? ComposerNoticeBannerView }
+        draftNotices.isHidden = draftNoticeViews.isEmpty
+        if let draftRow, !draftNoticeViews.isEmpty {
+            draftNotices.update(draftNoticeViews)
+            let w = draftNotices.fit(room: px + pw - draftRow.end)
+            draftNotices.frame = NSRect(x: px + pw - w, y: draftRow.y, width: w, height: pillH)
+            shown.append(draftNotices)
             pills = []
         }
         for (view, natural) in pills {

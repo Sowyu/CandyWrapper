@@ -40,8 +40,8 @@ public final class DitherPillSurface: DSView {
     /// The panel's own ground instead of the raised surface, for a large surface whose cards must stand a step
     /// above it (Settings).
     public var ground = false { didSet { if ground != oldValue { needsDisplay = true } } }
-    /// A quiet control (the new-thread page's project, machine and starters): the solid fill that keeps it readable
-    /// over a picture, with no rim and no shadow, so a row of them doesn't read as a wall of outlines.
+    /// A quiet control (the new-thread page's project, machine and notices): the panel's own ground as a solid fill, so
+    /// it stays readable over a picture and vanishes into a plain page, with no rim and no shadow.
     public var quiet = false { didSet { if quiet != oldValue { needsDisplay = true } } }
     private let shade = DSView()
     /// What shows through the fill over the Flower background.
@@ -66,8 +66,8 @@ public final class DitherPillSurface: DSView {
 
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        face.layer?.backgroundColor = ground ? Themed.color(\.background).cgColor(in: self) : DitherPill.fill(in: self)
-        backing.isHidden = ground
+        face.layer?.backgroundColor = ground || quiet ? Themed.color(\.background).cgColor(in: self) : DitherPill.fill(in: self)
+        backing.isHidden = ground || quiet
         shade.isHidden = quiet
         face.layer?.borderWidth = quiet ? 0 : 1
         face.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor

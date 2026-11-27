@@ -40,8 +40,6 @@ public final class DitherChipView: ControlView {
             changed()
         }
     }
-    /// A plain action, like the new-thread page's starters, has no chevron.
-    var showsChevron = true { didSet { if showsChevron != oldValue { changed() } } }
 
     init(icon: NSView, accessibilityLabel: String) {
         self.icon = icon
@@ -73,9 +71,9 @@ public final class DitherChipView: ControlView {
     }
 
     private func changed() {
-        chevron.isHidden = !interactive || !showsChevron
+        chevron.isHidden = !interactive
         dot.isHidden = online == nil
-        setAccessibilityRole(!interactive ? .staticText : showsChevron ? .popUpButton : .button)
+        setAccessibilityRole(interactive ? .popUpButton : .staticText)
         invalidateIntrinsicContentSize()
         restyle()
         needsLayout = true
@@ -87,7 +85,7 @@ public final class DitherChipView: ControlView {
     public override var intrinsicContentSize: NSSize {
         var w = DitherPill.textX + textWidth
         if online != nil { w += DitherPill.glyphGap + 6 }
-        if interactive && showsChevron { w += DitherPill.glyphGap + 12 }
+        if interactive { w += DitherPill.glyphGap + 12 }
         return NSSize(width: w + DitherPill.pad, height: Self.height)
     }
 

@@ -448,11 +448,6 @@ final class ComposerController {
         }
         panel.hero.onPickProject = { [weak self] anchor in self?.pickProject(from: anchor) }
         panel.hero.onStartWithoutProject = { [weak self] in self?.startDraftWithoutProject() }
-        panel.starterRow.onStartWithoutProject = { [weak self] in self?.startDraftWithoutProject() }
-        panel.starterRow.onAddProject = { [weak self] in
-            guard let self, case .draft(let current) = self.target else { return }
-            self.onAddProject?(current.draftId)
-        }
         panel.contextStrip.runOn.onAutoBalance = { [weak self] in self?.chooseAutomaticEnvironment() }
         panel.contextStrip.runOn.onChange = { [weak self] env in self?.changeEnvironment(env) }
         composer.stageArt = sidebar.stage != .none && ClientSettingsStore.shared.current.string("environmentIdentificationMode") == "artwork"

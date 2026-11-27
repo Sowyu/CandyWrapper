@@ -210,7 +210,7 @@ struct RedesignBaselineTests {
             insetDraft.setDraft(projectTitle: "demo-repo")
             insetDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
             try capture("inset-new-thread", insetWindow(insetDraft), insetSize)
-            // The new-thread page with a notice: it takes the project row's right end, never a row of its own above.
+            // The new-thread page with a notice: a quiet control at the project row's right end, never a row above.
             let noticeDraft = ComposerFidelityTests.panel(width: 1200, dark: dark)
             noticeDraft.setDraft(projectTitle: "demo-repo")
             noticeDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
@@ -220,9 +220,9 @@ struct RedesignBaselineTests {
                                                  actions: ["Copy relaunch command"], dismissible: true, shortTitle: "Server update", actionIcons: [.copy]))
             noticeDraft.showsNoticeBanner = true
             try capture("inset-new-thread-notice", insetWindow(noticeDraft), insetSize)
-            // The new-thread page's other states: typed, with attachments, two notices on the row, a long project name,
-            // and no project (Add project instead of Start without a project).
-            for state in ["typed", "attachments", "two-notices", "long-name", "no-project"] {
+            // The new-thread page's other states: typed, with attachments, two and three notices (one icon button with a
+            // count), a long project name, and no project.
+            for state in ["typed", "attachments", "two-notices", "three-notices", "long-name", "no-project"] {
                 let draft = ComposerFidelityTests.panel(width: 1200, dark: dark)
                 draft.setDraft(projectTitle: state == "long-name" ? "an-unusually-long-project-name-for-the-weather-service" : "demo-repo",
                                isScratch: state == "no-project")
@@ -235,7 +235,11 @@ struct RedesignBaselineTests {
                     let shelf = ComposerAttachmentsFidelityTests.view("shelf", size: NSSize(width: 680, height: 100)) as! ComposerImageShelfView
                     draft.composer.imageTiles = shelf.tiles
                 }
-                if state == "two-notices" {
+                if state == "three-notices" {
+                    draft.noticeBanner.apply(.init(variant: .warning, icon: .triangleAlert, title: "Cloning demo-repo failed", dismissible: true))
+                    draft.showsNoticeBanner = true
+                }
+                if state.hasSuffix("-notices") {
                     draft.serverUpdateNotice = ComposerServerUpdateNotice(status: .available(serverVersion: "0.1.10", clientVersion: "0.1.11"),
                                                                         action: "Copy relaunch command")
                     draft.lazyFallbackBanner.view.apply(.init(variant: .neutral, icon: .info, title: "Using Sonnet 5.5", dismissible: true))
@@ -458,7 +462,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 180)
+        #expect(count == 182)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
