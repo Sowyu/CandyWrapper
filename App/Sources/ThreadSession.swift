@@ -2001,7 +2001,7 @@ final class ThreadController {
         if state.isRunning { action = updateDisconnect && session?.environmentId == id ? "Disconnect server" : nil; actionEnabled = !disconnecting }
         panel.serverUpdateNotice = ComposerServerUpdateNotice(serverLabel: label, status: status, guidance: state == .idle ? guidance : nil,
                                                               action: action, actionEnabled: actionEnabled,
-                                                              actionTooltip: state.isRunning ? "Hide this server's threads. Switch it on again in Connections." : nil,
+                                                              actionTooltip: state.isRunning ? "Hide this server's threads. Switch it on again in \(RedesignCopy.environments)." : nil,
                                                               dismissible: state.isFailed || serverUpdates.dismissalKey(id) != nil)
     }
 

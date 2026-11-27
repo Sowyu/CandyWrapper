@@ -49,6 +49,12 @@ public struct DitherAccent: Equatable, Sendable {
 
     public var darkColor: NSColor { Self.color(dark) }
 
+    /// The accent as small text on a chip or card: a quarter toward white in dark, a fifth toward black in light. The
+    /// accent itself read 4.1:1 (dark) and 3.4:1 (light) as a file link on its chip (X8, Sol, round 2).
+    public func text(dark: Bool) -> String { dark ? Self.mix(accent(dark: true), white: 0.25) : Self.mix(accent(dark: false), black: 0.2) }
+    /// `text` for the chosen accent, resolved per appearance.
+    public static var currentText: NSColor { NSColor(name: nil) { Self.color(ThemeRuntime.ditherAccent.text(dark: $0.isDark)) } }
+
     /// The chosen accent as Redesign draws it, resolved per appearance, for drawing outside the palette's roles.
     public static var current: NSColor { NSColor(name: nil) { Self.color(ThemeRuntime.ditherAccent.accent(dark: $0.isDark)) } }
 

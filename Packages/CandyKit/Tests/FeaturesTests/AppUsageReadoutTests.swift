@@ -55,7 +55,9 @@ struct AppUsageReadoutTests {
         v.layout()
         #expect(v.hasReading && !v.memoryLabel.isHidden && !v.memoryMeter.isHidden)
         // CPU waits for its second sample, and the memory reading takes the line's start.
-        #expect(v.cpuLabel.isHidden && v.cpuMeter.isHidden && v.memoryMeter.frame.minX == 12 + AppUsageReadoutView.gap)
+        #expect(v.cpuLabel.isHidden && v.cpuMeter.isHidden && v.memoryMeter.frame.minX == ceil(v.memoryIcon.textWidth) + AppUsageReadoutView.gap)
+        // Each reading says what it measures in words (S3, round 2).
+        #expect(v.memoryIcon.text == "RAM" && v.cpuIcon.text == "CPU" && !v.memoryIcon.isHidden)
     }
 
     @Test func cpuTurnsAmberAfterTwoHotSamples() {

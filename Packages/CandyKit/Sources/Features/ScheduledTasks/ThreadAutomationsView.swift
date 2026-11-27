@@ -16,7 +16,7 @@ public final class ThreadAutomationsView: DSView {
     public var onRun: ((ScheduledTask) -> Void)?
     public var onToggle: ((ScheduledTask, Bool) -> Void)?
 
-    private let title = LabelView("Automations", font: DSFont.ui(11, weight: .medium), color: Themed.color(\.mutedForeground))
+    private let title = LabelView(RedesignCopy.scheduledTasks, font: DSFont.ui(11, weight: .medium), color: Themed.color(\.mutedForeground))
     private let manage = ButtonView(nil, icon: .settings2, variant: .ghost, size: .iconXs)
     private let errorLabel = LabelView("", font: DSFont.ui(11), color: Themed.color(\.destructive))
     private var rows: [ThreadAutomationRow] = []
@@ -33,7 +33,7 @@ public final class ThreadAutomationsView: DSView {
         manage.action = { [weak self] in self?.onManage?() }
         for v in [title, manage, errorLabel] as [NSView] { addSubview(v) }
         setAccessibilityRole(.group)
-        setAccessibilityLabel("Automations")
+        setAccessibilityLabel(RedesignCopy.scheduledTasks)
     }
 
     private func rebuild() {

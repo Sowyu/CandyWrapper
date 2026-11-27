@@ -31,7 +31,9 @@ public final class BetaSettingsView: SettingsPageBase {
 
     static let deviceReadOnlyReason = "Saved on this device. Select All projects to change it."
     static let guestDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Needs T3 Connect: sign in and link this machine in Sharing & access. Turning it off stops every guest link."
-    static let linkedDetail = "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in Connections. While off, nothing new starts over a link; running tasks finish."
+    static var linkedDetail: String {
+        "Let agents here work on your other machines, and theirs here. Turn it on for each machine, then link them in \(RedesignCopy.environments). While off, nothing new starts over a link; running tasks finish."
+    }
     static let guestSignedOutDetail = "Share a thread with a guest who watches it live in a browser and sends messages you approve. Sign in to T3 Connect to use guest links."
 
     public override init(context: SettingsPageContext) {
@@ -58,7 +60,7 @@ public final class BetaSettingsView: SettingsPageBase {
         let guest = serverSwitch("guest-links", Self.guestDetail, key: "guestSharingEnabled", reset: nil, label: "Guest links")
         guest.title = "Guest links"
         // T3's copy names the Connections group for links and its Sharing & access page for guests (LabsSettingsPanel.tsx at 3814).
-        let connections: (title: String, action: @MainActor () -> Void) = ("Connections", { [weak self] in self?.context.openSection?(.connections) })
+        let connections: (title: String, action: @MainActor () -> Void) = (RedesignCopy.environments, { [weak self] in self?.context.openSection?(.connections) })
         let access: (title: String, action: @MainActor () -> Void) = ("Sharing & access", { [weak self] in self?.context.openSection?(.access) })
         // Kept aside, so the row can swap between the switch and Sign in.
         let toggle = guest.control

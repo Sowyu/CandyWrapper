@@ -27,7 +27,7 @@ public enum SettingsSection: String, CaseIterable, Sendable {
         case .appearance: "Appearance"
         case .keybindings: "Keybindings"
         case .voice: "Voice"
-        case .snapShots: "SnapShots"
+        case .snapShots: RedesignCopy.word("SnapShots", "Snapshots")
         case .providers: "Providers"
         case .integrations: "Integrations"
         case .scheduledTasks: "Scheduled tasks"
@@ -894,6 +894,8 @@ public final class SettingsPageView: DSView {
         let bar = inCard ? SettingsHeaderView.floatingHeight : header.barHeight
         header.frame = NSRect(x: 0, y: 0, width: bounds.width, height: bar)
         scroll.frame = NSRect(x: 0, y: bar, width: bounds.width, height: max(0, bounds.height - bar))
+        // Redesign fades a row cut at either edge, as the nav does, so a page that runs on reads as scrolling (G1, round 2).
+        if scroll.scrollFade != dither { scroll.fadeSize = RedesignTokens.Space.l; scroll.scrollFade = dither }
         let gutter: CGFloat = 6
         let inner = max(0, bounds.width - 2 * gutter)
         // Dither: Capy's centred column, about 800pt of content; the two-pane pages keep their width.

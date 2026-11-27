@@ -1638,11 +1638,15 @@ private struct Builder {
             y += 1
         }
         // Negative scroll IDs keep table and code state separate while sharing the input and scrollbar paths.
-        let viewport = CGRect(x: 0, y: 0, width: width, height: y + (tableWidth > width ? MarkdownStyle.codeScrollbar : 0))
+        // Redesign: a table that scrolls stops short of Copy's column, so Copy never sits over a header cell that has
+        // scrolled under it ("Resu" in a narrow thread, T4, round 2). The card keeps the full width.
+        let copyColumn = ThreadDesign.redesign && tableWidth > width ? RedesignTokens.Space.m + 24 + RedesignTokens.Space.xs : 0
+        let card = CGRect(x: 0, y: 0, width: width, height: y + (tableWidth > width ? MarkdownStyle.codeScrollbar : 0))
+        let viewport = CGRect(x: 0, y: 0, width: width - copyColumn, height: card.height)
         box.items.insert(.scroll(codeIndex: -index - 1, viewport: viewport, contentWidth: tableWidth), at: 0)
         box.items.append(.endClip)
         if ThreadDesign.redesign {
-            box.items.insert(.box(viewport, fill: RedesignTokens.Card.fill, border: RedesignTokens.Card.border, radius: RedesignTokens.Card.radius), at: 0)
+            box.items.insert(.box(card, fill: RedesignTokens.Card.fill, border: RedesignTokens.Card.border, radius: RedesignTokens.Card.radius), at: 0)
         }
         y = viewport.maxY
         // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449). Redesign draws it
@@ -1809,6 +1813,10 @@ extension MarkdownLayout {
         var widths = maxs
         if maxSum < width, maxSum > 0 {
             widths = maxs.map { $0 + (width - maxSum) * $0 / maxSum }
+        } else if ThreadDesign.redesign, minSum >= width {
+            // The table scrolls either way, so its columns keep their natural widths: squeezed, a prose cell out of
+            // view wrapped and left its row taller than the rest for no visible reason (T4, Gemini, round 2).
+            widths = maxs
         } else if maxSum > width {
             let room = max(0, width - minSum), spread = maxSum - minSum
             widths = zip(mins, maxs).map { lo, hi in spread > 0 ? lo + room * (hi - lo) / spread : lo }

@@ -21,7 +21,7 @@ enum FileChipStyle {
     static let foreground = NSColor(name: nil) { appearance in
         let dark = appearance.isDark
         // Redesign has one accent, not T3's mention blue.
-        if ThemeRuntime.isDither(dark: dark) { return DitherAccent.current }
+        if ThemeRuntime.isDither(dark: dark) { return DitherAccent.currentText }
         return ThreadDesign.uses3814(dark: dark) ? ContextChipAccents.color((dark ? ContextChipAccents.dark : ContextChipAccents.light)["mention"]!) : legacyForeground
     }
     static let border = OKLab.mix(accent, 0.34, Themed.color(\.contrastBorder))

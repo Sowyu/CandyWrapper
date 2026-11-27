@@ -83,7 +83,7 @@ struct UsageDitherChartTests {
         for shape in [UsageDitherPlotView.Shape.linear, .step, .smooth] {
             let a = UsageDitherPlotView.grid(input, size: size, shape: shape)
             #expect(a == UsageDitherPlotView.grid(input, size: size, shape: shape))
-            let tops = UsageDitherPlotView.tops(input, size: size, shape: shape)
+            let tops = UsageDitherPlotView.drawnTops(input, size: size, shape: shape)
             for x in 0..<a.width {
                 // Nothing above the highest quantised edge in the column, and that top cell is an edge.
                 let highest = tops.map { $0[x] }.min() ?? a.height
@@ -141,6 +141,20 @@ struct UsageDitherChartTests {
             }
         }
         #expect(holes > 0)
+    }
+
+    /// A front series under one cell tall leaves the foot of a taller series behind it alone (G6, round 2).
+    @Test func thinFrontSeriesDrawsNoStripOverTheRear() {
+        let size = CGSize(width: 700, height: 224)
+        let input = Self.input()
+        let grid = UsageDitherPlotView.grid(input, size: size)
+        let tops = UsageDitherPlotView.tops(input, size: size)
+        let foot = grid.height - 1
+        for i in tops.indices.dropFirst() {
+            for x in tops[i].indices where tops[i][x] == foot && tops[..<i].contains(where: { $0[x] < foot }) {
+                #expect(grid[x, foot] != UInt8(2 + 2 * i) && grid[x, foot] != UInt8(3 + 2 * i), "series \(i) strip at \(x)")
+            }
+        }
     }
 
     @Test func texturesAreDistinctAndOrdered() {

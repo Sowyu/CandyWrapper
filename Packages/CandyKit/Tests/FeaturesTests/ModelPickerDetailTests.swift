@@ -411,6 +411,22 @@ import T3Store
         }
     }
 
+    /// Short of room the details card scrolls and keeps the whole description, never one clamped line (C7, round 2).
+    @Test func aShortDetailsCardScrollsInsteadOfClamping() throws {
+        try ModelPickerShrinkTests.withTheme(.redesign, stacked: false) {
+            let pane = ModelDetailPaneView(frame: NSRect(x: 0, y: 0, width: ModelDetailPaneView.width, height: 160))
+            let long = String(repeating: "Fast model for responsive assistance and lightweight agents. ", count: 3)
+            pane.show(ModelDetailContent(key: "k", name: "Model", provider: "Claude", driver: "claudeAgent", slug: "m", description: long,
+                                         prices: [.init(label: "Input", value: "$1")], example: nil,
+                                         facts: [.init(label: "Context", value: "1M"), .init(label: "Knowledge", value: "Jun 2026")], inputs: []),
+                      card: nil)
+            pane.layoutSubtreeIfNeeded()
+            let about = try #require(pane.subviews.compactMap { $0 as? TextBlockView }.first)
+            #expect(about.maxLines == 0 && about.frame.height > 40)
+            #expect(pane.maxScroll > 0)
+        }
+    }
+
     // MARK: Small fixes, 2026-11-21
 
     /// A clamped description whose second line fits on its own still ends in an ellipsis.

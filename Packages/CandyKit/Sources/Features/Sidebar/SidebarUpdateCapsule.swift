@@ -85,8 +85,8 @@ final class SidebarUpdateCapsuleLink: ControlView {
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
-    /// Redesign draws the link as a text action: no underline and no rim, the label in the foreground with the state
-    /// fill on the control corner under the pointer.
+    /// Redesign draws the link as a small button: no underline, the account card's hairline rim, the label in the
+    /// foreground and the state fill under the pointer. Without the rim Retry read as plain text (S3, round 2).
     private func restyle() {
         let fg = Themed.color(\.sidebarForeground, sidebar: true)
         label.color = fg
@@ -97,7 +97,8 @@ final class SidebarUpdateCapsuleLink: ControlView {
             hover.frame = bounds.insetBy(dx: 2, dy: 2)
             hover.cornerRadius = RedesignTokens.Radius.nested(in: RedesignTokens.Radius.control, inset: 2)
             hover.backgroundColor = RedesignTokens.State.fill(state, dark: dark)?.cgColor(in: self)
-            hover.borderWidth = 0
+            hover.borderWidth = 1
+            hover.borderColor = RedesignTokens.Surface.rim(dark: dark).cgColor(in: self)
             return
         }
         hover.borderWidth = 0
@@ -222,13 +223,14 @@ extension SidebarUpdatePillView {
     private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     private var iconSide: CGFloat { min(bounds.width, bounds.height) }
 
-    /// Redesign names the operation that failed, so Retry says what it repeats: "studio failed" reads "Couldn't update
-    /// studio", "2 failed" reads "Couldn't update 2 machines".
-    static func ditherFailedLabel(_ label: String) -> String {
-        guard label.hasSuffix(" failed") else { return label }
+    /// Redesign names the operation that failed, longest first: "studio: update failed", then T3's "studio failed".
+    /// The capsule shows the first that fits, so the machine's name never truncates before the words around it do.
+    /// "Couldn't update studio" cut to "Couldn't update..." beside Back (S3, round 2).
+    static func ditherFailedLabels(_ label: String) -> [String] {
+        guard label.hasSuffix(" failed") else { return [label] }
         let source = String(label.dropLast(" failed".count))
-        if let n = Int(source) { return "Couldn't update \(n) machines" }
-        return "Couldn't update \(source)"
+        if let n = Int(source) { return ["\(n) machines: update failed", label] }
+        return ["\(source): update failed", label]
     }
     /// The capsule shows its label: wider than its round icon.
     var isCapsuleExpanded: Bool { capsule != nil && bounds.width > iconSide + 0.5 }
@@ -239,8 +241,18 @@ extension SidebarUpdatePillView {
         guard let capsule, UpdateEverythingLogic.capsuleExpands(available: available, counting: capsule.countdown != nil) else { return side }
         guard dither else { return available }
         let end = capsule.view.action != nil ? capsuleLink.preferredWidth : side
-        let natural = RedesignTokens.Space.s + statusGlyphWidth(capsule) + capsuleLabel.textWidth.rounded(.up) + end
+        let natural = RedesignTokens.Space.s + statusGlyphWidth(capsule) + labelWidth(capsuleLabels(capsule)[0]) + end
         return max(side, min(available, natural))
+    }
+
+    /// The label's wordings, longest first; only a failed pass under Redesign has more than one.
+    private func capsuleLabels(_ capsule: SidebarUpdateCapsule) -> [String] {
+        let view = capsule.view
+        let labels = dither && view.tone == .failed ? Self.ditherFailedLabels(view.label) : [view.label]
+        return labels.map { $0 + (view.slow.map { " \($0.elapsed)" } ?? "") }
+    }
+    private func labelWidth(_ text: String) -> CGFloat {
+        (text as NSString).size(withAttributes: [.font: capsuleLabel.font]).width.rounded(.up)
     }
 
     /// Redesign's failed or slow glyph before the label, the glyph and its gap.
@@ -255,8 +267,7 @@ extension SidebarUpdatePillView {
     func capsuleChanged(from old: SidebarUpdateCapsule?) {
         if let capsule {
             let view = capsule.view
-            capsuleLabel.text = (dither && view.tone == .failed ? Self.ditherFailedLabel(view.label) : view.label)
-                + (view.slow.map { " \($0.elapsed)" } ?? "")
+            capsuleLabel.text = capsuleLabels(capsule)[0]
             capsuleLink.text = view.action?.rawValue ?? ""
             countdownLabel.text = capsule.countdown.map { "\($0)s" } ?? ""
             if let open = capsulePopup, let body = (open.content as? PopoverView)?.content as? SidebarUpdateCapsulePopoverView {
@@ -341,6 +352,9 @@ extension SidebarUpdatePillView {
         let lx: CGFloat = dither ? RedesignTokens.Space.s + statusGlyphWidth(capsule) : 12 // `pl-3`
         let end = capsuleLink.isHidden ? iconArea.minX : capsuleLink.frame.minX
         capsuleLabel.frame = NSRect(x: lx, y: (h - 16) / 2, width: max(0, end - lx), height: 16)
+        let labels = capsuleLabels(capsule)
+        let label = labels.first { labelWidth($0) <= capsuleLabel.frame.width } ?? labels[labels.count - 1]
+        if capsuleLabel.text != label { capsuleLabel.text = label }
         // `starting:opacity-0` with `transition-opacity duration-200 ease-out`: the label and link fade in as they show.
         if expanded, !wasShown, window != nil, !Motion.reduced {
             for v in [capsuleLabel, capsuleLink, capsuleFailedGlyph, capsuleSlowGlyph] as [NSView] where !v.isHidden {

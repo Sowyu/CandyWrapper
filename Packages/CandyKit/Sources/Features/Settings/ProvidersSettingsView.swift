@@ -876,7 +876,11 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
             }
             actions.append(delete)
         }
-        let signIn = ButtonView("Sign in", variant: .outline, size: .xs)
+        // Redesign names the action for a provider that is already signed in, as the Authentication row does: "Sign in"
+        // beside "Authenticated as" read as a sign-in that had failed (G4, round 2).
+        let authenticated = provider?.auth?["status"]?.stringValue == "authenticated"
+        let signIn = ButtonView(authenticated && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? "Change account" : "Sign in",
+                                variant: .outline, size: .xs)
         signIn.isEnabled = !readOnly && row.enabled && provider?.installed == true
         signIn.action = { [weak self] in
             guard let self else { return }
@@ -1350,6 +1354,8 @@ final class ProvidersSectionView: DSView, SettingsGroupRow {
         let w = bounds.width
         title.frame = NSRect(x: 16, y: 4, width: ceil(title.textWidth) + 1, height: 20)
         add.frame = NSRect(x: title.frame.maxX + 4, y: 2, width: 24, height: 24)
+        // Redesign keeps one way to add a provider, the list's last row: the "+" by the title repeated it (G4, round 2).
+        add.isHidden = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         let rs = refresh.intrinsicContentSize
         refresh.frame = NSRect(x: w - 16 - rs.width, y: (28 - rs.height) / 2, width: rs.width, height: rs.height)
         card.frame = NSRect(x: 0, y: 38, width: w, height: bounds.height - 38)

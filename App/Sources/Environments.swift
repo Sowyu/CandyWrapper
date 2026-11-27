@@ -92,7 +92,7 @@ final class Environments {
             self.drop(saved.environmentId)
             // ponytail: T3's supervisor prepares the SSH route again on its retry ladder; this drops the session and the
             // row's switch reconnects. Re-run `connectSaved` on the retry ladder if tunnels drop often.
-            self.onSshFailure?("SSH connection closed", "The tunnel to \(target.display) closed. Turn the environment off and on in Settings → Connections to reconnect.")
+            self.onSshFailure?("SSH connection closed", "The tunnel to \(target.display) closed. Turn the environment off and on in Settings → \(RedesignCopy.environments) to reconnect.")
         }
         // T3 looks for a better route every 60 s while on a fallback (supervisor.ts:800-822). These signals do it
         // without an idle timer: coming back to the app, another network, and input after a quiet socket.

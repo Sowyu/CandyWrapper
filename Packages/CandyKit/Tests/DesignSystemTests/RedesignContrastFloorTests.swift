@@ -59,6 +59,72 @@ struct RedesignContrastFloorTests {
         }
     }
 
+    /// The palette as `ThemeLibrary` builds it, with the accent's roles merged in, so the resolved primary and send
+    /// button labels follow `DitherAccent.foreground` for every accent, teal included (docs/decisions.md, 2026-11-27).
+    @Test func accentLabelsReadInTheResolvedPalette() {
+        for accent in DitherAccent.all {
+            var input = redesign(accent: accent.id)
+            input.light = ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!.merging(accent.colors(dark: false)) { $1 })
+            input.dark = ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!.merging(accent.colors(dark: true)) { $1 })
+            let palettes = ThemeRuntime.resolve(input)
+            for dark in [true, false] {
+                let p = dark ? palettes.dark : palettes.light, side = "\(accent.id) \(dark ? "dark" : "light")"
+                #expect(ratio(rgb(p.primary), rgb(p.primaryForeground)) >= 4.5, "\(side) primary")
+                #expect(ratio(rgb(p.messageAction), rgb(p.messageActionForeground)) >= 4.5, "\(side) send")
+            }
+        }
+        // The base palette already carries teal's rule, so nothing depends on the merge for the default.
+        for dark in [true, false] {
+            let base = ThemeDefinition.dither.colors(for: dark ? .dark : .light)!
+            #expect(base[.accentForeground] == DitherAccent.teal.foreground(dark: dark))
+            #expect(base[.messageActionForeground] == DitherAccent.teal.foreground(dark: dark))
+        }
+    }
+
+    /// A file link in the accent reads at 4.5:1 on the ground, a card and the chip's muted fill, for every accent.
+    @Test func accentTextReadsOnItsChips() {
+        let palettes = ThemeRuntime.resolve(redesign())
+        for accent in DitherAccent.all {
+            for dark in [true, false] {
+                let p = dark ? palettes.dark : palettes.light
+                for ground in [p.background, p.card, p.muted] {
+                    #expect(ratio(rgb(accent.text(dark: dark)), rgb(ground)) >= 4.5, "\(accent.id) \(dark ? "dark" : "light") on \(ground)")
+                }
+            }
+        }
+    }
+
+    @Test func destructiveFillKeepsWhiteAtFourAndAHalf() {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        ThemeRuntime.apply(redesign())
+        for dark in [true, false] {
+            let fill = RedesignTokens.Destructive.fill(dark: dark).usingColorSpace(.sRGB)!
+            let c = SIMD3(Double(fill.redComponent), Double(fill.greenComponent), Double(fill.blueComponent))
+            #expect(ratio(c, SIMD3(1, 1, 1)) >= 4.5, "\(dark ? "dark" : "light") destructive \(c)")
+        }
+    }
+
+    /// An empty radio's edge keeps 3:1 on the card it sits on (C6, round 2).
+    @Test func emptyRadioEdgeReads() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        ThemeRuntime.apply(redesign())
+        for dark in [true, false] {
+            let radio = RadioView(checked: false)
+            radio.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            radio.restyle()
+            let border = try #require(radio.decoration.boxStyle.border)
+            var c = SIMD3<Double>(0, 0, 0)
+            radio.effectiveAppearance.performAsCurrentDrawingAppearance {
+                let s = border.usingColorSpace(.sRGB)!
+                c = SIMD3(Double(s.redComponent), Double(s.greenComponent), Double(s.blueComponent))
+            }
+            let card = rgb(dark ? ThemeRuntime.palettes.dark.card : ThemeRuntime.palettes.light.card)
+            #expect(ratio(c, card) >= 3, "\(dark ? "dark" : "light") radio edge \(c) on \(card)")
+        }
+    }
+
     /// The off switch drawn offscreen on a Settings card: the track's pixel against the card's keeps 3:1.
     @Test func offSwitchEdgeReadsOnTheCard() throws {
         let previous = ThemeRuntime.input

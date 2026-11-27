@@ -339,7 +339,10 @@ public final class UsageHeaderView: TopbarDragView {
         let xxl = isDither ? viewport >= 1536 : bounds.width >= 1280
         for v in [metric, period, refresh] as [NSView] { v.isHidden = !xl }
         for v in [metricSelect, periodSelect, compactRefresh] as [NSView] { v.isHidden = xl }
-        if !isDither { period.isHidden = !xl || !showsWindowLabel; periodSelect.isHidden = xl || !showsWindowLabel }
+        // Limits have no period. The default themes drop the control as T3 does. Redesign hides it in place, so Limits
+        // and its neighbours don't move, where it used to draw it disabled at 2.65:1 in light (X8, 2026-11-27).
+        period.isHidden = period.isHidden || !showsWindowLabel
+        periodSelect.isHidden = periodSelect.isHidden || !showsWindowLabel
         windowLabel.isHidden = !(xxl && showsWindowLabel)
         // Right cluster first, so the breadcrumb truncates into what is left.
         var right = bounds.width - (isRouteModal ? 8 : 20)

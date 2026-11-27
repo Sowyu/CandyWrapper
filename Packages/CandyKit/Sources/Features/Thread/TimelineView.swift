@@ -975,7 +975,9 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     private func layoutMinimap() {
         let gutter = laneFrame.x
         minimap.isHidden = minimap.items.count < 2 || gutter <= 12
-        minimap.persistentGutter = gutter >= 48
+        // Redesign keeps the strips at rest from a 32pt gutter, room for the 12pt resting strip and its 12pt inset:
+        // T3's 48 left the ordinary 1100pt window with a rail that showed only under the pointer (T10, round 2).
+        minimap.persistentGutter = gutter >= (ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? 32 : 48)
         // `max(4rem, calc(100% - 14.75rem))` of the timeline, so an open terminal shrinks the rail (MessagesTimeline.logic.ts:286-288 at 4928, #32151).
         let height = min(CGFloat(max(1, minimap.items.count - 1)) * 8, max(64, bounds.height - topClearance - 236))
         minimap.frame = NSRect(x: 12, y: topClearance + (bounds.height - topClearance - height) / 2, width: min(40, max(0, gutter - 12)), height: height)
