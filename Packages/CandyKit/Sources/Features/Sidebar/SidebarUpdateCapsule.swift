@@ -66,12 +66,15 @@ final class SidebarUpdateCapsuleLink: ControlView {
         set { label.text = newValue; setAccessibilityLabel(newValue); needsLayout = true }
     }
     /// Text plus `pl-1.5` and `pr-3`.
-    var preferredWidth: CGFloat { (label.textWidth).rounded(.up) + 6 + 12 }
+    /// Redesign: the text centred in its rim, `Space.s` either side inside the 2pt inset.
+    var preferredWidth: CGFloat { (label.textWidth).rounded(.up) + (dither ? 2 * (2 + RedesignTokens.Space.s) : 6 + 12) }
+    private var dither: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
 
     override func layout() {
         super.layout()
         let h: CGFloat = 16
-        label.frame = NSRect(x: 6, y: (bounds.height - h) / 2, width: max(0, bounds.width - 18), height: h)
+        let lx: CGFloat = dither ? 2 + RedesignTokens.Space.s : 6
+        label.frame = NSRect(x: lx, y: (bounds.height - h) / 2, width: max(0, bounds.width - lx - (dither ? lx : 12)), height: h)
         // `underline-offset-3`: 3pt below the baseline, 1pt thick.
         let f = label.font
         let baseline = label.frame.minY + (h - (f.ascender - f.descender)) / 2 + f.ascender
@@ -82,7 +85,8 @@ final class SidebarUpdateCapsuleLink: ControlView {
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); restyle() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); restyle() }
 
-    /// Redesign draws the link as its other text controls: no underline, the state fill on the control corner.
+    /// Redesign draws the link as a small button: no underline, the card's hairline rim, the state fill on the control
+    /// corner.
     private func restyle() {
         let fg = Themed.color(\.sidebarForeground, sidebar: true)
         label.color = fg
@@ -93,8 +97,11 @@ final class SidebarUpdateCapsuleLink: ControlView {
             hover.frame = bounds.insetBy(dx: 2, dy: 2)
             hover.cornerRadius = RedesignTokens.Radius.nested(in: RedesignTokens.Radius.control, inset: 2)
             hover.backgroundColor = RedesignTokens.State.fill(state, dark: dark)?.cgColor(in: self)
+            hover.borderWidth = 1
+            hover.borderColor = RedesignTokens.Card.border.cgColor(in: self)
             return
         }
+        hover.borderWidth = 0
         line.isHidden = false
         hover.isHidden = true
         let decoration = state.hovered ? fg : Themed.color(\.mutedForeground, 0.6, sidebar: true)
@@ -224,8 +231,17 @@ extension SidebarUpdatePillView {
         guard let capsule, UpdateEverythingLogic.capsuleExpands(available: available, counting: capsule.countdown != nil) else { return side }
         guard dither else { return available }
         let end = capsule.view.action != nil ? capsuleLink.preferredWidth : side
-        let natural = RedesignTokens.Space.s + capsuleLabel.textWidth.rounded(.up) + end
+        let natural = RedesignTokens.Space.s + statusGlyphWidth(capsule) + capsuleLabel.textWidth.rounded(.up) + end
         return max(side, min(available, natural))
+    }
+
+    /// Redesign's failed or slow glyph before the label, the glyph and its gap.
+    private func statusGlyph(_ capsule: SidebarUpdateCapsule?) -> IconView? {
+        guard dither, let tone = capsule?.view.tone else { return nil }
+        return switch tone { case .failed: capsuleFailedGlyph; case .slow: capsuleSlowGlyph; case .default: nil }
+    }
+    private func statusGlyphWidth(_ capsule: SidebarUpdateCapsule) -> CGFloat {
+        statusGlyph(capsule) == nil ? 0 : 14 + RedesignTokens.Space.xs + 2
     }
 
     func capsuleChanged(from old: SidebarUpdateCapsule?) {
@@ -257,7 +273,7 @@ extension SidebarUpdatePillView {
         guard let capsule else {
             shapes.forEach { $0.isHidden = true }
             countdownRing.isHidden = true
-            for v in [capsuleLabel, capsuleLink, countdownLabel] as [NSView] { v.isHidden = true }
+            for v in [capsuleLabel, capsuleLink, countdownLabel, capsuleFailedGlyph, capsuleSlowGlyph] as [NSView] { v.isHidden = true }
             iconBox.isHidden = false
             ringTrack.opacity = 1; ringArc.opacity = 1
             return
@@ -310,12 +326,15 @@ extension SidebarUpdatePillView {
         let wasShown = labelShown
         capsuleLabel.isHidden = !expanded
         labelShown = expanded
-        let lx: CGFloat = dither ? RedesignTokens.Space.s : 12 // `pl-3`
+        let glyph = expanded ? statusGlyph(capsule) : nil
+        for g in [capsuleFailedGlyph, capsuleSlowGlyph] { g.isHidden = g !== glyph }
+        glyph?.frame = NSRect(x: RedesignTokens.Space.s, y: (h - 14) / 2, width: 14, height: 14)
+        let lx: CGFloat = dither ? RedesignTokens.Space.s + statusGlyphWidth(capsule) : 12 // `pl-3`
         let end = capsuleLink.isHidden ? iconArea.minX : capsuleLink.frame.minX
         capsuleLabel.frame = NSRect(x: lx, y: (h - 16) / 2, width: max(0, end - lx), height: 16)
         // `starting:opacity-0` with `transition-opacity duration-200 ease-out`: the label and link fade in as they show.
         if expanded, !wasShown, window != nil, !Motion.reduced {
-            for v in [capsuleLabel, capsuleLink] where !v.isHidden {
+            for v in [capsuleLabel, capsuleLink, capsuleFailedGlyph, capsuleSlowGlyph] as [NSView] where !v.isHidden {
                 let a = CABasicAnimation(keyPath: "opacity")
                 a.fromValue = 0
                 a.toValue = 1
@@ -338,10 +357,13 @@ extension SidebarUpdatePillView {
         // Hover is the trigger's `hover:bg-sidebar-row-hover` over the surface.
         let hovered = state.hovered || capsulePopup != nil
         if dither {
-            capsuleFill.fillColor = RedesignTokens.Card.fill.cgColor(in: self)
+            // A line of the account card, on the card's own surface: no box and no colored rim, only the state fill.
+            capsuleFill.fillColor = nil
             capsuleHover.fillColor = RedesignTokens.State.fill(state, dark: dark)?.cgColor(in: self)
                 ?? (capsulePopup != nil ? RedesignTokens.State.fill(RedesignTokens.State.pressed, dark: dark).cgColor(in: self) : nil)
-            capsuleRing.strokeColor = (tone ?? RedesignTokens.Card.border).cgColor(in: self)
+            capsuleRing.strokeColor = nil
+            capsuleFailedGlyph.strokeColor = Themed.color(\.destructive, sidebar: true)
+            capsuleSlowGlyph.strokeColor = Themed.color(\.warning, sidebar: true)
         } else {
             capsuleFill.fillColor = Themed.color(\.sidebarControlSurface, sidebar: true).cgColor(in: self)
             capsuleHover.fillColor = hovered ? Themed.color(\.sidebarRowHover, sidebar: true).cgColor(in: self) : nil
@@ -349,7 +371,11 @@ extension SidebarUpdatePillView {
         }
         capsuleRing.isHidden = capsuleRing.strokeColor == nil
         let view = capsule.view
-        if view.tone == .failed {
+        if view.tone == .failed, dither, view.label.hasSuffix(" failed") {
+            // The machine in the foreground, "failed" in `destructive`, after the glyph.
+            capsuleLabel.color = Themed.color(\.destructive, sidebar: true)
+            capsuleLabel.prefixColor = (view.label.utf16.count - "failed".utf16.count, fg)
+        } else if view.tone == .failed {
             capsuleLabel.color = Themed.color(\.destructive, sidebar: true)
             capsuleLabel.prefixColor = nil
         } else if view.slow != nil {

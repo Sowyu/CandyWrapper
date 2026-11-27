@@ -187,6 +187,16 @@ public enum RedesignTokens {
         public static let quiet: CGFloat = 0.72
     }
 
+    /// The account card's CPU and memory meters: a short bar on a faint track in the text color, the reading after it.
+    public enum Meter {
+        public static let width: CGFloat = 16
+        public static let height: CGFloat = 4
+        public static let track: CGFloat = 0.16
+        public static let fill = Text.quiet
+        /// The least a bar shows for any reading above zero, as a share of its width, so a light load still reads.
+        public static let least: CGFloat = 0.125
+    }
+
     /// Type weights. Redesign's chrome draws at 400 and 500, and size and color carry the hierarchy. Message content
     /// (Markdown, the prompt's rich text, code and math) keeps its own weights. `LabelView` and `TextBlockView` apply
     /// this to their fonts; custom drawing calls it. RedesignTokenGuardTests fails on a heavier literal elsewhere.

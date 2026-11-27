@@ -25,9 +25,8 @@ public struct AppUsageSample: Equatable, Sendable {
     }
 }
 
-/// What the readout shows for two samples: the numbers, the meters' lit dots and the tooltip.
+/// What the readout shows for two samples: the numbers, the meters' levels and the tooltip.
 public enum AppUsageLogic {
-    public static let dots = 6
     /// The memory meter fills at 1 GB.
     public static let memoryScale: Double = 1_073_741_824
     /// CPU turns amber after this many samples in a row above `hotPercent`.
@@ -50,10 +49,10 @@ public enum AppUsageLogic {
         return mb < 999.5 ? String(format: "%.0f MB", mb) : String(format: "%.1f GB", mb / 1024)
     }
 
-    /// Lit dots for a 0...1 level: rounded, and at least one while there is any.
-    public static func lit(_ fraction: Double) -> Int {
+    /// A meter's filled share for a 0...1 reading: capped at full, and never less than `Meter.least` while there is any.
+    public static func level(_ fraction: Double) -> CGFloat {
         guard fraction > 0 else { return 0 }
-        return min(dots, max(1, Int((fraction * Double(dots)).rounded())))
+        return min(1, max(RedesignTokens.Meter.least, CGFloat(fraction)))
     }
 
     public static func tooltip(cpu: Double?, footprint: UInt64) -> String {
@@ -62,24 +61,24 @@ public enum AppUsageLogic {
     }
 }
 
-/// A short row of dots, Redesign's working grid laid flat: `lit` of them in the foreground, the rest faint. A change
-/// fades the dots that flip one after another, toward the new level.
+/// A short bar on a faint track, filled to `level`, so it reads as a scale at a glance. A change moves the fill's
+/// right end over `RedesignTokens.Motion.standard` on the layer, and only then.
 final class AppUsageMeterView: DSView {
-    static let dot: CGFloat = 2, gap: CGFloat = 1
-    static var width: CGFloat { CGFloat(AppUsageLogic.dots) * dot + CGFloat(AppUsageLogic.dots - 1) * gap }
-    private var dots: [CALayer] = []
-    private(set) var lit = 0
+    typealias M = RedesignTokens.Meter
+    static var width: CGFloat { M.width }
+    private let track = CALayer()
+    private let fill = CALayer()
+    private(set) var level: CGFloat = 0
     var hot = false { didSet { if hot != oldValue { needsDisplay = true } } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        for _ in 0..<AppUsageLogic.dots {
-            let d = CALayer()
-            d.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull()]
-            d.cornerRadius = Self.dot / 2
-            layer?.addSublayer(d)
-            dots.append(d)
+        for l in [track, fill] {
+            l.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull()]
+            l.cornerRadius = M.height / 2
+            layer?.addSublayer(l)
         }
+        fill.anchorPoint = CGPoint(x: 0, y: 0.5)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -87,47 +86,55 @@ final class AppUsageMeterView: DSView {
     override var wantsUpdateLayer: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+    private var fillWidth: CGFloat { (M.width * level).rounded() }
+
     override func layout() {
         super.layout()
-        let y = ((bounds.height - Self.dot) / 2).rounded()
-        for (i, d) in dots.enumerated() { d.frame = CGRect(x: CGFloat(i) * (Self.dot + Self.gap), y: y, width: Self.dot, height: Self.dot) }
+        let y = ((bounds.height - M.height) / 2).rounded()
+        track.frame = CGRect(x: 0, y: y, width: M.width, height: M.height)
+        fill.bounds = CGRect(x: 0, y: 0, width: fillWidth, height: M.height)
+        fill.position = CGPoint(x: 0, y: y + M.height / 2)
     }
 
-    func setLit(_ n: Int, animated: Bool) {
-        guard n != lit else { return }
-        let old = lit
-        lit = n
-        let now = CACurrentMediaTime(), up = n > old
-        for i in (min(old, n)..<max(old, n)) where animated && !Motion.reduced {
-            let a = CABasicAnimation(keyPath: "backgroundColor")
-            a.fromValue = color(i < old)
-            a.duration = 0.18
-            a.beginTime = now + 0.04 * Double(up ? i - old : old - 1 - i)
-            a.fillMode = .backwards
-            dots[i].add(a, forKey: "level")
+    func setLevel(_ new: CGFloat, animated: Bool) {
+        guard new != level else { return }
+        let from = fill.presentation()?.bounds.width ?? fillWidth
+        level = new
+        fill.bounds.size.width = fillWidth
+        if animated, !Motion.reduced, window != nil {
+            let a = CABasicAnimation(keyPath: "bounds.size.width")
+            a.fromValue = from
+            a.toValue = fillWidth
+            a.duration = RedesignTokens.Motion.standard
+            a.timingFunction = RedesignTokens.Motion.curve
+            fill.add(a, forKey: "level")
         }
-        needsDisplay = true
-    }
-
-    private func color(_ on: Bool) -> CGColor {
-        on ? (hot ? SB.c(\.warning) : SB.c(\.sidebarForeground, 0.85)).cgColor(in: self) : SB.c(\.sidebarForeground, 0.2).cgColor(in: self)
     }
 
     override func updateLayer() {
-        for (i, d) in dots.enumerated() { d.backgroundColor = color(i < lit) }
+        track.backgroundColor = SB.c(\.sidebarForeground, M.track).cgColor(in: self)
+        fill.backgroundColor = (hot ? SB.c(\.warning) : SB.c(\.sidebarForeground, M.fill)).cgColor(in: self)
     }
 }
 
-/// Redesign's account pill second line: CandyWrapper's own CPU and memory, each an icon, a dot meter and a short
-/// number. It samples only while the app is active, the window shows and the sidebar is open.
+/// Redesign's account pill second line: CandyWrapper's own CPU and memory, each an icon, a bar meter and a short
+/// number in tabular digits. A reading shows only once it exists, so the line is empty, never a dash, before the
+/// first one. It samples every `interval` only while the app is active, the window shows and the sidebar is open;
+/// a visible window in the background takes one memory reading when it appears.
 public final class AppUsageReadoutView: DSView {
     static let interval: TimeInterval = 5
+    /// Icon to bar, bar to number.
+    static let gap: CGFloat = 4
+    /// CPU's number to memory's icon.
+    static let segmentGap: CGFloat = 10
     private let cpuIcon = IconView(name: .cpu, size: 12)
     private let memoryIcon = IconView(name: .memoryStick, size: 12)
     let cpuMeter = AppUsageMeterView()
     let memoryMeter = AppUsageMeterView()
-    let cpuLabel = LabelView("–", font: SB.font(11).monospacedDigits, color: SB.c(\.sidebarMutedForeground))
-    let memoryLabel = LabelView("–", font: SB.font(11).monospacedDigits, color: SB.c(\.sidebarMutedForeground))
+    let cpuLabel = LabelView("", font: SB.font(11).monospacedDigits, color: SB.c(\.sidebarMutedForeground))
+    let memoryLabel = LabelView("", font: SB.font(11).monospacedDigits, color: SB.c(\.sidebarMutedForeground))
+    /// Some reading shows. Without one the account card centres the name on its own.
+    public var hasReading: Bool { !memoryLabel.text.isEmpty || !cpuLabel.text.isEmpty }
     /// The layout's sidebar is open; a closed one slides out of view without hiding.
     public var sidebarOpen = true { didSet { if sidebarOpen != oldValue { sync() } } }
     private var timer: Timer?
@@ -165,22 +172,25 @@ public final class AppUsageReadoutView: DSView {
     public override func layout() {
         super.layout()
         var x: CGFloat = 0
-        let h = bounds.height
-        let segments = [(cpuIcon, cpuMeter, cpuLabel), (memoryIcon, memoryMeter, memoryLabel)]
+        let h = bounds.height, g = Self.gap
+        let all = [(cpuIcon, cpuMeter, cpuLabel), (memoryIcon, memoryMeter, memoryLabel)]
+        for (icon, meter, label) in all where label.text.isEmpty { icon.isHidden = true; meter.isHidden = true; label.isHidden = true }
+        let segments = all.filter { !$0.2.text.isEmpty }
         // In a narrow sidebar the meters go first, so the numbers and units never truncate.
-        let full = segments.reduce(-8) { $0 + 12 + 3 + AppUsageMeterView.width + 3 + ceil($1.2.textWidth) + 8 }
+        let full = segments.reduce(-Self.segmentGap) { $0 + 12 + g + AppUsageMeterView.width + g + ceil($1.2.textWidth) + Self.segmentGap }
         let meters = full <= bounds.width
         for (icon, meter, label) in segments {
             icon.frame = NSRect(x: x, y: (h - 12) / 2, width: 12, height: 12)
             meter.isHidden = !meters
-            meter.frame = NSRect(x: x + 12 + 3, y: 0, width: meters ? AppUsageMeterView.width : 0, height: h)
-            let lx = meters ? meter.frame.maxX + 3 : x + 12 + 4, w = ceil(label.textWidth)
+            meter.frame = NSRect(x: x + 12 + g, y: 0, width: meters ? AppUsageMeterView.width : 0, height: h)
+            let lx = meters ? meter.frame.maxX + g : x + 12 + g, w = ceil(label.textWidth)
             label.frame = NSRect(x: lx, y: (h - 16) / 2, width: w, height: 16)
             // Narrower still, a reading that would be cut ("1" of "182 MB") goes with its icon.
             let fits = lx + w <= bounds.width
             icon.isHidden = !fits
             label.isHidden = !fits
-            x = lx + w + 8
+            if !fits { meter.isHidden = true }
+            x = lx + w + Self.segmentGap
         }
     }
 
@@ -201,6 +211,11 @@ public final class AppUsageReadoutView: DSView {
     private func sync() {
         let visible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false
         let run = visible && NSApp.isActive && !isHiddenOrHasHiddenAncestor && sidebarOpen
+        // A window behind another app, covered or not, has no reading yet: one memory reading, with no timer and no
+        // CPU baseline, so the card never shows an empty meter.
+        if !run, !hasReading, window?.isVisible == true, !isHiddenOrHasHiddenAncestor, sidebarOpen, let now = AppUsageSample.read() {
+            show(cpu: nil, footprint: now.footprint, animated: false)
+        }
         guard run != (timer != nil) else { return }
         // A fresh baseline on every resume, so the first reading isn't averaged over the hidden stretch.
         guard run else { timer?.invalidate(); timer = nil; last = nil; hotStreak = 0; return }
@@ -221,16 +236,19 @@ public final class AppUsageReadoutView: DSView {
     }
 
     func show(cpu: Double?, footprint: UInt64, animated: Bool) {
+        let had = hasReading
         if let cpu {
             hotStreak = cpu > AppUsageLogic.hotPercent ? hotStreak + 1 : 0
             cpuMeter.hot = hotStreak >= AppUsageLogic.hotSamples
-            cpuMeter.setLit(AppUsageLogic.lit(cpu / 100), animated: animated)
+            // The first CPU reading appears in place; later ones move the bar.
+            cpuMeter.setLevel(AppUsageLogic.level(cpu / 100), animated: animated && !cpuLabel.text.isEmpty)
             cpuLabel.text = AppUsageLogic.cpuText(cpu)
         }
-        memoryMeter.setLit(AppUsageLogic.lit(Double(footprint) / AppUsageLogic.memoryScale), animated: animated)
+        memoryMeter.setLevel(AppUsageLogic.level(Double(footprint) / AppUsageLogic.memoryScale), animated: animated && had)
         memoryLabel.text = AppUsageLogic.memoryText(footprint)
         let tip = AppUsageLogic.tooltip(cpu: cpu, footprint: footprint)
         if currentTooltip != tip { setTooltip(tip); setAccessibilityValue(tip) }
         needsLayout = true
+        if !had { superview?.needsLayout = true }
     }
 }

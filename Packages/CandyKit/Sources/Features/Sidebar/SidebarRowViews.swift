@@ -502,8 +502,9 @@ class SidebarRowBase: ControlView {
     override func performAction() { onOpen?(); super.performAction() }
 
     /// `rowSurfaceClassName`: the open thread, then a selected row, then hover (or files dragged over).
-    static func surfaceColor(_ r: SidebarRowModel, hovered: Bool) -> NSColor? {
-        r.isActive ? SB.c(\.sidebarRowActive) : r.isSelected ? SB.c(\.sidebarRowSelected) : hovered ? SB.c(\.sidebarRowHover) : nil
+    /// Redesign adds the press: a held row takes the pressed step (`RedesignTokens.State.pressed`, the active row's fill).
+    static func surfaceColor(_ r: SidebarRowModel, hovered: Bool, pressed: Bool = false) -> NSColor? {
+        r.isActive || pressed ? SB.c(\.sidebarRowActive) : r.isSelected ? SB.c(\.sidebarRowSelected) : hovered ? SB.c(\.sidebarRowHover) : nil
     }
 
     /// The surface's ring: the keyboard focus ring (2px), else the file drag ring (`ring-1 ring-primary/70`).
@@ -700,7 +701,8 @@ final class SidebarCardRowView: SidebarRowBase {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // rowSurfaceClassName (Sidebar.tsx:1582-1605)
-        surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
+        surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver,
+            pressed: state.active && DesignGeometry.usesClassic(self))?.cgColor(in: self)
         applyRing(surface)
         applyLift(surface)
         CATransaction.commit()
@@ -1263,7 +1265,8 @@ final class SidebarSlimRowView: SidebarRowBase {
         let hovered = state.hovered || isKeyboardFocused
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver)?.cgColor(in: self)
+        surface.backgroundColor = SidebarRowBase.surfaceColor(r, hovered: state.hovered || isFileDragOver,
+            pressed: state.active && DesignGeometry.usesClassic(self))?.cgColor(in: self)
         applyRing(surface)
         applyLift(surface)
         CATransaction.commit()

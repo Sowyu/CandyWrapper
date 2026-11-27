@@ -50,6 +50,9 @@ public final class SidebarUpdatePillView: ControlView {
     let capsuleRing = CAShapeLayer()
     let capsuleLabel = LabelView("", font: DSFont.ui(12))
     let capsuleLink = SidebarUpdateCapsuleLink()
+    /// Redesign's status glyph before a failed or slow pass's label, the only other place the status color goes.
+    let capsuleFailedGlyph = IconView(name: .circleAlert, size: 14)
+    let capsuleSlowGlyph = IconView(name: .clock, size: 14)
     let countdownLabel = LabelView("", font: DSFont.ui(12, weight: .medium).monospacedDigits)
     let countdownRing = CAShapeLayer()
     var capsulePopup: OpenPopup?
@@ -114,7 +117,7 @@ public final class SidebarUpdatePillView: ControlView {
         capsuleLabel.lineHeight = 16
         countdownLabel.lineHeight = 16
         countdownLabel.alignment = .center
-        for v in [capsuleLabel, countdownLabel] as [NSView] { v.isHidden = true; addSubview(v) }
+        for v in [capsuleLabel, countdownLabel, capsuleFailedGlyph, capsuleSlowGlyph] as [NSView] { v.isHidden = true; addSubview(v) }
         capsuleLink.isHidden = true
         capsuleLink.onPress = { [weak self] in self?.runCapsuleAction() }
         addSubview(capsuleLink)

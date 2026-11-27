@@ -304,6 +304,8 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     let field = NSTextField()
     private let icon = IconView(name: .search, size: 16)
     private let surface = CALayer()
+    /// Redesign's "Search", under the field while it is empty.
+    private let placeholder = LabelView("Search", font: SB.font(13), color: SB.c(\.foreground, RedesignTokens.Text.quiet))
     private var hovered = false { didSet { restyle() } }
     private var fieldHeight: CGFloat = 0
     /// "Clear thread search" (SidebarThreadHeader.tsx:110-123): `icon-micro ghost-muted`, a `size-3` x, while searching.
@@ -320,6 +322,7 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
     private func syncClear() {
         let searching = !field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if clearButton.isHidden == searching { clearButton.isHidden = !searching; needsLayout = true }
+        syncPlaceholder()
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -350,6 +353,9 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         field.cell?.lineBreakMode = .byTruncatingTail
         field.setAccessibilityLabel("Search threads")
         field.delegate = self
+        placeholder.lineHeight = 20
+        placeholder.setAccessibilityElement(false)
+        addSubview(placeholder)
         addSubview(field)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
         restyle()
@@ -382,8 +388,16 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
             }
         }
         icon.strokeColor = dither && hovered ? SB.c(\.foreground) : dither ? SB.c(\.sidebarMutedForeground) : SB.c(\.sidebarIconColor)
-        field.placeholderAttributedString = NSAttributedString(string: "Search", attributes: [
+        // Redesign draws "Search" as the nav rows draw their labels; the field's own placeholder took font smoothing
+        // and read heavier and brighter than "New thread" under it.
+        field.placeholderAttributedString = dither ? nil : NSAttributedString(string: "Search", attributes: [
             .font: SB.font(size, weight), .foregroundColor: hovered ? SB.c(\.sidebarForeground) : resting])
+        placeholder.color = hovered ? SB.c(\.foreground) : SB.c(\.foreground, RedesignTokens.Text.quiet)
+        syncPlaceholder()
+    }
+
+    private func syncPlaceholder() {
+        placeholder.isHidden = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark) || !field.stringValue.isEmpty
     }
 
     override func layout() {
@@ -397,6 +411,7 @@ final class SidebarSearchFieldView: DSView, NSTextFieldDelegate {
         // `gap-2`, then the 20pt clear button before the `px-2` edge.
         let clear: CGFloat = clearButton.isHidden ? 0 : 20 + 8
         field.frame = NSRect(x: 30, y: (bounds.height - fh) / 2, width: max(0, bounds.width - 38 - clear), height: fh)
+        placeholder.frame = NSRect(x: 32, y: (bounds.height - 20) / 2, width: max(0, bounds.width - 40 - clear), height: 20)
         clearButton.frame = NSRect(x: bounds.width - 8 - 20, y: (bounds.height - 20) / 2, width: 20, height: 20)
     }
 }
@@ -438,8 +453,10 @@ final class SidebarNavRowView: ControlView {
 
     override func updateLayer() {
         layer?.cornerRadius = DitherChrome.controlRadius
-        layer?.backgroundColor = isSelected ? SB.c(\.sidebarRowActive).cgColor(in: self)
-            : state.hoverOrPressed ? SB.c(\.sidebarRowHover).cgColor(in: self) : nil
+        // Redesign's state steps: a press reads a step over hover, as on every other Redesign control.
+        let dark = effectiveAppearance.isDark
+        layer?.backgroundColor = (isSelected ? RedesignTokens.State.fill(RedesignTokens.State.selected, dark: dark)
+            : RedesignTokens.State.fill(state, dark: dark))?.cgColor(in: self)
         let strong = isSelected || state.hoverOrPressed
         icon.strokeColor = strong ? SB.c(\.foreground) : SB.c(\.sidebarMutedForeground)
         label.color = strong ? SB.c(\.foreground) : SB.c(\.foreground, RedesignTokens.Text.quiet)
@@ -638,7 +655,9 @@ public final class SidebarAccountRowView: ControlView {
         let end = bounds.width - 8 - trailingReserve
         let c = SidebarAccountChevronButton.size
         let right = end - c - 4
-        name.frame = NSRect(x: tx, y: h / 2 - 16, width: max(0, right - tx), height: 16)
+        // Before the first reading the name sits alone on the avatar's centre line.
+        let reading = usage.hasReading
+        name.frame = NSRect(x: tx, y: reading ? h / 2 - 16 : (h - 16) / 2, width: max(0, right - tx), height: 16)
         usage.frame = NSRect(x: tx, y: h / 2, width: max(0, right - tx), height: 16)
         chevron.frame = NSRect(x: end - c, y: (h - c) / 2, width: c, height: c)
     }
