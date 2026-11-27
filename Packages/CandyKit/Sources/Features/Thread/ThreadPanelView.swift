@@ -1819,7 +1819,16 @@ public final class ThreadPanelView: DSView {
     /// viewport), at most 736 wide, 20px above the bottom; the timeline keeps the overlay's height
     /// (`pt-2` + composer + spacer) clear. On the draft page the composer, a 32px context strip and
     /// the spacer are centered in the column below the header, with the hero 16px above.
-    private func layoutComposer(chat: CGFloat, height chatHeight: CGFloat) {
+    /// The composer group's lane beside Redesign's sheet: centred in the `clear` column left of it, `Space.s` in from
+    /// each side, never wider than the thread's own lane, so its right edge stays clear of the sheet.
+    nonisolated static func sheetColumn(clear: CGFloat, maximum: CGFloat) -> (x: CGFloat, width: CGFloat) {
+        let pad = RedesignTokens.Space.s
+        let width = max(0, min(maximum, clear - 2 * pad))
+        return (max(pad, ((clear - width) / 2).rounded(.down)), width)
+    }
+
+    /// `clear`: the room left of Redesign's sheet, `chat` without one.
+    private func layoutComposer(chat: CGFloat, clear: CGFloat, height chatHeight: CGFloat) {
         let lane: CGFloat = viewportWidth < 640 ? 12 : 48
         let placement = ThreadDetailsPlacement.lane(width: chat, maximum: ThreadChatWidth.current(dither: ThemeRuntime.isDither(dark: effectiveAppearance.isDark)), padding: lane, cardLeft: timeline.detailsCardLeft)
         let width = placement.width
@@ -1827,7 +1836,10 @@ public final class ThreadPanelView: DSView {
         let x = placement.x.rounded()
         readingLane = NSRect(x: x, y: 0, width: width, height: chatHeight)
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: x, width: width, height: height)
+            guard clear < chat else { return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: x, width: width, height: height) }
+            // Beside the sheet the composer group takes the whole clear column, `Space.s` in from each side.
+            let beside = Self.sheetColumn(clear: clear, maximum: width)
+            return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: beside.x, width: beside.width, height: height)
         }
         // Back from Redesign: everything docks again, the ring in the composer's footer.
         contextStrip.floatsAsPills = false
@@ -2699,7 +2711,7 @@ public final class ThreadPanelView: DSView {
                 shift = CGSize(width: ((rest.x - target.x) * open).rounded(), height: ((target.y - rest.y) * open).rounded())
             }
             strip.accessoryShift = shift
-            strip.sheetStart = inset && sheet && rightPanelOpen ? strip.convert(NSPoint(x: rightPanel.frame.minX, y: 0), from: self).x : nil
+            strip.sheetStart = card && sheet && rightPanelOpen ? strip.convert(NSPoint(x: rightPanel.frame.minX, y: 0), from: self).x : nil
             if strip.passThrough == nil { strip.passThrough = { [weak self] point in self?.cardRowHit(point) } }
         }
         // `left-0 w-1`: the handle starts at the panel's edge, off the chat's scrollbar (RightPanelResizeHandle.tsx:22 at 4928, #35043).
@@ -2725,8 +2737,11 @@ public final class ThreadPanelView: DSView {
         updateDetailsPresentation(inline: inlinePlacement != nil)
         let inlineDetails = detailsOpen ? inlinePlacement : nil
         timeline.detailsCardLeft = inlineDetails?.minX
-        layoutComposer(chat: chat, height: chatHeight)
-        layoutThreadTitle(chat: chat, above: above)
+        // Redesign's sheet covers the thread's text on purpose but never cuts a control: the composer, its pills and
+        // notices and the row under it keep to the column left of the sheet, `Space.s` short of its edge.
+        let clear = card && sheet && rightPanelOpen ? max(0, rightPanel.frame.minX - margin) : chat
+        layoutComposer(chat: chat, clear: clear, height: chatHeight)
+        layoutThreadTitle(chat: clear, above: above)
         if let findBar = lazyFindBar.loaded {
             // `top-3 right-3 w-[min(var(--thread-details-panel-width),calc(100%-1.5rem))]`: as wide as the
             // details card and lined up with it (ThreadFindBar.tsx:62-66 in 2994, f92afe79c).
