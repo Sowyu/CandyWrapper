@@ -21,6 +21,9 @@ final class WorkflowsPageController {
     private var detailTask: Task<Void, Never>?
     private var detailKey: (runId: String, key: String?)?
     var openSettingsLabs: () -> Void = {}
+    /// The server's name and whether this app can update it; the unsupported state's button runs `updateServer`.
+    var updateRoute: (String) -> ServerUpdateRoute = { ServerUpdateRoute(environment: $0, canUpdate: false) }
+    var updateServer: (String) -> Void = { _ in }
     /// Opens a thread by its environment and its own id.
     var openThread: (_ environmentId: String, _ threadId: String) -> Void = { _, _ in }
 
@@ -31,6 +34,11 @@ final class WorkflowsPageController {
         page.onSelect = { [weak self] id in self?.page.selectedRunId = id }
         page.onShownRunChange = { [weak self] _ in self?.readDetail(force: true) }
         page.onOpenSettings = { [weak self] in self?.openSettingsLabs() }
+        page.onUpdateServer = { [weak self] in
+            guard let self else { return }
+            let connected = self.environments.environmentIds.filter { self.environments.session($0) != nil }
+            if let env = self.environments.primaryId.flatMap({ connected.contains($0) ? $0 : nil }) ?? connected.first { self.updateServer(env) }
+        }
         page.onOpenURL = { url in if let u = URL(string: url) { NSWorkspace.shared.open(u) } }
         page.onAnswer = { [weak self] runId, name, choice, reason, done in self?.answer(runId, name, choice, reason, done) }
         page.onCancelRun = { [weak self] runId in self?.confirmCancel(runId) }
@@ -87,8 +95,14 @@ final class WorkflowsPageController {
         guard visible else { return }
         page.canOperate = environments.canOperate(subscribedEnvironment)
         if subscribedEnvironment == nil {
-            let connected = environments.environmentIds.contains { environments.session($0) != nil }
-            page.content = connected ? .off : .noEnvironment
+            let connected = environments.environmentIds.filter { environments.session($0) != nil }
+            // A server that stores no `workflowsEnabled` has no Labs switch to turn: it predates workflows.
+            let primary = environments.primaryId.flatMap { connected.contains($0) ? $0 : nil } ?? connected.first
+            if let primary, let settings = config(primary)?.settings, settings.raw.objectValue?.isEmpty == false, settings.raw["workflowsEnabled"] == nil {
+                page.content = .unsupported(updateRoute(primary))
+            } else {
+                page.content = connected.isEmpty ? .noEnvironment : .off
+            }
         } else {
             render()
         }

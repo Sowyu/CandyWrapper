@@ -37,6 +37,8 @@ final class SidebarCommands {
         let c = IssuesPageController(sidebar: sidebar!, environments: environments, capabilities: threads.pullRequests.capabilities)
         c.container.onEscape = { [weak self] in self?.goBack() }
         c.onSearchThreads = { [weak self] url in self?.onSearchThreads?(url) }
+        c.updateRoute = { [weak self] env in self?.updateRoute(env) ?? ServerUpdateRoute(environment: env, canUpdate: false) }
+        c.updateServer = { [weak self] env in self?.updateServer(env) }
         c.container.onClosed = { [weak self] removed in self?.threads.files.rememberPageTabs(removed, page: FilesController.issuesPageKey) }
         return c
     }()
@@ -45,12 +47,26 @@ final class SidebarCommands {
         let c = WorkflowsPageController(environments: environments, config: { [weak self] in self?.threads.composer.config($0) })
         c.page.onEscape = { [weak self] in self?.goBack() }
         c.openSettingsLabs = { [weak self] in self?.openSettingsItem?(SettingsSearch.items.first { $0.id == "workflows-beta" }!) }
+        c.updateRoute = { [weak self] env in self?.updateRoute(env) ?? ServerUpdateRoute(environment: env, canUpdate: false) }
+        c.updateServer = { [weak self] env in self?.updateServer(env) }
         c.openThread = { [weak self] env, threadId in
             self?.closeUtilityPage()
             self?.threads.open(ThreadId(threadId).scoped(to: env))
         }
         return c
     }()
+    /// Redesign's route out of a page a server is too old for: update it here when this app may, else Environments.
+    func updateRoute(_ env: String) -> ServerUpdateRoute {
+        let updates = threads.serverUpdates
+        let label = environments.label(env) ?? "this server"
+        return ServerUpdateRoute(environment: label, canUpdate: updates.canUpdate(env) && updates.offer(env, serverLabel: label) != nil)
+    }
+
+    func updateServer(_ env: String) {
+        let route = updateRoute(env)
+        if route.canUpdate { threads.serverUpdates.request(env, serverLabel: route.environment) } else { threads.openEnvironments?() }
+    }
+
     /// `useWorkflowEnvironmentIds().length > 0` (CommandPalette.tsx:527): a connected server has workflows on.
     var workflowsReachable: Bool {
         environments.environmentIds.contains { environments.session($0) != nil && threads.composer.config($0)?.settings.raw["workflowsEnabled"]?.boolValue == true }
@@ -1343,8 +1359,8 @@ final class SidebarCommands {
         sidebar.selectedNavPage = switch page {
         case .pullRequests: .pullRequests
         case .issues: .issues
-        case .workflows: .automations
-        case .usage: nil
+        // Automations opens scheduled tasks; Workflows is its own page with no nav row, so neither lights.
+        case .workflows, .usage: nil
         }
         if page == .pullRequests {
             pullRequestsPage.didShow()
