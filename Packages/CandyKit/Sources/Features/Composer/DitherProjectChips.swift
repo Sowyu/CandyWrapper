@@ -30,6 +30,18 @@ public final class DitherChipView: ControlView {
     var online: Bool? { didSet { if online != oldValue { changed() } } }
     /// Without a choice the chip is a static label: no chevron, no hover.
     var interactive = true { didSet { if interactive != oldValue { changed() } } }
+    /// The new-thread page's quiet controls: regular weight at the quiet text strength, a fill without rim or shadow
+    /// (`DitherPillSurface.quiet`), full strength on hover and while open.
+    var quiet = false {
+        didSet {
+            guard quiet != oldValue else { return }
+            pill.quiet = quiet
+            label.font = quiet ? DSFont.ui(13) : Self.font
+            changed()
+        }
+    }
+    /// A plain action, like the new-thread page's starters, has no chevron.
+    var showsChevron = true { didSet { if showsChevron != oldValue { changed() } } }
 
     init(icon: NSView, accessibilityLabel: String) {
         self.icon = icon
@@ -61,9 +73,9 @@ public final class DitherChipView: ControlView {
     }
 
     private func changed() {
-        chevron.isHidden = !interactive
+        chevron.isHidden = !interactive || !showsChevron
         dot.isHidden = online == nil
-        setAccessibilityRole(interactive ? .popUpButton : .staticText)
+        setAccessibilityRole(!interactive ? .staticText : showsChevron ? .popUpButton : .button)
         invalidateIntrinsicContentSize()
         restyle()
         needsLayout = true
@@ -73,27 +85,27 @@ public final class DitherChipView: ControlView {
     private var textWidth: CGFloat { min(240, ceil(label.textWidth)) }
 
     public override var intrinsicContentSize: NSSize {
-        var w = 6 + 14 + 4 + textWidth
-        if online != nil { w += 5 + 6 }
-        if interactive { w += 6 + 12 - 2 }
-        return NSSize(width: w + 6, height: Self.height)
+        var w = DitherPill.textX + textWidth
+        if online != nil { w += DitherPill.glyphGap + 6 }
+        if interactive && showsChevron { w += DitherPill.glyphGap + 12 }
+        return NSSize(width: w + DitherPill.pad, height: Self.height)
     }
 
     public override func layout() {
         super.layout()
         let midY = bounds.height / 2
         pill.frame = bounds
-        icon.frame = NSRect(x: 6, y: midY - 7, width: 14, height: 14)
-        label.frame = NSRect(x: 24, y: midY - 8, width: textWidth, height: 16)
+        icon.frame = NSRect(x: DitherPill.pad, y: midY - 7, width: DitherPill.glyph, height: DitherPill.glyph)
+        label.frame = NSRect(x: DitherPill.textX, y: midY - 8, width: textWidth, height: 16)
         var x = label.frame.maxX
         CATransaction.begin(); CATransaction.setDisableActions(true)
         fill.frame = bounds
         if online != nil {
-            dot.frame = CGRect(x: x + 5, y: midY - 3, width: 6, height: 6)
-            x += 11
+            dot.frame = CGRect(x: x + DitherPill.glyphGap, y: midY - 3, width: 6, height: 6)
+            x += DitherPill.glyphGap + 6
         }
         CATransaction.commit()
-        chevron.frame = NSRect(x: x + 4, y: midY - 6, width: 12, height: 12)
+        chevron.frame = NSRect(x: x + DitherPill.glyphGap, y: midY - 6, width: 12, height: 12)
     }
 
     public override func stateDidChange(from old: State) {
@@ -114,8 +126,9 @@ public final class DitherChipView: ControlView {
 
     private func restyle() {
         let lit = interactive && state.hoverOrPressed
-        label.color = muted && !lit ? Themed.color(\.mutedForeground) : Themed.color(\.foreground)
-        let iconColor = muted && !lit ? Themed.color(\.mutedForeground) : Themed.color(\.foreground, 0.85)
+        let rest = quiet ? Themed.color(\.foreground, RedesignTokens.Text.quiet) : Themed.color(\.mutedForeground)
+        label.color = (muted || quiet) && !lit ? rest : Themed.color(\.foreground)
+        let iconColor = (muted || quiet) && !lit ? rest : Themed.color(\.foreground, 0.85)
         (icon as? IconView)?.strokeColor = iconColor
         chevron.strokeColor = Themed.color(\.secondaryLabel)
         needsDisplay = true

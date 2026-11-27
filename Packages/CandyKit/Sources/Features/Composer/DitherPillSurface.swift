@@ -14,6 +14,13 @@ public enum DitherPill {
     /// Between the composer and the first row, between rows, and between pills in a row.
     public static let gap: CGFloat = 8
     public static let spacing: CGFloat = 6
+    /// Inside every pill around the composer, so a row of them reads as one: the glyph (or the chevron at the end) this
+    /// far in from the pill's edge, a 14pt glyph box, and this gap between the glyph and the text and before the chevron.
+    public static let pad: CGFloat = 8
+    public static let glyph: CGFloat = 14
+    public static let glyphGap: CGFloat = 6
+    /// Where a pill's text starts.
+    public static let textX: CGFloat = pad + glyph + glyphGap
 
     /// The solid surface fill: a timeline card scrolled under a panel never reads through it (the user's 1.14.10
     /// subagent panel over the changed-files card, 2026-10-28). Over the Flower background a little of the blurred
@@ -33,9 +40,9 @@ public final class DitherPillSurface: DSView {
     /// The panel's own ground instead of the raised surface, for a large surface whose cards must stand a step
     /// above it (Settings).
     public var ground = false { didSet { if ground != oldValue { needsDisplay = true } } }
-    /// A pill in the tab band: with Redesign's inset panel on it sits in the card's top row and draws no surface, so
-    /// its controls read as part of the row.
-    public var flatInInsetRow = false { didSet { if flatInInsetRow != oldValue { needsDisplay = true } } }
+    /// A quiet control (the new-thread page's project, machine and starters): the solid fill that keeps it readable
+    /// over a picture, with no rim and no shadow, so a row of them doesn't read as a wall of outlines.
+    public var quiet = false { didSet { if quiet != oldValue { needsDisplay = true } } }
     private let shade = DSView()
     /// What shows through the fill over the Flower background.
     private let backing = FlowerGlassView()
@@ -60,10 +67,9 @@ public final class DitherPillSurface: DSView {
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         face.layer?.backgroundColor = ground ? Themed.color(\.background).cgColor(in: self) : DitherPill.fill(in: self)
-        let flat = flatInInsetRow && ThemeRuntime.insetPanel(dark: effectiveAppearance.isDark)
-        face.isHidden = flat
-        shade.isHidden = flat
-        backing.isHidden = ground || flat
+        backing.isHidden = ground
+        shade.isHidden = quiet
+        face.layer?.borderWidth = quiet ? 0 : 1
         face.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor
         CATransaction.commit()
         needsLayout = true

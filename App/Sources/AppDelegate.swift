@@ -884,7 +884,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let path = args[i + 1]
         let delay = args.firstIndex(of: "--snapshot-delay").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 4
         #if DEBUG
-        // `--snapshot-open thread,panel,files,browser,terminal,pulls,issues,workflows,collapsed,picker,access,usage,settings:<page>`
+        // `--snapshot-open thread,draft,panel,files,browser,terminal,pulls,issues,workflows,collapsed,picker,access,usage,settings:<page>`
         // puts a test app in those states halfway through the delay,
         // since keys sent to an app behind the other windows don't reach its palette.
         if Self.isTestBuild, let o = args.firstIndex(of: "--snapshot-open"), o + 1 < args.count {
@@ -896,6 +896,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         switch step {
                         case "thread":
                             if let id = sidebar?.snapshot?.threads.first?.id { threads.open(id) }
+                        case "draft": threads.newThread()
                         case "panel": threads.panel.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
                         // The drawer's open state persists, so the step opens it only when it is closed.
                         case "terminal": if !threads.panel.terminalOpen { threads.panel.onTerminalToggle?() }

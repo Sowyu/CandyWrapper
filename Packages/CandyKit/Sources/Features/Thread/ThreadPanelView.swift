@@ -148,7 +148,16 @@ public final class ThreadHeaderView: TopbarDragView {
             ActiveKeymap.label(for: command).map { "\(text) (\($0))" } ?? text
         }
         guard toggleTips.count == 3 else { return }
-        toggleTips[0].text = tip(plain ? "Editor, scripts, git and lineage" : "Toggle thread details", "threadPanel.toggle")
+        toggleTips[0].text = tip(plain ? "Thread actions" : "Toggle thread details", "threadPanel.toggle")
+        // Redesign's menu leaves out the sections Thread details turns off, so the tooltip names what it holds on hover.
+        if plain {
+            toggleTips[0].textProvider = { [weak self] () -> String in
+                let text = self?.pill.menuSummary() ?? "Thread actions"
+                return ActiveKeymap.label(for: "threadPanel.toggle").map { "\(text) (\($0))" } ?? text
+            }
+        } else {
+            toggleTips[0].textProvider = nil
+        }
         toggleTips[1].text = tip("Toggle terminal drawer", "terminal.toggle")
         toggleTips[2].text = tip("Toggle right panel", "rightPanel.toggle")
     }
@@ -699,6 +708,8 @@ public final class ThreadPanelView: DSView {
     /// Redesign's machine and workspace row under the composer, in place of the checkout and ref pills.
     public let deviceRow = DitherDeviceRowView()
     public var showsDeviceRow = false { didSet { if showsDeviceRow != oldValue { needsLayout = true } } }
+    /// Redesign's starter actions under the new-thread page's composer.
+    public let starterRow = DitherStarterRowView()
     /// The thread error banner over the top of the timeline (ChatView.tsx:11355-11375).
     public let errorBanner = ThreadErrorBannerView()
     /// The composer provider's status (ProviderStatusBanner.tsx), above the error banner in the
@@ -927,6 +938,8 @@ public final class ThreadPanelView: DSView {
         addSubview(contextStrip)
         deviceRow.isHidden = true
         addSubview(deviceRow)
+        starterRow.isHidden = true
+        addSubview(starterRow)
         addSubview(commandMenu)
         addSubview(composer)
         // Empty and hidden until a subagent asks; in place so a change can ask the panel for a layout.
@@ -961,6 +974,13 @@ public final class ThreadPanelView: DSView {
         maximize.isHidden = true
         maximize.onPressedChange = { [weak self] _ in self?.toggleMaximized() }
         header.pill.onResize = { [weak self] in self?.needsLayout = true }
+        header.pill.menuSections[.lineage] = { [weak self] in
+            guard let self, self.lazyDetailsCard.loaded?.hasRelations == true else { return [] }
+            // The card holds the thread's links, repositories, usage, automations and lineage here (#42919).
+            var item = MenuItem("Thread details", icon: .gitFork)
+            item.action = { [weak self] in DispatchQueue.main.async { self?.setDetailsOpen(true) } }
+            return [.label("Details"), item]
+        }
         addSubview(maximize)
         for slide in [panelSlide, terminalSlide] {
             slide.onFrame = { [weak self] _ in self?.layoutNow() }
@@ -1116,13 +1136,6 @@ public final class ThreadPanelView: DSView {
     /// card with the thread's pull requests, automations and lineage under the same button.
     public func showDitherActions() {
         let toggle = header.toggles[0]
-        header.pill.menuSections[.lineage] = { [weak self] in
-            guard let self, self.lazyDetailsCard.loaded?.hasRelations == true else { return [] }
-            // The card holds the thread's links, repositories, usage, automations and lineage here (#42919).
-            var item = MenuItem("Thread details", icon: .gitFork)
-            item.action = { [weak self] in DispatchQueue.main.async { self?.setDetailsOpen(true) } }
-            return [.label("Details"), item]
-        }
         if detailsOpen { setDetailsOpen(false) }
         let items = header.pill.menuItems()
         guard !items.isEmpty, toggle.window != nil else { return }
@@ -1666,6 +1679,7 @@ public final class ThreadPanelView: DSView {
         // The new-thread page appearing, or showing another project, opens it: Redesign's Flower blooms.
         let opening = projectTitle != nil && (!isDraft || hero.projectTitle != projectTitle)
         isDraft = projectTitle != nil
+        header.pill.isDraft = isDraft
         hero.isHidden = !isDraft
         DitherArtView.setEmphasis(isDraft ? .hero : .thread, from: self)
         hero.projectTitle = projectTitle ?? ""
@@ -1798,6 +1812,7 @@ public final class ThreadPanelView: DSView {
         // Back from Redesign: everything docks again, the ring in the composer's footer.
         contextStrip.floatsAsPills = false
         deviceRow.isHidden = true
+        starterRow.isHidden = true
         waitingIndicator.isHidden = true
         ringPill.isHidden = true
         lazySubagentPill.loaded?.isHidden = true
@@ -2056,10 +2071,44 @@ public final class ThreadPanelView: DSView {
             DitherArtView.clearFlowerStage(from: self)
             return
         }
-        let floor = isDraft ? ([composer] + ditherShown).filter { !$0.isHidden }.map { isFlipped ? $0.frame.minY : $0.frame.maxY }
+        // The group's top: the composer, the project chip's row and the notices above it.
+        let floor = isDraft ? ([composer, hero] + ditherShown).filter { !$0.isHidden }.map { isFlipped ? $0.frame.minY : $0.frame.maxY }
             .reduce(nil as CGFloat?) { acc, y in acc.map { isFlipped ? min($0, y) : max($0, y) } ?? y } : nil
         DitherArtView.setFlowerStage(kind: isDraft ? .hero : .thread, content: NSRect(x: 0, y: 0, width: chat, height: chatHeight),
                                      floorTop: floor, from: self)
+    }
+
+    /// Redesign's new-thread page: the composer's top when the group (the context row, the composer and the starter
+    /// row, `DitherPill.gap` apart) has its middle `RedesignTokens.Draft.centre` of the way down from `top` to `bottom`.
+    /// The starter row's slot counts even while it is empty, so the composer never moves between drafts.
+    static func draftComposerY(top: CGFloat, bottom: CGFloat, composer: CGFloat) -> CGFloat {
+        let pill = DitherPill.height, gap = DitherPill.gap
+        let group = pill + gap + composer + gap + pill
+        let groupTop = top + (bottom - top) * RedesignTokens.Draft.centre - group / 2
+        return (max(top + gap, groupTop) + pill + gap).rounded()
+    }
+
+    /// The draft's notices in `room` beside the project and machine, `spacing` apart: each at its natural width when
+    /// they all fit, else the widest give first, down to one shared cap, so a short notice keeps its whole title while a
+    /// long one shortens; none goes under its narrowest form. A notice that would not fit even at its narrowest gets 0
+    /// and stays hidden, from the last one back.
+    static func draftNoticeWidths(natural: [CGFloat], minimum: [CGFloat], room: CGFloat, spacing: CGFloat) -> [CGFloat] {
+        var count = natural.count
+        func need(_ widths: ArraySlice<CGFloat>) -> CGFloat { widths.reduce(0, +) + spacing * CGFloat(max(0, widths.count - 1)) }
+        while count > 0 && need(minimum.prefix(count)) > room { count -= 1 }
+        let shown = Array(zip(natural.prefix(count), minimum.prefix(count)))
+        func capped(_ cap: CGFloat) -> [CGFloat] { shown.map { n, m in max(min(m, n), min(n, cap)).rounded(.down) } }
+        var result = shown.map(\.0)
+        if need(result[...]) > room {
+            // The largest cap that fits, by bisection over the natural widths' range.
+            var lo: CGFloat = 0, hi = result.max() ?? 0
+            for _ in 0..<24 {
+                let mid = (lo + hi) / 2
+                if need(capped(mid)[...]) <= room { lo = mid } else { hi = mid }
+            }
+            result = capped(lo)
+        }
+        return result + Array(repeating: 0, count: natural.count - count)
     }
 
     private var ditherDockViews: [ComposerBannerView?] {
@@ -2076,20 +2125,23 @@ public final class ThreadPanelView: DSView {
     /// background work, server update and the other notices) filling rows from the left, then the cards (the request
     /// panel, tasks, wide notices, the queue). The checkout and branch pills float `DitherPill.gap` below it, from its
     /// left edge, where T3's strip sits. The composer never moves for any of them; they fade in and out.
-    private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x: CGFloat, width: CGFloat, height: CGFloat) {
+    private func layoutDitherComposer(chat: CGFloat, chatHeight: CGFloat, x column: CGFloat, width lane: CGFloat, height: CGFloat) {
         let gap = DitherPill.gap, pillH = DitherPill.height, spacing = DitherPill.spacing
         let overlap = ComposerBannerView.overlap
+        // The new-thread page is one group, after Capy's: the project and machine row on the composer's top left, the
+        // composer, and the starter actions under it, `gap` apart, narrower than a thread's column and centred across.
+        let width = isDraft ? min(lane, RedesignTokens.Draft.width) : lane
+        let x = isDraft ? (column + (lane - width) / 2).rounded() : column
         // Pill rows sit inside the composer's corners; cards keep its full width.
         let px = x + DitherPill.inset, pw = max(0, width - 2 * DitherPill.inset)
-        // The draft centers the composer alone, so pills coming and going never move it.
+        // The draft places the group alone, so notices coming and going above it never move it.
         // A thread always keeps the row: the context ring and the waiting indicator sit at its right.
         let below = isDraft ? 0 : gap + pillH
-        let y = isDraft ? (chatTop + (chatHeight - chatTop - height - 20) / 2).rounded() : chatHeight - 20 - below - height
+        let y = isDraft ? Self.draftComposerY(top: chatTop, bottom: chatHeight, composer: height) : chatHeight - 20 - below - height
         let oldFrames = Dictionary(uniqueKeysWithValues: ditherShown.map { (ObjectIdentifier($0), $0.frame) })
         composer.frame = NSRect(x: x, y: y, width: width, height: height)
         composer.isHidden = !composerShown || chat == 0
         composer.joinsContextStrip = false
-        DitherArtView.setComposer(isDraft && composerShown && chat > 0 ? composer.frame : nil, from: self)
         let visible = !composer.isHidden
         let docked = visible && !isDraft
         // Queued messages sit at the end of the timeline as the default themes draw them (the user, 2026-11-21:
@@ -2100,6 +2152,42 @@ public final class ThreadPanelView: DSView {
         queue.isHidden = !hasQueuedMessages
         var shown: [NSView] = []
         var top = y
+        // Capy's machine and workspace row takes the strip's place, in threads under the composer and on the draft
+        // beside the project chip; its menu holds the strip's machine, workspace and ref.
+        let deviceShown = visible && showsDeviceRow
+        deviceRow.opensDown = isDraft
+        deviceRow.quiet = isDraft
+        hero.projectChip.quiet = true
+
+        // The draft's context row on the composer's top left: the project chip, then the machine. Its notices take the
+        // row's right end (`placeDraftNotices`).
+        var draftRow: (y: CGFloat, end: CGFloat)?
+        if isDraft {
+            let rowY = y - gap - pillH
+            var left = px
+            let w = hero.chipsWidth
+            hero.frame = NSRect(x: px, y: rowY, width: w, height: pillH)
+            if w > 0 { left += w + spacing }
+            if deviceShown {
+                deviceRow.frame = NSRect(x: left, y: rowY, width: min(deviceRow.intrinsicContentSize.width, max(0, px + pw - left)), height: pillH)
+                left = deviceRow.frame.maxX + spacing
+                shown.append(deviceRow)
+            }
+            draftRow = (rowY, left)
+            top = rowY
+        }
+        starterRow.isScratch = hero.isScratch
+        starterRow.offersScratch = hero.offersScratch
+        let starterShown = isDraft && visible && !starterRow.isEmpty
+        starterRow.isHidden = !starterShown
+        if starterShown {
+            starterRow.frame = NSRect(x: x, y: y + height + gap, width: width, height: pillH)
+            shown.append(starterRow)
+        }
+        // The art keeps clear of the whole group: Picture's dots thin around it and Flower's lotus stays under it.
+        var group = composer.frame.union(NSRect(x: x, y: y - gap - pillH, width: width, height: pillH))
+        if starterShown { group = group.union(starterRow.frame) }
+        DitherArtView.setComposer(isDraft && composerShown && chat > 0 ? group : nil, from: self)
 
         // The banner stack's items: notices become pills, the rest cards. The stack only runs their exits.
         let ordered = ComposerBannerStackItem.ordered(bannerStackItems(docked: docked, composerVisible: visible))
@@ -2135,14 +2223,9 @@ public final class ThreadPanelView: DSView {
             shown.append(view)
         }
 
-        // The context row: the draft's chips (the hero), Stash at the right.
+        // The context row: the parent pill at the left, Stash at the right.
         let rowY = top - gap - pillH
         var left = px, right = px + pw
-        if isDraft {
-            let w = hero.chipsWidth
-            hero.frame = NSRect(x: px, y: rowY, width: w, height: pillH)
-            if w > 0 { left += w + spacing; top = rowY }
-        }
         // A delegated task's way back to its parent leads the row.
         if docked, let title = parentPillTitle {
             let pill = lazyParentPill.view
@@ -2159,9 +2242,6 @@ public final class ThreadPanelView: DSView {
         }
         let badgeShown = showsStashBadge && visible
         stashBadge.placement = .floating
-        // Capy's machine and workspace row takes the strip's place under the composer, in threads and on the draft;
-        // its menu holds the strip's machine, workspace and ref.
-        let deviceShown = visible && showsDeviceRow
         // The row's right end, right to left: the context ring, then the waiting indicator. The machine row
         // gets what is left, the indicator drops its label before anything overlaps.
         let belowY = y + height + gap
@@ -2202,7 +2282,7 @@ public final class ThreadPanelView: DSView {
         contextStrip.floatsAsPills = true
         contextStrip.isHidden = true
         deviceRow.isHidden = !deviceShown
-        if deviceShown {
+        if deviceShown && !isDraft {
             let rx = px
             deviceRow.frame = NSRect(x: rx, y: belowY, width: min(deviceRow.intrinsicContentSize.width, max(0, belowRight - rx)), height: pillH)
             shown.append(deviceRow)
@@ -2237,6 +2317,20 @@ public final class ThreadPanelView: DSView {
         var rowTop = left > px ? rowY - gap - pillH : rowY
         var rowRight = left > px ? px + pw : right
         var cursor = px
+        // On the draft the notices share the context row's right end, trailing-aligned to the composer's edge, and
+        // shorten through their narrow forms rather than wrap above the project chip (the user, 2026-11-26).
+        if let draftRow {
+            let widths = Self.draftNoticeWidths(natural: pills.map { min($0.1, pw) },
+                                                minimum: pills.map { ($0.0 as? ComposerNoticeBannerView)?.compactPillWidth ?? $0.1 },
+                                                room: px + pw - draftRow.end, spacing: spacing)
+            var x = px + pw - widths.filter { $0 > 0 }.reduce(0) { $0 + $1 + spacing } + spacing
+            for ((view, _), w) in zip(pills, widths) where w > 0 {
+                view.frame = NSRect(x: x, y: draftRow.y, width: w, height: pillH)
+                x += w + spacing
+                shown.append(view)
+            }
+            pills = []
+        }
         for (view, natural) in pills {
             let w = min(natural, pw)
             if cursor + w > rowRight && (cursor > px || rowRight < px + pw) {

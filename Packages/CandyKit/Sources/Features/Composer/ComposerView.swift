@@ -595,7 +595,8 @@ public final class ComposerView: DSView {
 
     private func updatePlaceholderContrast() {
         let strong = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
-        placeholder.color = Themed.color(\.placeholder, strong || modern ? 1 : 0.75)
+        // Redesign's dark composer, where 75% of the placeholder nearly disappeared; in light 75% already reads.
+        placeholder.color = Themed.color(\.placeholder, strong || modern || capy && effectiveAppearance.isDark ? 1 : 0.75)
     }
 
     /// `typed` is the prompt when the caller already serialized it: each read of `prompt` serializes the whole draft.
