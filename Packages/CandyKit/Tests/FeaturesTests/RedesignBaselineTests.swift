@@ -102,8 +102,11 @@ struct RedesignBaselineTests {
                         panel.questionPanel.configure(PendingUserInput(requestId: "q", createdAt: nil,
                             questions: [PanelsFidelityTests.purpose, PanelsFidelityTests.language], responseCapability: "live", dismissible: false), threadId: "t")
                         panel.drawer = .question
-                        panel.composer.pending = .question(.init(label: "Next question", compactLabel: "Next", enabled: false,
-                            showsPrevious: false, responding: false, showsAttach: true))
+                        // As `ComposerController.syncQuestion` does: the composer and the card get the same footer.
+                        let footer = ComposerView.QuestionFooter(label: "Next question", compactLabel: "Next", enabled: false,
+                            showsPrevious: false, responding: false, showsAttach: true)
+                        panel.composer.pending = .question(footer)
+                        panel.questionPanel.actions = footer
                     }
                 }
                 if mode == "attachments" {
