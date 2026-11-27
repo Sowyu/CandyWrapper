@@ -58,3 +58,34 @@ Surfaces that use these roles change with them: the composer's placeholder and i
 - Light's segmented control selects with a white card on a #f0f0f0 track, about 1.1:1, plus the rim and shadow.
 - Light's disabled send button draws its arrow at 2.5:1, under the 3:1 I hold disabled controls to. It lives in `Features/Composer`, which another agent has today.
 - Light body text passes 7:1 with no margin over Blur (above). Raising `ThreadDesign.markdownBody` from 0.8 to 0.88 in Redesign light would give 10:1, and moves every light thread picture.
+
+## Round 3, after the round-2 review (2026-11-27)
+
+The three round-2 reviewers measured what this branch had left. These are the tokens and draws I moved for them. The ratios are worked from the token colors over the plain ground that Redesign is moving to, and each one is held by a test.
+
+| Kind | Floor | Before | After | Held by |
+|---|---|---|---|---|
+| Label on the default dark teal (send, Approve, Merge, Ship it) | 4.5 | 3.7 white | 5.1 #111111 | `RedesignContrastFloorTests.accentLabelsReadInTheResolvedPalette` |
+| Label on a filled destructive button, dark and light | 4.5 | 3.5 and 3.7 white | 4.6 white on a deeper red | `destructiveFillKeepsWhiteAtFourAndAHalf` |
+| Usage "30 days" on Limits, light (disabled) | 3 | 2.65 | hidden in place | `UsagePageView` |
+| Usage "87%" on the open share, dark | 4.5 | 4.3 | about 5.3 | `RedesignTokens.Meter.poolOpenDark` |
+| Empty radio or checkbox edge, dark | 3 | 1.3 | 3.4 | `emptyRadioEdgeReads` |
+| File link in a reply, dark and light | 4.5 | 4.1 and 3.4 | 7.1 and 5.7 on the chip's fill | `accentTextReadsOnItsChips` |
+| Message rail's resting strip on the ground, light | 3 | 2.7 | 3.0 | `ThreadMinimapHoverTests` |
+| Selected sidebar and Settings row, light | none | 1.16 | 1.31 | the palette |
+
+Tokens that moved:
+
+- `ThemeLibrary` merges the accent's roles for teal too, and the base dark palette's `accentForeground` and `messageActionForeground` are #111111, so the default teal follows `DitherAccent.foreground` like every other accent (docs/decisions.md, 2026-11-27).
+- `RedesignTokens.Destructive.fill`: the palette's red darkened in its hue until white reads 4.6:1, for filled destructive buttons and badges. The red of text and icons stays.
+- `RedesignTokens.Meter.poolOpenDark` 0.28: the open share of a usage limit in dark. Light keeps T3's 0.35.
+- `RedesignTokens.Control.offTrackDark` and `offTrackLight` now also edge an empty radio or checkbox.
+- `DitherAccent.text`: the accent a quarter toward white in dark and a fifth toward black in light, for file links.
+- `ThreadMinimapView.restingBoost` 1.6 to 1.9.
+- Light `sidebarRowSelected` and `sidebarRowActive` #00000012 to #0000001f.
+
+Where a floor and the look pulled apart:
+
+- Light outline buttons with a label (Add environment, New terminal, Retry connection) drew their edge in the control outline, #8a8a87 at 3.4:1, and every reviewer read them as heavy boxes. Their edge is now `Surface.strongRim` in black, about 1.8:1, which is under the 3:1 I hold control edges to. The label names the button, so WCAG 1.4.11 does not need the edge, and hover brings the full outline back. Icon-only outline buttons keep 3:1.
+- The composer's rim (1.2 to 1.4:1) and light's disabled send arrow (2.5:1) are still under their floors. Both live in `Features/Composer`, which another agent has today.
+- Light body text stays at 0.8 of the text color. On the plain ground it is about 9:1, so the 0.88 above is not needed once the picture goes.

@@ -618,6 +618,11 @@ final class UsagePoolSegmentView: ControlView {
             x += w + 6
         }
         percent.frame = NSRect(x: x, y: (bounds.height - 16) / 2, width: ceil(percent.textWidth) + 1, height: 16)
+        // Redesign: a pace tick near the start cut through the percent ("6|8%"), so the percent steps right of it.
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let at = UsageLimitWindowBar.paceMark(timeLeft: timeLeft, width: bounds.width),
+           at > percent.frame.minX - 4, at < percent.frame.maxX + 4 {
+            percent.frame.origin.x = at + 6
+        }
         // The plate: `bg-background/85 rounded-sm px-1.5 py-0.5 text-2xs`, `gap-1.5` between its parts.
         var pw = ceil(plateText.textWidth) + 1
         if let credits { pw += (plateText.text.isEmpty ? 0 : 6) + 12 + 2 + ceil(credits.textWidth) + 1 }

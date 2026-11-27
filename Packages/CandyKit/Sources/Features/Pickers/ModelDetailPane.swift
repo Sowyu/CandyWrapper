@@ -120,7 +120,8 @@ final class ModelDetailPaneView: DSView {
         super.init(frame: frameRect)
         clipsToBounds = true
         layer?.cornerCurve = .continuous
-        for l in [cardLine] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]; layer?.addSublayer(l) }
+        for l in [cardLine, bottomFade] { l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull(), "colors": NSNull()]; layer?.addSublayer(l) }
+        bottomFade.zPosition = 10
         for l in [name, provider, priceCaption] { l.smoothsFont = false }
         name.lineHeight = 20; provider.lineHeight = 16; priceCaption.lineHeight = 16
         // The whole description shows; `layout` clamps it only when the host's height cannot hold every line.
@@ -228,6 +229,14 @@ final class ModelDetailPaneView: DSView {
         guard next != scrollOffset else { super.scrollWheel(with: event); return }
         scrollOffset = next
         setBoundsOrigin(NSPoint(x: 0, y: scrollOffset))
+        placeFade()
+    }
+
+    /// A row cut at the card's foot fades out while more is below, so the card reads as scrolling, not clipped.
+    private let bottomFade = CAGradientLayer()
+    private func placeFade() {
+        bottomFade.frame = CGRect(x: 0, y: bounds.maxY - RedesignTokens.Space.l, width: bounds.width, height: RedesignTokens.Space.l)
+        bottomFade.isHidden = scrollOffset >= maxScroll - 0.5
     }
 
     override func layout() {
@@ -235,6 +244,7 @@ final class ModelDetailPaneView: DSView {
         // A new model or a taller card starts at the top again; the offset only survives within the content.
         scrollOffset = min(scrollOffset, maxScroll)
         if bounds.origin.y != scrollOffset { setBoundsOrigin(NSPoint(x: 0, y: scrollOffset)) }
+        defer { placeFade() }
         let x = Self.pad, w = bounds.width - 2 * Self.pad
         var y: CGFloat = 0
         if let card {
@@ -311,6 +321,7 @@ final class ModelDetailPaneView: DSView {
         // The content ground, a step above the dock's darker ground as the list card is. A surface nested in the popup
         // takes that fill step and no rim of its own: the popup's rim is the only one.
         layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        bottomFade.colors = [Themed.color(\.background, 0).cgColor(in: self), Themed.color(\.background).cgColor(in: self)]
         layer?.borderWidth = 0
         layer?.cornerRadius = RedesignTokens.Radius.control
     }
