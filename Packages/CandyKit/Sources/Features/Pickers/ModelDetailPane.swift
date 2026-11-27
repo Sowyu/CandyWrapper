@@ -142,6 +142,7 @@ final class ModelDetailPaneView: DSView {
         }
         guard content != self.content else { return }
         self.content = content
+        scrollOffset = 0
         icon?.removeFromSuperview(); icon = nil
         for (l, v) in priceRows + factRows + [exampleRow].compactMap({ $0 }) { l.removeFromSuperview(); v.removeFromSuperview() }
         priceRows = []; factRows = []; exampleRow = nil
@@ -218,8 +219,22 @@ final class ModelDetailPaneView: DSView {
         return y + Self.pad
     }
 
+    /// How far the card is scrolled when its content is taller than the room the popup leaves it.
+    private(set) var scrollOffset: CGFloat = 0
+    var maxScroll: CGFloat { max(0, height(for: content, card: card?.info, width: bounds.width) - bounds.height) }
+
+    override func scrollWheel(with event: NSEvent) {
+        let next = min(max(0, scrollOffset - event.scrollingDeltaY), maxScroll)
+        guard next != scrollOffset else { super.scrollWheel(with: event); return }
+        scrollOffset = next
+        setBoundsOrigin(NSPoint(x: 0, y: scrollOffset))
+    }
+
     override func layout() {
         super.layout()
+        // A new model or a taller card starts at the top again; the offset only survives within the content.
+        scrollOffset = min(scrollOffset, maxScroll)
+        if bounds.origin.y != scrollOffset { setBoundsOrigin(NSPoint(x: 0, y: scrollOffset)) }
         let x = Self.pad, w = bounds.width - 2 * Self.pad
         var y: CGFloat = 0
         if let card {
@@ -240,12 +255,9 @@ final class ModelDetailPaneView: DSView {
         provider.frame = NSRect(x: x + 24, y: y + 20, width: max(0, w - 24), height: 16)
         y += 36
         if !about.isHidden {
-            // Every line that fits: the host caps the popup's height, and the description gives up lines, ending in
-            // an ellipsis with the whole text in VoiceOver, before the prices or the facts clip.
+            // The whole description, ending on its own word: when the host caps the popup the card scrolls instead.
+            // Clamping it left "Fast Claude model for responsive..." on the new-thread page (C7, round 2).
             about.maxLines = 0
-            let full = about.height(forWidth: w)
-            let room = full - max(0, height(for: content, card: card?.info, width: bounds.width) - bounds.height)
-            about.maxLines = room < full ? max(1, Int(room / (about.lineHeight ?? 20))) : 0
             let h = about.height(forWidth: w)
             about.frame = NSRect(x: x, y: y + Self.gap, width: w, height: h)
             y += Self.gap + h

@@ -373,6 +373,11 @@ public final class ComposerPickers {
             let need = body.naturalSize.height + placement.sideOffset + placement.collisionPadding
             let above = content.bounds.height - inWindow.maxY - DitherChrome.band, below = inWindow.minY
             if above < need && below > above { side.side = .bottom }
+            // Where neither side holds it, the host caps it to the side's room and the details card scrolls. Shifting
+            // it to fit slid it over the prompt on the new-thread page and ran its bottom row to the window's edge
+            // (C7, round 2).
+            side.collision = .flip
+            side.fallbackAxisSide = .none
         }
         let popup = host.open(PickerPopupView(body), trigger: modelButton, anchorRect: anchorRect, placement: side, motion: .popover)
         track(popup)
