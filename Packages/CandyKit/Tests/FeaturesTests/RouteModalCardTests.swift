@@ -102,6 +102,51 @@ struct RouteModalCardTests {
         #expect(page.scroll.frame.minY == 40 && page.header.frame.height == 40)
     }
 
+    /// Redesign's nav runs longer than the modal: it scrolls inside it and stops 8pt above the edge, or above the pinned
+    /// sign-in row, with the foot rule showing there is more.
+    @Test(arguments: [false, true]) func navStopsInsideTheModal(signedOut: Bool) throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var input = ThemeRuntime.input
+        input.ditherLight = true; input.ditherDark = true
+        ThemeRuntime.apply(input)
+        let nav = SettingsSidebarView()
+        nav.isRouteModal = true
+        nav.t3Connect = signedOut ? .signedOut : .unavailable
+        let modal = AppRouteModalView(label: "Settings", content: SettingsPageView(), navigation: nav)
+        modal.frame = NSRect(x: 0, y: 0, width: 1100, height: 780)
+        modal.layoutSubtreeIfNeeded()
+        nav.layoutSubtreeIfNeeded()
+        let scroll = try #require(nav.subviews.first { $0 is ScrollAreaView })
+        let document = try #require((scroll as? ScrollAreaView)?.scrollView.documentView)
+        #expect(document.frame.height > scroll.frame.height, "the fixture needs a nav taller than the modal")
+        let foot = signedOut ? nav.ditherSignIn.frame.minY - 8 : nav.bounds.height - 8
+        #expect(scroll.frame.maxY <= foot)
+        if signedOut { #expect(nav.ditherSignIn.frame.maxY <= nav.bounds.height - 8 && !nav.ditherSignIn.isHidden) }
+    }
+
+    /// Usage in light draws its page, not an empty card: the body's chart and totals are laid out inside the modal.
+    @Test func usageModalDrawsItsPageInLight() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        var input = ThemeRuntime.input
+        input.ditherLight = true; input.ditherDark = true
+        ThemeRuntime.apply(input)
+        let page = RedesignBaselineTests.usagePage()
+        let modal = AppRouteModalView(label: "Usage", content: page)
+        let image = RedesignBaselineTests.image(modal, size: NSSize(width: 1100, height: 780), dark: false)
+        // Count distinct colors in the page's body, below its header: an empty card is one flat fill.
+        var colors = Set<UInt32>()
+        let rep = image
+        for y in stride(from: 300, to: rep.pixelsHigh - 200, by: 7) {
+            for x in stride(from: 300, to: rep.pixelsWide - 300, by: 7) {
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                colors.insert(UInt32(c.redComponent * 255) << 16 | UInt32(c.greenComponent * 255) << 8 | UInt32(c.blueComponent * 255))
+            }
+        }
+        #expect(colors.count > 20)
+    }
+
     @Test func defaultThemesKeepT3sFrame() {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }

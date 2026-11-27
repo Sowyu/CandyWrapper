@@ -1,7 +1,7 @@
 import AppKit
 import Testing
 @testable import DesignSystem
-import T3Protocol
+@testable import T3Protocol
 import T3Store
 @testable import Features
 
@@ -360,36 +360,24 @@ struct RedesignBaselineTests {
             let context = SettingsPagesFidelityTests.context()
             context.configs = ["a": try PickersFidelityTests.recordedConfig()]
             context.nowMs = { TimestampFormat.nowMs(Self.now) }
-            for section in DitherSettingsSection.allCases {
-                // The original fixtures constructed fixed layer colors in Aqua, even for a dark canvas.
-                // An earlier snapshot can leave a different ambient drawing appearance on this thread.
-                var pages: [NSView & SettingsGroupRow] = []
-                NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
-                    pages = section.slices.map { Self.page($0.page, context: context) as NSView & SettingsGroupRow }
-                }
-                let page = DitherSettingsSectionView(section: section, pages: pages)
-                try capture("settings-" + section.rawValue, page, NSSize(width: 800, height: min(1800, max(100, page.height(forWidth: 800)))))
+            // Every page in Redesign's nav as the app shows it (SettingsPages.swift `show`): the page in the route modal's
+            // card, on the card's solid ground, at its full height.
+            for section in SettingsSection.navSections(dither: true) {
+                let card = Self.settingsCard(section, context: context)
+                try capture("settings-" + section.rawValue, card, card.frame.size)
             }
-            // Settings and Usage float over the route on Redesign's solid pill surface.
-            for name in ["settings-modal", "usage-modal"] {
-                let page = SettingsPageView()
-                page.header.isRouteModal = true
-                var nav: SettingsSidebarView?
-                if name.hasPrefix("settings") {
-                    var pages: [NSView & SettingsGroupRow] = []
-                    NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
-                        pages = DitherSettingsSection.appearance.slices.map { Self.page($0.page, context: context) as NSView & SettingsGroupRow }
-                    }
-                    page.header.section = .appearance
-                    page.page = DitherSettingsSectionView(section: .appearance, pages: pages)
-                    nav = SettingsSidebarView()
-                    nav?.isRouteModal = true
-                    nav?.selected = .appearance
-                } else {
-                    page.header.plainTitle = "Usage"
-                }
-                try capture(name, AppRouteModalView(label: "Settings", content: page, navigation: nav), NSSize(width: 1100, height: 780))
-            }
+            // Settings and Usage float over the route on Redesign's solid pill surface, Settings with its nav and the
+            // sign-in row pinned at its foot, Usage with a week of figures.
+            let settings = SettingsPageView()
+            settings.header.isRouteModal = true
+            settings.header.section = .appearance
+            NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance { settings.page = Self.appPage(.appearance, context: context) }
+            let nav = SettingsSidebarView()
+            nav.isRouteModal = true
+            nav.selected = .appearance
+            nav.t3Connect = .signedOut
+            try capture("settings-modal", AppRouteModalView(label: "Settings", content: settings, navigation: nav), NSSize(width: 1100, height: 780))
+            try capture("usage-modal", AppRouteModalView(label: "Usage", content: Self.usagePage(), navigation: nil), NSSize(width: 1100, height: 780))
             // Tint from picture on (every other image runs with it off): the fixture picture's color in the surfaces.
             input.ditherTintFromPicture = true
             input.pictureTint = PictureTint.tint(of: try #require(DitherArt.picture(ComposerAttachmentsFidelityTests.fixture, maxPixels: 64)))
@@ -415,12 +403,12 @@ struct RedesignBaselineTests {
             blurDraft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
             try capture("composer-empty-blur", blurDraft, panelSize)
             try capture("sidebar-many-threads-blur", sidebar, NSSize(width: 280, height: 900))
-            var redesignPages: [NSView & SettingsGroupRow] = []
-            NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance {
-                redesignPages = DitherSettingsSection.redesign.slices.map { Self.page($0.page, context: context) as NSView & SettingsGroupRow }
-            }
-            let redesignPage = DitherSettingsSectionView(section: .redesign, pages: redesignPages)
-            try capture("settings-redesign-blur", redesignPage, NSSize(width: 800, height: min(1800, max(100, redesignPage.height(forWidth: 800)))))
+            // The Redesign page with Background set to Blur: Picture's inks and dot size leave the page.
+            let client = context.client
+            context.client = ClientSettings(decoding: .object(["redesignBackground": .string("blur")]))
+            let blurCard = Self.settingsCard(.redesign, context: context)
+            context.client = client
+            try capture("settings-redesign-blur", blurCard, blurCard.frame.size)
             // Background set to Flower: the lotus above the new thread's composer and beside a wide thread's column,
             // held at the open flower (Animate off renders that one frame).
             input.ditherBlur = false; input.ditherFlower = true; input.ditherGradientAnimates = false
@@ -436,7 +424,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 168)
+        #expect(count == 180)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 
@@ -457,6 +445,98 @@ struct RedesignBaselineTests {
         case .snapShots: SnapShotSettingsView(context: context)
         default: GeneralSettingsView(context: context)
         }
+    }
+
+    /// The page the app builds for a nav entry under Redesign (SettingsPages.swift `extraPage`, `show`).
+    static func appPage(_ section: SettingsSection, context: SettingsPageContext) -> NSView & SettingsGroupRow {
+        switch section {
+        case .chat, .diffs, .threads, .browser, .devices, .worktrees, .maintenance, .about, .providers, .sourceControl, .general:
+            return ConcernSettingsView(context: context, section: section, dither: true)
+        case .connections, .access:
+            let page = ConnectionsFidelityTests.make(["kind": "rows"], size: NSSize(width: 800, height: 600)) as! ConnectionsSettingsView
+            if section == .access { page.showsAccess = true }
+            return page
+        case .voice: return VoiceSettingsView(context: context)
+        case .redesign:
+            // The switch on, as a reader of this page has it: the library a test can turn on without the user's defaults.
+            let previous = ThemeRuntime.input
+            let library = ThemeLibrary(defaults: UserDefaults(suiteName: "cw.redesign-baseline")!, pinned: nil)
+            library.controlsAppearance = false
+            library.setTheme(ThemeDefinition.dither.id)
+            ThemeRuntime.apply(previous)
+            return RedesignSettingsView(context: context, library: library)
+        default: return page(section, context: context)
+        }
+    }
+
+    /// A Settings page in the route modal's card (`AppRouteModalView.pageCard`): the card's solid ground, its fixed top
+    /// row with the title and close, and the whole page below it, sized to its content.
+    static func settingsCard(_ section: SettingsSection, context: SettingsPageContext, width: CGFloat = 800) -> NSView {
+        let page = SettingsPageView()
+        page.header.isRouteModal = true
+        page.header.section = section
+        page.header.restore.isHidden = section != .general
+        page.inCard = true
+        // Fixed layer colors are made in Aqua, as the app's first build of a page is (an earlier snapshot can leave a
+        // different drawing appearance on this thread).
+        NSAppearance(named: .aqua)!.performAsCurrentDrawingAppearance { page.page = appPage(section, context: context) }
+        (page.page as? SettingsPageBase)?.refresh()
+        page.frame = NSRect(x: 0, y: 0, width: width, height: 4000)
+        page.layoutSubtreeIfNeeded()
+        let content = SettingsHeaderView.floatingHeight + (page.page?.frame.maxY ?? 0) + 48
+        let ground = CardGround(frame: NSRect(x: 0, y: 0, width: width, height: min(2400, max(200, content.rounded(.up)))))
+        page.frame = ground.bounds
+        page.autoresizingMask = [.width, .height]
+        ground.addSubview(page)
+        return ground
+    }
+
+    /// The page card's fill, `Themed.color(\.background)` as `AppRouteModalView.updateLayer` paints it.
+    final class CardGround: DSView {
+        override func updateLayer() { layer?.backgroundColor = Themed.color(\.background).cgColor(in: self) }
+    }
+
+    /// Usage over a week of Codex and Claude cost, with its chart, totals and the model table.
+    static func usagePage() -> UsagePageView {
+        let page = UsagePageView()
+        page.header.isRouteModal = true
+        var m = UsagePageView.Model()
+        m.metric = "cost"
+        m.windowDays = 7
+        m.body = .usage
+        m.window = UsageWindow(sinceDay: "2026-10-04", untilDay: "2026-10-10", timeZone: "UTC")
+        m.activeProviders = [.codex, .claude]
+        m.providersWithData = [.codex, .claude]
+        let codex = [0, 1.2, 3.5, 2, 0, 4.1, 2.2], claude = [2, 2.5, 1, 0.5, 3, 3.2, 1.8]
+        let days = UsageFormat.enumerateDays("2026-10-04", "2026-10-10")
+        var merged = MergedUsage()
+        merged.daily = days.enumerated().map { i, d in
+            UsagePeriodTotals(day: d, hourStart: nil, costUsd: codex[i] + claude[i], totalTokens: (codex[i] + claude[i]) * 400_000,
+                              byProvider: [.codex: UsageByProvider(costUsd: codex[i], totalTokens: codex[i] * 400_000),
+                                           .claude: UsageByProvider(costUsd: claude[i], totalTokens: claude[i] * 400_000)])
+        }
+        let cx = codex.reduce(0, +), cl = claude.reduce(0, +)
+        merged.costUsd = cx + cl
+        merged.totalTokens = merged.costUsd * 400_000
+        merged.uncachedInputTokens = merged.totalTokens * 0.3
+        merged.cachedInputTokens = merged.totalTokens * 0.6
+        merged.outputTokens = merged.totalTokens * 0.1
+        merged.records = 412; merged.sessions = 37
+        merged.categoryCost = UsageCategorySplit(input: merged.costUsd * 0.35, cacheRead: merged.costUsd * 0.2, output: merged.costUsd * 0.45)
+        merged.providers = [
+            UsageProviderTotals(provider: .codex, costUsd: cx, totalTokens: cx * 400_000, records: 220, sessions: 19, costShare: cx / merged.costUsd, tokenShare: cx / merged.costUsd),
+            UsageProviderTotals(provider: .claude, costUsd: cl, totalTokens: cl * 400_000, records: 192, sessions: 18, costShare: cl / merged.costUsd, tokenShare: cl / merged.costUsd),
+        ]
+        func model(_ name: String, _ p: UsageProviderKind, _ cost: Double) -> UsageModelTotals {
+            let tokens = cost * 400_000
+            return UsageModelTotals(model: name, provider: p, costUsd: cost, totalTokens: tokens,
+                                    tokens: UsageTokenTotals(uncached: tokens * 0.3, cached: tokens * 0.6, cacheCreation: 0, output: tokens * 0.1),
+                                    records: 100, unpricedRecords: 0, unpricedTokens: 0, costShare: cost / merged.costUsd, tokenShare: cost / merged.costUsd)
+        }
+        merged.models = [model("claude-sonnet-5-5", .claude, cl), model("gpt-6-astra", .codex, cx)]
+        m.merged = merged
+        page.model = m
+        return page
     }
 
     static func compare(_ reference: NSBitmapImageRep, _ ours: NSBitmapImageRep, name: String) throws {
