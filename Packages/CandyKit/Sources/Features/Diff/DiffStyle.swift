@@ -81,7 +81,12 @@ enum DiffStyle {
     /// Find matches, translucent so the syntax colours stay under them (StyledDiffCodeView.tsx:24-33 at 5258):
     /// `light-dark(#ff963288, #ff963266)`, and the current one `color-mix(in lab, modified-base 45%, transparent)`.
     static let searchMatch = NSColor(name: nil) { NSColor(srgbRed: 1, green: 0x96 / 255, blue: 0x32 / 255, alpha: ($0.isDark ? 0x66 : 0x88) / 255) }
-    static let searchMatchCurrent = NSColor(srgbRed: 0, green: 0x9f / 255, blue: 1, alpha: 0.45)
+    /// The current match's strength over the code, in T3's blue or Redesign's accent.
+    static let searchMatchCurrentAlpha: CGFloat = 0.45
+    static let searchMatchCurrent = NSColor(name: nil) { appearance in
+        ThemeRuntime.isDither(dark: appearance.isDark) ? DitherAccent.current.withAlphaComponent(searchMatchCurrentAlpha)
+            : NSColor(srgbRed: 0, green: 0x9f / 255, blue: 1, alpha: searchMatchCurrentAlpha)
+    }
 
     static var additionLine: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : canvasRGB(0xecf9f4, 0x0d1713, 0x02110b) }
     static var additionNumber: NSColor { alternateColors ? mix(additionBase, 0.08, surface) : canvasRGB(0xeef9f5, 0x0e1713, 0x04110b) }
@@ -114,7 +119,10 @@ enum DiffStyle {
             appearance.performAsCurrentDrawingAppearance {
                 let dark = appearance.isDark
                 let color: NSColor
-                if ThemeRuntime.isDither(dark: dark) { color = previous }
+                // Redesign keeps one accent and the status colors, so a modified file is grey, as in T3's blue-orange scheme.
+                if ThemeRuntime.isDither(dark: dark) {
+                    color = change == .change || change == .renamePure || change == .renameChanged ? Themed.color(\.mutedForeground, dark ? 0.65 : 1) : previous
+                }
                 else {
                     color = switch change {
                     case .new: alternateColors ? (dark ? additionBase : Themed.color(\.diffAdditionForeground))

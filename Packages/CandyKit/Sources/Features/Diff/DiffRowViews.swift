@@ -214,7 +214,7 @@ final class DiffTitleView: DSView {
     }
 }
 
-/// Header counts. pierre: `-D` then `+A` (zero counts hidden), mono 11px, `gap: 1ch`.
+/// Header counts. pierre: `-D` then `+A` (zero counts hidden), mono 11px, `gap: 1ch`; Redesign puts `+A` first.
 /// Aligned (T3 `DiffStatLabel`): `+A` and `-D` right-aligned in two 4ch columns 8px apart.
 final class DiffStatView: DSView {
     /// `right` edge of each part; text wider than its column starts at `left` instead, as an
@@ -239,9 +239,7 @@ final class DiffStatView: DSView {
             font = DSFont.mono(11)
             baselineShift = 0
             let gap = DSFont.ui(12).advancement(forGlyph: DSFont.ui(12).glyph(withName: "zero")).width // 1ch of the header font
-            var items: [(String, NSColor)] = []
-            if deletions > 0 { items.append(("-\(deletions)", DiffStyle.deletionBase)) }
-            if additions > 0 { items.append(("+\(additions)", DiffStyle.additionBase)) }
+            let items = Self.pierreItems(additions: additions, deletions: deletions, redesign: ThemeRuntime.isDither(dark: effectiveAppearance.isDark))
             var x: CGFloat = 0
             var placed: [(String, NSColor, CGFloat)] = []
             for (i, item) in items.enumerated() {
@@ -262,6 +260,14 @@ final class DiffStatView: DSView {
             preferredWidth = 8 * ch + 8
         }
         needsDisplay = true
+    }
+
+    /// pierre's counts, zero counts left out: `-D +A`, or `+A -D` in Redesign, as the toolbar's totals read.
+    static func pierreItems(additions: Int, deletions: Int, redesign: Bool) -> [(String, NSColor)] {
+        var items: [(String, NSColor)] = []
+        if deletions > 0 { items.append(("-\(deletions)", DiffStyle.deletionBase)) }
+        if additions > 0 { items.append(("+\(additions)", DiffStyle.additionBase)) }
+        return redesign ? items.reversed() : items
     }
 
     /// The panel header's totals (`DiffStatLabel layout="inline"`, `text-2xs`): `+A -D`, compact,
