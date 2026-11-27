@@ -99,11 +99,30 @@ public enum SettingsProjectList {
         guard !chosen.isEmpty else { return nil }
         let threads = chosen.reduce(0) { $0 + threadCount($1.environmentId, $1.projectId) }
         let hasOtherMembers = chosen.count < p.members.count
-        let message = ProjectRemoval.message(members: chosen, allMembers: chosen, hasOtherMembers: hasOtherMembers,
-                                             groupName: p.displayName, threadCount: threads)
         let noun = hasOtherMembers ? "checkout" : "project"
+        let message = deletionMessage(noun: noun, name: chosen.count == 1 ? chosen[0].title : p.displayName, members: chosen,
+                                      threads: threads, hasOtherMembers: hasOtherMembers)
         let button = threads > 0 ? "Delete \(noun) and \(threads) thread\(threads == 1 ? "" : "s")" : "Delete \(noun)"
         return SettingsProjectDeletion(name: p.displayName, members: chosen, threadCount: threads, message: message, confirmTitle: button)
+    }
+
+    /// The list's prompt, which only Redesign shows: the scope as the question, then where it lives, then one line on
+    /// what goes and what stays. T3's five lines (`ProjectRemoval.message`) stay on the default themes' project page.
+    static func deletionMessage(noun: String, name: String, members: [SettingsScopeProject.Member], threads: Int,
+                                hasOtherMembers: Bool) -> String {
+        let question = threads > 0 ? "Remove \(noun) \"\(name)\" and delete its \(threads) thread\(threads == 1 ? "" : "s")?"
+            : "Remove \(noun) \"\(name)\"?"
+        let place: String
+        if members.count == 1 {
+            place = members[0].workspaceRoot + (members[0].environmentLabel.map { " on \($0)" } ?? "")
+        } else {
+            let machines = members.compactMap(\.environmentLabel)
+            place = "\(members.count) checkouts" + (machines.isEmpty ? "" : " on " + ListFormatter.localizedString(byJoining: machines))
+        }
+        let goes = threads > 0 ? "Its threads and archived threads are deleted from this server for good."
+            : "Its archived threads are deleted from this server for good."
+        let stays = hasOtherMembers ? "Other checkouts, the files on disk and provider sessions stay." : "The files on disk and provider sessions stay."
+        return [question, place, goes + " " + stays].joined(separator: "\n")
     }
 
     /// Rows whose name, machine or path contains every word of the query, ignoring case and accents.
