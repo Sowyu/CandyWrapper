@@ -425,11 +425,12 @@ public final class SettingsSectionView: DSView {
 
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); applyDither() }
 
-    /// Dither (after Capy's section labels): 15pt regular in the foreground color.
+    /// Redesign: the type scale's 16pt title step at 400, in the foreground color
+    /// (redesign-polish-audit-2026-11-21.md, section 2).
     private func applyDither() {
         let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         let classic = DesignGeometry.usesClassic(self)
-        titleLabel.font = dither ? DSFont.ui(15) : classic ? DSFont.ui(14) : DSFont.ui(16, weight: .semibold)
+        titleLabel.font = dither ? DSFont.ui(16) : classic ? DSFont.ui(14) : DSFont.ui(16, weight: .semibold)
         titleLabel.lineHeight = classic ? 20 : 24
         titleLabel.color = Themed.color(\.contrastForeground, dither || !classic ? 1 : 0.7)
         needsLayout = true

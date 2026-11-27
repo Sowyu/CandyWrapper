@@ -560,12 +560,13 @@ final class SettingsSubheadingView: DSView, SettingsGroupRow {
     override func layout() {
         super.layout()
         let modern = !ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
-        // Redesign: the same 15pt label in the text color as its section titles (SettingsSectionView.applyDither), so
+        // Redesign: the same 16pt label at 400 as its section titles (SettingsSectionView.applyDither), so
         // Appearance's "Color scheme" and "Themes" read like "Interface" below them.
-        label.font = modern ? DSFont.ui(16, weight: .semibold) : DSFont.ui(15)
+        label.font = modern ? DSFont.ui(16, weight: .semibold) : DSFont.ui(16)
+        label.lineHeight = modern ? 20 : 24
         label.color = Themed.color(\.foreground)
         let h = bounds.height - topPadding
-        label.frame = NSRect(x: 16, y: topPadding + (h - (modern ? 24 : 20)) / 2, width: ceil(label.textWidth) + 1, height: modern ? 24 : 20)
+        label.frame = NSRect(x: 16, y: topPadding + (modern ? (h - 24) / 2 : ((h - 24) / 2).rounded(.down)), width: ceil(label.textWidth) + 1, height: 24)
         if let trailing {
             let s = trailing.intrinsicContentSize
             trailing.frame = NSRect(x: bounds.width - 16 - s.width, y: topPadding + (h - s.height) / 2, width: s.width, height: s.height)
