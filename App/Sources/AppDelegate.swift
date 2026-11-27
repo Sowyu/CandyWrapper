@@ -897,6 +897,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         case "thread":
                             if let id = sidebar?.snapshot?.threads.first?.id { threads.open(id) }
                         case "draft": threads.newThread()
+                        // `thread:<title prefix>` opens that thread, `scroll:<0...1>` scrolls its timeline a moment later.
+                        case let s where s.hasPrefix("thread:"):
+                            let prefix = String(s.dropFirst("thread:".count))
+                            if let id = sidebar?.snapshot?.threads.first(where: { $0.title.hasPrefix(prefix) })?.id { threads.open(id) }
+                        case let s where s.hasPrefix("scroll:"):
+                            let fraction = CGFloat(Double(s.dropFirst("scroll:".count)) ?? 0)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + delay / 4) { [weak window] in
+                                MainActor.assumeIsolated {
+                                    func timeline(_ view: NSView) -> TimelineView? {
+                                        if let t = view as? TimelineView, !t.isHiddenOrHasHiddenAncestor { return t }
+                                        return view.subviews.lazy.compactMap(timeline).first
+                                    }
+                                    if let content = window?.contentView, let t = timeline(content) { t.scroll(toFraction: fraction) }
+                                }
+                            }
                         case "panel": threads.panel.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
                         // The drawer's open state persists, so the step opens it only when it is closed.
                         case "terminal": if !threads.panel.terminalOpen { threads.panel.onTerminalToggle?() }
