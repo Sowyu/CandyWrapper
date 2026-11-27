@@ -103,6 +103,61 @@ public enum KeybindingsLogic {
         return command.split(separator: ".", omittingEmptySubsequences: false).map { titleCase(String($0)) }.joined(separator: ": ")
     }
 
+    /// The label Redesign shows: `threadPanel.toggle` opens the header's actions menu there (GitController's handler),
+    /// not the details card T3's label names.
+    public static func commandLabel(_ command: String, redesign: Bool) -> String {
+        redesign && command == "threadPanel.toggle" ? "Thread: Actions Menu" : commandLabel(command)
+    }
+
+    /// Redesign's key caps: Mac glyphs for named keys where T3 prints the token (`arrowup`).
+    static let keyGlyphs: [String: String] = [
+        "arrowup": "↑", "arrowdown": "↓", "arrowleft": "←", "arrowright": "→", "enter": "↩", "tab": "⇥", "esc": "⎋",
+        "backspace": "⌫", "delete": "⌦", "pageup": "⇞", "pagedown": "⇟", "home": "↖", "end": "↘", "space": "Space",
+    ]
+
+    /// Plain words for the default rules' conditions, positive and negated. Redesign shows these on the When line.
+    static let whenPhrases: [String: (String, String)] = [
+        "terminalFocus": ("in the terminal", "outside the terminal"),
+        "terminalOpen": ("terminal open", "terminal closed"),
+        "previewFocus": ("in the browser", "outside the browser"),
+        "previewOpen": ("browser open", "browser closed"),
+        "editableFocus": ("in a text field", "outside text fields"),
+        "composerFocus": ("in the composer", "outside the composer"),
+        "composerEmpty": ("composer empty", "composer has text"),
+        "draftThreadRoute": ("on a new thread", "on an existing thread"),
+        "turnRunning": ("while the agent works", "while the agent is idle"),
+        "rightPanelOpen": ("right panel open", "right panel closed"),
+        "usagePageOpen": ("on the Usage page", "off the Usage page"),
+        "modelPickerOpen": ("model picker open", "model picker closed"),
+        "isDesktop": ("in the app", "on the web"),
+        "isWeb": ("on the web", "in the app"),
+    ]
+
+    /// A When expression in plain words ("Outside the terminal and the browser"), or nil when it has a group or a
+    /// condition without a phrase, which then shows as typed. An empty expression is "Always".
+    public static func whenSummary(_ expression: String) -> String? {
+        guard case .ok(let node) = parseWhen(expression) else { return nil }
+        guard let node else { return "Always" }
+        func terms(_ n: KeybindingWhenNode) -> [String]? {
+            switch n {
+            case .identifier("true"): return []
+            case .identifier(let name): return whenPhrases[name].map { [$0.0] }
+            case .not(.identifier(let name)): return whenPhrases[name].map { [$0.1] }
+            case .and(let l, let r): guard let a = terms(l), let b = terms(r) else { return nil }; return a + b
+            default: return nil
+            }
+        }
+        if case .identifier("false") = node { return "Never" }
+        guard var parts = terms(node) else { return nil }
+        if parts.isEmpty { return "Always" }
+        // "outside the terminal and outside the browser" reads as "outside the terminal and the browser".
+        for i in parts.indices.dropFirst() where parts[i].hasPrefix("outside ") && parts[i - 1].hasPrefix("outside ") {
+            parts[i] = String(parts[i].dropFirst("outside ".count))
+        }
+        let text = parts.count > 2 ? parts.dropLast().joined(separator: ", ") + " and " + parts.last! : parts.joined(separator: " and ")
+        return text.prefix(1).uppercased() + text.dropFirst()
+    }
+
     /// `titleCaseCommandSegment`.
     static func titleCase(_ segment: String) -> String {
         let spaced = segment.replacingOccurrences(of: "([a-z0-9])([A-Z])", with: "$1 $2", options: .regularExpression)
@@ -351,6 +406,12 @@ public enum KeybindingsLogic {
 
     /// `KeybindingPill` part labels on macOS: the modifiers, then the key (KeybindingsSettings.tsx:105-135,
     /// T3 5258). A literal "+" key shows as a plus keycap, not empty pills (#40808).
+    public static func pillParts(_ value: String, glyphs: Bool) -> [String] {
+        let parts = pillParts(value)
+        guard glyphs, let last = parts.last, let glyph = keyGlyphs[last] else { return parts }
+        return parts.dropLast() + [glyph]
+    }
+
     public static func pillParts(_ value: String) -> [String] {
         let plusKey = value == "+" || value.hasSuffix("++")
         let rest = plusKey ? String(value.dropLast(value == "+" ? 1 : 2)) : value

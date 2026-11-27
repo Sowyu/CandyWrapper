@@ -42,7 +42,7 @@ final class UsageDitherPlotView: DSView {
     static let shape = Shape.linear
     static let cell = DitherFill.chartCell
     /// Gridline dots: one cell in this many along each tick row; nil draws none.
-    static let gridEvery: Int? = nil
+    static let gridEvery: Int? = 3
     /// The edge's lift toward the text color, and the fill's fade toward the ground at the plot's top.
     static let edgeLift: CGFloat = 0.3
     static let topFade: Double = 0.35
@@ -94,14 +94,18 @@ final class UsageDitherPlotView: DSView {
     private func colors() -> [CGColor] {
         let ground = Themed.color(\.background), ink = Themed.color(\.foreground)
         var out = [Themed.color(\.border).cgColor(in: self)], holes: [CGColor] = []
-        for s in input.series {
+        let dark = effectiveAppearance.isDark
+        for (i, s) in input.series.enumerated() {
             // The edge lifts from the series color first, then both dim together toward the ground.
             var keep: CGFloat = s.dim
             if let spot = input.spotlight, spot != s.id { keep *= Self.spotlightDim }
-            for c in [s.color, OKLab.mix(s.color, 1 - Self.edgeLift, ink)] {
+            // A hatched series' lines step back toward the ground in light, where a dark provider color made the hatch
+            // the heaviest mark on the page; its edge keeps full strength, so the silhouette still reads.
+            let lines = i > 0 && !dark ? OKLab.mix(s.color, Self.lightHatch, ground) : s.color
+            for c in [lines, OKLab.mix(s.color, 1 - Self.edgeLift, ink)] {
                 out.append((keep < 1 ? OKLab.mix(c, keep, ground) : c).cgColor(in: self))
             }
-            holes.append(OKLab.mix(s.color, Self.holeTint * keep, ground).cgColor(in: self))
+            holes.append(OKLab.mix(s.color, Self.holeTint(i) * keep, ground).cgColor(in: self))
         }
         return out + holes
     }
@@ -182,8 +186,12 @@ final class UsageDitherPlotView: DSView {
     /// Series `i`'s holes, after every fill and edge layer: dither-kit draws a hole as a dark tint of the series
     /// color, not the ground.
     static func holeLayer(_ i: Int, of count: Int) -> UInt8 { UInt8(2 + 2 * count + i) }
-    /// How much of the series color a hole keeps over the ground.
-    static let holeTint: CGFloat = 0.4
+    /// How much of the series color a hole keeps over the ground: the first series' dither holes keep dither-kit's
+    /// tint; a hatched series' gaps stay near the ground, so the hatch reads as lines rather than a dark mass and the
+    /// two series stay apart.
+    static func holeTint(_ series: Int) -> CGFloat { series == 0 ? 0.4 : 0.12 }
+    /// How much of its color a hatched series' lines keep in light.
+    static let lightHatch: CGFloat = 0.6
 
     /// The bitmap for a grid: fills and their holes fade toward the ground at the top of the plot, so the solid foot
     /// reads brightest.

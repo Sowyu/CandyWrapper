@@ -40,10 +40,14 @@ public final class BetaSettingsView: SettingsPageBase {
         let folders = clientSwitch("boring-sidebar",
             "Group sidebar threads into project folders. Pinned threads stay on top, and Snoozed and Settled stay below the folders.",
             key: "boringSidebarEnabled", label: "Boring sidebar (group by project)", title: "Boring sidebar (group by project)")
+        // Redesign names the row for what it does; T3's label stays in the default themes.
+        let redesign = ThemeRuntime.isDither(dark: false) || ThemeRuntime.isDither(dark: true)
+        if redesign { folders.title = "Project folders in the sidebar" }
         // `BoringSidebarMultilineRow` (LabsSettingsPanel.tsx:54-80 at 4928, #26463), shown while the boring sidebar is on.
         let multiline = clientSwitch("boring-sidebar-multiline",
             "In the boring sidebar, show folder threads on two lines: the title, then the branch, pull request, and agent.",
             key: "boringSidebarMultilineRows", label: "Two-line folder rows", title: "Two-line folder rows")
+        if redesign { multiline.detail = "Show folder threads on two lines: the title, then the branch, pull request, and agent." }
         binder.add { [weak self, weak folders, weak multiline] in
             guard let self, let folders, let multiline else { return }
             multiline.isHidden = !self.context.client.bool("boringSidebarEnabled")

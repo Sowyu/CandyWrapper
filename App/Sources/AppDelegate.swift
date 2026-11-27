@@ -885,7 +885,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let path = args[i + 1]
         let delay = args.firstIndex(of: "--snapshot-delay").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 4
         #if DEBUG
-        // `--snapshot-open thread,panel,files,browser,terminal,pulls,issues,workflows,collapsed,picker,access` puts a test app in those states halfway through the delay,
+        // `--snapshot-open thread,panel,files,browser,terminal,pulls,issues,workflows,collapsed,picker,access,usage,settings:<page>`
+        // puts a test app in those states halfway through the delay,
         // since keys sent to an app behind the other windows don't reach its palette.
         if Self.isTestBuild, let o = args.firstIndex(of: "--snapshot-open"), o + 1 < args.count {
             let steps = args[o + 1].split(separator: ",").map(String.init)
@@ -907,6 +908,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         case "collapsed": (window.contentView as? SidebarLayoutView)?.setOpen(false)
                         case "picker": threads.composer.pickers.toggleModelPicker()
                         case "access": threads.composer.pickers.openAccessMode()
+                        case "usage": self.sidebarCommands?.openUtilityPage(.usage)
+                        // `settings:<page>` opens Settings on a page by its raw value, such as `settings:redesign`.
+                        case let s where s.hasPrefix("settings"):
+                            let name = s.split(separator: ":").dropFirst().first.map(String.init) ?? "general"
+                            self.settings?.show(SettingsSection(rawValue: name) ?? .general)
                         default: break
                         }
                     }

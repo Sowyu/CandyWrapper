@@ -39,6 +39,10 @@ public final class ConcernSettingsView: SettingsPageBase {
             (source as? GeneralSettingsView)?.usesBoundary = !clientOnly
             (source as? ScopedSettingsPage)?.usesBoundary = !clientOnly
             if section == .general { (source as? GeneralSettingsView)?.addWorkingShelfRow() }
+            // T3's line names the browser; a Mac app follows the clock format in System Settings.
+            if dither, let time = source.anchors["time-format"] as? SettingsRowView {
+                time.detail = "System default follows the clock format in System Settings."
+            }
             if let storage = source as? StorageSettingsView { storage.reportsEnabled = section == .maintenance }
             DitherSettingsSectionView.apply(slice, to: source)
             Self.orderRows(slice, source: source)
@@ -76,6 +80,9 @@ public final class ConcernSettingsView: SettingsPageBase {
     /// Rows only CandyWrapper has: About's CandyWrapper group in the default themes, General's Input group in Redesign.
     public static let candyWrapperRows = ["tooltips", "trackpad-haptics", "message-rail-haptic"]
 
+    /// Rows Redesign leaves out, so search doesn't offer them.
+    public static let hiddenInRedesign: Set<String> = ["language"]
+
     /// A search result pointed at the section that shows its row in this layout.
     public static func located(_ item: SettingsSearchItem, dither: Bool) -> SettingsSearchItem {
         guard candyWrapperRows.contains(item.id) else { return item }
@@ -86,8 +93,10 @@ public final class ConcernSettingsView: SettingsPageBase {
     private static func slices(_ page: SettingsSection, dither: Bool) -> [DitherSettingsSlice] {
         typealias G = DitherSettingsSlice.Group
         switch page {
-        case .general where dither: return slices(.general, dither: false)
-            + [.init(.general, [G("behavior", "Input", rows: ["trackpad-haptics", "message-rail-haptic", "tooltips"])])]
+        // Redesign drops the Language row: CandyWrapper has one language, so the row only said so.
+        case .general where dither: return slices(.general, dither: false).dropLast()
+            + [.init(.general, [G("behavior", "Display", rows: ["time-format"])]),
+               .init(.general, [G("behavior", "Input", rows: ["trackpad-haptics", "message-rail-haptic", "tooltips"])])]
         case .about where dither: return Array(slices(.about, dither: false).dropLast())
         case .general: return [
             .init(.general, [G("behavior", "Notifications", rows: ["thread-notifications", "in-app-notifications"])]),

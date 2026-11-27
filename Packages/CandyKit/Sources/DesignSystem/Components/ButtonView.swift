@@ -307,6 +307,10 @@ public final class ButtonView: ControlView {
         label.font = monospaced ? DSFont.mono(m.font, weight: .medium) : DSFont.ui(m.font, weight: .medium)
         label.lineHeight = m.line
         var look = ButtonStyles.look(variant: variant, state: state, radius: size == .micro || size == .iconMicro ? DesignGeometry.radius(m.radius, in: self) : m.radius)
+        if variant == .default || variant == .destructive, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            // Redesign's filled buttons are flat: no inset top highlight, only the soft drop under them.
+            look.box.shadows.removeAll { $0.inset }
+        }
         if variant == .glass, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             // Redesign draws no blur and ignores Glass opacity, so a glass button floating over content takes the
             // solid resting surface instead: at the user's 10% opacity its label sat straight on the text behind it.

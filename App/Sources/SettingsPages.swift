@@ -294,6 +294,7 @@ extension SettingsController {
         guard isOpen else { return }
         updateContext()
         nav.searchItems = SettingsSearch.available(searchAvailability()).map { ConcernSettingsView.located($0, dither: isDither) }
+            .filter { !isDither || !ConcernSettingsView.hiddenInRedesign.contains($0.id) }
         if let d = ditherSection {
             ditherPages[d]?.refresh()
         } else {

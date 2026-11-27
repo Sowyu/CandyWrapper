@@ -502,10 +502,14 @@ public final class SettingsSidebarView: DSView {
         let footer: CGFloat = avatar.isHidden ? rowH : 36
         let rowY = h - 8 - footer
         if isRouteModal {
-            layoutConcernNavigation(top: y, bottom: h - (avatar.isHidden ? (ditherSignIn.isHidden ? 0 : rowH + 16) : 52), dither: true)
+            // The nav scrolls inside the modal and stops 8pt above its edge, or above the pinned foot row. A rule marks
+            // the foot whenever rows run under it, so a cut-off row reads as more to scroll.
+            let foot: CGFloat = avatar.isHidden ? (ditherSignIn.isHidden ? 8 : rowH + 16) : 52
+            layoutConcernNavigation(top: y, bottom: h - foot, dither: true)
             avatar.frame = NSRect(x: 8, y: h - 44, width: 36, height: 36)
             ditherSignIn.frame = NSRect(x: 8, y: h - 8 - rowH, width: max(0, w - 16), height: rowH)
-            footerRule.frame = CGRect(x: 16, y: ditherSignIn.frame.minY - 4.5, width: max(0, w - 32), height: 1)
+            footerRule.frame = CGRect(x: 16, y: h - foot + 3.5, width: max(0, w - 32), height: 1)
+            footerRule.isHidden = isSearching || (ditherSignIn.isHidden && navDocument.frame.height <= navScroll.frame.height)
             return
         }
         layoutConcernNavigation(top: y, bottom: h - (t3Connect == .signedOut ? 88 : 48), dither: true)

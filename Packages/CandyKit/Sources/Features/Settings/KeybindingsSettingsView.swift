@@ -207,14 +207,26 @@ final class UnassignedPill: ControlView {
 final class KeybindingPillButton: ControlView {
     private let decoration = BoxDecorationLayer()
     private var group = KbdGroupView(keys: [])
-    var value = "" {
-        didSet {
-            group.removeFromSuperview()
-            group = KbdGroupView(keys: KeybindingsLogic.pillParts(value))
-            addSubview(group)
-            invalidateIntrinsicContentSize()
-            needsLayout = true
+    var value = "" { didSet { rebuild() } }
+
+    /// Redesign draws each key as an outlined key cap with Mac glyphs for named keys; T3 keeps its plain keys.
+    private func rebuild() {
+        let dither = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        group.removeFromSuperview()
+        let keys = KeybindingsLogic.pillParts(value, glyphs: dither).map { part -> KbdView in
+            let key = KbdView(part)
+            key.outline = dither
+            return key
         }
+        group = KbdGroupView(keys)
+        addSubview(group)
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if group.keys.first?.outline != ThemeRuntime.isDither(dark: effectiveAppearance.isDark) { rebuild() }
     }
 
     override init(frame frameRect: NSRect) {
@@ -355,7 +367,7 @@ final class ShortcutRecorderView: ControlView, ShortcutCaptureResponder, RouteMo
 final class WhenLineView: DSView {
     private let label = LabelView("When", font: DSFont.ui(12), color: Themed.color(\.mutedForeground, 0.7))
     let trigger = ButtonView("Always", variant: .ghostMuted, size: .micro)
-    var expression = "" { didSet { trigger.title = expression.isEmpty ? "Always" : expression; trigger.variant = expression.isEmpty ? .ghostMuted : .ghost; needsLayout = true } }
+    var expression = "" { didSet { sync() } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
@@ -365,6 +377,19 @@ final class WhenLineView: DSView {
         addSubview(label)
         addSubview(trigger)
     }
+
+    /// Redesign says the condition in words ("Outside the terminal") with the expression in the tooltip; the editor
+    /// still edits the expression. One it can't say, such as a group, shows as typed.
+    private func sync() {
+        let summary = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? KeybindingsLogic.whenSummary(expression) : nil
+        trigger.title = summary ?? (expression.isEmpty ? "Always" : expression)
+        trigger.monospaced = summary == nil
+        trigger.variant = expression.isEmpty ? .ghostMuted : .ghost
+        if summary != nil, !expression.isEmpty { trigger.setTooltip(expression) }
+        needsLayout = true
+    }
+
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); sync() }
 
     override func layout() {
         super.layout()
@@ -499,7 +524,8 @@ final class KeybindingRowView: DSView, SettingsGroupRow, FocusWithinObserver {
         let unassignedPill = UnassignedPill(label: unassigned)
         controls = SettingsControlGroup([warning, actionsButton, save, pill, unassignedPill, recorder], gap: 6)
         self.unassignedPill = unassignedPill
-        settingsRow = SettingsRowView(title: KeybindingsLogic.commandLabel(row.command), control: controls)
+        settingsRow = SettingsRowView(title: KeybindingsLogic.commandLabel(row.command, redesign: ThemeRuntime.isDither(dark: false) || ThemeRuntime.isDither(dark: true)),
+                                      control: controls)
         super.init(frame: .zero)
         settingsRow.detailView = when
         settingsRow.accessories = badge.map { [$0] } ?? []

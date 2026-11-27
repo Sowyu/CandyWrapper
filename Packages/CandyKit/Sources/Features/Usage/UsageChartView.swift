@@ -271,11 +271,11 @@ public final class UsageChartView: DSView {
 
     public override func layout() {
         super.layout()
-        // Redesign sets the axes in the monospace font, like dither-kit; T3 uses the UI font with tabular figures.
+        // Redesign sets the axes in 11pt monospace, its caption step, like dither-kit; T3 uses 10pt UI type with tabular figures.
         let redesign = plot.redesign
         legend.isHidden = !redesign
-        for l in yLabels { l.font = redesign ? DSFont.mono(10) : UsageStyle.tabular(10) }
-        for l in xLabels { l.font = redesign ? DSFont.mono(10) : DSFont.ui(10) }
+        for l in yLabels { l.font = redesign ? DSFont.mono(11) : UsageStyle.tabular(10) }
+        for l in xLabels { l.font = redesign ? DSFont.mono(11) : DSFont.ui(10) }
         let h = Self.plotHeight
         plot.frame = NSRect(x: 56 + 8, y: 0, width: max(0, bounds.width - 64), height: h)
         for (i, l) in yLabels.enumerated() where i < plot.ticks.count {
@@ -677,7 +677,6 @@ public final class UsageShareBarView: DSView {
         legend = visible.map { s in
             let swatch = DSView()
             swatch.layer?.cornerRadius = 2
-            swatch.layer?.backgroundColor = s.color.cgColor
             let l = UsageStyle.label(s.label, 12, color: Themed.color(\.mutedForeground))
             let v = UsageStyle.label(format(s.value), 12, tabular: true)
             for x in [swatch, l, v] as [NSView] { addSubview(x) }
@@ -707,6 +706,8 @@ public final class UsageShareBarView: DSView {
             aside.frame = NSRect(x: bounds.width - s.width, y: 20 - s.height - 1, width: s.width, height: s.height)
         }
         bar.frame = NSRect(x: 0, y: 30, width: bounds.width, height: 8)
+        // Resolved in this view's appearance: at init the swatches took whichever appearance happened to be current.
+        for (i, item) in legend.enumerated() { item.0.layer?.backgroundColor = segments[i].color.cgColor(in: self) }
         var y: CGFloat = 48
         for row in legendRows(bounds.width) {
             var x: CGFloat = 0

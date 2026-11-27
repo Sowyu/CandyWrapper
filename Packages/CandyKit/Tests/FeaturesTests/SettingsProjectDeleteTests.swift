@@ -36,20 +36,17 @@ struct SettingsProjectDeleteTests {
     @Test func emptyProjectCopy() throws {
         let plan = try #require(SettingsProjectList.deletion(key: "a:/Users/dev/code/harbor-docs", scope: List.scope(), threadCount: { _, _ in 0 }))
         #expect(plan.confirmTitle == "Delete project")
-        #expect(plan.message == """
-            Remove project "harbor-docs"?
-            Path: /Users/dev/code/harbor-docs
-            Any archived threads are deleted from T3 Code. Provider sessions are kept.
-            This removes only the project entries, not the files on disk.
-            This action cannot be undone.
-            """)
+        // The question, where it lives, and one line on what goes and what stays.
+        #expect(plan.message.hasPrefix("Remove project \"harbor-docs\"?\n/Users/dev/code/harbor-docs"))
+        #expect(plan.message.hasSuffix("\nIts archived threads are deleted from this server for good. The files on disk and provider sessions stay."))
+        #expect(plan.message.split(separator: "\n").count == 3 && !plan.message.contains("T3 Code"))
     }
 
     @Test func projectWithThreadsCopy() throws {
         let plan = try #require(SettingsProjectList.deletion(key: "a:/Users/dev/code/basalt", scope: List.scope(), threadCount: { _, _ in 22 }))
         #expect(plan.confirmTitle == "Delete project and 22 threads")
         #expect(plan.message.hasPrefix("Remove project \"Basalt\" and delete its 22 threads?\n"))
-        #expect(plan.message.contains("Those threads and any archived threads are deleted from T3 Code. Provider sessions are kept."))
+        #expect(plan.message.contains("Its threads and archived threads are deleted from this server for good."))
         let one = try #require(SettingsProjectList.deletion(key: "a:/Users/dev/code/quill", scope: List.scope(), threadCount: { _, _ in 1 }))
         #expect(one.confirmTitle == "Delete project and 1 thread")
     }
@@ -60,13 +57,13 @@ struct SettingsProjectDeleteTests {
         let plan = try #require(SettingsProjectList.deletion(key: key, scope: List.scope(), threadCount: { env, _ in env == "a" ? 10 : 8 }))
         #expect(plan.members.map(\.projectId) == ["m1", "m2"])
         #expect(plan.confirmTitle == "Delete project and 18 threads")
-        #expect(plan.message.contains("This removes 2 grouped project entries."))
+        #expect(plan.message.contains("\n2 checkouts"))
         // Scoped to one machine, only its checkout goes and the rest of the group stays.
         var scoped = List.scope(); scoped.selection = SettingsScopeSelection(machine: "b", project: nil)
         let one = try #require(SettingsProjectList.deletion(key: key, scope: scoped, threadCount: { _, _ in 8 }))
         #expect(one.members.map(\.projectId) == ["m2"])
         #expect(one.confirmTitle == "Delete checkout and 8 threads")
-        #expect(one.message.contains("Other entries in this grouped project are unaffected."))
+        #expect(one.message.contains("Other checkouts, the files on disk and provider sessions stay."))
     }
 
     @Test func offlineMachineDisablesDelete() throws {
@@ -121,7 +118,8 @@ struct SettingsProjectDeleteTests {
         }
     }
 
-    /// The dialog in Redesign: T3's lines, Cancel focused, the destructive button naming the loss.
+    /// The dialog in Redesign: the question, the path and one line on what goes, Cancel focused, the destructive button
+    /// naming the loss.
     @Test func redesignBaseline() throws {
         let record = ProcessInfo.processInfo.environment["CANDY_RECORD_REDESIGN_BASELINE"] == "1"
         let plan = try #require(SettingsProjectList.deletion(key: "a:/Users/dev/code/basalt", scope: List.scope(), threadCount: { _, _ in 22 }))
