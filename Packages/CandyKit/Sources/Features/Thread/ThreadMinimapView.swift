@@ -277,9 +277,13 @@ public final class ThreadMinimapView: DSView, HoverSyncPointerClient {
         let near = (backdrop?[1] ?? Themed.color(\.mutedForeground, 0.6)).cgColor
         let base = (backdrop?[0] ?? Themed.color(\.mutedForeground, 0.25)).cgColor
         let nearCurrent = backdrop?[3].cgColor
+        // Redesign (round-1 review T10, 2026-11-26: "short bright white bars read as a stray glyph"): the strips are a
+        // column of targets, 12pt at rest and even steps up to the hovered one. Their colors keep T3's ratios
+        // (`backdropColors`).
+        let redesign = backdrop != nil
         for i in items.indices {
             let distance = hovered.map { abs(i - $0) }
-            let width: CGFloat = distance == 0 ? 24 : distance == 1 ? 16 : distance == 2 ? 10 : 8
+            let width = Self.stripWidth(distance: distance, redesign: redesign)
             let rect = CGRect(x: 0, y: tickY(i), width: width, height: 2)
             guard rect.intersects(dirtyRect) else { continue }
             let path = CGPath(roundedRect: rect, cornerWidth: 1, cornerHeight: 1, transform: nil)
@@ -313,6 +317,12 @@ extension ThreadMinimapView {
     /// on-screen strip reaching white caps it, so the boost shows in light.
     static let restingBoost = 1.6
     static func backdropColors(dark: Bool) -> [NSColor]? { BackdropMarks.colors(strips, keep: 3, dark: dark, restingBoost: restingBoost) }
+    /// A strip's length by its distance from the hovered one: T3's 24, 16, 10 and 8 (TimelineMinimap.tsx:194-214), or
+    /// Redesign's 24, 20, 16 and 12, one step apart.
+    static func stripWidth(distance: Int?, redesign: Bool) -> CGFloat {
+        let steps: [CGFloat] = redesign ? [24, 20, 16, 12] : [24, 16, 10, 8]
+        return steps[min(3, distance ?? 3)]
+    }
 }
 
 /// Holds the rail's hover area where HoverSync can find it. It draws nothing and lets every click through.

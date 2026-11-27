@@ -95,7 +95,8 @@ struct ThreadCompletionTests {
         let item = ThreadMinimapItem(id: "u", rowIndex: 0, userText: "see \(quote.markdown) and **this**", assistantText: nil)
         #expect(item.preview == "see the quote and this")
     }
-    /// Redesign draws T3's strips: 8pt each whatever the turn's length, left-aligned, the turn on screen only brighter.
+    /// Redesign draws T3's strips at its own resting length: 12pt each whatever the turn's length (T3's 8pt read as a
+    /// stray glyph, round-1 review T10), left-aligned, the turn on screen only brighter.
     @Test func ditherMinimapDrawsT3Strips() throws {
         let previous = ThemeRuntime.input
         defer { ThemeRuntime.apply(previous) }
@@ -113,18 +114,18 @@ struct ThreadCompletionTests {
         map.inView = IndexSet(integer: 2)
         let rep = try #require(map.bitmapImageRepForCachingDisplay(in: map.bounds))
         map.cacheDisplay(in: map.bounds, to: rep)
-        // Each strip's widest pixel row, left of the guide line at x 12. Rounded ends antialias, so the bright strip may
+        // Each strip's widest pixel row, short of the hovered length. Rounded ends antialias, so the bright strip may
         // light one more pixel than a quiet one.
         let scale = CGFloat(rep.pixelsWide) / map.bounds.width
         var ticks: [Int] = [], current = 0
         for y in 0..<rep.pixelsHigh {
-            let lit = (0..<Int(11 * scale)).filter { (rep.colorAt(x: $0, y: y)?.brightnessComponent ?? 0) > 0.3 }.count
+            let lit = (0..<Int(20 * scale)).filter { (rep.colorAt(x: $0, y: y)?.brightnessComponent ?? 0) > 0.3 }.count
             if lit > 0 { current = max(current, lit) } else if current > 0 { ticks.append(current); current = 0 }
         }
         if current > 0 { ticks.append(current) }
         #expect(ticks.count == 6)
         #expect((ticks.max() ?? 0) - (ticks.min() ?? 0) <= 2, "\(ticks)")
-        #expect(abs(CGFloat(ticks.min() ?? 0) - 8 * scale) <= 2, "\(ticks)")
+        #expect(abs(CGFloat(ticks.min() ?? 0) - ThreadMinimapView.stripWidth(distance: nil, redesign: true) * scale) <= 2, "\(ticks)")
     }
     @Test func taskSummaryUsesRunningThenPendingThenLast() {
         let steps = [ThreadTaskStep(text: "A", status: "pending"), ThreadTaskStep(text: "B", status: "running")]
