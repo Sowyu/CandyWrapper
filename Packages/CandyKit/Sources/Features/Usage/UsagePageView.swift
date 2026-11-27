@@ -408,11 +408,9 @@ public final class UsageInlineMenuButton: ControlView {
         chevron.strokeColor = Themed.color(\.mutedForeground)
         // `opacity-0 transition-opacity`, shown on hover, keyboard focus or an open menu (UsagePage.tsx:1287,1401).
         chevron.isHidden = alert
-        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-            HoverReveal.fade([chevron], visible: active || state.focusVisible)
-        } else {
-            chevron.alphaValue = active || state.focusVisible ? 1 : 0.6
-        }
+        // Redesign used to hide the chevron at rest, which left an empty gap before the next slash and no sign the
+        // crumb opens a menu; it now rests faint like the default themes'.
+        chevron.alphaValue = active || state.focusVisible ? 1 : 0.6
         warning.isHidden = !alert
         warning.strokeColor = Themed.color(\.warningForeground)
     }

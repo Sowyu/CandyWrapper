@@ -277,15 +277,17 @@ public final class UsageChartView: DSView {
         for l in yLabels { l.font = redesign ? DSFont.mono(11) : UsageStyle.tabular(10) }
         for l in xLabels { l.font = redesign ? DSFont.mono(11) : DSFont.ui(10) }
         let h = Self.plotHeight
-        plot.frame = NSRect(x: 56 + 8, y: 0, width: max(0, bounds.width - 64), height: h)
+        // Redesign keeps `Space.s` clear at the right, so the last date never sits on the card's edge.
+        let trail = redesign ? RedesignTokens.Space.s : 0
+        plot.frame = NSRect(x: 56 + 8, y: 0, width: max(0, bounds.width - 64 - trail), height: h)
         for (i, l) in yLabels.enumerated() where i < plot.ticks.count {
             let y = UsageChartLogic.y(plot.ticks[i], max: plot.scaleMax) / UsageChartLogic.viewHeight * h
             l.frame = NSRect(x: 0, y: (y - 7).rounded(), width: 56, height: 14)
         }
-        let xw = max(0, bounds.width - 64)
+        let xw = max(0, bounds.width - 64 - trail)
         for (i, l) in xLabels.enumerated() {
             let w = ceil(l.textWidth) + 1
-            let x: CGFloat = i == 0 ? 64 : i == 1 ? 64 + (xw - w) / 2 : bounds.width - w
+            let x: CGFloat = i == 0 ? 64 : i == 1 ? 64 + (xw - w) / 2 : bounds.width - trail - w
             l.frame = NSRect(x: x, y: h + 4, width: w, height: 14)
         }
         // `justify-between` centers the middle label between its neighbours' edges, not the plot.

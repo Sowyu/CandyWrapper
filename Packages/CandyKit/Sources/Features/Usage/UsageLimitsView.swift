@@ -621,7 +621,12 @@ final class UsagePoolSegmentView: ControlView {
         // The plate: `bg-background/85 rounded-sm px-1.5 py-0.5 text-2xs`, `gap-1.5` between its parts.
         var pw = ceil(plateText.textWidth) + 1
         if let credits { pw += (plateText.text.isEmpty ? 0 : 6) + 12 + 2 + ceil(credits.textWidth) + 1 }
-        let px = bounds.width - 8 - pw - 12
+        var px = bounds.width - 8 - pw - 12
+        // Redesign: a pace tick under the plate cut through its text, so the plate steps left of the tick when it fits.
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let at = UsageLimitWindowBar.paceMark(timeLeft: timeLeft, width: bounds.width),
+           at > px - 4, at < px + pw + 12 + 4, at - 6 - pw - 12 >= percent.frame.maxX + 6 {
+            px = at - 6 - pw - 12
+        }
         plate.frame = NSRect(x: px, y: (bounds.height - 20) / 2, width: pw + 12, height: 20)
         plateText.frame = NSRect(x: px + 6, y: (bounds.height - 16) / 2, width: ceil(plateText.textWidth) + 1, height: 16)
         if let ticket, let credits {
