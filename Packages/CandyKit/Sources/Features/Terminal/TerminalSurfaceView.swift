@@ -125,7 +125,10 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     /// Resolve under the view's appearance: SwiftTerm stores plain RGB.
     func theme(dark: Bool) -> Theme {
         let fixed = { (color: NSColor) -> NSColor in NSColor(cgColor: color.cgColor(in: self)) ?? color }
-        return Theme(background: fixed(Themed.color(\.background)), foreground: fixed(Themed.color(\.foreground)),
+        // Redesign's ground is translucent over the art, which SwiftTerm paints as white or black; it takes the
+        // opaque ground the drawer card draws too.
+        let ground = ThemeRuntime.isDither(dark: dark) ? RedesignTokens.Surface.groundFill(dark: dark) : fixed(Themed.color(\.background))
+        return Theme(background: ground, foreground: fixed(Themed.color(\.foreground)),
                      cursor: dark ? NSColor(srgbRed: 180 / 255, green: 203 / 255, blue: 1, alpha: 1)
                                   : NSColor(srgbRed: 38 / 255, green: 56 / 255, blue: 78 / 255, alpha: 1),
                      selection: dark ? NSColor(srgbRed: 180 / 255, green: 203 / 255, blue: 1, alpha: 0.25)
@@ -133,12 +136,17 @@ public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDele
     }
 
     private var appliedDark: Bool?
+    private var appliedBackground: CGColor?
 
+    /// Applies the theme when the appearance or the ground changes. Redesign's ground follows the picture and the theme,
+    /// which change without an appearance change; keying on the appearance alone left SwiftTerm painting the ground it
+    /// started with, a black box inside the drawer's card.
     private func applyTheme() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        guard dark != appliedDark else { return }
-        appliedDark = dark
         let theme = theme(dark: dark)
+        guard dark != appliedDark || theme.background.cgColor != appliedBackground else { return }
+        appliedDark = dark
+        appliedBackground = theme.background.cgColor
         terminal.installColors(Self.palette(dark: dark))
         terminal.nativeBackgroundColor = theme.background
         terminal.nativeForegroundColor = theme.foreground
@@ -365,11 +373,14 @@ final class InputTerminalView: TerminalView {
     /// sharp above the dim. T3 blurs the terminal with the rest (`backdrop-filter`): paint the background behind the glyphs.
     /// The snapshot shares one context with every view drawn before the terminal, so the text position their labels
     /// left behind would shift its glyphs: start from the identity text matrix.
+    /// Redesign paints the ground behind the glyphs on every draw: left to the layer, a capture of the window showed the
+    /// cleared cells as a black or white box inside the drawer card (round 0, P5).
     override func draw(_ dirtyRect: NSRect) {
         let snapshot = ModalHost.isTakingSnapshot ? NSGraphicsContext.current?.cgContext : nil
         snapshot?.textMatrix = .identity
         super.draw(dirtyRect)
-        guard let context = snapshot else { return }
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        guard let context = snapshot ?? (redesign ? NSGraphicsContext.current?.cgContext : nil) else { return }
         context.saveGState()
         context.setBlendMode(.destinationOver)
         context.setFillColor(nativeBackgroundColor.cgColor)

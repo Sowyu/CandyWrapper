@@ -52,6 +52,12 @@ public final class TerminalDrawerView: DSView {
         needsLayout = true
     }
 
+    /// The active terminal's name. Redesign's card shows it at the left of its top row, so the actions there sit in a
+    /// header instead of floating over an empty band.
+    public var title = "" { didSet { if title != oldValue { titleLabel.text = title; needsLayout = true } } }
+    private let titleIcon = IconView(name: .terminal, size: 14, strokeColor: Themed.color(\.mutedForeground))
+    private let titleLabel = LabelView("", font: DSFont.ui(12), color: Themed.color(\.mutedForeground))
+
     /// The panes on screen; empty shows the empty state.
     public private(set) var panes: [(id: String, surface: TerminalSurfaceView)] = []
     private var listShown = false
@@ -75,6 +81,7 @@ public final class TerminalDrawerView: DSView {
         list.isHidden = !listShown
         actions.isHidden = empty || (listShown && !isCard)
         needsLayout = true
+        needsDisplay = true // the card's ground depends on whether terminals show
     }
 
     /// Height drag: the start height plus how far the pointer moved up. `ended` once on release.
@@ -96,6 +103,11 @@ public final class TerminalDrawerView: DSView {
         addSubview(list)
         actions.isHidden = true
         addSubview(actions)
+        titleLabel.lineHeight = 16
+        titleLabel.isHidden = true
+        titleIcon.isHidden = true
+        addSubview(titleIcon)
+        addSubview(titleLabel)
         addSubview(handle)
         handle.onDrag = { [weak self] delta, ended in
             guard let self else { return }
@@ -121,15 +133,25 @@ public final class TerminalDrawerView: DSView {
         let content = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
         if listShown {
             let listWidth = TerminalListAsideView.width
-            list.frame = NSRect(x: content.maxX - listWidth, y: content.minY, width: listWidth, height: content.height)
+            // In the card the list runs to the card's top: the action row sits over it and the list starts its rows
+            // under that row itself. Placing it under the row as well left a second row's height of empty list.
+            list.frame = isCard ? NSRect(x: w - listWidth, y: 0, width: listWidth, height: h)
+                : NSRect(x: content.maxX - listWidth, y: content.minY, width: listWidth, height: content.height)
             // The card keeps one surface: the list meets the terminals on a hairline, with no gap.
             grid.frame = NSRect(x: 0, y: content.minY, width: max(0, content.width - listWidth - (isCard ? 0 : 6)), height: content.height)
         } else {
             grid.frame = content
         }
+        let showsTitle = cardRow != nil && !title.isEmpty
+        titleLabel.isHidden = !showsTitle
+        titleIcon.isHidden = !showsTitle
         if let cardRow {
             // The card's top row, like the right panel's: 24pt controls 4pt in from the top and right.
             actions.frame = cardRow.trailing[0]
+            let mid = actions.frame.midY, x = RedesignTokens.Space.m
+            titleIcon.frame = NSRect(x: x, y: mid - 7, width: 14, height: 14)
+            let titleEnd = (listShown ? w - TerminalListAsideView.width : actions.frame.minX) - RedesignTokens.Space.s
+            titleLabel.frame = NSRect(x: x + 14 + 6, y: mid - 8, width: max(0, titleEnd - x - 20), height: 16)
         } else {
             // `absolute right-2 top-2`, from the aside's border box.
             actions.frame = NSRect(x: w - 8 - size.width, y: 8, width: size.width, height: size.height)
@@ -178,8 +200,11 @@ public final class TerminalDrawerView: DSView {
     }
 
     public override func updateLayer() {
-        // The split container is `bg-(--terminal-background)`, the app's background.
-        layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
+        // The split container is `bg-(--terminal-background)`, the app's background. Redesign's card takes the opaque
+        // ground its terminals paint, so no pane shows as a box of another shade inside it.
+        let ground = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !panes.isEmpty
+            ? RedesignTokens.Surface.groundFill(dark: effectiveAppearance.isDark) : Themed.color(\.background)
+        layer?.backgroundColor = ground.cgColor(in: self)
         border.backgroundColor = Themed.color(\.border, 0.8).cgColor(in: self)
         if let layer {
             layer.cornerRadius = isCard ? RedesignTokens.Radius.panel : 0

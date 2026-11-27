@@ -128,6 +128,13 @@ public enum RedesignTokens {
             return NSColor(srgbRed: mix(g.x), green: mix(g.y), blue: mix(g.z), alpha: 1)
         }
 
+        /// The panel's ground made opaque. Redesign frosts `background` over the art, and a surface that cannot draw a
+        /// translucent ground (SwiftTerm paints its cells on an opaque canvas) draws this instead.
+        public nonisolated static func groundFill(dark: Bool) -> NSColor {
+            let g = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).background.srgb
+            return NSColor(srgbRed: CGFloat(g.x), green: CGFloat(g.y), blue: CGFloat(g.z), alpha: 1)
+        }
+
         /// The rim in the text color.
         public nonisolated static func rim(dark: Bool) -> NSColor {
             let a = increaseContrast ? rimContrast : rim

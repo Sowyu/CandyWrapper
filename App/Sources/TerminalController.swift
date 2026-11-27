@@ -276,6 +276,7 @@ final class TerminalController {
             if let a = host.attachments[id] { panes.append((id, a.surface)) }
         }
         host.view.show(panes, direction: direction, activeId: activeId, list: list)
+        host.view.title = activeId.isEmpty ? "" : label(activeId)
         host.view.actions.setSplitLimitReached(ids.count >= TerminalDrawerState.maxPerGroup)
         host.view.list.setSplitLimitReached(ids.count >= TerminalDrawerState.maxPerGroup)
     }
