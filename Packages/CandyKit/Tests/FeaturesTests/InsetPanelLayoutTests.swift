@@ -48,8 +48,9 @@ import Testing
         panel.setTerminal(open: true, height: 200)
         layout.layoutSubtreeIfNeeded()
         let drawer = layout.convert(panel.terminalDrawer.frame, from: panel)
-        #expect(drawer.minY - card().maxY == s)
-        #expect(drawer.maxY == h - s && drawer.minX == card().minX && drawer.maxX == card().maxX)
-        #expect(right.minX - drawer.maxX == s)
+        // The drawer floats inside the full-height thread card, over its art, `Space.s` from its sides and bottom.
+        #expect(card().minY == s && card().maxY == h - s)
+        #expect(drawer.maxY == card().maxY - s && drawer.minX == card().minX + s && drawer.maxX == card().maxX - s)
+        #expect(right.minX - card().maxX == s)
     }
 }
