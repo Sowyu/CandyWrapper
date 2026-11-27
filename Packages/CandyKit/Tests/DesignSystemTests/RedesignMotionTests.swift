@@ -43,9 +43,14 @@ import Testing
 
     /// Lets Core Animation run the animations out and their completion blocks fire.
     /// Awaits rather than spinning the run loop: the ends arrive on the main queue, which a test on it must yield.
-    func settle(_ ms: Int = 400) async throws {
+    /// Another suite can hold the main thread through the wait, so the ends land late: with `until`, it waits again,
+    /// six times at most, until the condition holds.
+    func settle(_ ms: Int = 400, until done: (() -> Bool)? = nil) async throws {
         CATransaction.flush()
-        try await Task.sleep(for: .milliseconds(ms))
+        for _ in 0..<(done == nil ? 1 : 6) {
+            try await Task.sleep(for: .milliseconds(ms))
+            if done?() ?? true { break }
+        }
     }
 
     func redesignKeys(_ layer: CALayer) -> [String] { (layer.animationKeys() ?? []).filter { $0.hasPrefix("redesign.") } }
@@ -85,12 +90,12 @@ import Testing
             RedesignMotion.pill(layer, entering: true)
             #expect(Set(redesignKeys(layer)) == ["redesign.pill.y", "redesign.pill.opacity"])
             #expect(layer.opacity == 1 && CATransform3DIsIdentity(layer.transform), "the model is the resting frame from the start")
-            try await settle()
+            try await settle(until: { redesignKeys(layer).isEmpty })
             #expect(redesignKeys(layer).isEmpty)
 
             var left = false
             RedesignMotion.pill(layer, entering: false) { left = true }
-            try await settle()
+            try await settle(until: { left })
             #expect(left)
             #expect(redesignKeys(layer).isEmpty)
             #expect(layer.opacity == 1, "the caller hides the view; the layer keeps its resting opacity")
