@@ -650,7 +650,18 @@ public final class ThreadPanelView: DSView {
         didSet {
             guard subagentStripExpanded != oldValue else { return }
             lazySubagentPill.loaded?.expanded = subagentStripExpanded
+            // Redesign: the panel rises from its pill as the right panel slides in, and leaves as a still image.
+            let moves = window != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+            if moves, !subagentStripExpanded, let panel = lazySubagentPanel.loaded, !panel.isHidden, panel.superview === self {
+                leaveAsStill(panel, vertical: true)
+            }
             needsLayout = true
+            if moves, subagentStripExpanded {
+                layoutSubtreeIfNeeded()
+                if let panel = lazySubagentPanel.loaded, !panel.isHidden, let layer = panel.layer {
+                    RedesignMotion.panel(layer, entering: true, vertical: true)
+                }
+            }
         }
     }
     /// Every background task is a subagent the strip already shows, so the waiting indicator under the composer stays
@@ -1084,7 +1095,12 @@ public final class ThreadPanelView: DSView {
     private func detailsVisibilityChanged() {
         let open = detailsOpen
         header.toggles[0].isPressed = open
+        // Redesign: the dropdown drops from the Lineage toggle as the right panel slides in, and leaves as a still image.
+        let wasShown = lazyDetailsCard.loaded.map { !$0.isHidden } ?? false
+        let moves = open != wasShown && window != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        if moves, !open, let card = lazyDetailsCard.loaded { leaveAsStill(card, edge: -1, vertical: true) }
         if open { detailsCard.isHidden = false } else { lazyDetailsCard.loaded?.isHidden = true }
+        if moves, open, let layer = detailsCard.layer { RedesignMotion.panel(layer, entering: true, edge: -1, vertical: true) }
         syncDetailsPopoverMonitor()
         needsLayout = true
         onDetailsVisibilityChange?()
@@ -1405,7 +1421,7 @@ public final class ThreadPanelView: DSView {
     }
 
     /// Redesign: a still image of `view` leaves over it the way `RedesignMotion.panel` closes, then goes.
-    private func leaveAsStill(_ view: NSView, vertical: Bool = false) {
+    private func leaveAsStill(_ view: NSView, edge: CGFloat = 1, vertical: Bool = false) {
         guard !view.isHidden, view.bounds.width > 0, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let still = CALayer()
@@ -1415,7 +1431,7 @@ public final class ThreadPanelView: DSView {
         still.zPosition = 21
         Self.copyCorners(of: view, to: still)
         layer?.addSublayer(still)
-        RedesignMotion.panel(still, entering: false, vertical: vertical) { still.removeFromSuperlayer() }
+        RedesignMotion.panel(still, entering: false, edge: edge, vertical: vertical) { still.removeFromSuperlayer() }
     }
 
     /// The terminal and panel toggles sit on the panel's tab bar while the panel shows, closing slide
