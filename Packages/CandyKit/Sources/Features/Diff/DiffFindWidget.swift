@@ -17,8 +17,26 @@ final class DiffFindWidget: DSView {
     /// Redesign's close: a ghost icon button inside the box after Next, as the thread find bar's, in place of pierre's
     /// round button on the corner. It runs `close.action`.
     private let ghostClose = ButtonView(icon: .x, variant: .ghost, size: .iconXs)
+    /// Redesign's previous and next: the thread find bar's chevrons, so the app has one find bar. They run the arrows' actions.
+    private let ghostPrevious = ButtonView(icon: .chevronUp, variant: .ghost, size: .iconXs)
+    private let ghostNext = ButtonView(icon: .chevronDown, variant: .ghost, size: .iconXs)
     private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
     private var closeWidth: CGFloat { redesign ? 2 + 24 : 0 }
+    /// Redesign's bar is the thread find bar's height.
+    static let redesignHeight: CGFloat = 36
+
+    /// The count as the thread find bar writes it: `2/5`, `0/0` when nothing matches, nothing before a query.
+    static func compactCount(_ text: String, query: String) -> String {
+        if query.isEmpty { return "" }
+        if text == "No results" { return "0/0" }
+        let parts = text.components(separatedBy: " of ")
+        return parts.count == 2 ? parts.joined(separator: "/") : text
+    }
+    private func syncCount() {
+        let shown = redesign ? Self.compactCount(countText, query: field.text) : countText
+        if count.text != shown { count.text = shown }
+        count.font = DSFont.ui(12, weight: redesign ? .regular : .medium)
+    }
     private let count = LabelView("", font: DSFont.ui(12, weight: .medium))
     private let box = BoxDecorationLayer(), fieldBox = BoxDecorationLayer()
 
@@ -36,9 +54,15 @@ final class DiffFindWidget: DSView {
 
     /// `1 of 3`, or `No results` in the dimmer `[data-no-matches]` color.
     var countText = "" {
-        didSet { count.text = countText; needsLayout = true; superview?.needsLayout = true; updateLayer() }
+        didSet { syncCount(); needsLayout = true; superview?.needsLayout = true; updateLayer() }
     }
-    var hasMatches = false { didSet { previous.isEnabled = hasMatches; next.isEnabled = hasMatches; updateLayer() } }
+    var hasMatches = false {
+        didSet {
+            for b in [previous, next] { b.isEnabled = hasMatches }
+            for b in [ghostPrevious, ghostNext] { b.isEnabled = hasMatches }
+            updateLayer()
+        }
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -48,10 +72,21 @@ final class DiffFindWidget: DSView {
         field.paddingOverride = (6, 72)
         field.setAccessibilityLabel("Search")
         count.lineHeight = 20
-        for v in [field, matchCase, wholeWord, regex, count, previous, next, close, ghostClose] as [NSView] { addSubview(v) }
+        for v in [field, matchCase, wholeWord, regex, count, previous, next, close, ghostPrevious, ghostNext, ghostClose] as [NSView] { addSubview(v) }
         ghostClose.setAccessibilityLabel("Close")
         TooltipController.redesign(ghostClose, "Close find") { "Esc" }
         ghostClose.action = { [weak self] in self?.close.action?() }
+        ghostPrevious.setAccessibilityLabel("Previous match")
+        ghostNext.setAccessibilityLabel("Next match")
+        TooltipController.redesign(ghostPrevious, "Previous match") { "⇧Return" }
+        TooltipController.redesign(ghostNext, "Next match") { "Return" }
+        ghostPrevious.action = { [weak self] in self?.previous.action?() }
+        ghostNext.action = { [weak self] in self?.next.action?() }
+        // The case, word and regex toggles name themselves in Redesign too.
+        TooltipController.redesign(matchCase, "Match case")
+        TooltipController.redesign(wholeWord, "Match whole word")
+        TooltipController.redesign(regex, "Use regular expression")
+        for b in [ghostPrevious, ghostNext] { b.isEnabled = false }
         previous.isEnabled = false
         next.isEnabled = false
         field.onStateChange = { [weak self] _ in self?.updateLayer() }
@@ -59,10 +94,12 @@ final class DiffFindWidget: DSView {
 
     @MainActor required init?(coder: NSCoder) { fatalError() }
 
-    private var countWidth: CGFloat { max(50, ceil(count.textWidth)) }
-    /// The box: border 1, padding 4, then field, count and nav on a 6pt grid gap.
+    private var countWidth: CGFloat { max(redesign ? 40 : 50, ceil(count.textWidth)) }
+    /// The box: border 1, padding 4, then field, count and nav on a 6pt grid gap. Redesign: the thread find bar's
+    /// 36pt row, the field straight on the bar, then the count and three 24pt buttons 2pt apart.
     var boxSize: CGSize {
-        CGSize(width: 2 * Self.inset + fieldWidth + Self.gap + countWidth + Self.gap + Self.navWidth + closeWidth, height: 38)
+        if redesign { return CGSize(width: fieldWidth + countWidth + 3 * 26 + 5, height: Self.redesignHeight) }
+        return CGSize(width: 2 * Self.inset + fieldWidth + Self.gap + countWidth + Self.gap + Self.navWidth + closeWidth, height: 38)
     }
     var preferredSize: CGSize { CGSize(width: boxSize.width + Self.overhang, height: boxSize.height + Self.overhang) }
 
@@ -96,6 +133,29 @@ final class DiffFindWidget: DSView {
         close.isHidden = redesign
         ghostClose.isHidden = !redesign
         ghostClose.frame = NSRect(x: navX + 48 + 2, y: y + 2, width: 24, height: 24)
+        for v in [previous, next] { v.isHidden = redesign }
+        for v in [ghostPrevious, ghostNext] { v.isHidden = !redesign }
+        if redesign { layoutRedesign(box) } else { count.alignment = .left }
+    }
+
+    /// The thread find bar's row (ThreadFindBarView): buttons from the right edge, the count left of them, the field
+    /// with the case, word and regex toggles at its end filling the rest.
+    private func layoutRedesign(_ box: CGRect) {
+        var x = box.maxX - 5
+        let y = box.minY + (box.height - 24) / 2
+        for button in [ghostClose, ghostNext, ghostPrevious] {
+            x -= 24; button.frame = NSRect(x: x, y: y, width: 24, height: 24); x -= 2
+        }
+        x -= countWidth
+        count.alignment = .center
+        count.frame = NSRect(x: x, y: box.minY + (box.height - 20) / 2, width: countWidth, height: 20)
+        let fieldFrame = NSRect(x: box.minX + 1, y: box.minY + (box.height - 28) / 2, width: max(0, x - box.minX - 1), height: 28)
+        field.frame = fieldFrame
+        let padding: (CGFloat?, CGFloat?) = (11, showsToggles ? 70 : 6)
+        if field.paddingOverride != padding { field.paddingOverride = padding }
+        for (i, toggle) in [matchCase, wholeWord, regex].enumerated() {
+            toggle.frame = NSRect(x: fieldFrame.maxX - 64 + CGFloat(i) * 21, y: box.minY + (box.height - 20) / 2, width: 20, height: 20)
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -112,16 +172,14 @@ final class DiffFindWidget: DSView {
             // rim while it has the keyboard.
             var style = BoxStyle()
             style.radius = RedesignTokens.Radius.card
+            // The field sits straight on the bar, as in the thread find bar; the bar's rim takes the accent while typing.
             style.fill = bg
-            style.border = RedesignTokens.Surface.rim(dark: dark)
+            style.border = field.state.focused ? Themed.color(\.primary, Double(RedesignTokens.Surface.focusRim)) : RedesignTokens.Surface.rim(dark: dark)
             style.shadows = [RedesignTokens.Shadow.floating.box]
             box.boxStyle = style
-            var input = BoxStyle()
-            input.radius = RedesignTokens.Radius.control
-            input.fill = RedesignTokens.Card.fill
-            input.border = field.state.focused ? Themed.color(\.primary, Double(RedesignTokens.Surface.focusRim)) : RedesignTokens.Surface.rim(dark: dark)
-            fieldBox.boxStyle = input
-            count.color = Themed.color(\.mutedForeground)
+            fieldBox.boxStyle = BoxStyle()
+            syncCount()
+            count.color = count.text == "0/0" ? Themed.color(\.destructive) : Themed.color(\.mutedForeground)
             return
         }
         // `border: 1px solid` fg at 20% over what lies behind (`background-clip: padding-box`), `--diffs-widget-shadow`.

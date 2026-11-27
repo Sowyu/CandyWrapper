@@ -433,12 +433,12 @@ public final class DiffPanelView: DSView {
             guard let self, let full = self.shownFull else { return }
             self.show(full.diff, collapsed: full.collapsed)
         }
-        wrapToggle.onPressedChange = { [weak self] in self?.wrapOverride = $0; self?.wrapLines = $0 }
-        whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0 }
+        wrapToggle.onPressedChange = { [weak self] in self?.wrapOverride = $0; self?.wrapLines = $0; self?.syncToggleTooltips() }
+        whitespaceToggle.onPressedChange = { [weak self] in self?.ignoreWhitespace = $0; self?.syncToggleTooltips() }
         // Remembered across panels (`t3code.diffFileTreeOpen`, DiffPanel.tsx:123, 238-242).
         treeToggle.onPressedChange = { [weak self] shown in
             UserDefaults.standard.set(shown, forKey: "t3code.diffFileTreeOpen")
-            self?.treeScroll.isHidden = !shown; self?.needsLayout = true
+            self?.treeScroll.isHidden = !shown; self?.needsLayout = true; self?.syncToggleTooltips()
         }
         treeToggle.isPressed = UserDefaults.standard.bool(forKey: "t3code.diffFileTreeOpen")
         treeScroll.isHidden = !treeToggle.isPressed
@@ -499,6 +499,14 @@ public final class DiffPanelView: DSView {
         baseRefButton.action = { [weak self] in self?.showBaseRefMenu() }
         refreshButton.setAccessibilityLabel("Refresh diff")
         refreshButton.setTooltip("Refresh diff")
+        // Redesign names every icon button (DiffPanel.tsx:1474-1569 for the words).
+        addSubview(viewTrack, positioned: .below, relativeTo: wrapToggle)
+        viewTrack.isHidden = true
+        layoutToggle.items[0].setAccessibilityLabel("Stacked diff view")
+        layoutToggle.items[1].setAccessibilityLabel("Split diff view")
+        TooltipController.redesign(layoutToggle.items[0], "Stacked diff view")
+        TooltipController.redesign(layoutToggle.items[1], "Split diff view")
+        syncToggleTooltips()
         truncatedBar.actions = ["frame": NSNull(), "bounds": NSNull(), "position": NSNull(), "hidden": NSNull()]
         layer?.addSublayer(truncatedBar); truncatedBar.addSublayer(truncatedBottom)
         truncatedBottom.actions = truncatedBar.actions
@@ -896,8 +904,9 @@ public final class DiffPanelView: DSView {
     /// remote-only refs (DiffPanel.tsx:826-920).
     // ponytail: a plain menu without the search field and the per-branch local/remote switch; a choice picks
     // its local branch when it has one. Port the combobox if users compare against remote branches often.
-    private func showBaseRefMenu() {
+    private func showBaseRefMenu(from anchor: NSView? = nil) {
         guard let refLoader, let cwd = gitCwd ?? workspaceRoot else { return }
+        let anchor = anchor ?? baseRefButton
         let head = gitSource?.headRef, selected = baseRef
         Task { [weak self] in
             async let local = refLoader(cwd, false)
@@ -914,7 +923,7 @@ public final class DiffPanelView: DSView {
                 item.action = { [weak self] in self?.selectBaseRef(value) }
                 return item
             }
-            MenuPopupView.show(items, from: self.baseRefButton, placement: .dropdown)
+            MenuPopupView.show(items, from: anchor, placement: .dropdown)
         }
     }
 
@@ -946,6 +955,24 @@ public final class DiffPanelView: DSView {
         collapseButton.icon = list.allCollapsed ? .chevronsUpDown : .chevronsDownUp
         collapseButton.iconSize = 14
         collapseButton.setAccessibilityLabel(list.allCollapsed ? "Expand all files" : "Collapse all files")
+        TooltipController.redesign(collapseButton, list.allCollapsed ? "Expand all files" : "Collapse all files")
+    }
+
+    /// The toggles' tooltips say what a click does next, as T3's do.
+    private func syncToggleTooltips() {
+        TooltipController.redesign(wrapToggle, wrapToggle.isPressed ? "Disable line wrapping" : "Enable line wrapping")
+        TooltipController.redesign(whitespaceToggle, whitespaceToggle.isPressed ? "Show whitespace changes" : "Hide whitespace changes")
+        TooltipController.redesign(treeToggle, treeToggle.isPressed ? "Hide file tree" : "Show file tree")
+    }
+
+    /// Redesign's view toggles sit on one segmented track, so they take the segmented look; elsewhere they are T3's ghosts.
+    private let viewTrack = ToggleTrackView()
+    private func syncToggleStyle(redesign: Bool) {
+        let variant: ToggleView.Variant = redesign ? .segmented : .ghost
+        for toggle in [wrapToggle, whitespaceToggle, hideTestsToggle, treeToggle] where toggle.variant != variant {
+            toggle.variant = variant
+            toggle.size = redesign ? .xs : .sm
+        }
     }
 
     /// "Latest turn" and a Turn submenu (DiffPanel.tsx:757-822). Git scopes are not offered yet.
@@ -975,7 +1002,15 @@ public final class DiffPanelView: DSView {
         }
         // The menu shows the list read last; opening it reads again for next time (DiffPanel.tsx:938-945).
         let commits = gitLoader != nil ? commitsMenu() : nil
-        MenuPopupView.show(items + [.submenu("Turn", turns)] + [commits].compactMap { $0 }, from: scopeButton, placement: .dropdown)
+        // Redesign drops the comparison target from a narrow toolbar rather than cut its name; the menu offers it then.
+        var compare: [MenuItem] = []
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), gitScope == .branch, refLoader != nil, !baseRefTitle.isEmpty, baseRefButton.isHidden {
+            var item = MenuItem("Compare with \(baseRefTitle)…")
+            item.closesOnClick = true
+            item.action = { [weak self] in guard let self else { return }; self.showBaseRefMenu(from: self.scopeButton) }
+            compare = [.separator, item]
+        }
+        MenuPopupView.show(items + [.submenu("Turn", turns)] + [commits].compactMap { $0 } + compare, from: scopeButton, placement: .dropdown)
         if gitLoader != nil { loadBranchCommits() }
     }
 
@@ -1043,12 +1078,29 @@ public final class DiffPanelView: DSView {
             view.frame = NSRect(x: x, y: ((h - height) / 2 * 2).rounded() / 2, width: width, height: height)
             x -= 4
         }
-        place(treeToggle, width: 28, height: 28)
-        if !hideTestsToggle.isHidden { place(hideTestsToggle, width: 28, height: 28) }
-        place(whitespaceToggle, width: 28, height: 28)
-        place(wrapToggle, width: 28, height: 28)
+        let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        syncToggleStyle(redesign: redesign)
+        viewTrack.isHidden = !redesign
+        if redesign {
+            // Redesign: wrap, whitespace, test files and the tree are one segmented track, beside the layout group.
+            let toggles = [wrapToggle, whitespaceToggle] + (hideTestsToggle.isHidden ? [] : [hideTestsToggle]) + [treeToggle]
+            let width = 2 + CGFloat(toggles.count) * 28 + CGFloat(toggles.count - 1) * 2 + 2
+            place(viewTrack, width: width, height: 28)
+            var tx = viewTrack.frame.minX + 2
+            for toggle in toggles {
+                toggle.frame = NSRect(x: tx, y: viewTrack.frame.minY + 2, width: 28, height: 24)
+                tx += 30
+            }
+            x -= 4
+        } else {
+            place(treeToggle, width: 28, height: 28)
+            if !hideTestsToggle.isHidden { place(hideTestsToggle, width: 28, height: 28) }
+            place(whitespaceToggle, width: 28, height: 28)
+            place(wrapToggle, width: 28, height: 28)
+        }
         let group = layoutToggle.intrinsicContentSize
         place(layoutToggle, width: group.width, height: group.height)
+        if redesign { x -= 4 }
         place(collapseButton, width: 28, height: 28)
         if showsRefresh { place(refreshButton, width: 28, height: 28) }
         if !totals.isHidden {
@@ -1065,7 +1117,25 @@ public final class DiffPanelView: DSView {
             let scale = min(1, max(0, room) / max(1, head + base))
             let fits = room >= chrome + 24
             [compareHead, compareArrow, baseRefButton].forEach { $0.isHidden = !fits }
-            if fits {
+            if redesign {
+                // Redesign never cuts a ref name: the head goes first, then the base, which the scope menu then offers.
+                let full = room >= head + base, baseFits = room + 8 >= base
+                compareHead.isHidden = !full
+                compareArrow.isHidden = !baseFits
+                baseRefButton.isHidden = !baseFits
+                if full {
+                    compareHead.frame = NSRect(x: left, y: (h - 16) / 2, width: head, height: 16)
+                    left += head + 8
+                }
+                if baseFits {
+                    compareArrow.frame = NSRect(x: left, y: (h - 14) / 2, width: 14, height: 14)
+                    left += 14 + 8
+                    // Only a name past T3's `max-w-48` is cut.
+                    let title = Self.truncate(baseRefTitle, to: base - chrome)
+                    if baseRefButton.title != title { baseRefButton.title = title }
+                    baseRefButton.frame = NSRect(x: left, y: (h - 24) / 2, width: base, height: 24)
+                }
+            } else if fits {
                 let headWidth = (head * scale).rounded(.up), baseWidth = (base * scale).rounded(.up)
                 compareHead.frame = NSRect(x: left, y: (h - 16) / 2, width: headWidth, height: 16)
                 left += headWidth + 8
@@ -1115,6 +1185,7 @@ public final class DiffPanelView: DSView {
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         syncRedesignState()
+        needsLayout = true // the toolbar regroups in and out of Redesign
     }
 
     public override func updateLayer() {
@@ -1125,6 +1196,17 @@ public final class DiffPanelView: DSView {
         truncatedBottom.backgroundColor = Themed.color(\.border, 0.7).cgColor(in: self)
         omittedBar.backgroundColor = truncatedBar.backgroundColor
         omittedBottom.backgroundColor = truncatedBottom.backgroundColor
+    }
+}
+
+/// The quiet track a segmented group draws, behind toggles that each keep their own state.
+final class ToggleTrackView: DSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func updateLayer() {
+        layer?.cornerRadius = DesignGeometry.radius(10, in: self)
+        layer?.cornerCurve = .continuous
+        layer?.backgroundColor = (RedesignTokens.Segment.light(in: self) ? RedesignTokens.Segment.trackFill
+            : Themed.color(\.contrastInput, 0.4)).cgColor(in: self)
     }
 }
 

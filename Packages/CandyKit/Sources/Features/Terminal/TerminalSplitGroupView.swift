@@ -388,8 +388,12 @@ public final class TerminalListAsideView: DSView {
             layer?.cornerRadius = DesignGeometry.radius(8, in: self)
             let fg = Themed.color(active || hovered ? \.foreground : \.mutedForeground)
             label.color = fg
-            glyph.strokeColor = fg
-            let fill: NSColor? = active ? Themed.color(\.accent) : hovered ? Themed.color(\.accent, 0.6) : nil
+            let dark = effectiveAppearance.isDark, redesign = ThemeRuntime.isDither(dark: dark)
+            // Redesign marks the active terminal with the accent on its glyph, so it reads at a glance in the list.
+            glyph.strokeColor = redesign && active && !hovered ? Themed.color(\.primary) : fg
+            let fill: NSColor? = redesign ? (active ? RedesignTokens.State.fill(RedesignTokens.State.selected, dark: dark)
+                                              : hovered ? RedesignTokens.State.fill(RedesignTokens.State.hover, dark: dark) : nil)
+                : active ? Themed.color(\.accent) : hovered ? Themed.color(\.accent, 0.6) : nil
             layer?.backgroundColor = fill?.cgColor(in: self)
         }
 

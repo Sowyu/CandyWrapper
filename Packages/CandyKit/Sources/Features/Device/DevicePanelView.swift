@@ -96,6 +96,8 @@ public final class DevicePanelView: DSView {
             for (name, icon) in buttons {
                 let button = ButtonView(nil, icon: icon, variant: .ghost, size: .iconSm)
                 button.setAccessibilityLabel(name)
+                let spoken = ["home": "Home", "back": "Back", "recents": "Recent apps", "appSwitcher": "App switcher", "power": "Power"][name] ?? name
+                TooltipController.redesign(button, spoken)
                 button.action = { [weak self] in self?.onButton?(name) }
                 rail.append(button); addSubview(button)
             }
@@ -123,6 +125,10 @@ public final class DevicePanelView: DSView {
             close.setAccessibilityLabel("Close device")
             close.action = { [weak self] in self?.onClose?(active) }
             rail.append(close); addSubview(close)
+            // Redesign names every icon button; the default themes keep T3's bare rail.
+            for button in rail.suffix(rail.count - buttons.count) {
+                if let label = button.accessibilityLabel() { TooltipController.redesign(button, label) }
+            }
         }
         empty.isHidden = state == nil || setupNeeded || !(state?.devices.isEmpty ?? true) || state?.hostStatus == "installing" || state?.hostStatus == "starting"
         if !empty.isHidden {

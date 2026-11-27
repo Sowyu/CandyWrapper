@@ -302,6 +302,7 @@ struct RedesignBaselineTests {
             try capture("thread-unavailable", ThreadUnavailableStateView(frame: NSRect(origin: .zero, size: stateSize)), stateSize)
             let find = DSView(frame: NSRect(x: 0, y: 0, width: 440, height: 120))
             let diffFind = DiffFindWidget()
+            diffFind.field.text = "greet"
             diffFind.countText = "2 of 5"; diffFind.hasMatches = true
             diffFind.frame = NSRect(origin: NSPoint(x: 8, y: 8), size: diffFind.preferredSize)
             find.addSubview(diffFind)

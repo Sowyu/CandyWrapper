@@ -885,7 +885,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let path = args[i + 1]
         let delay = args.firstIndex(of: "--snapshot-delay").flatMap { $0 + 1 < args.count ? Double(args[$0 + 1]) : nil } ?? 4
         #if DEBUG
-        // `--snapshot-open thread,panel,terminal,pulls,collapsed,picker,access` puts a test app in those states halfway through the delay,
+        // `--snapshot-open thread,panel,files,browser,terminal,pulls,issues,workflows,collapsed,picker,access` puts a test app in those states halfway through the delay,
         // since keys sent to an app behind the other windows don't reach its palette.
         if Self.isTestBuild, let o = args.firstIndex(of: "--snapshot-open"), o + 1 < args.count {
             let steps = args[o + 1].split(separator: ",").map(String.init)
@@ -897,8 +897,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         case "thread":
                             if let id = sidebar?.snapshot?.threads.first?.id { threads.open(id) }
                         case "panel": threads.panel.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
-                        case "terminal": threads.panel.onTerminalToggle?()
+                        // The drawer's open state persists, so the step opens it only when it is closed.
+                        case "terminal": if !threads.panel.terminalOpen { threads.panel.onTerminalToggle?() }
+                        case "files": threads.panel.mutatePanel { $0.open(.files); $0.isOpen = true; return [] }
+                        case "browser": threads.panel.mutatePanel { $0.openBrowser(nil); $0.isOpen = true; return [] }
                         case "pulls": self.sidebarCommands?.openUtilityPage(.pullRequests)
+                        case "issues": self.sidebarCommands?.openUtilityPage(.issues)
+                        case "workflows": self.sidebarCommands?.openUtilityPage(.workflows)
                         case "collapsed": (window.contentView as? SidebarLayoutView)?.setOpen(false)
                         case "picker": threads.composer.pickers.toggleModelPicker()
                         case "access": threads.composer.pickers.openAccessMode()

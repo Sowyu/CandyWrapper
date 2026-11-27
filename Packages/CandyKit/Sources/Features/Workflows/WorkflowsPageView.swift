@@ -295,7 +295,11 @@ public final class WorkflowsPageView: DSView, DitherBandPage {
         let top: CGFloat = band ? 0 : 52
         let body = NSRect(x: 0, y: top, width: w, height: max(0, h - top))
         loadingLabel.frame = NSRect(x: 24, y: body.minY + 24, width: max(0, w - 48), height: 20)
-        if let empty {
+        if let empty, band {
+            // Redesign's state centers itself in the page. Sized to its fitting width, which has no width to wrap to,
+            // it came out a few points wide and drew its button as a 1pt line through the label.
+            empty.frame = body
+        } else if let empty {
             let size = empty.fittingSize
             empty.frame = NSRect(x: body.midX - min(size.width, w) / 2, y: body.midY - size.height / 2, width: min(size.width, w), height: size.height)
         }

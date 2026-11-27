@@ -748,7 +748,8 @@ final class WorkflowQuestionCardView: DSView {
             var cy = top
             for (i, (b, note)) in choices.enumerated() {
                 if i > 0 { cy += RedesignTokens.Space.s }
-                set(b, NSRect(x: x, y: cy, width: b.fittingSize.width, height: 28))
+                // Every choice takes the column's width, so the buttons read as one stacked set and not as strays.
+                set(b, NSRect(x: x, y: cy, width: column, height: 28))
                 var rowH: CGFloat = 28
                 if let note {
                     let nh = note.height(forWidth: noteW)

@@ -149,6 +149,11 @@ public final class FilesPanelView: DSView {
         } else if redesign, noMatches {
             copy = StateCopy(title: "No matching files", detail: "Try part of the file name or a shorter path.", icon: .search)
             stateView.action = nil
+        } else if redesign, !loading, treeView.model.ready, treeView.model.rows.isEmpty,
+                  searchField.input.text.trimmingCharacters(in: .whitespaces).isEmpty {
+            // An empty folder said nothing at all; Redesign says so, with Refresh.
+            copy = StateCopy(title: "No files yet", detail: "This folder is empty. New files show here.", icon: .folder)
+            stateView.action = StateAction("Refresh", icon: .refreshCw) { [weak self] in self?.onRefresh?() }
         }
         stateView.redesign = copy
         stateView.isHidden = copy == nil
@@ -161,6 +166,14 @@ public final class FilesPanelView: DSView {
         updateChrome()
     }
 
+    /// T3's ghost field reads as loose text in Redesign; there it is a framed field with a search glyph.
+    private func syncSearchStyle() {
+        let variant: InputGroupView.Variant = redesign ? .default : .ghost
+        guard searchField.variant != variant else { return }
+        searchField.variant = variant
+        searchField.leading = redesign ? .icon(.search) : nil
+    }
+
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window != nil { updateChrome() }
@@ -170,13 +183,21 @@ public final class FilesPanelView: DSView {
         super.layout()
         let h: CGFloat = inline ? 36 : 40
         let w = bounds.width
+        syncSearchStyle()
         refresh.frame = NSRect(x: 8, y: (h - 24) / 2, width: 24, height: 24)
         var right = w - 8
         if !expandAll.isHidden {
             expandAll.frame = NSRect(x: right - 24, y: (h - 24) / 2, width: 24, height: 24)
             right -= 24 + 4
         }
-        searchField.frame = NSRect(x: 36, y: (h - 28) / 2, width: max(0, right - 36), height: 28)
+        if redesign {
+            // Redesign: the framed search field leads the row, its actions after it, as in the diff's toolbar.
+            refresh.frame = NSRect(x: right - 24, y: (h - 24) / 2, width: 24, height: 24)
+            right -= 24 + RedesignTokens.Space.s
+            searchField.frame = NSRect(x: 8, y: (h - 28) / 2, width: max(0, right - 8), height: 28)
+        } else {
+            searchField.frame = NSRect(x: 36, y: (h - 28) / 2, width: max(0, right - 36), height: 28)
+        }
         border.frame = CGRect(x: 0, y: h - 1, width: w, height: 1)
         border.isHidden = inline
         var y = h + (inline ? 4 : 0)
