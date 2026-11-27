@@ -48,7 +48,9 @@ public final class QuestionPanelView: ComposerBannerView {
     private var headerHeight: CGFloat { isDither ? 24 : 30 }
     /// Nightly 3754 ComposerPendingUserInputPanel.tsx:237-245: `sm:ps-5.5 pe-4 pb-1`.
     private var bodyStart: CGFloat { isDither ? 28 : 22 }
-    private var bodyEnd: CGFloat { isDither ? 4 : 16 }
+    /// Redesign matches `bodyStart`, so the choices sit as far from the right rim as from the left (the user, 2026-11-27:
+    /// 4 left the rows 31pt in on the left and 7pt on the right).
+    private var bodyEnd: CGFloat { isDither ? 28 : 16 }
     static let bodyBottom: CGFloat = 4
 
     private var threadId: ThreadId = ""
@@ -302,7 +304,10 @@ public final class QuestionPanelView: ComposerBannerView {
 
     // MARK: Layout
 
-    private var actionsHeight: CGFloat { showsActions ? Self.actionsGap + MessageActionPill.height : 0 }
+    /// Redesign leaves the same gap under Submit as above it; with only `pad` under it the pill sat 3pt off the composer.
+    private var actionsHeight: CGFloat {
+        showsActions ? Self.actionsGap + MessageActionPill.height + (isDither ? Self.actionsGap : 0) : 0
+    }
 
     private func bodyHeight(width: CGFloat) -> CGFloat {
         let textWidth = max(0, width - 2 * Self.pad - bodyStart - bodyEnd)

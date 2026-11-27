@@ -206,7 +206,24 @@ public struct ComposerChipLook: Equatable, Sendable {
         }
     }
 
-    var foreground: NSColor {
+    /// Redesign draws image and video chips neutral: the inset card's fill and rim, the text color, the size muted.
+    /// The picture's average color tinted the whole chip (the user, 2026-11-27, picked option B).
+    private var neutralInRedesign: Bool { state == nil && (kind == .image || kind == .video) }
+    private func inRedesign(_ other: NSColor, _ redesign: @escaping @Sendable (Bool) -> NSColor) -> NSColor {
+        guard neutralInRedesign else { return other }
+        return NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? redesign($0.isDark) : other }
+    }
+    private static func text(_ role: KeyPath<Palette, TokenColor>, dark: Bool) -> NSColor {
+        let c = ThemeRuntime.palettes.palette(dark: dark, sidebar: false)[keyPath: role].srgb
+        return NSColor(srgbRed: CGFloat(c.x), green: CGFloat(c.y), blue: CGFloat(c.z), alpha: CGFloat(c.w))
+    }
+
+    /// The size or upload state after the label.
+    var detailForeground: NSColor { inRedesign(foreground) { Self.text(\.mutedForeground, dark: $0) } }
+
+    var foreground: NSColor { inRedesign(baseForeground) { Self.text(\.foreground, dark: $0) } }
+
+    private var baseForeground: NSColor {
         if let foregroundOverride { return foregroundOverride }
         if state == .unresolved { return Themed.color(\.foreground) }
         if state == .invalid { return Themed.color(\.destructive) }
@@ -215,13 +232,17 @@ public struct ComposerChipLook: Equatable, Sendable {
         return OKLab.mix(accent, 0.22, Themed.color(\.contrastForeground))
     }
 
-    var border: NSColor {
+    var border: NSColor { inRedesign(baseBorder) { RedesignTokens.Surface.rim(dark: $0) } }
+
+    private var baseBorder: NSColor {
         if state == .invalid { return Themed.color(\.destructive, 0.35) }
         guard let accent else { return Themed.color(\.border, 0.7) }
         return OKLab.mix(accent, 0.34, Themed.color(\.contrastBorder))
     }
 
-    var fill: NSColor {
+    var fill: NSColor { inRedesign(baseFill) { RedesignTokens.Surface.insetFill(dark: $0) } }
+
+    private var baseFill: NSColor {
         if state == .invalid { return Themed.color(\.destructive, 0.08) }
         return accent?.withAlphaComponent(0.11) ?? Themed.color(\.accent, 0.4)
     }
@@ -231,10 +252,10 @@ public struct ComposerChipLook: Equatable, Sendable {
     /// `[button:enabled&,a&]:hover`: the border at 48% and the fill at 17% on interactive chips.
     var hoverBorder: NSColor {
         guard let accent else { return border }
-        return OKLab.mix(accent, 0.48, Themed.color(\.contrastBorder))
+        return inRedesign(OKLab.mix(accent, 0.48, Themed.color(\.contrastBorder))) { RedesignTokens.Surface.rim(dark: $0) }
     }
 
-    var hoverFill: NSColor { accent?.withAlphaComponent(0.17) ?? fill }
+    var hoverFill: NSColor { inRedesign(accent?.withAlphaComponent(0.17) ?? fill) { RedesignTokens.Surface.insetFill(dark: $0) } }
 }
 
 extension NSAttributedString.Key {
@@ -381,7 +402,7 @@ final class ComposerChipAttachment: NSTextAttachment {
         ctx.textPosition = CGPoint(x: iconRect.maxX + 0.33 * em, y: baseline)
         CTLineDraw(line.line, ctx)
         if let detail = look.detail {
-            let d = TextLine(NSAttributedString(string: detail, attributes: [.font: detailFont, .foregroundColor: look.foreground]))
+            let d = TextLine(NSAttributedString(string: detail, attributes: [.font: detailFont, .foregroundColor: look.detailForeground]))
             ctx.textPosition = CGPoint(x: iconRect.maxX + 0.33 * em + line.width + 0.33 * em, y: d.baseline(top: rect.minY + (rect.height - 14) / 2, lineHeight: 14))
             CTLineDraw(d.line, ctx)
         }

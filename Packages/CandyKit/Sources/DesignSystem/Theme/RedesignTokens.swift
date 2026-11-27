@@ -98,10 +98,18 @@ public enum RedesignTokens {
         /// at the very foot let a light picture's own text show through (1.16.0 release walk).
         public static let shade: CGFloat = 0.7
 
+        /// How far a dark surface's fill sits from the ground toward `surfaceRaised`. At 1 the composer read too light
+        /// on the ground (the user, 2026-11-27: "should be darker").
+        public static let raisedDark: CGFloat = 0.5
+
         /// The fill of a surface that rests on the ground: the composer, the pills, the header pill, Settings.
         @MainActor public static func fill(in view: NSView) -> CGColor {
             let dark = view.effectiveAppearance.isDark
-            return Themed.color(dark ? \.surfaceRaised : \.card).cgColor(in: view)
+            guard dark else { return Themed.color(\.card).cgColor(in: view) }
+            let p = ThemeRuntime.palettes.palette(dark: true, sidebar: false)
+            let g = p.background.srgb, r = p.surfaceRaised.srgb, a = Double(raisedDark)
+            func mix(_ lo: Double, _ hi: Double) -> CGFloat { CGFloat(lo + (hi - lo) * a) }
+            return NSColor(srgbRed: mix(g.x, r.x), green: mix(g.y, r.y), blue: mix(g.z, r.z), alpha: 1).cgColor
         }
 
         /// The fill of a card on a surface: a step in the text color over the panel's ground, opaque so the picture
