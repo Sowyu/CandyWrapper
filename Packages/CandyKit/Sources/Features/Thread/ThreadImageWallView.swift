@@ -622,6 +622,16 @@ public final class ThreadImageWallView: DSView {
         super.layout()
         let w = bounds.width
         Self.placeBar(back: nil, labels: [title, count], hint: hint, close: close, width: w)
+        if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
+            // Redesign: the count sits at the bar's right before the close in muted 12pt, and the resize help is
+            // the count's tooltip instead of a sentence beside the title (round-0 review, T7).
+            hint.isHidden = true
+            count.font = DSFont.ui(12)
+            count.lineHeight = 16
+            let cw = ceil(count.textWidth) + 1
+            count.frame = NSRect(x: close.frame.minX - RedesignTokens.Space.m - cw, y: Self.header / 2 - 8, width: cw, height: 16)
+            count.toolTip = hint.text
+        }
         rule.frame = NSRect(x: 0, y: Self.header - 1, width: w, height: 1)
         let top = Self.header
         scroll.frame = NSRect(x: 0, y: top, width: w, height: max(0, bounds.height - top))

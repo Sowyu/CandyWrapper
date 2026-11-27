@@ -42,9 +42,10 @@ public enum BackdropMarks {
     }
 
     /// Target luminances over a worst background of luminance `lw`, keeping T3's ratios (see the type's comment).
-    nonisolated static func luminances(_ states: [[Layer]], keep: Int, dark: Bool, over lw: Double) -> [Double] {
+    /// `restingBoost` multiplies the resting state's contrast to the background, still capped so the `keep` states fit.
+    nonisolated static func luminances(_ states: [[Layer]], keep: Int, dark: Bool, over lw: Double, restingBoost: Double = 1) -> [Double] {
         let ref = reference(states, dark: dark)
-        let resting = contrast(ref.states[0], ref.background)
+        let resting = contrast(ref.states[0], ref.background) * restingBoost
         let ratios = ref.states.map { contrast($0, ref.states[0]) }
         let top = ratios.prefix(keep).max() ?? 1
         if dark {
@@ -57,10 +58,10 @@ public enum BackdropMarks {
 
     /// The opaque color for each state, in the hue of its top layer in the current palette, or nil where the panel
     /// is solid and T3's translucent marks draw as they are.
-    public static func colors(_ states: [[Layer]], keep: Int? = nil, dark: Bool) -> [NSColor]? {
+    public static func colors(_ states: [[Layer]], keep: Int? = nil, dark: Bool, restingBoost: Double = 1) -> [NSColor]? {
         guard let worst = worstBackground(dark: dark) else { return nil }
         let palette = ThemeRuntime.palettes.palette(dark: dark, sidebar: false)
-        let targets = luminances(states, keep: keep ?? states.count, dark: dark, over: WindowGlass.linear(worst))
+        let targets = luminances(states, keep: keep ?? states.count, dark: dark, over: WindowGlass.linear(worst), restingBoost: restingBoost)
         return zip(states, targets).map { layers, l in
             withLuminance(palette[keyPath: layers.last!.key], l).nsColor
         }

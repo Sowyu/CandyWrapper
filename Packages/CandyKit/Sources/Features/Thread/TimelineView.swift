@@ -1242,7 +1242,7 @@ public final class TimelineView: DSView, @preconcurrency NSAccessibilityCustomRo
     }
 
     /// Scrolls to a share of the scrollable height (0 top, 1 end). Tests and previews.
-    func scroll(toFraction f: CGFloat) {
+    public func scroll(toFraction f: CGFloat) {
         followsEnd = f >= 1
         // Measure everything first so the fraction means the same as in a browser that laid out all rows.
         for (i, item) in items.enumerated() {
