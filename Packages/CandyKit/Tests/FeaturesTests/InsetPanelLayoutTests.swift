@@ -32,8 +32,11 @@ import Testing
         let s = RedesignTokens.Space.s, w = layout.bounds.width, h = layout.bounds.height
         func card() -> NSRect { layout.convert(layout.insetCardFrame, from: layout.main) }
         #expect(card() == NSRect(x: layout.main.frame.minX + s, y: s, width: w - layout.main.frame.minX - 2 * s, height: h - 2 * s))
-        #expect(layout.tabStrip.frame.minY == s && layout.tabStrip.frame.height == CardTopRow.rowHeight)
+        #expect(layout.tabStrip.frame.minY == s && layout.tabStrip.frame.height == CardTopRow.floatHeight)
         #expect(layout.convert(panel.bounds, from: panel).minY == s + CardTopRow.rowHeight)
+        // No band: the rows run to the card's top behind the floating pills, and start below them at rest.
+        #expect(layout.convert(panel.timeline.frame, from: panel).minY == s)
+        #expect(panel.timeline.topClearance >= CardTopRow.floatHeight)
 
         panel.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
         layout.layoutSubtreeIfNeeded()
@@ -45,8 +48,9 @@ import Testing
         panel.setTerminal(open: true, height: 200)
         layout.layoutSubtreeIfNeeded()
         let drawer = layout.convert(panel.terminalDrawer.frame, from: panel)
-        #expect(drawer.minY - card().maxY == s)
-        #expect(drawer.maxY == h - s && drawer.minX == card().minX && drawer.maxX == card().maxX)
-        #expect(right.minX - drawer.maxX == s)
+        // The drawer floats inside the full-height thread card, over its art, `Space.s` from its sides and bottom.
+        #expect(card().minY == s && card().maxY == h - s)
+        #expect(drawer.maxY == card().maxY - s && drawer.minX == card().minX + s && drawer.maxX == card().maxX - s)
+        #expect(right.minX - card().maxX == s)
     }
 }

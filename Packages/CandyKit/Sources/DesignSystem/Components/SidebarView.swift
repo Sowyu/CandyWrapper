@@ -344,7 +344,8 @@ public final class SidebarLayoutView: DSView {
         // The band and frame around the panel are flat, so the sidebar drops its grain to match them.
         if sidebar.surface.showsGrain == dither { sidebar.surface.showsGrain = !dither }
         tabStrip.isHidden = !dither
-        tabStrip.frame = inset ? NSRect(x: gap + margin, y: margin, width: max(0, bounds.width - gap - 2 * margin), height: CardTopRow.rowHeight)
+        // Inset, the strip lies over the card's top with no ground; its pills float over the page (`layoutInsetRow`).
+        tabStrip.frame = inset ? NSRect(x: gap + margin, y: margin, width: max(0, bounds.width - gap - 2 * margin), height: CardTopRow.floatHeight)
             : NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: band)
         // Over the sidebar's titlebar row, right-aligned, while the sidebar is open.
         for (i, b) in [backButton, forwardButton].enumerated() {

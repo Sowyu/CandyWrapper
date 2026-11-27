@@ -12,6 +12,10 @@ public struct CardTopRow: Equatable, Sendable {
     public static let rowHeight = DitherTabStripView.tabHeight + 2 * pillInset
     /// The tabs' inset from the card's left edge, the same 4pt as from its top.
     public static let tabsInset = (rowHeight - 24) / 2
+    /// The inset card's floating breadcrumb and header pill: this far in from the card's top, left and right edges.
+    public static let floatGap = RedesignTokens.Space.s
+    /// The band over the inset card's top that the floating pills take: the gap above and below a tab-high pill.
+    public static let floatHeight = 2 * floatGap + DitherTabStripView.tabHeight
     /// The narrowest tab area still usable: one tab at its narrowest (60), the gap and the 24pt +. Below it the tabs
     /// drop to a second row under the pill.
     public static let minTabRoom: CGFloat = 60 + 4 + 24

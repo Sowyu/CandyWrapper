@@ -24,7 +24,6 @@ final class DitherThreadTitleView: DSView, DitherStripLeading {
         super.init(frame: frameRect)
         layer?.masksToBounds = false
         frost.radius = RedesignTokens.Radius.control
-        frost.flatInInsetRow = true
         addSubview(frost)
         name.truncation = .middle
         for l in [project, slash, name] { l.lineHeight = Self.lineHeight; addSubview(l) }
