@@ -76,8 +76,9 @@ public enum RedesignTokens {
     public enum Surface {
         /// A card on a surface, in the text color over the panel's ground: code blocks, tables, tool output.
         public static let inset: CGFloat = 0.05
-        /// The 1pt rim on every surface and card, in the text color.
-        public static let rim: CGFloat = 0.08
+        /// The 1pt rim on every surface and card, in the text color. 0.08 read as a hard line around the darker
+        /// composer fill (the user, 2026-11-27: "the outline feels a bit weird").
+        public static let rim: CGFloat = 0.05
         /// Light's rim, a step above `rim`: at 0.08 the inset card, Settings and the floating cards dissolved
         /// into the off-white beside them (round-1 review, W7 and Sol's fix 10).
         public static let rimLight: CGFloat = 0.12
