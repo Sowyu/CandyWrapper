@@ -357,7 +357,24 @@ public final class ComposerPickers {
         // Docked, the popup opens above the composer and slides over it when that space is short
         // (ProviderModelPicker.tsx:462-467); the trigger grows away from its end edge (ComposerControlsBar.tsx:191-192).
         let placement = PopupPlacement(side: .top, align: .end, sideOffset: 4, fallbackAxisSide: .none, collision: .shift)
-        let popup = host.open(PickerPopupView(body), trigger: modelButton, placement: placement, motion: .popover)
+        // Redesign measures "above the composer" from the composer's top edge, not the chip's, so the picker's
+        // footer never sits over the prompt and send (round-1 review C7, 2026-11-26). It still slides over the
+        // composer when the space above is short.
+        // The new-thread page centres its composer, so when the room above is short the picker opens on the side with
+        // more room, under the composer there.
+        var anchorRect: CGRect?
+        var side = placement
+        if ThemeRuntime.isDither(dark: modelButton.effectiveAppearance.isDark),
+           let composer = sequence(first: modelButton.superview, next: { $0?.superview }).first(where: { $0 is ComposerView }) ?? nil,
+           let content = composer.window?.contentView {
+            let c = modelButton.convert(composer.bounds, from: composer)
+            anchorRect = CGRect(x: 0, y: c.minY, width: modelButton.bounds.width, height: c.height)
+            let inWindow = composer.convert(composer.bounds, to: nil)
+            let need = body.naturalSize.height + placement.sideOffset + placement.collisionPadding
+            let above = content.bounds.height - inWindow.maxY - DitherChrome.band, below = inWindow.minY
+            if above < need && below > above { side.side = .bottom }
+        }
+        let popup = host.open(PickerPopupView(body), trigger: modelButton, anchorRect: anchorRect, placement: side, motion: .popover)
         track(popup)
         modelPicker = view
         syncDocked()

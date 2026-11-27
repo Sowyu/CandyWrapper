@@ -372,8 +372,19 @@ public final class ComposerImageShelfView: DSView {
         private var hover: HoverGroup?
         private var focusWithin = false
         private var isSnapShot = false
+        /// The upload failed: Redesign rims the tile in the error color.
+        private(set) var failed = false
+        private var redesign: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) }
         func focusWithinChanged(_ focused: Bool) { focusWithin = focused; revealRemove() }
-        private func revealRemove() { HoverReveal.fade([remove], visible: !isSnapShot || hover?.hovered == true || focusWithin) }
+        /// Redesign shows a tile's remove and retry on hover or focus only, as T3 does for a snapshot's remove, so
+        /// they never sit over a picture at rest (round-1 review C4, 2026-11-26).
+        private func revealRemove() {
+            let lit = hover?.hovered == true || focusWithin
+            HoverReveal.fade([remove], visible: !(isSnapShot || redesign) || lit)
+            HoverReveal.fade([retry], visible: !redesign || lit)
+        }
+        /// Redesign's corner controls: 18pt with a 12pt glyph, a quarter of a 64pt tile instead of most of its top.
+        static let redesignControl: CGFloat = 18, redesignGlyph: CGFloat = 12
         private(set) var id = ""
         let image = AsyncImageView()
         /// A file's name, wrapped in the tile (ComposerAttachmentStrip.tsx:715):
@@ -457,21 +468,24 @@ public final class ComposerImageShelfView: DSView {
                 progressStrip.isHidden = true
                 retry.isHidden = true
             }
+            if case .failed = tile.status { failed = true } else { failed = false }
+            needsDisplay = true
             needsLayout = true
         }
 
         override func updateLayer() {
             // Redesign's remove and retry are its solid resting control (the glass variant's Redesign look), not
             // translucent black over the picture.
-            let redesign = ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
             if remove.variant != (redesign ? .glass : .mediaClose) {
                 remove.variant = redesign ? .glass : .mediaClose
                 retry.variant = redesign ? .glass : .overlay
+                for b in [remove, retry] { b.iconSize = redesign ? Self.redesignGlyph : nil }
+                HoverReveal.withoutAnimation { revealRemove() }
                 needsLayout = true
             }
             layer?.cornerRadius = ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
             layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
-            layer?.borderColor = Themed.color(\.border, 0.8).cgColor(in: self)
+            layer?.borderColor = (redesign && failed ? Themed.color(\.destructive) : Themed.color(\.border, 0.8)).cgColor(in: self)
             progressStrip.layer?.backgroundColor = Themed.color(\.background, 0.85).cgColor(in: self)
         }
 
@@ -491,10 +505,11 @@ public final class ComposerImageShelfView: DSView {
             // `absolute right-1 top-1` and `bottom-1 left-1`, inside the 1px border.
             remove.frame = NSRect(x: inner.maxX - 4 - 24, y: inner.minY + 4, width: 24, height: 24)
             retry.frame = NSRect(x: inner.minX + 4, y: inner.maxY - 4 - 24, width: 24, height: 24)
-            if ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
-                // Redesign keeps a tile's controls in one corner: retry sits beside remove at the top right.
-                let gap = RedesignTokens.Space.xs
-                retry.frame.origin = CGPoint(x: remove.isHidden ? remove.frame.minX : remove.frame.minX - gap - 24, y: remove.frame.minY)
+            if redesign {
+                // Redesign keeps a tile's controls in one corner, small: retry beside remove at the top right.
+                let s = Self.redesignControl, gap = RedesignTokens.Space.xs / 2
+                remove.frame = NSRect(x: inner.maxX - gap - s, y: inner.minY + gap, width: s, height: s)
+                retry.frame = NSRect(x: remove.isHidden ? remove.frame.minX : remove.frame.minX - gap - s, y: remove.frame.minY, width: s, height: s)
             }
         }
 

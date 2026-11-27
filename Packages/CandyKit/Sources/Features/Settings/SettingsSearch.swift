@@ -92,6 +92,7 @@ public enum SettingsSearch {
     static let redesignSearchTerms: [String: [String]] = [
         "thread-details-items": ["customize show hide header pill actions menu dropdown editor scripts branch pull request git changes totals servers automations lineage side chats usage limits 5 hour weekly quota tokens"],
         "panel-animations": ["motion speed slide sidebar right panel terminal duration"],
+        "composer-context": ["branch machine environment worktree footer row below under composer"],
     ]
 
     /// `filterAvailableSettingsSearchItems`, plus the platform filter `searchSettings` applies (desktop, macOS).

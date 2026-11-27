@@ -57,7 +57,7 @@ final class DiffReviewAnnotationView: DSView, DiffAnnotationContent {
     let editor = TextareaView(placeholder: "Add a comment…", size: .sm)
     let submit = ButtonView("Comment", size: .xs)
     let cancel = ButtonView("Cancel", variant: .ghostMuted, size: .xs)
-    private let hint = LabelView("⌘/Ctrl Enter to send", font: DSFont.ui(10), color: Themed.color(\.mutedForeground, 0.7))
+    private let hint = LabelView(RedesignCopy.mac("⌘/Ctrl Enter to send", "⌘Enter to send"), font: DSFont.ui(10), color: Themed.color(\.mutedForeground, 0.7))
     var onSubmit: ((String) -> Void)?
     var onCancel: (() -> Void)?
     override init(frame: NSRect) {

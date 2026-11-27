@@ -1141,12 +1141,12 @@ final class ComposerPermissionsMenu: DSView, PickerPopupBody {
         permissions.onPick = { [weak self] mode in onPick(mode); self?.onClose?() }
         permissions.onUnrestricted = { [weak self] on in self?.onClose?(); onUnrestricted?(on) }
     }
-    var naturalSize: CGSize { CGSize(width: 296, height: 130 + permissions.extraHeight) }
+    var naturalSize: CGSize { CGSize(width: 296, height: permissions.height + 8) }
     func handleKey(_ key: PopupKey) -> Bool {
         if key == .escape { onClose?(); return true }
         return permissions.handleKey(key)
     }
-    override func layout() { super.layout(); permissions.frame = NSRect(x: 4, y: 4, width: bounds.width - 8, height: 122 + permissions.extraHeight) }
+    override func layout() { super.layout(); permissions.frame = NSRect(x: 4, y: 4, width: bounds.width - 8, height: permissions.height) }
 }
 
 // MARK: - Docked picker

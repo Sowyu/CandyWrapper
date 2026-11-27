@@ -43,16 +43,26 @@ final class ComposerCompactPill: ControlView {
     /// `@max-[480px]/composer-surface:hidden` on the word (#27033 at 4928): a narrow composer shows the count alone.
     var narrow = false { didSet { if narrow != oldValue { word.isHidden = narrow; invalidateIntrinsicContentSize(); needsLayout = true } } }
 
+    /// Redesign draws a ghost button, glyph and word at the model chip's weight, and keeps the count in the tooltip
+    /// (round-1 review C2, 2026-11-26: "a filled chip wider than send with a token count"). The word hides on a
+    /// narrow composer as T3's does, so there the count stays as its label.
+    private var ghost: Bool { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !narrow }
+    private var countWidth: CGFloat { ceil(count.textWidth) }
+    /// The composer chips' padding under Redesign (`ComposerControlView.capy`).
+    private static let ghostPad: CGFloat = 8
+
     override var intrinsicContentSize: NSSize {
+        if ghost { return NSSize(width: Self.ghostPad + 14 + 6 + ceil(word.textWidth) + Self.ghostPad, height: Self.height) }
         let wordWidth = narrow ? 0 : ceil(word.textWidth) + 6
-        return NSSize(width: (modern ? 8 + 16 + 6 + wordWidth + ceil(count.textWidth) + 8 : 1 + 10 + 14 + 6 + wordWidth + ceil(count.textWidth) + 10 + 1), height: Self.height)
+        return NSSize(width: (modern ? 8 + 16 + 6 + wordWidth + countWidth + 8 : 1 + 10 + 14 + 6 + wordWidth + countWidth + 10 + 1), height: Self.height)
     }
 
     override func layout() {
         super.layout()
         decoration.frame = bounds
         decoration.layout(boxSize: bounds.size)
-        var x: CGFloat = modern ? 8 : 11
+        count.isHidden = ghost
+        var x: CGFloat = ghost ? Self.ghostPad : modern ? 8 : 11
         let glyph: CGFloat = modern ? 16 : 14
         icon.frame = NSRect(x: x, y: ((bounds.height - glyph) / 2).rounded(), width: glyph, height: glyph)
         x += glyph + 6
@@ -91,15 +101,18 @@ final class ComposerCompactPill: ControlView {
         }
         let dark = effectiveAppearance.isDark
         if ThemeRuntime.isDither(dark: dark) {
-            // Redesign: a quiet control. Pressed while the next send compacts, the hover fill otherwise; the word in
-            // the text color (a step down while keeping full history), the glyph and the count muted.
+            // Redesign: a ghost button beside send, glyph and word at the model chip's 13pt medium, the count in the
+            // tooltip. The word says the state ("Compact" or "Keep"), in the text color while the next send compacts
+            // and a step down while it keeps full history; only hover fills it.
             let on = !keepFullHistory
+            word.font = DSFont.ui(13, weight: .medium)
+            word.lineHeight = 16
             word.color = Themed.color(\.foreground, on || hovered ? 1 : RedesignTokens.Text.quiet)
             count.color = Themed.color(\.mutedForeground)
-            icon.strokeColor = count.color
+            icon.strokeColor = on || hovered ? Themed.color(\.foreground, RedesignTokens.Text.quiet) : Themed.color(\.mutedForeground)
             box = BoxStyle()
             box.radius = RedesignTokens.Radius.control
-            box.fill = on ? RedesignTokens.State.fill(RedesignTokens.State.selected, dark: dark) : RedesignTokens.State.fill(state, dark: dark)
+            box.fill = RedesignTokens.State.fill(state, dark: dark)
         }
         decoration.boxStyle = box
         // Two lines (ComposerPrimaryActions.tsx:389-396).

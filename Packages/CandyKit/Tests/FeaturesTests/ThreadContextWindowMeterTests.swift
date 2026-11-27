@@ -74,7 +74,9 @@ struct ThreadContextWindowMeterTests {
                     meter.usage = usage
                     meter.layoutSubtreeIfNeeded()
                     _ = try self.inkedPixels(meter)
-                    #expect(abs(Double(meter.arc.strokeEnd) - fraction) < 0.001, "\(usage)")
+                    // Redesign's ring never shows less than `Meter.least` of a turn for usage above zero.
+                    let want = meter.capy && fraction > 0 ? max(Double(RedesignTokens.Meter.least), fraction) : fraction
+                    #expect(abs(Double(meter.arc.strokeEnd) - want) < 0.001, "\(usage)")
                     let details = ThreadContextWindowDetailsView(frame: NSRect(x: 0, y: 0, width: 280, height: 200))
                     _ = details.configure(usage: usage, capy: redesign, model: "m", compactOffered: true, disabled: false, reason: nil)
                     details.layoutSubtreeIfNeeded()

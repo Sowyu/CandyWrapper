@@ -513,8 +513,8 @@ public final class ThreadPanelView: DSView {
     /// Redesign shows the background work as this quiet indicator under the composer, at the right beside the
     /// context ring, instead of the banner pill above it.
     public let waitingIndicator = DitherWaitingView()
-    /// The pill behind the context ring under Redesign; the ring itself is the composer's meter, moved here.
-    private let ringPill = DitherPillSurface()
+    /// The quiet patch behind the context ring under Redesign; the ring itself is the composer's meter, moved here.
+    private let ringPill: DitherPillSurface = { let s = DitherPillSurface(); s.quiet = true; return s }()
     /// "Branch changed from <branch>" (ChatView.tsx:7801-7837), keyed like T3's `branch-mismatch:<key>`.
     public let lazyBranchBanner = LazyView { ComposerNoticeBannerView() }
     public var branchBanner: ComposerNoticeBannerView { lazyBranchBanner.view }
@@ -2119,6 +2119,8 @@ public final class ThreadPanelView: DSView {
     /// The pills and cards Redesign showed on the last pass, to animate what comes and goes.
     private var ditherShown: [NSView] = []
     private var ditherLeaving: [NSView] = []
+    /// The page the last Redesign pass laid out, so a new page snaps instead of animating (`animateDitherDock`).
+    private var ditherPage: String?
 
     /// Redesign (the user, 2026-10-22: "no more things sticking out of the prompt field, only floating rounded rectangle
     /// pills"): nothing touches the composer. What T3 docks on its top edge floats `DitherPill.gap` above it, in rows:
@@ -2158,7 +2160,9 @@ public final class ThreadPanelView: DSView {
         // beside the project chip; its menu holds the strip's machine, workspace and ref.
         let deviceShown = visible && showsDeviceRow
         deviceRow.opensDown = isDraft
-        deviceRow.quiet = isDraft
+        // Quiet on both pages: under a thread's composer the machine and the ring are plain text on a patch of the
+        // panel's ground, like the new-thread page's row (the user, 2026-11-26: "not everything has to be pills").
+        deviceRow.quiet = true
         hero.projectChip.quiet = true
 
         // The draft's context row on the composer's top left: the project chip, then the machine. Its notices are one
@@ -2286,7 +2290,10 @@ public final class ThreadPanelView: DSView {
         // or the first status pill fit beside it.
         let strip: SubagentStripPillView? = stripOn ? lazySubagentPill.view : nil
         if let strip, strip.superview !== self { addSubview(strip, positioned: .above, relativeTo: queue) }
-        let badges = badgeShown ? [stashBadge] : []
+        // On the draft Stash is a quiet control in the context row (placed with the notices below); in a thread it
+        // stays a pill above the composer.
+        stashBadge.quiet = draftRow != nil
+        let badges = badgeShown && draftRow == nil ? [stashBadge] : []
         // The subagent pill leads the cluster and keeps its width; only Stash drops its label.
         let rightPills: [ComposerBannerView] = (strip.map { [$0] } ?? []) + badges
         func pillWidth(_ view: ComposerBannerView, _ titled: Bool) -> CGFloat {
@@ -2314,12 +2321,26 @@ public final class ThreadPanelView: DSView {
         // shorten through their narrow forms rather than wrap above the project chip (the user, 2026-11-26).
         let draftNoticeViews = draftRow == nil ? [] : pills.compactMap { $0.0 as? ComposerNoticeBannerView }
         draftNotices.isHidden = draftNoticeViews.isEmpty
-        if let draftRow, !draftNoticeViews.isEmpty {
-            draftNotices.update(draftNoticeViews)
-            let w = draftNotices.fit(room: px + pw - draftRow.end)
-            draftNotices.frame = NSRect(x: px + pw - w, y: draftRow.y, width: w, height: pillH)
-            shown.append(draftNotices)
-            pills = []
+        // Stash sits before the notices at the row's right end. The notices shorten to their icon first, then Stash
+        // to its glyph and count, before anything would wrap.
+        let draftStash = draftRow != nil && badgeShown
+        if let draftRow {
+            var end = px + pw
+            let stashTitled = draftStash ? stashBadge.width(showingTitle: true) + spacing : 0
+            if !draftNoticeViews.isEmpty {
+                draftNotices.update(draftNoticeViews)
+                let w = draftNotices.fit(room: end - draftRow.end - stashTitled)
+                draftNotices.frame = NSRect(x: end - w, y: draftRow.y, width: w, height: pillH)
+                end -= w + spacing
+                shown.append(draftNotices)
+                pills = []
+            }
+            if draftStash {
+                stashBadge.showsTitle = stashBadge.width(showingTitle: true) <= end - draftRow.end
+                let w = stashBadge.width(showingTitle: stashBadge.showsTitle)
+                stashBadge.frame = NSRect(x: end - w, y: draftRow.y, width: w, height: pillH)
+                shown.append(stashBadge)
+            }
         }
         for (view, natural) in pills {
             let w = min(natural, pw)
@@ -2416,7 +2437,14 @@ public final class ThreadPanelView: DSView {
             stashMenu.frame = NSRect(x: x, y: base - gap - h, width: width, height: h)
         }
 
-        animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting)
+        // A new page (thread to new thread and back, another thread, a draft for another project) appears already
+        // composed: the shared controls (the machine row, Stash) jump straight to where this page puts them instead of
+        // gliding over from the last page's spots (the user's 1.20.1 recording, 2026-11-26).
+        let page = isDraft ? "draft:" + hero.projectTitle : model.projection?.thread.id.rawValue ?? ""
+        let pageChanged = page != ditherPage
+        ditherPage = page
+        animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting, snap: pageChanged,
+                          inPlace: isDraft ? [deviceRow, stashBadge, draftNotices] : [])
 
         let inset = docked ? 8 + (y - insetTop) + height + below + 20 : 0
         if timeline.bottomInset != inset {
@@ -2451,21 +2479,41 @@ public final class ThreadPanelView: DSView {
 
     /// New pills rise and fade in, leaving ones sink and fade out (`RedesignMotion.pill`), and when the set changes the
     /// others slide to their new rows over `standard`. Nothing runs while the set stays the same (typing, resizing).
-    private func animateDitherDock(shown: [NSView], oldFrames: [ObjectIdentifier: NSRect], exiting: NSView?) {
+    /// `snap`: a new page, so nothing slides, rises or fades; what is shown is simply there, and what left is gone.
+    /// `inPlace`: the new-thread row's quiet controls, which never slide; one that arrives later (the machine, once the
+    /// environment list is known) fades in where it lands.
+    private func animateDitherDock(shown: [NSView], oldFrames: [ObjectIdentifier: NSRect], exiting: NSView?,
+                                   snap: Bool = false, inPlace: [NSView] = []) {
         let before = ditherShown
         ditherShown = shown
+        if snap {
+            for view in shown {
+                view.alphaValue = 1
+                view.layer?.removeAllAnimations()
+            }
+            for view in before + ditherLeaving where !shown.contains(where: { $0 === view }) && view !== exiting {
+                view.layer?.removeAllAnimations()
+                view.isHidden = true
+            }
+            ditherLeaving = []
+            return
+        }
         guard window != nil, !Motion.reduced else { ditherLeaving = []; return }
         let changed = before.count != shown.count || zip(before, shown).contains { $0 !== $1 }
         defer { for view in ditherLeaving where !shown.contains(where: { $0 === view }) { view.isHidden = false } }
         guard changed else { return }
+        let fixed = { (view: NSView) in inPlace.contains { $0 === view } }
         for view in shown where oldFrames[ObjectIdentifier(view)] == nil {
             view.alphaValue = 1
-            if let layer = view.layer { RedesignMotion.pill(layer, entering: true) }
+            guard let layer = view.layer else { continue }
+            if fixed(view) { RedesignMotion.fade(layer) } else { RedesignMotion.pill(layer, entering: true) }
         }
         let leaving = before.filter { view in !shown.contains { $0 === view } && view !== exiting && view.superview === self }
         ditherLeaving.removeAll { view in shown.contains { $0 === view } }
         ditherLeaving += leaving
-        let moving = shown.compactMap { view in oldFrames[ObjectIdentifier(view)].flatMap { $0 != view.frame ? (view, $0, view.frame) : nil } }
+        let moving = shown.compactMap { view in
+            fixed(view) ? nil : oldFrames[ObjectIdentifier(view)].flatMap { $0 != view.frame ? (view, $0, view.frame) : nil }
+        }
         for (view, old, _) in moving { view.frame = old }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = RedesignTokens.Motion.standard

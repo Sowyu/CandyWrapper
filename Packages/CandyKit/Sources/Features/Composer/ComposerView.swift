@@ -1091,10 +1091,12 @@ public final class ComposerView: DSView {
         let rowY = h - edge - rowHeight
         let midY = rowY + rowHeight / 2
         let right = w - edge
-        let attachIcon: IconName = capyFooter ? .plus : .paperclip
+        // Redesign keeps its "+" at its own left edge in Question mode too, never a paperclip beside the lock (round-1
+        // review C2, 2026-11-26).
+        let attachIcon: IconName = capy ? .plus : .paperclip
         if attach.icon != attachIcon { attach.icon = attachIcon }
         footerControls.forEach { $0.isHidden = false }
-        separators.forEach { $0.isHidden = modern }
+        separators.forEach { $0.isHidden = modern || capy }
         var actionsLeft: CGFloat
         if let footer = questionFooter {
             // Right to left: Stop (28, only while a run can stop), the pill, Previous; `gap-1.5` compact, else `gap-2`
@@ -1179,10 +1181,10 @@ public final class ComposerView: DSView {
             actionsLeft = contextWindowMeter.frame.minX
         }
         // Nightly 3824 groups the controls beside send (#25869); Redesign keeps its "+" at its own edge.
-        if modern || capyFooter {
-            let start = capyFooter ? Self.capyEdge : 9
+        if modern || capy {
+            let start = capy ? Self.capyEdge : 9
             attach.frame = NSRect(x: start, y: midY - 14, width: 28, height: 28)
-            let left = attach.isHidden ? start : attach.frame.maxX + (capyFooter ? 3 : 8)
+            let left = attach.isHidden ? start : attach.frame.maxX + (capy ? 3 : 8)
             var available = max(0, actionsLeft - 8 - left)
             for control in footerControls.reversed() {
                 let width = min(control.intrinsicContentSize.width, available)

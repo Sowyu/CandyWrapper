@@ -22,6 +22,23 @@ public enum DitherPill {
     /// Where a pill's text starts.
     public static let textX: CGFloat = pad + glyph + glyphGap
 
+    /// A quiet control (the new-thread page's project, machine and notices, and the row under a thread's composer) is
+    /// plain text and glyph on a patch of the panel's own ground, no rim and no shadow (Capy's footer; the user,
+    /// 2026-11-26: "not everything has to be pills"). The patch only just covers what sits behind the words: 22pt
+    /// tall in the 30pt control, 6pt around the glyph and chevron, on the controls' corner. Hover and an open menu
+    /// fill the same shape.
+    public static func quietPatch(_ bounds: CGRect) -> CGRect { bounds.insetBy(dx: quietInsetX, dy: quietInsetY) }
+    public static let quietInsetX: CGFloat = 2
+    public static let quietInsetY: CGFloat = 4
+    public static let quietRadius: CGFloat = RedesignTokens.Radius.control
+
+    /// Places a control's hover fill: the quiet patch for a quiet control, else the whole pill. Call inside a
+    /// transaction with actions off.
+    @MainActor public static func placeFill(_ fill: CALayer, in bounds: CGRect, quiet: Bool) {
+        fill.frame = quiet ? quietPatch(bounds) : bounds
+        fill.cornerRadius = quiet ? quietRadius : radius
+    }
+
     /// The solid surface fill: a timeline card scrolled under a panel never reads through it (the user's 1.14.10
     /// subagent panel over the changed-files card, 2026-10-28). Over the Flower background a little of the blurred
     /// flower shows through instead (`RedesignTokens.FlowerGlass`).
@@ -42,7 +59,7 @@ public final class DitherPillSurface: DSView {
     public var ground = false { didSet { if ground != oldValue { needsDisplay = true } } }
     /// A quiet control (the new-thread page's project, machine and notices): the panel's own ground as a solid fill, so
     /// it stays readable over a picture and vanishes into a plain page, with no rim and no shadow.
-    public var quiet = false { didSet { if quiet != oldValue { needsDisplay = true } } }
+    public var quiet = false { didSet { if quiet != oldValue { needsDisplay = true; needsLayout = true } } }
     private let shade = DSView()
     /// What shows through the fill over the Flower background.
     private let backing = FlowerGlassView()
@@ -77,8 +94,8 @@ public final class DitherPillSurface: DSView {
 
     public override func layout() {
         super.layout()
-        let r = min(radius, bounds.height / 2)
-        for v in [shade, backing, face] { v.frame = bounds }
+        let r = quiet ? DitherPill.quietRadius : min(radius, bounds.height / 2)
+        for v in [shade, backing, face] { v.frame = quiet ? DitherPill.quietPatch(bounds) : bounds }
         backing.radius = r
         CATransaction.begin(); CATransaction.setDisableActions(true)
         face.layer?.cornerRadius = r

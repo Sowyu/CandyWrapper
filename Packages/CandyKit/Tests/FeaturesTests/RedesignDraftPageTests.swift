@@ -9,18 +9,18 @@ import T3Store
 /// under a thread's composer, and a header pill that shows only what applies.
 @MainActor
 struct RedesignDraftPageTests {
-    private func panel(draft: Bool) throws -> (ThreadPanelView, NSWindow) {
+    private func panel(draft: Bool, width: CGFloat = 1100, project: String = "Sandbox") throws -> (ThreadPanelView, NSWindow) {
         var input = ThemeRuntime.input
         input.ditherLight = true; input.ditherDark = true
         ThemeRuntime.apply(input)
         let panel = ThreadPanelView()
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.appearance = NSAppearance(named: .darkAqua)
         window.contentView = panel
-        panel.frame = NSRect(x: 0, y: 0, width: 1100, height: 800)
+        panel.frame = NSRect(x: 0, y: 0, width: width, height: 800)
         if draft {
-            panel.setDraft(projectTitle: "Sandbox")
+            panel.setDraft(projectTitle: project)
         } else {
             let projection = try JSONDecoder().decode(ThreadProjection.self, from: Data(#"{"thread":{"id":"t"},"runs":[],"updatedAt":"2026-10-22T00:00:00Z"}"#.utf8))
             panel.setProjection(projection, projectTitle: "Sandbox", workspaceRoot: nil)
@@ -108,7 +108,10 @@ struct RedesignDraftPageTests {
         meter.usage = ThreadContextWindowUsage(used: 32_800, maximum: 400_000, automatically: true)
         panel.layoutSubtreeIfNeeded()
         let composer = panel.composer.frame, machine = panel.deviceRow.frame, ring = meter.frame
-        #expect(!panel.deviceRow.opensDown && !panel.deviceRow.quiet)
+        // Plain text on a quiet patch, like the new-thread page's row: not raised pills (the user, 2026-11-26).
+        #expect(!panel.deviceRow.opensDown && panel.deviceRow.quiet)
+        let patches = panel.subviews.compactMap { $0 as? DitherPillSurface }.filter { !$0.isHidden && $0.frame == ring }
+        #expect(patches.count == 1 && patches.allSatisfy(\.quiet), "the ring sits on one quiet patch")
         // One row: same top, same height, flush with the composer's edges.
         #expect(machine.minY == ring.minY && machine.height == ring.height && machine.height == DitherPill.height)
         #expect(machine.minX == composer.minX + DitherPill.inset && ring.maxX == composer.maxX - DitherPill.inset)
@@ -156,5 +159,88 @@ struct RedesignDraftPageTests {
         #expect(pill.menuSummary(shown: [:]) == "Editor, scripts and git")
         #expect(pill.menuSummary(shown: ["scripts": false, "gitActions": false]) == "Editor")
         #expect(pill.menuSummary(shown: ["openIn": false, "scripts": false, "gitActions": false]) == "Thread actions")
+    }
+
+    private func addNotices(_ panel: ThreadPanelView, count: Int) {
+        panel.noticeBanner.apply(.init(variant: .neutral, icon: .download, title: "Server update available",
+                                       actions: ["Copy relaunch command"], dismissible: true, shortTitle: "Server update"))
+        panel.showsNoticeBanner = true
+        if count > 1 {
+            panel.lazyFallbackBanner.view.apply(.init(variant: .neutral, icon: .info, title: "Using Sonnet 5.5", dismissible: true))
+            panel.fallbackKey = "weekly"
+        }
+        panel.layoutSubtreeIfNeeded()
+    }
+
+    /// The user, 2026-11-26: "whys the stash so weird". On the new-thread page Stash is a quiet control in the context
+    /// row, before the notices at its right end, never a raised pill on a row of its own.
+    @Test(arguments: [0, 1, 2])
+    func stashJoinsTheDraftRow(notices: Int) throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (panel, window) = try panel(draft: true)
+        defer { window.contentView = nil }
+        panel.stashBadge.count = 2
+        panel.showsStashBadge = true
+        if notices > 0 { addNotices(panel, count: notices) }
+        panel.layoutSubtreeIfNeeded()
+        let stash = panel.stashBadge.frame, row = panel.hero.frame, composer = panel.composer.frame
+        #expect(panel.stashBadge.quiet && !panel.stashBadge.isHidden)
+        #expect(stash.minY == row.minY && stash.height == DitherPill.height, "one row with the project and machine")
+        #expect(stash.minX >= panel.deviceRow.frame.maxX)
+        if notices == 0 {
+            #expect(stash.maxX == composer.maxX - DitherPill.inset)
+        } else {
+            #expect(stash.maxX + DitherPill.spacing == panel.draftNotices.frame.minX, "Stash sits before the notices")
+            #expect(panel.draftNotices.frame.maxX == composer.maxX - DitherPill.inset)
+        }
+        #expect(panel.stashBadge.showsTitle)
+    }
+
+    /// A long project name at 960pt: the notices shorten first, then Stash, and nothing overlaps or wraps.
+    @Test func aLongProjectShortensTheNoticeThenStash() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (panel, window) = try panel(draft: true, width: 960, project: "candywrapper-native-redesign-composer-footer-integration")
+        defer { window.contentView = nil }
+        panel.stashBadge.count = 12
+        panel.showsStashBadge = true
+        addNotices(panel, count: 1)
+        let machine = panel.deviceRow.frame, stash = panel.stashBadge.frame, notice = panel.draftNotices.frame
+        #expect(stash.minY == machine.minY && notice.minY == machine.minY, "no row wraps")
+        #expect(machine.maxX <= stash.minX && stash.maxX <= notice.minX)
+        // The notice gave up its title before Stash did.
+        #expect(!panel.draftNotices.titled || panel.stashBadge.showsTitle)
+    }
+
+    /// The user's 1.20.1 recording: opening the new-thread page from a thread slid the machine control and Stash
+    /// over from their places in the thread. Every row control has its final frame after the page's first layout
+    /// pass, with no animation on it.
+    @Test func theDraftRowAppearsComposed() throws {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        let (panel, window) = try panel(draft: false)
+        defer { window.contentView = nil }
+        panel.stashBadge.count = 2
+        panel.showsStashBadge = true
+        panel.layoutSubtreeIfNeeded()
+        let inThread = panel.deviceRow.frame
+        panel.setDraft(projectTitle: "Sandbox")
+        panel.layoutSubtreeIfNeeded()
+        let row = panel.hero.frame, machine = panel.deviceRow.frame
+        #expect(machine != inThread)
+        #expect(machine.minY == row.minY && machine.minX == row.minX + panel.hero.chipsWidth + DitherPill.spacing)
+        #expect(panel.stashBadge.frame.minY == row.minY)
+        for view in [panel.deviceRow, panel.stashBadge] as [NSView] {
+            #expect((view.layer?.animationKeys() ?? []).isEmpty, "\(type(of: view)) animates as the page shows")
+            #expect(view.alphaValue == 1)
+        }
+        // And back to a thread: the machine is under the composer at once.
+        let projection = try JSONDecoder().decode(ThreadProjection.self, from: Data(#"{"thread":{"id":"t2"},"runs":[],"updatedAt":"2026-10-22T00:00:00Z"}"#.utf8))
+        panel.setDraft(projectTitle: nil)
+        panel.setProjection(projection, projectTitle: "Sandbox", workspaceRoot: nil)
+        panel.layoutSubtreeIfNeeded()
+        #expect(panel.deviceRow.frame.minY > panel.composer.frame.maxY)
+        #expect((panel.deviceRow.layer?.animationKeys() ?? []).isEmpty)
     }
 }

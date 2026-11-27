@@ -134,6 +134,7 @@ final class GitController {
         pill.changes.action = { [weak self] in self?.panel.toggleDiff() }
         pill.menuSections[.git] = { [weak self] in self?.actionsMenuItems() ?? [] }
         detailsItemsObserver = ClientSettingsStore.shared.observe { [weak self] keys in
+            if keys.contains("persistComposerContextStrip") { self?.renderDeviceRow() }
             guard keys.contains("threadDetailsItems") || keys.contains("threadDetailsUsageEnabled") else { return }
             self?.renderPill()
         }
@@ -415,8 +416,12 @@ final class GitController {
         let runOn = panel.contextStrip.runOn, env = environmentOption
         let picked = target.isDraft ? runOn.selected : nil
         let workspace = !isRepo ? nil : target.envMode == .worktree || target.worktreePath != nil ? "Worktree" : "Local"
+        // Composer context (T3's "Keep composer context visible in active threads") keeps the branch in a thread's row
+        // too, as T3's kept strip shows its branch control (round-1 review X6, 2026-11-26).
+        let branch = !target.isDraft && ClientSettingsStore.shared.current.bool("persistComposerContextStrip") ? resolvedBranch : nil
+        let detail = [workspace, branch].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
         panel.deviceRow.configure(machine: (target.isDraft ? runOn.autoBalanceLabel : nil) ?? picked?.label ?? env?.label ?? "Run on",
-                                  kind: picked?.machine ?? env?.machine ?? "laptop", workspace: workspace,
+                                  kind: picked?.machine ?? env?.machine ?? "laptop", workspace: detail.isEmpty ? nil : detail,
                                   online: environments.state(target.environmentId)?.status == .connected)
         panel.showsDeviceRow = true
     }

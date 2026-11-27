@@ -230,10 +230,21 @@ struct RedesignBaselineTests {
             try capture("inset-new-thread-notice", insetWindow(noticeDraft), insetSize)
             // The new-thread page's other states: typed, with attachments, two and three notices (one icon button with a
             // count), a long project name, and no project.
-            for state in ["typed", "attachments", "two-notices", "three-notices", "long-name", "no-project"] {
-                let draft = ComposerFidelityTests.panel(width: 1200, dark: dark)
-                draft.setDraft(projectTitle: state == "long-name" ? "an-unusually-long-project-name-for-the-weather-service" : "demo-repo",
+            // Stash joins the context row as a quiet control: alone, before a notice, and with a long name at 960pt.
+            for state in ["typed", "attachments", "two-notices", "three-notices", "long-name", "no-project",
+                          "stash", "stash-notice", "stash-long-name-960"] {
+                let draft = ComposerFidelityTests.panel(width: state.hasSuffix("960") ? 960 : 1200, dark: dark)
+                draft.setDraft(projectTitle: state.contains("long-name") ? "an-unusually-long-project-name-for-the-weather-service" : "demo-repo",
                                isScratch: state == "no-project")
+                if state.hasPrefix("stash") {
+                    draft.stashBadge.count = 2
+                    draft.showsStashBadge = true
+                }
+                if state == "stash-notice" || state == "stash-long-name-960" {
+                    draft.noticeBanner.apply(.init(variant: .neutral, icon: .download, title: "Server update available",
+                                                   actions: ["Copy relaunch command"], dismissible: true, shortTitle: "Server update", actionIcons: [.copy]))
+                    draft.showsNoticeBanner = true
+                }
                 draft.hero.offersScratch = true
                 draft.composer.footerControls = [try PickersFidelityTests.pickers().controlsView]
                 draft.deviceRow.configure(machine: "MacBook Pro", kind: "laptop", workspace: "Local", online: true)
@@ -253,7 +264,7 @@ struct RedesignBaselineTests {
                     draft.lazyFallbackBanner.view.apply(.init(variant: .neutral, icon: .info, title: "Using Sonnet 5.5", dismissible: true))
                     draft.fallbackKey = "weekly"
                 }
-                try capture("inset-new-thread-" + state, insetWindow(draft), insetSize)
+                try capture("inset-new-thread-" + state, insetWindow(draft), state.hasSuffix("960") ? NSSize(width: 960, height: 780) : insetSize)
             }
             let insetThread = ComposerFidelityTests.panel(width: 1200, dark: dark)
             insetThread.referenceViewportWidth = 1200
@@ -480,7 +491,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 198)
+        #expect(count == 204)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

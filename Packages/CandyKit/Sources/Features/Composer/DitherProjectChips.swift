@@ -97,7 +97,7 @@ public final class DitherChipView: ControlView {
         label.frame = NSRect(x: DitherPill.textX, y: midY - 8, width: textWidth, height: 16)
         var x = label.frame.maxX
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        fill.frame = bounds
+        DitherPill.placeFill(fill, in: bounds, quiet: quiet)
         if online != nil {
             dot.frame = CGRect(x: x + DitherPill.glyphGap, y: midY - 3, width: 6, height: 6)
             x += DitherPill.glyphGap + 6

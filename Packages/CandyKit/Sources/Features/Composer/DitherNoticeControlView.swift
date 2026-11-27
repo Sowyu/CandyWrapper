@@ -79,7 +79,7 @@ public final class DitherNoticeControlView: ControlView {
         let midY = bounds.height / 2
         surface.frame = bounds
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        fill.frame = bounds
+        DitherPill.placeFill(fill, in: bounds, quiet: true)
         CATransaction.commit()
         let iconX = titled || !count.text.isEmpty ? DitherPill.pad : (bounds.width - DitherPill.glyph) / 2
         icon.frame = NSRect(x: iconX, y: midY - 7, width: DitherPill.glyph, height: DitherPill.glyph)

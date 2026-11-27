@@ -929,8 +929,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 f.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - f.height)
                                 window.setFrame(f, display: true)
                             }
-                        case "picker": threads.composer.pickers.toggleModelPicker()
-                        case "access": threads.composer.pickers.openAccessMode()
+                        // Laid out first, so a popup opened right after "draft" anchors on the page's composer.
+                        case "picker": window.contentView?.layoutSubtreeIfNeeded(); threads.composer.pickers.toggleModelPicker()
+                        case "access": window.contentView?.layoutSubtreeIfNeeded(); threads.composer.pickers.openAccessMode()
                         case "usage": self.sidebarCommands?.openUtilityPage(.usage)
                         // `settings:<page>` opens Settings on a page by its raw value, such as `settings:redesign`.
                         case let s where s.hasPrefix("settings"):

@@ -109,7 +109,7 @@ public final class PullRequestPendingCommentCardView: PullRequestAnnotationCardV
 /// small textarea, the ⌘Enter hint, Cancel and the submit.
 public final class PullRequestDraftCommentView: DSView, DiffAnnotationContent {
     public let textarea = TextareaView(size: .sm)
-    private let hint = LabelView("⌘/Ctrl Enter to send", font: DSFont.ui(10))
+    private let hint = LabelView(RedesignCopy.mac("⌘/Ctrl Enter to send", "⌘Enter to send"), font: DSFont.ui(10))
     private let cancel = ButtonView("Cancel", variant: .ghostMuted, size: .xs)
     private let submit = ButtonView("Add to review", variant: .default, size: .xs)
     var onCancel: (() -> Void)?

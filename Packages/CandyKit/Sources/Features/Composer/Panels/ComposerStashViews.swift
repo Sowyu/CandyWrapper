@@ -47,13 +47,41 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     public var showsCount = true { didSet { if showsCount != oldValue { countLabel.isHidden = !showsCount; needsLayout = true } } }
     private let countLabel = glassLabel("0", font: DSFont.ui(12, weight: .medium), color: Themed.color(\.mutedForeground), lineHeight: 16)
 
+    /// Redesign's new-thread page: Stash is one of the context row's quiet controls (`DitherPill.quietPatch`) beside
+    /// the project, the machine and the notices, not a raised pill on a row of its own (the user, 2026-11-26: "whys
+    /// the stash so weird"). A 14pt glyph and 13pt text at the quiet strength, the count in muted tabular figures,
+    /// the patch filled on hover and while the stash list is open.
+    public var quiet = false {
+        didSet {
+            guard quiet != oldValue else { return }
+            bare = quiet
+            quietSurface.isHidden = !quiet
+            quietIcon.isHidden = !quiet
+            icon.isHidden = quiet
+            title.font = quiet ? DSFont.ui(13) : DSFont.ui(12)
+            countLabel.font = quiet ? TL.tabular(13) : DSFont.ui(12, weight: .medium)
+            title.lineHeight = 16; countLabel.lineHeight = 16
+            restyle(); needsLayout = true
+        }
+    }
+    private let quietSurface: DitherPillSurface = { let s = DitherPillSurface(); s.quiet = true; s.isHidden = true; return s }()
+    private let quietFill = CALayer()
+    private let quietIcon: IconView
+
     /// The stash's badge by default; Redesign's Queued pill passes the queue's glyph, title and spoken label.
     public init(icon: IconName = .bookmark, title: String = "Stash",
                 describe: @escaping (Int) -> String = { "Stashed prompts: \($0). Open stash." }) {
+        quietIcon = IconView(name: icon, size: 14)
+        quietIcon.isHidden = true
         self.icon = IconView(name: icon, size: 12, strokeColor: Themed.color(\.mutedForeground))
         self.title = glassLabel(title, font: DSFont.ui(12), color: Themed.color(\.mutedForeground), lineHeight: 16)
         self.describe = describe
         super.init(variant: .neutral)
+        addSubview(quietSurface)
+        quietFill.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        row.wantsLayer = true
+        row.layer?.addSublayer(quietFill)
+        row.addSubview(quietIcon)
         row.addSubview(self.icon)
         row.addSubview(self.title)
         row.addSubview(countLabel)
@@ -63,9 +91,18 @@ public final class ComposerStashBadgeView: ComposerBannerView {
         restyle()
     }
 
+    /// The quiet form's width: the glyph, the title when shown, the count, on the row's padding (`DitherPill`).
+    private func quietWidth(showingTitle: Bool) -> CGFloat {
+        var w = DitherPill.pad + DitherPill.glyph
+        if showingTitle { w += DitherPill.glyphGap + ceil(title.textWidth) }
+        if showsCount { w += (showingTitle ? DitherPill.glyphGap : RedesignTokens.Space.xs) + ceil(countLabel.textWidth) }
+        return w + DitherPill.pad
+    }
+
     /// `w-fit`: padding, the 24pt icon column, `gap-x-1`, the label, `gap-x-1`, the count.
     public var preferredWidth: CGFloat { width(showingTitle: showsTitle) }
     public func width(showingTitle: Bool) -> CGFloat {
+        if quiet { return quietWidth(showingTitle: showingTitle) }
         sizeForPill()
         let label = showingTitle ? ceil(title.textWidth) + 4 : 0
         guard showsCount else { return padX * 2 + Self.row + (showingTitle ? 4 + label : 0) }
@@ -75,7 +112,7 @@ public final class ComposerStashBadgeView: ComposerBannerView {
     private var padX: CGFloat { ditherFloating ? 6 : Self.padX }
     private func sizeForPill() {
         let size: CGFloat = 12
-        guard title.font.pointSize != size else { return }
+        guard !quiet, title.font.pointSize != size else { return }
         title.font = DSFont.ui(size)
         countLabel.font = DSFont.ui(size, weight: .medium)
     }
@@ -90,10 +127,46 @@ public final class ComposerStashBadgeView: ComposerBannerView {
         // The count has its own color class outside the row's `transition-colors`: it switches at once.
         countLabel.color = pulsing ? Themed.color(\.primary) : Themed.color(\.mutedForeground)
         row.setAccessibilityLabel(describe(count))
+        if quiet {
+            let lit = menuOpen || row.state.hovered
+            title.color = lit ? Themed.color(\.foreground) : Themed.color(\.foreground, RedesignTokens.Text.quiet)
+            quietIcon.strokeColor = lit ? Themed.color(\.foreground, 0.85) : Themed.color(\.foreground, RedesignTokens.Text.quiet)
+            let dark = effectiveAppearance.isDark
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            quietFill.backgroundColor = menuOpen ? RedesignTokens.State.fill(RedesignTokens.State.pressed, dark: dark).cgColor
+                : row.state.hovered ? RedesignTokens.State.fill(RedesignTokens.State.hover, dark: dark).cgColor : nil
+            CATransaction.commit()
+        }
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        if quiet { restyle() }
     }
 
     public override func layout() {
         super.layout()
+        if quiet {
+            // One of the new-thread row's quiet controls: the glyph in the machine control's glyph box, the text at
+            // its text column, the count after it, all on one 16pt line.
+            quietSurface.frame = bounds
+            row.frame = bounds
+            let midY = bounds.height / 2
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            DitherPill.placeFill(quietFill, in: row.bounds, quiet: true)
+            CATransaction.commit()
+            quietIcon.frame = NSRect(x: DitherPill.pad, y: midY - DitherPill.glyph / 2, width: DitherPill.glyph, height: DitherPill.glyph)
+            var x = DitherPill.pad + DitherPill.glyph
+            title.isHidden = !showsTitle
+            if showsTitle {
+                title.frame = NSRect(x: x + DitherPill.glyphGap, y: midY - 8, width: ceil(title.textWidth), height: 16)
+                x = title.frame.maxX + DitherPill.glyphGap
+            } else {
+                x += RedesignTokens.Space.xs
+            }
+            countLabel.frame = NSRect(x: x, y: midY - 8, width: ceil(countLabel.textWidth) + 1, height: 16)
+            return
+        }
         // Floating (Redesign's pill) the row sits in the middle.
         sizeForPill()
         let padY = placement == .floating ? ((bounds.height - Self.row) / 2).rounded() : Self.padY

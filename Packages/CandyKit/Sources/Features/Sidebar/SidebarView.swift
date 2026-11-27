@@ -105,7 +105,9 @@ public final class SidebarContentView: DSView {
     let issuesNavRow = SidebarNavRowView(.circleDot, "Issues")
     /// Dither (after Capy): nav rows under the search field.
     let navRows = [SidebarNavRowView(.squarePen, "New thread"), SidebarNavRowView(.gitPullRequestArrow, "Pull requests"),
-                   SidebarNavRowView(.calendarClock, "Automations"), SidebarNavRowView(.settings, "Settings")]
+                   // Named for the page it opens, Settings > Scheduled tasks (round-1 review X6, 2026-11-26: "Automations"
+                   // against the page's title).
+                   SidebarNavRowView(.calendarClock, "Scheduled tasks"), SidebarNavRowView(.settings, "Settings")]
     /// Dither (after Capy): the account row, a pill floating at the foot of the sidebar.
     public let accountRow = SidebarAccountRowView()
     /// Dither: Capy's "Threads" section label between the nav rows and the list.
