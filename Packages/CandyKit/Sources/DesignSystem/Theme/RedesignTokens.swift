@@ -300,6 +300,8 @@ public enum RedesignTokens {
             return DitherAccent.color(DitherAccent.lightAccent(hex))
         }
         public static let label = NSColor.white
+        /// The fill's strength under the pointer, T3's `hover:bg-destructive/90`.
+        public static let hover: CGFloat = 0.9
     }
 
     /// Segmented controls in light. T3's track (`bg-input/40`) and selection (`bg-input/72`) are greys of the control

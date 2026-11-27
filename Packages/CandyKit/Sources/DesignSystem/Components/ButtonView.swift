@@ -312,7 +312,7 @@ public final class ButtonView: ControlView {
             look.box.shadows.removeAll { $0.inset }
             if variant == .destructive {
                 let fill = RedesignTokens.Destructive.fill(dark: effectiveAppearance.isDark)
-                look.box.fill = state.hoverOrPressed ? fill.withAlphaComponent(0.9) : fill
+                look.box.fill = state.hoverOrPressed ? fill.withAlphaComponent(RedesignTokens.Destructive.hover) : fill
                 look.box.border = fill
                 look.text = RedesignTokens.Destructive.label
                 look.icon = look.text
