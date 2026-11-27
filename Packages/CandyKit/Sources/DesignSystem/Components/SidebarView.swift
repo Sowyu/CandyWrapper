@@ -347,11 +347,19 @@ public final class SidebarLayoutView: DSView {
         // Inset, the strip lies over the card's top with no ground; its pills float over the page (`layoutInsetRow`).
         tabStrip.frame = inset ? NSRect(x: gap + margin, y: margin, width: max(0, bounds.width - gap - 2 * margin), height: CardTopRow.floatHeight)
             : NSRect(x: gap, y: 0, width: max(0, bounds.width - gap), height: band)
-        // Over the sidebar's titlebar row, right-aligned, while the sidebar is open.
+        collapsedTrigger.frame = NSRect(x: SidebarMetrics.controlsLeft(windowedMac: true) + 1, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
+        // After Capy, one row on the traffic lights' centre line: the sidebar toggle, back and forward, right-aligned
+        // over the sidebar while it is open (the sidebar places its own toggle before them), and after the hidden
+        // sidebar's toggle while it is hidden, where the breadcrumb starts after them.
+        let hiddenRow = dither && !isOpen && !sliding
         for (i, b) in [backButton, forwardButton].enumerated() {
-            b.isHidden = !dither || !isOpen || sliding
-            b.frame = NSRect(x: gap - 8 - 28 * CGFloat(2 - i) - 2 * CGFloat(1 - i), y: (DitherChrome.band - 28) / 2, width: 28, height: 28)
+            b.isHidden = !dither || sliding
+            let x = hiddenRow ? collapsedTrigger.frame.maxX + Self.historyGap + CGFloat(i) * (28 + Self.historyGap)
+                : gap - 8 - 28 * CGFloat(2 - i) - Self.historyGap * CGFloat(1 - i)
+            b.frame = NSRect(x: x, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
         }
+        tabStrip.leadStart = hiddenRow ? forwardButton.frame.maxX + SidebarMetrics.titlebarControlGap - tabStrip.frame.minX : nil
+        tabStrip.leadMidY = hiddenRow && inset ? SidebarMetrics.topbarHeight / 2 - tabStrip.frame.minY : nil
         for view in main.subviews {
             view.frame = view is DitherArtView || view is ThemeBackgroundView ? main.bounds
                 : inset ? NSRect(x: margin, y: band, width: max(0, main.bounds.width - 2 * margin), height: max(0, main.bounds.height - band - margin))
@@ -366,8 +374,10 @@ public final class SidebarLayoutView: DSView {
         restoreHandle.isHidden = isOpen && restorePreviewWidth == nil
         let zone = SidebarMetrics.restoreHandle
         restoreHandle.frame = NSRect(x: zone.minX, y: ((bounds.height - zone.height) / 2).rounded(), width: zone.width, height: zone.height)
-        collapsedTrigger.frame = NSRect(x: SidebarMetrics.controlsLeft(windowedMac: true) + 1, y: (SidebarMetrics.topbarHeight - 28) / 2, width: 28, height: 28)
     }
+
+    /// Between the sidebar toggle, back and forward in Redesign's top row.
+    public static let historyGap: CGFloat = 2
 
     /// A page in the main column reports the thread card's frame in its own coordinates from its layout, or nil for the
     /// whole card. A page that never reports gets the whole card.
