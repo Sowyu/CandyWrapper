@@ -62,6 +62,8 @@ public final class BrowserDeviceToolbarView: DSView {
         rotate.iconDefinition = Self.rotationIcon
         rotate.setAccessibilityLabel("Rotate viewport")
         close.setAccessibilityLabel("Close device toolbar")
+        TooltipController.redesign(rotate, "Rotate viewport")
+        TooltipController.redesign(close, "Close device toolbar")
         lockTip = TooltipController.attach(to: lock, text: "Lock aspect ratio", placement: PopupPlacement(side: .top, align: .center, sideOffset: 4))
         for v in [dimensions, select, widthField, times, heightField, lock, rotate, close] as [NSView] { addSubview(v) }
         setAccessibilityRole(.toolbar)

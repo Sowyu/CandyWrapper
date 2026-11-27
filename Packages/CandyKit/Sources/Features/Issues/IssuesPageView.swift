@@ -160,6 +160,10 @@ public final class IssuesPageView: DSView {
         trackerButton.icon = hostOption?.tracker.map(IssueListLogic.trackerIcon) ?? .plug2
         trackerButton.setAccessibilityLabel("Filter by tracker: \(hostOption?.label ?? "All")")
         trackerButton.isHidden = m.hostOptions.count <= 1
+        // Redesign greys the list controls while the server cannot list issues, since none of them can act there.
+        let inert = m.body == .unsupported && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
+        for control in [sortButton, filtersButton, views.button, trackerButton] { control.isEnabled = !inert }
+        search.input.isEnabled = !inert
         refreshButton.isEnabled = !m.refreshing
         panelToggle.isEnabled = m.panelAvailable
         panelToggle.setTooltip(m.panelAvailable ? (m.panelOpen ? "Close right panel" : "Open right panel") : "Select an issue first")

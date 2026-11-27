@@ -40,6 +40,7 @@ public final class BrowserPanelView: DSView {
         super.init(frame: frameRect)
         clipsToBounds = true
         [viewer, empty, unreachable, deviceToolbar, chrome].forEach(addSubview)
+        empty.onEnterURL = { [weak self] in self?.chrome.focusAddress() }
         applyBody()
     }
 
@@ -255,6 +256,9 @@ public final class BrowserChromeRowView: DSView {
 
     public override func layout() {
         super.layout()
+        // T3's ghost address bar reads as loose text in Redesign; there it is a framed field, like the files search.
+        let variant: InputGroupView.Variant = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? .default : .ghost
+        if address.variant != variant { address.variant = variant }
         let y = (bounds.height - 24) / 2
         var x: CGFloat = 8
         for b in [back, forward, refresh] {
@@ -374,6 +378,8 @@ public enum BrowserMoreMenu {
             for (b, l, d) in [(minus, "Zoom out", -1), (plus, "Zoom in", 1), (reset, "Reset zoom", 0)] {
                 b.setAccessibilityLabel(l)
                 b.action = { [weak self] in self?.onStep?(d) }
+                let command = d < 0 ? "preview.zoomOut" : d > 0 ? "preview.zoomIn" : "preview.resetZoom"
+                TooltipController.redesign(b, l) { ActiveKeymap.label(for: command) }
             }
             [minus, label, plus, reset].forEach(addSubview)
         }
@@ -417,6 +423,11 @@ public final class BrowserEmptyStateView: DSView {
         [none, scroll].forEach(addSubview)
         none.redesign = StateCopy(title: "No preview yet", detail: "Type a URL above or run a dev script. Local servers show up here when they start.", icon: .globe)
         apply(recents: [], servers: [])
+    }
+
+    /// Redesign's empty state offers the address bar as its action; the panel wires it to `focusAddress`.
+    public var onEnterURL: (@MainActor () -> Void)? {
+        didSet { none.action = onEnterURL.map { focus in StateAction("Enter a URL", icon: .globe) { focus() } } }
     }
 
     public func apply(recents: [Recent], servers: [PreviewableServer]) {
@@ -567,6 +578,7 @@ public final class BrowserEmptyStateView: DSView {
             remove.iconSize = 14
             remove.alphaValue = 0
             remove.setAccessibilityLabel("Remove \(label) from history")
+            TooltipController.redesign(remove, "Remove from history")
             remove.action = { [weak self] in self?.onRemove?() }
             [icon, title, detail, remove].forEach(addSubview)
             setAccessibilityRole(.button)
