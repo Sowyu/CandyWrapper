@@ -178,6 +178,8 @@ final class UserMessageRowView: TimelineRowView {
     static let fade: CGFloat = 28
 
     private let bubble = FillView()
+    /// Redesign's 1pt surface rim on the bubble, so its edge reads over the art and on light ground; clear elsewhere.
+    static let redesignRim = NSColor(name: nil) { ThemeRuntime.isDither(dark: $0.isDark) ? RedesignTokens.Surface.rim(dark: $0.isDark) : .clear }
     private let markdown = MarkdownView(frame: .zero)
     private let toggle = ButtonView("Show full message", variant: .ghostMuted, size: .xs)
     private let time = LabelView("", font: TL.tabular(12), color: TL.c(\.mutedForeground))
@@ -346,7 +348,7 @@ final class UserMessageRowView: TimelineRowView {
         // A guest's message sits on `bg-guest-surface` (TimelineUserMessageRow.tsx:443-447 at 3669). Media, file cards
         // and a lone voice note draw without the bubble's fill and padding.
         let fill = shape.drawsBubble ? (presentation.guestName == nil ? TL.c(\.messageSurface) : GuestColors.surface) : nil
-        if bubble.fill !== fill { bubble.fill = fill }
+        if bubble.fill !== fill { bubble.fill = fill; bubble.border = fill == nil ? nil : Self.redesignRim }
         markdown.isHidden = markdown.isHidden || shape.mediaOnly || shape.fileCardsOnly || shape.audioOnly
         // A folded message is never collapsible (`collapsible={!folded}`).
         foldable = fold == nil && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

@@ -1004,8 +1004,8 @@ public enum LotusArt {
     /// thin field reads as the black ground, so it keeps none.
     static func fieldLeast(dark: Bool) -> Double { dark ? 0 : 0.14 }
     /// The field's share of the ink: about Gradient's own cell color (36% of the accent over the ground in dark), and in
-    /// light about its 32% under the flower's faintness.
-    public static func fieldAlpha(dark: Bool) -> UInt8 { dark ? 92 : 150 }
+    /// light about 24% under the flower's 0.75, quieter than the lotus so the dots stay calm behind controls and text.
+    public static func fieldAlpha(dark: Bool) -> UInt8 { dark ? 92 : 80 }
 
     /// One shown frame over `full`'s cells: the field, then the flower's `codes` on `flower` (a canvas inside `full`, or
     /// `full` itself) over it, a covered cell hiding the field.

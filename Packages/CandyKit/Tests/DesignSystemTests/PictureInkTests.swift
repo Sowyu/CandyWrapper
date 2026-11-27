@@ -95,24 +95,18 @@ struct PictureInkTests {
         func lum(_ x: Int) -> Double { (0..<h).map { y in PictureInk.luminance(SIMD3(Double(b[y * row + x * 4]), Double(b[y * row + x * 4 + 1]), Double(b[y * row + x * 4 + 2])) / 255) }.reduce(0, +) / Double(h) }
         let plain = try #require(PictureInk.render(tone, inks: PictureInk.inks(hue: 250), ground: ground, dark: false, shape: .plain, text: []))
         let p = [UInt8](plain.dataProvider!.data! as Data)
-        // With the real muted #5c5c5a (6.3:1 on the ground) the column keeps pale picture ink at the text floors instead
-        // of plain ground. Whether light's column should be plain is the user's open choice
-        // (docs/research/redesign-system.md, pictures in redesign-audit-2026-11-26/choice-light-column), so the
-        // rendering stays and this records the gap.
-        withKnownIssue("light's column holds pale ink at its text floors, an open choice for the user") {
-            for x in 0..<w where Double(x) * 3 + 1.5 >= column[0] && Double(x) * 3 + 1.5 <= column[0] + column[2] {
-                #expect(b[x * 4] == ground.bytes[0] && b[x * 4 + 2] == ground.bytes[2], "x \(x)")
-            }
+        // Light's column is plain ground at the standard "Dim behind text" (decided 2026-11-26 after the round-0
+        // review: pale ink at the text floors read badly to all four reviewers; pictures in
+        // redesign-audit-2026-11-26/choice-light-column).
+        for x in 0..<w where Double(x) * 3 + 1.5 >= column[0] && Double(x) * 3 + 1.5 <= column[0] + column[2] {
+            #expect(b[x * 4] == ground.bytes[0] && b[x * 4 + 2] == ground.bytes[2], "x \(x)")
         }
         // Out from the column, in bands one Bayer tile wide, the ink comes back without a step: never lighter outward.
         let first = Int(((column[0] + column[2]) / 3).rounded(.up))
         let bands = stride(from: first, to: w - 7, by: 8).map { x in (x..<(x + 8)).map(lum).reduce(0, +) / 8 }
         let steps = zip(bands, bands.dropFirst()).map { $0.0 - $0.1 }
         let total = bands.first! - bands.last!
-        // The ramp starts from that pale ink, so it rises less than 0.5 to the picture: the same open choice.
-        withKnownIssue("the ramp starts from pale ink, not ground, while light's column choice is open") {
-            #expect(total > 0.5 && steps.allSatisfy { $0 > -0.005 && $0 < total / 3 }, "\(steps)")
-        }
+        #expect(total > 0.5 && steps.allSatisfy { $0 > -0.005 && $0 < total / 3 }, "\(steps)")
         // And by the panel's edge it is the picture as it is.
         #expect(Array(b[(w - 1) * 4..<(w - 1) * 4 + 3]) == Array(p[(w - 1) * 4..<(w - 1) * 4 + 3]))
     }
@@ -172,8 +166,11 @@ struct PictureInkTests {
         // Behind the text, edge to edge, it holds in full.
         #expect(PictureInk.columnCalm(column[0], column: column, panelWidth: panel) == 1)
         #expect(PictureInk.columnCalm(column[0] + column[2], column: column, panelWidth: panel) == 1)
-        // Gone by the panel's edge, the whole margin out.
-        #expect(PictureInk.columnCalm(panel, column: column, panelWidth: panel) == 0)
+        // Gone by the panel's edge when the margin has room for the hold and the whole curve; a narrower one keeps
+        // part of the cap there (`calmHold`).
+        let margin = panel - column[0] - column[2], hold = PictureInk.calmHold, reach = PictureInk.calmReach
+        #expect(PictureInk.columnCalm(panel, column: column, panelWidth: panel)
+                    == (margin >= hold + reach ? 0 : PictureInk.calmFalloff(max(margin - hold, 0) / reach)))
         #expect(PictureInk.columnCalm(column[0] + column[2] + 120, column: column, panelWidth: panel) > 0)
     }
 
@@ -187,10 +184,12 @@ struct PictureInkTests {
         // The 1100pt window's 35pt margin: most of the cap is still on at the edge.
         #expect(edge(35) > 0.8)
         #expect(PictureInk.cellCap(column: 0.0165, falloff: edge(35), dark: true) < 0.05)
-        // Wide margins are what they were: the whole curve, gone at the edge.
-        #expect(edge(reach) == 0 && edge(reach + 200) == 0)
+        // Wide margins hold for `calmHold`, then run the whole curve, gone at the edge.
+        let hold = PictureInk.calmHold
+        #expect(edge(hold + reach) == 0 && edge(hold + reach + 200) == 0)
+        #expect(edge(hold) == 1)
         #expect(PictureInk.columnCalm(reach, column: [reach + 100, 0, 700, 800], panelWidth: 2000)
-                    == PictureInk.calmFalloff(100 / (reach + 100)))
+                    == PictureInk.calmFalloff((100 - hold) / (reach + 100 - hold)))
         // Continuous in the margin: no jump as the window resizes across `calmReach`.
         var last = edge(1)
         for m in stride(from: 1.5, through: reach + 40, by: 0.5) {

@@ -959,7 +959,7 @@ private struct Builder {
         var box = Box(height: textBox.height, baseline: textBox.firstBaseline)
         box.items += MarkdownMathStyle.items(inline, in: textBox, parent: parent, color: color)
         for chip in textBox.chips {
-            box.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.uses3814 ? nil : ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
+            box.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: nil, radius: MarkdownStyle.chipRadius))
         }
         box.items += Self.fileChips(inline, in: textBox, size: size, weight: weight)
         box.items += Self.contextChips(inline, in: textBox, size: size, weight: weight)
@@ -1589,7 +1589,7 @@ private struct Builder {
                 var cell = Box(height: textBox.height)
                 cell.items += MarkdownMathStyle.items(inline, in: textBox, parent: cellFont, color: context.color)
                 for chip in textBox.chips {
-                    cell.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: ThreadDesign.uses3814 ? nil : ThreadDesign.inlineCodeBorder, radius: MarkdownStyle.chipRadius))
+                    cell.items.append(.box(chip, fill: ThreadDesign.inlineCodeFill, border: nil, radius: MarkdownStyle.chipRadius))
                 }
                 cell.items += Self.fileChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)
                 cell.items += Self.contextChips(inline, in: textBox, size: size, weight: r == 0 ? .semibold : .regular)

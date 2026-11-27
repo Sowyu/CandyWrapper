@@ -28,11 +28,10 @@ enum ThreadDesign {
     static let markdownBody = NSColor(name: nil) { appearance in
         Themed.color(\.foreground, uses3814(dark: appearance.isDark) ? 0.9 : 0.8)
     }
+    /// Inline code is a fill with no rim in both designs: under Redesign it often sits inside a bubble, a card or a
+    /// table that has its own rim (round-0 review, Opus fix 6), and `--muted` is opaque there (`WindowGlass.tintMembers`).
     static let inlineCodeFill = NSColor(name: nil) { appearance in
         uses3814(dark: appearance.isDark) ? Themed.color(\.contrastForeground, 0.1) : Themed.color(\.muted)
-    }
-    static let inlineCodeBorder = NSColor(name: nil) { appearance in
-        uses3814(dark: appearance.isDark) ? .clear : Themed.color(\.contrastBorder)
     }
 }
 

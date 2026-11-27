@@ -230,10 +230,11 @@ public enum PictureInk {
         return around * (0.25 + 0.75 * edge)
     }
 
-    /// The text floors behind a thread's reading column, against the worst cell. Dark holds body at 14:1 and muted at
-    /// 6.8:1, what the Great Wave in a 1975pt window needed to read comfortably (picture-fix-2026-11-21/5 and 7).
-    /// Light holds 7:1 and 4.5:1: muted text on its plain ground measures 4.47:1, so no dot fits behind it anyway.
-    nonisolated static func floors(dark: Bool) -> (body: Double, muted: Double) { dark ? (14, 6.8) : (7, 4.5) }
+    /// The text floors behind a thread's reading column, against the worst cell. Dark holds body at 15:1 and muted at
+    /// 7.5:1: 14 and 6.8, what the Great Wave in a 1975pt window needed (picture-fix-2026-11-21/5 and 7), still left
+    /// muted text and inline code on busy dots for the round-0 reviewers (W3). Light holds 7:1 and 4.5:1, and its
+    /// column is plain ground anyway (`columnBound`).
+    nonisolated static func floors(dark: Bool) -> (body: Double, muted: Double) { dark ? (15, 7.5) : (7, 4.5) }
     /// How the cap lets go beside the column (`calmFalloff`): the power on the distance before its smoothstep.
     nonisolated static let calmSpread = 1.3
     /// How fast the cap relaxes toward the window's edge: `cellCap` takes the fall-off to this power, so above 1 the
@@ -254,12 +255,18 @@ public enum PictureInk {
     /// The cap's weight at `x` for a thread's reading column: 1 across the column, then `calmFalloff` of the way out
     /// over the margin on that side or `calmReach`, whichever is longer. A margin at least `calmReach` wide gets the
     /// whole curve and ends at 0; a narrower one is cut off partway, so its edge keeps some of the cap.
-    nonisolated static func columnCalm(_ x: Double, column c: [Double], panelWidth: Double) -> Double {
+    nonisolated static func columnCalm(_ x: Double, column c: [Double], panelWidth: Double, hold: Double = calmHold) -> Double {
         let left = c[0], right = c[0] + c[2]
         if x >= left, x <= right { return 1 }
         let (d, margin) = x < left ? (left - x, left) : (x - right, panelWidth - right)
-        return calmFalloff(d / max(margin, calmReach))
+        return calmFalloff(max(d - hold, 0) / max(margin - hold, calmReach))
     }
+
+    /// How far beside the column dark's cap holds fully before it starts to let go, in points. The inset card with the
+    /// right panel open leaves margins of about 48pt; without the hold the cap let go across them and left a bright
+    /// strip of picture at each of the card's edges (round-0 review, 03-thread-right-panel.dark.png). Light holds
+    /// none: its column is plain ground, so a hold there left a narrow card with no picture at all.
+    nonisolated static let calmHold = 64.0
 
     /// The cap's weight at `t` of the way from the column's edge (0) to the panel's edge (1): 1 to 0 on a smoothstep of
     /// `t` to the `calmSpread`, so it has no slope at either end and no visible start or end.
@@ -308,10 +315,10 @@ public enum PictureInk {
         var row = [Double](repeating: 1, count: w), fade = [Double](repeating: 0, count: w)
         var columnInks: [(UInt8, UInt8, UInt8)]?
         if case let .thread(column?) = shape, column.count == 4,
-           let bound = TextDim.pictureBound(textBound(text, dark: dark), groundY: groundY, dark: dark, at: dim) {
+           let bound = TextDim.pictureBound(columnBound(text, groundY: groundY, dark: dark), groundY: groundY, dark: dark, at: dim) {
             var inksAt = [(UInt8, UInt8, UInt8)](repeating: (0, 0, 0), count: w * 2)
             for x in 0..<w {
-                let f = columnCalm((Double(x) + 0.5) * unit, column: column, panelWidth: panel.width)
+                let f = columnCalm((Double(x) + 0.5) * unit, column: column, panelWidth: panel.width, hold: dark ? calmHold : 0)
                 let cap = cellCap(column: bound, falloff: f, dark: dark)
                 fade[x] = calmJitter * 4 * f * (1 - f)
                 for k in 0..<2 { inksAt[x * 2 + k] = capToward(ground: ground, ink: levels[k], groundY: groundY, bound: cap, dark: dark).byteTriple }
@@ -354,6 +361,15 @@ public enum PictureInk {
         let body = luminance(text[0]), muted = luminance(text[1]), f = floors(dark: dark)
         if dark { return min((body + 0.05) / f.body - 0.05, (muted + 0.05) / f.muted - 0.05) }
         return max(f.body * (body + 0.05) - 0.05, f.muted * (muted + 0.05) - 0.05)
+    }
+
+    /// The bound behind a thread's column at the standard "Dim behind text": the text floors' bound in dark; in light
+    /// the plain ground, so no ink sits behind the text at all and it comes back across the margin on the same
+    /// falloff. Pale ink held only to light's 7:1 and 4.5:1 floors still sat right behind the words, and all four
+    /// round-0 reviewers found it hard to read (W3, W7, T2). Nil when no text is given.
+    nonisolated static func columnBound(_ text: [SIMD3<Double>], groundY: Double, dark: Bool) -> Double? {
+        guard let bound = textBound(text, dark: dark) else { return nil }
+        return dark ? bound : max(bound, groundY)
     }
 
     /// `ink` moved toward `ground` in linear light until its luminance is within `bound`. The two stay one hue.

@@ -580,7 +580,7 @@ public final class DitherArtView: NSView {
 
     /// What the front page needs from Picture's dots, in points from the panel's top left, snapped to whole cells so
     /// a sub-point layout change renders nothing.
-    private func pictureShape(cell: CGFloat) -> PictureInk.Shape {
+    func pictureShape(cell: CGFloat) -> PictureInk.Shape {
         let (page, front) = self.front
         func cells(_ r: NSRect) -> [Double] {
             let local = convert(r, from: front)
@@ -813,9 +813,10 @@ extension DitherArtView {
     /// set renders after `settleDelay` of quiet. A live window resize renders when it ends.
     static let dragGap: CFTimeInterval = 0.25
     static let settleDelay: CFTimeInterval = 0.15
-    /// Light's flower: much fainter, so it reads as a texture on the pale ground and the column's falloff shows no
-    /// shape (the mock at full strength looked cut out around a pale blob).
-    static func flowerOpacity(dark: Bool) -> Float { dark ? 1 : 0.4 }
+    /// Light's flower: fainter than dark's, so the column's falloff shows no shape (the mock at full strength looked cut
+    /// out around a pale blob). At 0.4 the lotus was lost in grey static on a thread (round-0 review, W6); 0.75 with a
+    /// quieter field (`LotusArt.fieldAlpha`) lets it read as a lotus, and the column cap still holds the text floors.
+    static func flowerOpacity(dark: Bool) -> Float { dark ? 1 : 0.75 }
 
     func requestBloom() {
         // Back on the new-thread page soon after leaving it: the flower shows at rest, no replay.
