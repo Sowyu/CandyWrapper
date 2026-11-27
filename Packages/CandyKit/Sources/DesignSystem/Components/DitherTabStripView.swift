@@ -165,13 +165,14 @@ public final class DitherTabStripView: TopbarDragView {
         if let leading = leadingAccessory, !leading.isHidden {
             // The trailing accessory's resting place, so the breadcrumb doesn't jump while it glides into the card.
             let x = leadStart ?? contentStart - Self.accessoryRight
-            let end = trailingAccessory.map { $0.isHidden ? bounds.width - Self.accessoryRight : bounds.width - Self.accessoryRight - $0.intrinsicContentSize.width }
+            let rest = trailingAccessory.map { $0.isHidden ? bounds.width - Self.accessoryRight : bounds.width - Self.accessoryRight - $0.intrinsicContentSize.width }
                 ?? bounds.width - Self.accessoryRight
+            let end = min(rest, sheetStart ?? rest)
             let width = leading.fittingWidth(max: max(0, end - Self.leadingGap - x))
             leading.frame = NSRect(x: x, y: ((bounds.height - Self.tabHeight) / 2).rounded(), width: width, height: Self.tabHeight)
         }
         plus.isHidden = !showsTabs
-        let room = max(0, bounds.width - contentStart - 40 - reserve)
+        let room = max(0, min(bounds.width - reserve, sheetStart ?? bounds.width) - contentStart - 40)
         let shown = !showsTabs ? 0..<0 : Self.window(count: views.count, selected: views.firstIndex { $0.tab.id == selected }, room: room)
         let count = CGFloat(shown.count)
         let width = shown.isEmpty ? 0 : min(Self.tabWidth, (room - Self.gap * (count - 1)) / count)

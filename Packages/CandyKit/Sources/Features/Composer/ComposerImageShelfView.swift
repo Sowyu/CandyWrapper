@@ -389,7 +389,8 @@ public final class ComposerImageShelfView: DSView {
         private func revealRemove() {
             let lit = hover?.hovered == true || focusWithin
             HoverReveal.fade([remove], visible: !(isSnapShot || redesign) || lit)
-            HoverReveal.fade([retry], visible: !redesign || lit)
+            // A failed upload keeps its retry in sight: it is the tile's error cue (round-2 review C4).
+            HoverReveal.fade([retry], visible: !redesign || lit || failed)
         }
         /// Redesign's corner controls: 18pt with a 12pt glyph, a quarter of a 64pt tile instead of most of its top.
         static let redesignControl: CGFloat = 18, redesignGlyph: CGFloat = 12
@@ -469,7 +470,9 @@ public final class ComposerImageShelfView: DSView {
                 progress.text = ComposerFileRow.formatProgress(p)
                 retry.isHidden = true
             case .failed(let reason):
-                progressStrip.isHidden = true
+                // Redesign names the failure in the progress strip's place, in the error color.
+                progressStrip.isHidden = !redesign
+                progress.text = "Failed"
                 retry.isHidden = false
                 retryTip.text = reason
             case .ready:
@@ -477,6 +480,8 @@ public final class ComposerImageShelfView: DSView {
                 retry.isHidden = true
             }
             if case .failed = tile.status { failed = true } else { failed = false }
+            progress.color = Themed.color(failed ? \.destructive : \.foreground)
+            HoverReveal.withoutAnimation { revealRemove() }
             needsDisplay = true
             needsLayout = true
         }
@@ -494,6 +499,7 @@ public final class ComposerImageShelfView: DSView {
             layer?.cornerRadius = redesign ? RedesignTokens.Radius.control : ComposerDesign.uses3814(dark: effectiveAppearance.isDark) ? 8 : 10
             layer?.backgroundColor = Themed.color(\.background).cgColor(in: self)
             layer?.borderColor = (redesign && failed ? Themed.color(\.destructive) : Themed.color(\.border, 0.8)).cgColor(in: self)
+            if failed { progressStrip.isHidden = !redesign }
             progressStrip.layer?.backgroundColor = Themed.color(\.background, 0.85).cgColor(in: self)
         }
 

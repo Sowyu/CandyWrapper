@@ -1993,12 +1993,14 @@ final class ComposerController {
         placeholder.questionChoiceOnly = !question.editorEnabled
         composer.placeholderInput = placeholder
         let responding = question.isResponding
-        composer.pending = .question(ComposerView.QuestionFooter(
+        let footer = ComposerView.QuestionFooter(
             label: session.primaryLabel(compact: false, responding: responding),
             compactLabel: session.primaryLabel(compact: true, responding: responding),
             enabled: session.canPressPrimary && !responding && shell != nil,
             showsPrevious: session.showsPrevious, responding: responding,
-            showsAttach: question.editorEnabled && supportsQuestionAttachments && fileUploadLimit != nil))
+            showsAttach: question.editorEnabled && supportsQuestionAttachments && fileUploadLimit != nil)
+        composer.pending = .question(footer)
+        question.actions = footer
         panel.needsLayout = true
     }
 

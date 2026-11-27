@@ -1113,12 +1113,13 @@ public final class ComposerView: DSView {
             questionPill.title = compactActions ? footer.compactLabel : footer.label
             let pillWidth = questionPill.intrinsicContentSize.width
             questionPill.frame = NSRect(x: pillRight - pillWidth, y: midY - 14, width: pillWidth, height: 28)
-            questionPill.isHidden = false
-            actionsLeft = questionPill.frame.minX
+            // Redesign's question card holds Previous and Next under its choices (`QuestionPanelView.actions`).
+            questionPill.isHidden = capy
+            actionsLeft = capy ? (runState.canInterrupt ? primary.frame.minX : right) : questionPill.frame.minX
             let previous = compactActions ? previousCompact : previousFull
             previousFull.isHidden = true
             previousCompact.isHidden = true
-            if footer.showsPrevious {
+            if footer.showsPrevious, !capy {
                 let pw = previous.intrinsicContentSize.width
                 previous.frame = NSRect(x: actionsLeft - gap - pw, y: midY - 14, width: pw, height: 28)
                 previous.isHidden = false

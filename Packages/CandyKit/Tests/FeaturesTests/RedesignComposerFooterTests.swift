@@ -96,7 +96,9 @@ struct RedesignComposerFooterTests {
         }
     }
 
-    @Test func failedTileHidesItsControlsUntilHover() {
+    /// Remove waits for hover; retry stays in sight on a failed tile as its error cue, with "Failed" in the strip
+    /// (round-2 review C4).
+    @Test func failedTileShowsRetryAtRest() {
         redesign {
             let shelf = ComposerImageShelfView()
             let window = host(shelf)
@@ -108,7 +110,12 @@ struct RedesignComposerFooterTests {
             tile.displayIfNeeded()
             let buttons = tile.subviews.compactMap { $0 as? ButtonView }
             #expect(buttons.count == 2 && buttons.allSatisfy { $0.frame.width == 18 })
-            #expect(buttons.allSatisfy { $0.alphaValue == 0 }, "remove and retry show on hover only")
+            let retry = buttons.first { $0.accessibilityLabel()?.hasPrefix("Retry") == true }
+            let remove = buttons.first { $0.accessibilityLabel()?.hasPrefix("Remove") == true }
+            #expect(retry?.alphaValue == 1, "retry shows at rest on a failed tile")
+            #expect(remove?.alphaValue == 0, "remove shows on hover only")
+            let labels = tile.subviews.flatMap { $0.subviews.compactMap { ($0 as? LabelView)?.text } }
+            #expect(labels.contains("Failed"))
         }
     }
 }

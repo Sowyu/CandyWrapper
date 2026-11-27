@@ -80,8 +80,24 @@ public final class QuestionPanelView: ComposerBannerView {
     private var previews: [MarkdownView] = []
     private var previewSources: [String] = []
 
+    /// Redesign puts the composer footer's Previous and Next in the card, under the choices they act on, and the
+    /// composer leaves them out. The same labels, states and actions as the footer (`ComposerView.QuestionFooter`).
+    public var actions: ComposerView.QuestionFooter? {
+        didSet { if actions != oldValue { refreshActions(); needsLayout = true } }
+    }
+    let nextPill = MessageActionPill()
+    let previousButton = ButtonView("Previous", variant: .outline, size: .sm)
+    /// Redesign's header icon, in the approval card's shield's place, so the two prompts read as one kind of card.
+    private let questionIcon = IconView(name: .messageCircleQuestion, size: 16, strokeColor: Themed.color(\.mutedForeground))
+    private var showsActions: Bool { isDither && actions != nil && session != nil }
+    static let actionsGap: CGFloat = RedesignTokens.Space.s
+
     public init() {
         super.init(variant: .neutral)
+        nextPill.compact = false
+        nextPill.action = { [weak self] in self?.advance() }
+        previousButton.action = { [weak self] in self?.previous() }
+        [questionIcon, previousButton, nextPill].forEach { $0.isHidden = true; addSubview($0) }
         header.action = { [weak self] in self?.toggleCollapsed() }
         addSubview(header)
         [headerLabel, collapsedQuestion, counter].forEach(addSubview)
@@ -277,7 +293,16 @@ public final class QuestionPanelView: ComposerBannerView {
         onChange?()
     }
 
+    private func refreshActions() {
+        guard let actions else { return }
+        nextPill.title = actions.label
+        nextPill.isEnabled = actions.enabled
+        previousButton.isEnabled = !actions.responding
+    }
+
     // MARK: Layout
+
+    private var actionsHeight: CGFloat { showsActions ? Self.actionsGap + MessageActionPill.height : 0 }
 
     private func bodyHeight(width: CGFloat) -> CGFloat {
         let textWidth = max(0, width - 2 * Self.pad - bodyStart - bodyEnd)
@@ -294,7 +319,7 @@ public final class QuestionPanelView: ComposerBannerView {
     /// The banner's full height at `width`, the 17px under the composer included.
     public func preferredHeight(width: CGFloat) -> CGFloat {
         let body = isCollapsed || session == nil ? 0 : min(maxBodyHeight, bodyHeight(width: width))
-        return Self.pad + headerHeight + body + Self.pad + Self.overlap
+        return Self.pad + headerHeight + body + actionsHeight + Self.pad + Self.overlap
     }
 
     public override func layout() {
@@ -323,9 +348,22 @@ public final class QuestionPanelView: ComposerBannerView {
         headerLabel.frame = NSRect(x: x, y: pad + (isDither ? 4 : 10), width: hw, height: 16)
         collapsedQuestion.frame = NSRect(x: x + hw + 4, y: pad + (isDither ? 4 : 10), width: max(0, right - 4 - x - hw - 4), height: 16)
 
+        questionIcon.isHidden = !isDither
+        questionIcon.frame = NSRect(x: pad + 6, y: pad + 4, width: 16, height: 16)
         let full = bodyHeight(width: w)
-        let visible = min(maxBodyHeight, full)
+        let visible = isCollapsed ? 0 : min(maxBodyHeight, full)
         scroll.frame = NSRect(x: pad, y: pad + headerHeight, width: w - 2 * pad, height: visible)
+        // Next under the choices, its right edge on the number keys' right edge; Previous before it.
+        nextPill.isHidden = !showsActions
+        previousButton.isHidden = !showsActions || actions?.showsPrevious != true
+        if showsActions {
+            let y = pad + headerHeight + visible + Self.actionsGap
+            let nw = nextPill.intrinsicContentSize.width
+            let right = w - pad - bodyEnd - 10
+            nextPill.frame = NSRect(x: right - nw, y: y, width: nw, height: MessageActionPill.height)
+            let pw = previousButton.intrinsicContentSize.width
+            previousButton.frame = NSRect(x: nextPill.frame.minX - Self.actionsGap - pw, y: y, width: pw, height: MessageActionPill.height)
+        }
         // `pe-2` clears the overlay scrollbar once there is something to scroll.
         let scrollGutter: CGFloat = full > visible ? 8 : 0
         body.frame = NSRect(x: 0, y: 0, width: w - 2 * pad, height: full)
