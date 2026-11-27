@@ -303,6 +303,9 @@ public final class ConnectionsSettingsView: DSView, SettingsGroupRow {
         showsList = true
         set(model)
     }
+
+    /// A saved environment's row in the list, for the notice's click to scroll to.
+    public func environmentRow(_ id: String) -> NSView? { rows[id] }
     private let addButton = ButtonView("Add environment", icon: .plus, variant: .ghostMuted, size: .xs)
     /// `ServerUpdatesAction variant="ghost-muted"`, before "Add environment" (`flex items-center gap-1`).
     let updateAllButton = ButtonView("Update all", variant: .ghostMuted, size: .xs)

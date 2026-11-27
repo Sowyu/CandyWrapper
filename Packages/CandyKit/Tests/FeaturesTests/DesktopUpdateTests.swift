@@ -110,7 +110,7 @@ struct DesktopUpdateTests {
             #expect(offer.label == "Copy relaunch command")
         } else { Issue.record("The same server must offer the banner's manual relaunch action") }
         let notice = UpdateEverythingLogic.serverUpdateNotice([manual], target: target)
-        #expect(notice == "Server update available")
+        #expect(notice == "Server update available: Sandbox runs 0.1.1-nightly.20261017.3234, this app expects \(target)")
         let pill = SidebarUpdatePillView()
         pill.update = base
         let pending = UpdateEverythingLogic.Pending(servers: plan.targets.count, providers: 2)
@@ -120,7 +120,7 @@ struct DesktopUpdateTests {
         pill.onEverything = { automatic += 1 }
         pill.onDownload = { appDownloads += 1 }
         #expect(!pill.isHidden && pill.iconStatus == .everything && pill.hasServerUpdates)
-        #expect(pill.tooltipText == "Server update available" && !pill.isInteractionDisabled)
+        #expect(pill.tooltipText == notice && !pill.isInteractionDisabled)
         #expect(pending.count == 2) // Manual servers do not become automatic Update all targets.
         pill.performAction()
         #expect(guidance == 1 && automatic == 0)
@@ -157,6 +157,37 @@ struct DesktopUpdateTests {
         server.connected = true
         server.ownServer = true
         #expect(UpdateEverythingLogic.serverUpdateNotice([server], target: target) == nil)
+    }
+
+    /// The report from 1.20.0: the local environment, run by T3's own service on an older Nightly, lit the button, and
+    /// Environments > List had no row for it. Two remotes through T3 Connect, connected and current, show nothing there.
+    @Test func theLocalEnvironmentNeverLightsTheServerNotice() {
+        let target = ServerVersionSkewLogic.clientVersion
+        func machine(_ id: String, _ version: String, primary: Bool = false, connected: Bool = true, off: Bool = false) -> UpdateEverythingLogic.Machine {
+            .init(environmentId: id, label: id, serverVersion: version, connected: connected, canMaintain: true, updating: false,
+                  capabilities: ServerUpdateCapabilities([:]), turnedOff: off, primary: primary)
+        }
+        let old = "0.1.11-nightly.20261119.4928"
+        let local = machine("macbook", old, primary: true)
+        let aniko = machine("aniko", target), cloud = machine("78722", target)
+        #expect(UpdateEverythingLogic.serverUpdateNotice([local, aniko, cloud], target: target) == nil)
+        let pill = SidebarUpdatePillView()
+        pill.setEverything(summary: nil, pending: .init(), serverNotice: UpdateEverythingLogic.serverUpdateNotice([local, aniko, cloud], target: target))
+        #expect(!pill.hasServerUpdates)
+
+        // A remote that is behind is counted and named, the first one leads, and the click goes to its row.
+        let behind = machine("studio", old), alsoBehind = machine("alvin", "0.1.12-nightly.20261120.5000")
+        let shape = [local, aniko, behind, cloud, alsoBehind, machine("gone", old, connected: false), machine("off", old, off: true)]
+        #expect(UpdateEverythingLogic.serverUpdateNoticeMachines(shape, target: target).map(\.environmentId) == ["studio", "alvin"])
+        #expect(UpdateEverythingLogic.serverUpdateNotice(shape, target: target)
+            == "2 server updates available: studio runs \(old) and 1 more, this app expects \(target)")
+
+        // The notice counts exactly the rows in Environments > List that show an update: the saved environments
+        // (every machine but the local one) whose row passes `rowOffersUpdate`, as SettingsController builds it.
+        let rowsWithUpdate = shape.filter { !$0.primary }.filter {
+            UpdateEverythingLogic.rowOffersUpdate(enabled: !$0.turnedOff, connected: $0.connected, serverVersion: $0.serverVersion, target: target)
+        }.map(\.environmentId)
+        #expect(Set(UpdateEverythingLogic.serverUpdateNoticeMachines(shape, target: target).map(\.environmentId)) == Set(rowsWithUpdate))
     }
 
     @Test func footerUpdateScope() {

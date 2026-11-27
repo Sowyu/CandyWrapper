@@ -209,6 +209,14 @@ final class SettingsController {
         if isOpen { show(target) } else { open() }
     }
 
+    /// The sidebar's server update notice: Environments on the list, scrolled to the row it counted.
+    func revealEnvironment(_ environmentId: String?) {
+        connections.showList()
+        open(.connections)
+        guard let environmentId, let row = connections.environmentRow(environmentId) else { return }
+        page.reveal(row)
+    }
+
     func open() {
         guard !isOpen, let window else { return }
         willOpen()
@@ -355,7 +363,10 @@ final class SettingsController {
                environments.session(id)?.token.isEmpty == false {
                 updateAction = .outdated(update.isFailed ? "Retry update" : "Update")
             }
-            if r.enabled, state?.status == .connected, mismatch != nil, !update.isRunning, let updates = serverUpdates {
+            // The same rule as the sidebar's server update notice, so the button lights only for a row that offers this.
+            if UpdateEverythingLogic.rowOffersUpdate(enabled: r.enabled, connected: state?.status == .connected, serverVersion: mismatch?.server,
+                                                     target: ServerVersionSkewLogic.clientVersion),
+               !update.isRunning, let updates = serverUpdates {
                 switch updates.offer(id, serverLabel: "\(r.label) server") {
                 case .update?: updateAction = .update(update.isFailed ? "Retry update" : "Update", enabled: updates.canUpdate(id))
                 case .manual(let manual)?: updateAction = .copy(manual)
