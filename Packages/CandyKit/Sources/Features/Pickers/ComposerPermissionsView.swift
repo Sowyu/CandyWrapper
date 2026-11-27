@@ -26,18 +26,30 @@ final class ComposerPermissionsView: DSView {
     /// The description's height. Two lines, or with the Turn off row as many lines as Unrestricted's hint takes at
     /// the menu's narrowest width (296 less padding), so the row sits below its last line.
     private var detailHeight: CGFloat = 32
+    /// Redesign lists the modes as rows, each with its icon and name, so they can be compared before one is picked
+    /// (round-1 review C8, 2026-11-26: "five similar unlabeled icon targets"). The trigger on the composer stays an
+    /// icon, as the user decided. The description under the rows follows the hovered or focused row.
+    let rows: Bool
+    static let rowHeight: CGFloat = 28
+    /// The section's height in its menu.
+    var height: CGFloat {
+        guard rows else { return 122 + extraHeight }
+        return 28 + CGFloat(buttons.count) * Self.rowHeight + 6 + detailHeight + (turnOff == nil ? 0 : 4 + 24) + 6
+    }
 
     init(modes: [RuntimeMode], selected: RuntimeMode, unrestricted: UnrestrictedAccess.State? = nil) {
         self.modes = modes; self.selected = selected
         self.unrestricted = modes.contains(.fullAccess) ? unrestricted : nil
         choices = modes.map { $0 } + (self.unrestricted == nil ? [] : [nil])
+        rows = ThemeRuntime.isDither(dark: NSApp?.effectiveAppearance.isDark ?? true)
         super.init(frame: .zero)
         heading.lineHeight = 16; title.lineHeight = 20
         detail.font = DSFont.ui(12); detail.lineHeight = 16; detail.color = Themed.color(\.mutedForeground)
         for view in [heading, track, title, detail] as [NSView] { addSubview(view) }
         for (i, mode) in choices.enumerated() {
             let info = Self.info(mode, unrestricted: self.unrestricted)
-            let choice = PermissionChoice(icon: mode == .fullAccess ? ComposerPickers.fullAccessIcon(dark: NSApp.effectiveAppearance.isDark) : info.icon.definition, checked: i == selectedIndex)
+            let choice = PermissionChoice(icon: mode == .fullAccess ? ComposerPickers.fullAccessIcon(dark: NSApp.effectiveAppearance.isDark) : info.icon.definition, checked: i == selectedIndex,
+                                          label: rows ? info.label : nil)
             choice.setAccessibilityLabel(info.label); choice.setAccessibilityHelp(info.description)
             choice.action = { [weak self] in self?.pick(i) }
             choice.onPreview = { [weak self] lit in self?.preview(lit ? i : nil) }
@@ -51,6 +63,10 @@ final class ComposerPermissionsView: DSView {
         }
         preview(nil)
         if turnOff != nil { detailHeight = max(32, detail.layout(forWidth: 272).height) }
+        title.isHidden = rows
+        // The track is the segmented control's; rows sit on the menu itself.
+        track.isHidden = rows
+        if rows { for b in buttons { b.removeFromSuperview(); addSubview(b) } }
     }
     static func info(_ mode: RuntimeMode?, unrestricted: UnrestrictedAccess.State?) -> ComposerPickers.ModeInfo {
         guard let mode else {
@@ -74,6 +90,11 @@ final class ComposerPermissionsView: DSView {
         switch key {
         case .left: next = (current + choices.count - 1) % choices.count
         case .right: next = (current + 1) % choices.count
+        // Rows move down and up too; above the first row the key goes back to the menu (the traits above).
+        case .down where rows: next = min(choices.count - 1, focused == nil ? current : current + 1)
+        case .up where rows:
+            guard current > 0 else { return false }
+            next = current - 1
         case .home: next = 0
         case .end: next = choices.count - 1
         case .enter, .space: pick(current); return true
@@ -92,6 +113,16 @@ final class ComposerPermissionsView: DSView {
         super.layout()
         let w = bounds.width - 16
         heading.frame = NSRect(x: 8, y: 6, width: w, height: 16)
+        if rows {
+            var y: CGFloat = 28
+            for button in buttons {
+                button.frame = NSRect(x: 0, y: y, width: bounds.width, height: Self.rowHeight)
+                y += Self.rowHeight
+            }
+            detail.frame = NSRect(x: 8, y: y + 6, width: w, height: detailHeight)
+            if let turnOff { turnOff.frame = NSRect(x: 8, y: detail.frame.maxY + 4, width: turnOff.intrinsicContentSize.width, height: 24) }
+            return
+        }
         track.frame = NSRect(x: 8, y: 28, width: w, height: 28)
         // No gaps; only the outer ends round (`first:rounded-l-md last:rounded-r-md`, #26514 at 4928). Redesign rounds each
         // fill on its own, as the reasoning levels do.
@@ -112,13 +143,29 @@ private final class PermissionChoice: ControlView {
     var first = true { didSet { needsDisplay = true } }
     var last = true { didSet { needsDisplay = true } }
     var onPreview: ((Bool) -> Void)?
-    init(icon: IconDefinition, checked: Bool) {
+    /// Redesign's row form: the mode's name after the icon and a check on the chosen one.
+    private let label: LabelView?
+    private let check: IconView?
+    init(icon: IconDefinition, checked: Bool, label: String? = nil) {
         self.checked = checked; self.icon = IconView(definition: icon, size: 14)
+        self.label = label.map { LabelView($0, font: DSFont.ui(13)) }
+        check = label != nil && checked ? IconView(name: .check, size: 14) : nil
         super.init(frame: .zero); scalesWhenPressed = false; addSubview(self.icon)
+        if let l = self.label { l.lineHeight = 16; addSubview(l) }
+        if let check { addSubview(check) }
         setAccessibilityRole(.radioButton); setAccessibilityValue(checked ? 1 : 0)
     }
     override func stateDidChange(from old: State) { super.stateDidChange(from: old); onPreview?(state.hovered || state.focusVisible) }
     override func updateLayer() {
+        if let label, let layer {
+            // A menu row: the hover fill inset on the menu's control corner, the chosen row in the text color.
+            let lit = state.hoverOrPressed || state.focusVisible
+            layer.backgroundColor = nil
+            fill.backgroundColor = lit ? RedesignTokens.State.fill(RedesignTokens.State.hover, dark: effectiveAppearance.isDark).cgColor : nil
+            let ink = Themed.color(checked || lit ? \.foreground : \.mutedForeground)
+            label.color = ink; icon.strokeColor = ink; check?.strokeColor = Themed.color(\.foreground)
+            return
+        }
         if ThemeRuntime.isDither(dark: effectiveAppearance.isDark), let layer {
             ComposerFooterSegmentView.paint(layer, in: self, checked: checked, hovered: state.hoverOrPressed, focused: state.focusVisible, first: first, last: last)
             icon.strokeColor = Themed.color(checked || state.hovered ? \.contrastForeground : \.contrastMutedForeground)
@@ -134,7 +181,24 @@ private final class PermissionChoice: ControlView {
         layer?.borderWidth = state.focusVisible ? 2 : 0; layer?.borderColor = Themed.color(\.ring).cgColor(in: self)
         icon.strokeColor = Themed.color(checked || state.hovered ? \.foreground : \.mutedForeground)
     }
-    override func layout() { super.layout(); icon.frame = NSRect(x: (bounds.width - 14) / 2, y: 5, width: 14, height: 14) }
+    private lazy var fill: CALayer = {
+        let l = CALayer()
+        l.actions = ["backgroundColor": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        l.cornerRadius = RedesignTokens.Radius.control
+        layer?.insertSublayer(l, at: 0)
+        return l
+    }()
+    override func layout() {
+        super.layout()
+        guard let label else { icon.frame = NSRect(x: (bounds.width - 14) / 2, y: 5, width: 14, height: 14); return }
+        let midY = bounds.height / 2
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        fill.frame = bounds.insetBy(dx: RedesignTokens.Space.xs, dy: 0)
+        CATransaction.commit()
+        icon.frame = NSRect(x: 12, y: midY - 7, width: 14, height: 14)
+        check?.frame = NSRect(x: bounds.width - 12 - 14, y: midY - 7, width: 14, height: 14)
+        label.frame = NSRect(x: 12 + 14 + 8, y: midY - 8, width: max(0, bounds.width - 34 - 12 - 14 - 8), height: 16)
+    }
 }
 
 /// A traits menu and its Permissions section use the same popup and close after either pick.
@@ -155,12 +219,13 @@ final class ComposerOptionsMenu: DSView, PickerPopupBody {
         permissions.onPick = { [weak self] mode in onPick(mode); self?.onClose?() }
         permissions.onUnrestricted = { [weak self] on in self?.onClose?(); onUnrestricted?(on) }
     }
-    var naturalSize: CGSize { CGSize(width: max(296, traits?.naturalSize.width ?? 0), height: (traits?.naturalSize.height ?? 0) + (traits == nil ? 130 : 131) + permissions.extraHeight) }
+    var naturalSize: CGSize { CGSize(width: max(296, traits?.naturalSize.width ?? 0), height: (traits?.naturalSize.height ?? 0) + permissions.height + (traits == nil ? 8 : 9)) }
     func focusPermissions() { permissionsFocused = true; traits?.highlightedIndex = nil }
     func handleKey(_ key: PopupKey) -> Bool {
         if key == .escape { onClose?(); return true }
         if key == .left || key == .right { focusPermissions() }
         if key == .down, let traits, traits.highlightedIndex == traits.selectableIndices.last { focusPermissions(); return true }
+        if key == .up, permissionsFocused, permissions.rows, permissions.handleKey(.up) { return true }
         if key == .up, permissionsFocused, let traits {
             permissionsFocused = false; traits.highlightedIndex = traits.selectableIndices.last; return true
         }
@@ -172,6 +237,6 @@ final class ComposerOptionsMenu: DSView, PickerPopupBody {
         let top = traits?.naturalSize.height ?? 0
         traits?.frame = NSRect(x: 0, y: 0, width: bounds.width, height: top)
         divider.frame = NSRect(x: 8, y: top + 4, width: max(0, bounds.width - 16), height: 1)
-        permissions.frame = NSRect(x: 4, y: top + (traits == nil ? 4 : 5), width: bounds.width - 8, height: 122 + permissions.extraHeight)
+        permissions.frame = NSRect(x: 4, y: top + (traits == nil ? 4 : 5), width: bounds.width - 8, height: permissions.height)
     }
 }

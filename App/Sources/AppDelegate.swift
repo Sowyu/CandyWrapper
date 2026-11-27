@@ -921,8 +921,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         case "issues": self.sidebarCommands?.openUtilityPage(.issues)
                         case "workflows": self.sidebarCommands?.openUtilityPage(.workflows)
                         case "collapsed": (window.contentView as? SidebarLayoutView)?.setOpen(false)
-                        case "picker": threads.composer.pickers.toggleModelPicker()
-                        case "access": threads.composer.pickers.openAccessMode()
+                        // Laid out first, so a popup opened right after "draft" anchors on the page's composer.
+                        case "picker": window.contentView?.layoutSubtreeIfNeeded(); threads.composer.pickers.toggleModelPicker()
+                        case "access": window.contentView?.layoutSubtreeIfNeeded(); threads.composer.pickers.openAccessMode()
                         case "usage": self.sidebarCommands?.openUtilityPage(.usage)
                         // `settings:<page>` opens Settings on a page by its raw value, such as `settings:redesign`.
                         case let s where s.hasPrefix("settings"):
