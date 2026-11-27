@@ -310,6 +310,13 @@ public final class ButtonView: ControlView {
         if variant == .default || variant == .destructive, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             // Redesign's filled buttons are flat: no inset top highlight, only the soft drop under them.
             look.box.shadows.removeAll { $0.inset }
+            if variant == .destructive {
+                let fill = RedesignTokens.Destructive.fill(dark: effectiveAppearance.isDark)
+                look.box.fill = state.hoverOrPressed ? fill.withAlphaComponent(0.9) : fill
+                look.box.border = fill
+                look.text = RedesignTokens.Destructive.label
+                look.icon = look.text
+            }
         }
         if variant == .glass, ThemeRuntime.isDither(dark: effectiveAppearance.isDark) {
             // Redesign draws no blur and ignores Glass opacity, so a glass button floating over content takes the

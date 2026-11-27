@@ -545,8 +545,9 @@ public final class ThemeLibrary {
                 if a == .light { input.ditherLight = true } else { input.ditherDark = true }
                 input.ditherPicture = DitherPicture.path
                 var colors = d.colors(for: a) ?? d.colors
-                // Teal is the palette's own; another accent replaces its roles once, so every accent use follows.
-                if accent != .teal { colors.merge(accent.colors(dark: a == .dark)) { $1 } }
+                // The accent replaces its roles once, so every accent use follows, teal included: skipping teal left
+                // the default dark send button and Approve white on teal at 3.7:1 (X8, 2026-11-27).
+                colors.merge(accent.colors(dark: a == .dark)) { $1 }
                 let half = ThemeRuntimeHalf(colors: colors)
                 if a == .light { input.light = half } else { input.dark = half }
                 continue

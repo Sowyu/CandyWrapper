@@ -258,6 +258,9 @@ public enum RedesignTokens {
         /// arc at full text strength over a `Surface.strongRim` track, and never less than `least` of a turn.
         public static let ringRadius: CGFloat = 5.75
         public static let ringStroke: CGFloat = 2.5
+        /// A usage limit's open share in dark. T3's 35% of a near-white series came to #747472 under the 12pt "87%",
+        /// 4.3:1 (X8, Gemini); 28% is about 5.6:1. Light keeps T3's 35%, where its dark label reads 8:1.
+        public static let poolOpenDark: CGFloat = 0.28
     }
 
     /// Type weights. Redesign's chrome draws at 400 and 500, and size and color carry the hierarchy. Message content
@@ -285,6 +288,18 @@ public enum RedesignTokens {
         public static let offTrackDark = NSColor(srgbRed: 0x6b / 255, green: 0x6b / 255, blue: 0x6d / 255, alpha: 1)
         /// #8a8a87, light's control outline (`input`): 3.4:1 on white.
         public static let offTrackLight = NSColor(srgbRed: 0x8a / 255, green: 0x8a / 255, blue: 0x87 / 255, alpha: 1)
+    }
+
+    /// A filled destructive button: the palette's red darkened in its own hue until white on it reads 4.6:1, the way
+    /// light's accent is (`DitherAccent.lightAccent`). White on the stock red was 3.5:1 in dark and 3.7:1 in light
+    /// (X8, 2026-11-27). Red text and icons keep the palette's red.
+    public enum Destructive {
+        public nonisolated static func fill(dark: Bool) -> NSColor {
+            let red = ThemeRuntime.palettes.palette(dark: dark, sidebar: false).destructive.srgb
+            let hex = DitherAccent.hex((red.x, red.y, red.z))
+            return DitherAccent.color(DitherAccent.lightAccent(hex))
+        }
+        public static let label = NSColor.white
     }
 
     /// Segmented controls in light. T3's track (`bg-input/40`) and selection (`bg-input/72`) are greys of the control

@@ -59,6 +59,39 @@ struct RedesignContrastFloorTests {
         }
     }
 
+    /// The palette as `ThemeLibrary` builds it, with the accent's roles merged in, so the resolved primary and send
+    /// button labels follow `DitherAccent.foreground` for every accent, teal included (docs/decisions.md, 2026-11-27).
+    @Test func accentLabelsReadInTheResolvedPalette() {
+        for accent in DitherAccent.all {
+            var input = redesign(accent: accent.id)
+            input.light = ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .light)!.merging(accent.colors(dark: false)) { $1 })
+            input.dark = ThemeRuntimeHalf(colors: ThemeDefinition.dither.colors(for: .dark)!.merging(accent.colors(dark: true)) { $1 })
+            let palettes = ThemeRuntime.resolve(input)
+            for dark in [true, false] {
+                let p = dark ? palettes.dark : palettes.light, side = "\(accent.id) \(dark ? "dark" : "light")"
+                #expect(ratio(rgb(p.primary), rgb(p.primaryForeground)) >= 4.5, "\(side) primary")
+                #expect(ratio(rgb(p.messageAction), rgb(p.messageActionForeground)) >= 4.5, "\(side) send")
+            }
+        }
+        // The base palette already carries teal's rule, so nothing depends on the merge for the default.
+        for dark in [true, false] {
+            let base = ThemeDefinition.dither.colors(for: dark ? .dark : .light)!
+            #expect(base[.accentForeground] == DitherAccent.teal.foreground(dark: dark))
+            #expect(base[.messageActionForeground] == DitherAccent.teal.foreground(dark: dark))
+        }
+    }
+
+    @Test func destructiveFillKeepsWhiteAtFourAndAHalf() {
+        let previous = ThemeRuntime.input
+        defer { ThemeRuntime.apply(previous) }
+        ThemeRuntime.apply(redesign())
+        for dark in [true, false] {
+            let fill = RedesignTokens.Destructive.fill(dark: dark).usingColorSpace(.sRGB)!
+            let c = SIMD3(Double(fill.redComponent), Double(fill.greenComponent), Double(fill.blueComponent))
+            #expect(ratio(c, SIMD3(1, 1, 1)) >= 4.5, "\(dark ? "dark" : "light") destructive \(c)")
+        }
+    }
+
     /// The off switch drawn offscreen on a Settings card: the track's pixel against the card's keeps 3:1.
     @Test func offSwitchEdgeReadsOnTheCard() throws {
         let previous = ThemeRuntime.input
