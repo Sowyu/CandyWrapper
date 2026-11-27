@@ -12,9 +12,9 @@ import T3Store
 public final class TerminalSurfaceView: DSView, @preconcurrency TerminalViewDelegate {
     /// `CONTENT_PADDING` (surface.ts:36).
     static let padding: CGFloat = 4
-    /// Redesign keeps the text 8pt from the card's edge, as its code blocks and rows do; T3's 4 put the prompt
-    /// about 3pt from it.
-    private var padding: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? RedesignTokens.Space.s : Self.padding }
+    /// Redesign keeps the text on the card's own inset, `Space.m`, the inset its title row and table cells use, so the
+    /// prompt starts under the title's icon; T3's 4 put the prompt about 3pt from the edge.
+    private var padding: CGFloat { ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? RedesignTokens.Space.m : Self.padding }
     /// `MAX_SCROLLBACK_ROWS` (core.ts:12).
     public static let scrollbackRows = 10_000
 

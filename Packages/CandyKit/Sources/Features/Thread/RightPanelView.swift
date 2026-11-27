@@ -14,11 +14,22 @@ final class RightPanelView: DSView {
     static let defaultWidth: CGFloat = 540
     static let minWidth: CGFloat = 360
 
+    /// T3's chat column floor, `SIBLING_COLUMN_MIN_WIDTH` (usePreviewPanelInlineSize.ts:17).
+    static let chatMinWidth: CGFloat = 360
+
     /// The inline width: the default, at most 70% of the viewport and leaving the chat column
-    /// 360px, never under 360 (`getPreviewPanelMaxWidth`).
-    static func width(viewport: CGFloat, container: CGFloat, preferred: CGFloat = defaultWidth) -> CGFloat {
-        let maxWidth = max(minWidth, min((viewport * 0.7).rounded(.down), container.rounded(.down) - 360))
+    /// `chatMin` (T3's 360px), never under 360 (`getPreviewPanelMaxWidth`, usePreviewPanelInlineSize.ts:68-73).
+    static func width(viewport: CGFloat, container: CGFloat, preferred: CGFloat = defaultWidth,
+                      chatMin: CGFloat = chatMinWidth) -> CGFloat {
+        let maxWidth = max(minWidth, min((viewport * 0.7).rounded(.down), container.rounded(.down) - chatMin))
         return min(max(preferred, minWidth), maxWidth)
+    }
+
+    /// Whether the panel opens as a sheet over the thread: T3's `(max-width: 980px)` (rightPanelLayout.ts:1,
+    /// ChatView.tsx:764). Redesign passes a wider `chatMin` and also gets a sheet when the container can't hold that
+    /// beside the panel's narrowest; T3's own floor never turns the panel into a sheet, so T3's themes keep T3's rule.
+    static func isSheet(viewport: CGFloat, container: CGFloat, chatMin: CGFloat = chatMinWidth) -> Bool {
+        viewport <= 980 || (chatMin > chatMinWidth && container.rounded(.down) - chatMin < minWidth)
     }
 
     var onRenameDevice: ((String, String) -> Void)?
@@ -539,7 +550,9 @@ final class RightPanelView: DSView {
     override func updateLayer() {
         layer?.backgroundColor = (isSheet ? Themed.color(\.background) : Themed.color(\.background)).cgColor(in: self)
         border.backgroundColor = Themed.color(\.border).cgColor(in: self)
-        layer?.borderColor = isCard ? RedesignTokens.Surface.rim(dark: effectiveAppearance.isDark).cgColor : nil
+        // A terminal tab with the keyboard turns the card's rim a step whiter, as the drawer's card does.
+        let dark = effectiveAppearance.isDark, keyed = terminal.superview === self && terminal.hasKeyFocus
+        layer?.borderColor = isCard ? (keyed ? RedesignTokens.Surface.keyRim(dark: dark) : RedesignTokens.Surface.rim(dark: dark)).cgColor : nil
     }
 }
 

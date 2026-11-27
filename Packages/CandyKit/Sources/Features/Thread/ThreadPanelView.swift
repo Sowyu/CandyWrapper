@@ -789,7 +789,16 @@ public final class ThreadPanelView: DSView {
 
     private weak var sheetPreviousResponder: NSResponder?
     private var sheetWasOpen = false
-    public var rightPanelSheetOpen: Bool { rightPanelOpen && viewportWidth <= 980 && !rightPanelMaximized }
+    public var rightPanelSheetOpen: Bool { rightPanelOpen && sheetLayout && !rightPanelMaximized }
+    /// The thread column's floor beside an inline panel: T3's 360px, and Redesign's reading width in its card.
+    private var chatMinWidth: CGFloat {
+        ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !isEmbedded ? RedesignTokens.Thread.minReading
+            : RightPanelView.chatMinWidth
+    }
+    /// The right panel shows as a sheet over the thread (`RightPanelView.isSheet`).
+    private var sheetLayout: Bool {
+        RightPanelView.isSheet(viewport: viewportWidth, container: bounds.width, chatMin: chatMinWidth)
+    }
 
     /// SheetPopup uses a modal focus scope. Routed by the existing app key dispatcher.
     public func handleRightPanelSheetKey(_ event: NSEvent) -> Bool {
@@ -1348,7 +1357,7 @@ public final class ThreadPanelView: DSView {
         let wasOpen = rightPanel.isHidden == false
         let diffWasShown = wasOpen && panelState.active?.kind == .diff
         let open = state.isOpen
-        let slides = animated && open != wasOpen && viewportWidth > 980
+        let slides = animated && open != wasOpen && !sheetLayout
         // A closing panel gives back its surfaces at once (`RightPanelView.apply`); a still image of it slides away.
         if slides, !open { panelGhost = ghost(of: rightPanel, replacing: panelGhost) }
         if open { dropGhost(&panelGhost) }
@@ -1524,7 +1533,7 @@ public final class ThreadPanelView: DSView {
         guard next != panelState || !closed.isEmpty else { return }
         panelActionRevision += 1
         let duration = SettingsPanelMotion.duration
-        let animateSheet = viewportWidth <= 980 && !rightPanelMaximized && next.isOpen != panelState.isOpen && duration > 0
+        let animateSheet = sheetLayout && !rightPanelMaximized && next.isOpen != panelState.isOpen && duration > 0
         if animateSheet, !next.isOpen { animateClosingSheet(duration: duration) }
         setPanelState(next, animated: !animateSheet)
         if animateSheet, next.isOpen {
@@ -2507,10 +2516,10 @@ public final class ThreadPanelView: DSView {
 
     public override func layout() {
         super.layout()
-        let sheet = viewportWidth <= 980 && !rightPanelMaximized
+        let sheet = sheetLayout && !rightPanelMaximized
         let panelWidth = !rightPanelOpen ? 0 : rightPanelMaximized ? bounds.width
             : sheet ? RightPanelSheetBackdropView.width(viewport: viewportWidth, container: bounds.width)
-            : RightPanelView.width(viewport: viewportWidth, container: bounds.width, preferred: preferredPanelWidth)
+            : RightPanelView.width(viewport: viewportWidth, container: bounds.width, preferred: preferredPanelWidth, chatMin: chatMinWidth)
         // Mid-slide the panel shows the open share of its width, on whole device pixels so the chat stays sharp.
         let scale = window?.backingScaleFactor ?? 2
         let shownPanel = sheet || !panelSlide.isRunning ? panelWidth
@@ -2621,7 +2630,8 @@ public final class ThreadPanelView: DSView {
             panelResize.onDrag = { [weak self] delta in
                 guard let self else { return }
                 let proposed = self.bounds.width - self.panelResize.frame.minX + delta, old = self.preferredPanelWidth
-                self.preferredPanelWidth = RightPanelView.width(viewport: self.viewportWidth, container: self.bounds.width, preferred: proposed)
+                self.preferredPanelWidth = RightPanelView.width(viewport: self.viewportWidth, container: self.bounds.width,
+                                                                preferred: proposed, chatMin: self.chatMinWidth)
                 if self.preferredPanelWidth != old, self.preferredPanelWidth != proposed { Haptics.tap(.alignment) } // reached min or max
                 UserDefaults.standard.set(Double(self.preferredPanelWidth), forKey: "t3code:preview-panel-width")
                 self.needsLayout = true

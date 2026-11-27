@@ -37,9 +37,10 @@ public final class TerminalDrawerView: DSView {
         didSet { guard isCard != oldValue else { return }; syncChrome(); needsDisplay = true }
     }
 
-    /// The keyboard is in one of the drawer's terminals; the card's rim takes the accent.
+    /// The keyboard is in one of the drawer's terminals; the card's rim turns a step whiter. In the right panel's
+    /// terminal tab (`isPanel`) the panel's card draws that rim, so it redraws too.
     public private(set) var hasKeyFocus = false {
-        didSet { if hasKeyFocus != oldValue { needsDisplay = true } }
+        didSet { if hasKeyFocus != oldValue { needsDisplay = true; if isPanel { superview?.needsDisplay = true } } }
     }
     private var responderObservation: NSKeyValueObservation?
 
@@ -196,7 +197,8 @@ public final class TerminalDrawerView: DSView {
     }
 
     func syncKeyFocus() {
-        hasKeyFocus = isCard && !panes.isEmpty && (window?.firstResponder as? NSView)?.isDescendant(of: self) == true
+        hasKeyFocus = (isCard || isPanel) && ThemeRuntime.isDither(dark: effectiveAppearance.isDark) && !panes.isEmpty
+            && (window?.firstResponder as? NSView)?.isDescendant(of: self) == true
     }
 
     public override func updateLayer() {
@@ -210,10 +212,11 @@ public final class TerminalDrawerView: DSView {
             layer.cornerRadius = isCard ? RedesignTokens.Radius.panel : 0
             layer.cornerCurve = .continuous
             layer.borderWidth = isCard ? 1 : 0
+            // With the keyboard in a terminal the rim turns a step whiter in the text color, never the accent (the user,
+            // 2026-11-27: "not a fan of the accented outline here", then "just made the grey a little bit whiter").
             let dark = effectiveAppearance.isDark
-            // Focus shows quietly: the rim takes the accent at low strength instead of the text color.
-            layer.borderColor = !isCard ? nil : hasKeyFocus ? Themed.color(\.primary, RedesignTokens.Surface.focusRim).cgColor(in: self)
-                : RedesignTokens.Surface.rim(dark: dark).cgColor
+            layer.borderColor = !isCard ? nil
+                : (hasKeyFocus ? RedesignTokens.Surface.keyRim(dark: dark) : RedesignTokens.Surface.rim(dark: dark)).cgColor
         }
         emptyLabel.color = Themed.color(\.mutedForeground)
     }

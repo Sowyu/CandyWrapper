@@ -103,8 +103,11 @@ public enum RedesignTokens {
         /// sent (the user, 2026-11-26: "make the dashes more prominent"). 1pt, `dashPattern` long, round joins.
         public static let dash: CGFloat = 0.42
         public static let dashPattern: [NSNumber] = [4, 3]
-        /// A card's rim while the keyboard is inside it (the terminal drawer), in the accent.
+        /// A field's rim while it has the keyboard (the diff find field), in the accent.
         public static let focusRim: CGFloat = 0.4
+        /// A card's rim while the keyboard is in it (the terminal drawer), in the text color: the resting rim a step
+        /// whiter, no accent (the user, 2026-11-27: "just made the grey a little bit whiter"). `strongRim` read as a line.
+        public static let keyRim: CGFloat = 0.16
         /// The black under a caption over a picture (the agent gallery), reached halfway down a short gradient. 0.62
         /// at the very foot let a light picture's own text show through (1.16.0 release walk).
         public static let shade: CGFloat = 0.7
@@ -145,6 +148,13 @@ public enum RedesignTokens {
             return dark ? Themed.white(a) : Themed.black(a)
         }
 
+        /// The rim of a card with the keyboard in it, `keyRim` in the text color; with Increase Contrast the same step
+        /// above that rim.
+        public nonisolated static func keyRim(dark: Bool) -> NSColor {
+            let a = increaseContrast ? rimContrast + (keyRim - rim) : keyRim
+            return dark ? Themed.white(a) : Themed.black(a)
+        }
+
         nonisolated static var increaseContrast: Bool { NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
     }
 
@@ -178,6 +188,21 @@ public enum RedesignTokens {
         public static let width: CGFloat = 640
         /// Where the group's middle sits, as a share of the card's height under the top row. Capy's is 0.45.
         public static let centre: CGFloat = 0.45
+    }
+
+    /// The thread beside the right panel. T3 keeps the chat column 360px wide, which in a Redesign card leaves a
+    /// table one number a line; Redesign keeps it this wide and shows the panel as a sheet when it can't.
+    public enum Thread {
+        /// The thread column's narrowest beside an inline right panel.
+        public static let minReading: CGFloat = 480
+    }
+
+    /// Markdown tables in a narrow thread: short values stay on one line and a table that can't fit scrolls sideways.
+    public enum Table {
+        /// A cell whose whole text is at most this wide never wraps: numbers, units, identifiers, a short tuple.
+        public static let keepWhole: CGFloat = 144
+        /// A column's narrowest, its padding included.
+        public static let columnMin: CGFloat = 64
     }
 
     /// Text steps in the text color. Capy's sidebar labels rest a step under the text color and come to full strength

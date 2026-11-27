@@ -72,6 +72,11 @@ struct TerminalDrawerCardTests {
         #expect(drawer.bounds.contains(actions))
         #expect(actions.minY == CardTopRow.tabsInset && drawer.bounds.width - actions.maxX == CardTopRow.tabsInset)
         #expect(actions.height == 24)
+        // The terminal's first column sits on the card's own inset, under the title's icon.
+        if let surface = drawer.surface {
+            surface.layoutSubtreeIfNeeded()
+            #expect(drawer.convert(surface.terminal.frame, from: surface).minX == RedesignTokens.Space.m)
+        }
         // The handle fills the gap above the card.
         let handle = panel.terminalResize.frame
         #expect(!panel.terminalResize.isHidden)
@@ -199,7 +204,9 @@ struct TerminalDrawerCardTests {
         #expect(!keys.contains("redesign.panel.y"), "\(keys)")
     }
 
-    @Test func focusTintsTheRim() throws {
+    /// Focus in a terminal turns the card's rim a step whiter in the text color, never the accent (the user, 2026-11-27:
+    /// "just made the grey a little bit whiter").
+    @Test func focusWhitensTheRim() throws {
         Motion.reducedOverride = true
         defer { Motion.reducedOverride = nil }
         let (panel, window, done) = makePanel(width: 1400)
@@ -208,9 +215,13 @@ struct TerminalDrawerCardTests {
         panel.layoutSubtreeIfNeeded()
         let drawer = panel.terminalDrawer
         #expect(!drawer.hasKeyFocus)
+        drawer.updateLayer()
+        #expect(drawer.layer?.borderColor == RedesignTokens.Surface.rim(dark: true).cgColor)
         drawer.surface?.focus()
         #expect(window.firstResponder is InputTerminalView)
         #expect(drawer.hasKeyFocus)
+        drawer.updateLayer()
+        #expect(drawer.layer?.borderColor == RedesignTokens.Surface.keyRim(dark: true).cgColor)
         window.makeFirstResponder(panel)
         #expect(!drawer.hasKeyFocus)
     }

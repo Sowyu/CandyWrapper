@@ -68,6 +68,32 @@ struct MarkdownTableTests {
         } }
     }
 
+    /// Redesign keeps a short cell whole in a narrow thread: `4 (0, 100, -40, 37)` never stacks one number a line, the
+    /// table scrolls sideways instead, and Copy stays in the card's header row. A long prose cell still wraps at words.
+    @Test func shortCellsStayWholeAndCopyStaysInTheHeader() throws {
+        try ThreadDesign.$layoutUses3814.withValue(nil) { try withTheme(SmallFixes3Pictures.redesign(dark: true)) {
+            let prose = String(repeating: "converts degrees and checks the round trip ", count: 3)
+            let source = "| Test | Cases | Notes |\n|---|---|---|\n| test_c_to_f | 4 (0, 100, -40, 37) | \(prose) |\n| test_kmh | 3 (0, 10, 100) | ok |"
+            let view = MarkdownView(frame: NSRect(x: 0, y: 0, width: 260, height: 200))
+            view.messageID = "table-short-cells"
+            view.setMarkdown(source)
+            for width in stride(from: CGFloat(200), through: 520, by: 40) {
+                let layout = view.layout(forWidth: width)
+                let boxes = layout.items.compactMap { item -> MarkdownTextBox? in if case .text(let box, _) = item { box } else { nil } }
+                for box in boxes where box.text.hasPrefix("4 (") || box.text.hasPrefix("3 (") || box.text.hasPrefix("test_") {
+                    #expect(box.lineCount == 1, "\(box.text) wraps at \(width)")
+                }
+                let viewport = try #require(layout.items.compactMap { item -> CGRect? in
+                    if case .scroll(let id, let viewport, _) = item, id < 0 { return viewport }
+                    return nil
+                }.first)
+                let copy = try #require(layout.controls.first { if case .copyTable = $0.action { true } else { false } })
+                #expect(viewport.contains(copy.frame), "Copy outside the card at \(width)")
+                #expect(copy.frame.maxY < viewport.minY + 48, "Copy below the header row at \(width)")
+            }
+        } }
+    }
+
     /// Cells whose longest words together pass the lane still scroll sideways.
     static let wide = "| " + (0..<8).map { "column\($0)withaverylongunbrokenheadername" }.joined(separator: " | ") + " |\n|"
         + String(repeating: "---|", count: 8) + "\n| " + (0..<8).map { "cell\($0)withaverylongunbrokenvalueinside" }.joined(separator: " | ") + " |"

@@ -47,6 +47,14 @@ struct RedesignBaselineTests {
                 let reference = try #require(NSBitmapImageRep(data: Data(contentsOf: url)))
                 try Self.compare(reference, ours, name: base)
             }
+            // A wide table in a narrow thread: short values stay whole, the table scrolls inside its card, and Copy keeps
+            // its place in the header row over the header text, which fades out under it.
+            let narrowTable = MarkdownView(frame: NSRect(x: 0, y: 0, width: 360, height: 240))
+            narrowTable.messageID = "baseline-narrow-table"
+            narrowTable.setMarkdown("| Test | Cases | Result | Time | Notes |\n|---|---|---|---|---|\n"
+                + "| test_c_to_f | 4 (0, 100, -40, 37) | ok | 0.001s | converts and checks the round trip |\n"
+                + "| test_kmh_to_mph | 3 (0, 10, 100) | ok | 0.002s | rounds to two places |")
+            try capture("table-narrow", narrowTable, NSSize(width: 360, height: 240))
             let panelSize = NSSize(width: 844, height: 780)
             for mode in ["empty", "typing", "queued", "queued-attachments", "approval", "question", "attachments", "compact", "compact-legacy"] {
                 let panel = ComposerFidelityTests.panel(width: 844, dark: dark)
@@ -261,6 +269,16 @@ struct RedesignBaselineTests {
                                             list: TerminalListModel.make(terminals, label: { TerminalLabels.label($0) }, closeShortcut: nil))
             insetThread.setTerminal(open: true, height: 260)
             try capture("inset-thread-terminal-drawer", insetHost, insetSize)
+            // A window too narrow for the thread's reading width beside the right panel: the panel opens as a sheet over
+            // the whole thread instead of squeezing it.
+            let narrowThread = ComposerFidelityTests.panel(width: 1040, dark: dark)
+            narrowThread.referenceViewportWidth = 1040
+            narrowThread.timeline.context.now = { Self.now }
+            narrowThread.setProjection(try ThreadPreview.projection(titled: ThreadPreview.markdownThread), projectTitle: "demo-repo", workspaceRoot: nil)
+            narrowThread.header.setThreadVisible(true)
+            narrowThread.mutatePanel { $0.open(.diff); $0.isOpen = true; return [] }
+            try capture("inset-thread-narrow-sheet", insetWindow(narrowThread), NSSize(width: 1040, height: 780))
+            #expect(narrowThread.rightPanel.isSheet)
             input.insetPanel = false
             ThemeRuntime.apply(input)
             // A failed update pass: the capsule takes its own line in the account card and the name keeps its row.
@@ -462,7 +480,7 @@ struct RedesignBaselineTests {
             flowerThread.layoutSubtreeIfNeeded(); flowerThread.timeline.scroll(toFraction: 0)
             try capture("thread-markdown-top-flower", flowerThread, NSSize(width: 1300, height: 780))
         }
-        #expect(count == 194)
+        #expect(count == 198)
         print("Redesign baseline: \(count) images; failure artifacts: \(Self.output.path)")
     }
 

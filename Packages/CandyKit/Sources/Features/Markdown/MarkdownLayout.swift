@@ -1646,8 +1646,9 @@ private struct Builder {
         }
         y = viewport.maxY
         // Nightly 3824 wraps cells directly and keeps only Copy (MarkdownTable.tsx:29-34, #26449). Redesign draws it
-        // inside the card at the header row's right, on the cells' edge inset, unless the table scrolls under it.
-        if ThreadDesign.redesign, tableWidth <= width {
+        // inside the card at the header row's right, on the cells' edge inset. A table that scrolls keeps it there too,
+        // and `MarkdownView` fades the header text out under it.
+        if ThreadDesign.redesign {
             let edge = RedesignTokens.Space.m, header = 8.8 * 2 + headerHeight
             box.controls.append(.init(frame: CGRect(x: width - edge - 24, y: ((header - 24) / 2).rounded(), width: 24, height: 24), icon: .copy,
                                       variant: .ghostMuted, action: .copyTable(table)))
@@ -1794,8 +1795,15 @@ extension MarkdownLayout {
                         }
                         return natural(word) + (match.range.location == 0 ? indent : 0)
                     }.max() ?? 0
-                mins[c] = max(mins[c], min(cap, max(longest, formulaWidth) + padding))
+                // Redesign keeps a short cell whole, so `4 (0, 100, -40, 37)` never stacks one number a line.
+                let whole = natural(cell) + indent
+                let shortest = ThreadDesign.redesign && whole <= RedesignTokens.Table.keepWhole ? whole : longest
+                mins[c] = max(mins[c], min(cap, max(shortest, formulaWidth) + padding))
             }
+        }
+        if ThreadDesign.redesign {
+            mins = mins.map { max($0, RedesignTokens.Table.columnMin) }
+            maxs = zip(mins, maxs).map { max($0, $1) }
         }
         let maxSum = maxs.reduce(0, +), minSum = mins.reduce(0, +)
         var widths = maxs
