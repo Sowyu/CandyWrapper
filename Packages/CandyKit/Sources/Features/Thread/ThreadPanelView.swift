@@ -443,6 +443,8 @@ public final class ThreadPanelView: DSView {
     private let threadTitle = DitherThreadTitleView()
     /// Redesign: the fade at the window's top edge (`ThreadHeaderShadeView`).
     let headerShade = ThreadHeaderShadeView()
+    /// Redesign: the rows fade into the ground above an open thread's composer and stay hidden under it (`ThreadComposerShadeView`).
+    let composerShade = ThreadComposerShadeView()
     /// Redesign: whether the rows run up through the header row under `headerShade`, which an open thread's do.
     private var ditherTopFade = false
     /// The composer's lane, which the timeline's rows share (`ThreadDetailsPlacement.lane`).
@@ -916,6 +918,8 @@ public final class ThreadPanelView: DSView {
         addSubview(timeline)
         headerShade.isHidden = true
         addSubview(headerShade)
+        composerShade.isHidden = true
+        addSubview(composerShade)
         addSubview(threadTitle)
         addSubview(defaultFade)
         addSubview(header)
@@ -1842,6 +1846,7 @@ public final class ThreadPanelView: DSView {
             return layoutDitherComposer(chat: chat, chatHeight: chatHeight, x: beside.x, width: beside.width, height: height)
         }
         // Back from Redesign: everything docks again, the ring in the composer's footer.
+        composerShade.isHidden = true
         contextStrip.floatsAsPills = false
         deviceRow.isHidden = true
         draftNotices.isHidden = true
@@ -2141,6 +2146,11 @@ public final class ThreadPanelView: DSView {
         composer.joinsContextStrip = false
         let visible = !composer.isHidden
         let docked = visible && !isDraft
+        composerShade.isHidden = !docked
+        if docked {
+            let shadeTop = y - ThreadComposerShadeView.fade
+            composerShade.frame = NSRect(x: 0, y: shadeTop, width: chat, height: max(0, chatHeight - shadeTop))
+        }
         // Queued messages sit at the end of the timeline as the default themes draw them (the user, 2026-11-21:
         // "port it to redesign"), in Redesign's colors and corners.
         let hasQueuedMessages = docked && !queue.state.items.isEmpty
@@ -2439,7 +2449,8 @@ public final class ThreadPanelView: DSView {
         animateDitherDock(shown: shown, oldFrames: oldFrames, exiting: exiting, snap: pageChanged,
                           inPlace: isDraft ? [deviceRow, stashBadge, draftNotices] : [])
 
-        let inset = docked ? 8 + (y - insetTop) + height + below + 20 : 0
+        // The last row rests above the composer shade's fade, so only rows scrolled past the end fade.
+        let inset = docked ? max(8 + (y - insetTop), ThreadComposerShadeView.fade) + height + below + 20 : 0
         if timeline.bottomInset != inset {
             timeline.bottomInset = inset
             if terminalOpen { needsLayout = true }
