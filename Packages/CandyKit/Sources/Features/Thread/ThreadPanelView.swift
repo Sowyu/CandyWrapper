@@ -316,6 +316,25 @@ public final class ThreadHeaderView: TopbarDragView {
 
 }
 
+/// The resting shadow of a card floating over Redesign's art, drawn along the card's corner and nothing else.
+private final class CardShadowView: DSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func layout() { super.layout(); place() }
+    override func setFrameSize(_ newSize: NSSize) { super.setFrameSize(newSize); place() }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); place() }
+    /// The shadow lives on a sublayer: AppKit owns a layer-backed view's own shadow properties and resets them.
+    private let shade = CALayer()
+    private func place() {
+        guard let layer else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        if shade.superlayer == nil { layer.addSublayer(shade) }
+        shade.frame = layer.bounds
+        let path = SmoothCorners.path(shade.bounds, RedesignTokens.Radius.panel, flipped: false)
+        RedesignTokens.Shadow.resting.apply(to: shade, path: path, dark: effectiveAppearance.isDark)
+        CATransaction.commit()
+    }
+}
+
 /// Keep the default fade in the view order between the scroller and header. A loose layer's
 /// zPosition is ignored by offscreen layer rendering, which painted it behind the scroller.
 private final class ThreadTopFadeView: DSView {
@@ -787,6 +806,10 @@ public final class ThreadPanelView: DSView {
         return rightPanel.subviews.flatMap(collect)
     }
     private let rightPanelBackdrop = RightPanelSheetBackdropView()
+    /// Redesign: the resting shadow of the drawer's and the right panel's cards where they float over the art. The
+    /// cards clip to their corners, so the shadow is its own view under each.
+    private let drawerShadow = CardShadowView()
+    private let panelShadow = CardShadowView()
     let rightPanel = RightPanelView()
     /// `RightPanelMaximizeControl`, shown left of the window's panel toggles while the panel is open.
     let maximize = ToggleView(nil, icon: .maximize2, variant: .ghost, size: .sm)
@@ -929,6 +952,7 @@ public final class ThreadPanelView: DSView {
         addSubview(errorBanner)
         addSubview(providerBanner)
         rightPanel.isHidden = true
+        for s in [drawerShadow, panelShadow] { s.isHidden = true; addSubview(s, positioned: .below, relativeTo: nil) }
         rightPanelBackdrop.isHidden = true
         addSubview(rightPanelBackdrop)
         rightPanelBackdrop.onClose = { [weak self] in self?.toggleRightPanel() }
@@ -2452,11 +2476,14 @@ public final class ThreadPanelView: DSView {
         // thread reaches down to the card's top, so the composer keeps the distance it has from the window's foot.
         let drawerCard = drawerIsCard
         let gap = drawerCard ? RedesignTokens.Space.s : 0
-        let shownDrawer = !terminalSlide.isRunning ? (drawer > 0 ? drawer + gap : 0)
-            : (((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) + gap) * terminalSlide.value * scale).rounded() / scale
+        // Inset, the drawer floats inside the thread card over its art, `gap` in from the card's sides and bottom, with
+        // the handle's gap above it (the user, 2026-11-26: "the crap should render behind these panels btw because its
+        // a floating panel"). The card keeps its full height.
+        let around = inset ? 2 * gap : gap
+        let shownDrawer = !terminalSlide.isRunning ? (drawer > 0 ? drawer + around : 0)
+            : (((terminalOpen ? drawer : terminalGhost?.bounds.height ?? 0) + around) * terminalSlide.value * scale).rounded() / scale
         let chatHeight = bounds.height - shownDrawer
-        // Inset, the page already keeps the margin to the window's bottom and the sidebar, so the gap goes above the card.
-        let drawerX = inset ? 0 : gap, drawerWidth = inset ? chat : max(0, min(chat, bounds.width - gap) - gap)
+        let drawerX = gap, drawerWidth = inset ? max(0, chat - 2 * gap) : max(0, min(chat, bounds.width - gap) - gap)
         let drawerTop = inset ? chatHeight + gap : chatHeight
         if let terminalDrawer = drawer > 0 ? self.terminalDrawer : lazyTerminalDrawer.loaded {
             terminalDrawer.isHidden = drawer == 0
@@ -2465,6 +2492,8 @@ public final class ThreadPanelView: DSView {
             terminalDrawer.frame = NSRect(x: drawerX, y: drawerTop, width: drawerWidth, height: drawer)
         }
         terminalGhost?.frame.origin.y = drawerTop
+        drawerShadow.isHidden = !drawerCard || drawer == 0
+        drawerShadow.frame = NSRect(x: drawerX, y: drawerTop, width: drawerWidth, height: drawer)
         if terminalResize.superview == nil, drawerCard, drawer > 0 {
             terminalResize.vertical = true
             addSubview(terminalResize)
@@ -2489,7 +2518,7 @@ public final class ThreadPanelView: DSView {
                                            width: max(0, lane), height: min(320, max(0, chatHeight - timeline.topClearance)))
         }
         // The thread card, top row included, for the window to frame; nothing while the right panel fills the page.
-        if inset { reportInsetCard(NSRect(x: 0, y: -CardTopRow.rowHeight, width: chat, height: chat > 0 ? chatHeight + CardTopRow.rowHeight : 0)) }
+        if inset { reportInsetCard(NSRect(x: 0, y: -CardTopRow.rowHeight, width: chat, height: chat > 0 ? bounds.height + CardTopRow.rowHeight : 0)) }
         else if card { reportInsetCard(nil) }
         // Mid-slide the panel keeps its width and runs past the window's right edge.
         // Inset, the page's own edges are already the margin from the window, and a maximized panel takes the whole page.
@@ -2497,6 +2526,9 @@ public final class ThreadPanelView: DSView {
         let panelRight = inset ? (sheet || rightPanelMaximized ? 0 : margin) : sheet ? margin : 2 * margin
         rightPanel.frame = NSRect(x: panelX, y: panelTop, width: max(0, panelWidth - panelRight),
                                   height: max(0, bounds.height - panelTop - (inset ? 0 : margin)))
+        // Inset, the panel's card sits on the window's color beside the thread's, not over the art: no shadow there.
+        panelShadow.isHidden = !card || inset || sheet || rightPanelMaximized || rightPanel.isHidden
+        panelShadow.frame = rightPanel.frame
         panelGhost?.frame.origin.x = sheet ? chat : chat + margin
         if rightPanelSheetOpen != sheetWasOpen {
             sheetWasOpen = rightPanelSheetOpen
