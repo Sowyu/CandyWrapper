@@ -27,7 +27,7 @@ struct TextDimTests {
             let b = PictureInk.textBound(text, dark: dark)
             #expect(TextDim.pictureBound(b, groundY: PictureInk.luminance(ground), dark: dark, at: TextDim.standard) == b)
         }
-        #expect(PictureInk.floors(dark: true) == (14, 6.8))
+        #expect(PictureInk.floors(dark: true) == (15, 7.5))
         #expect(try render(200, .thread(column: column), dim: TextDim.standard) == render(200, .thread(column: column), dim: nil))
         // Blur: the stored 35% sits at the default, and the track's ends at none and 90.
         #expect(TextDim.blurDim(at: TextDim.standard) == 35 && TextDim.position(blurDim: 35) == TextDim.standard)
