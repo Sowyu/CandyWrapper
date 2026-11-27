@@ -910,20 +910,18 @@ public final class ProvidersSettingsView: ScopedSettingsPage {
         let nameControl = SettingsControlGroup([accent, name], gap: 8)
         nameControl.frame.size = NSSize(width: 28 + 8 + 224, height: 28)
         let nameRow = SettingsRowView(title: "Display name", control: nameControl)
-        if DesignGeometry.usesClassic(self) {
-            nameRow.status = statusLine(row, provider)
-            header.group.rows = [nameRow]
-        } else {
-            let status = SettingsRowView(title: "Status")
-            // RedactedSensitiveText.tsx:47 uses 11pt mono at 1.5 line height. Baseline alignment
-            // with the 12/16 status spans makes the account line 17pt tall.
-            if provider?.auth?["status"]?.stringValue == "authenticated",
-               let email = provider?.auth?["email"]?.stringValue, !email.isEmpty {
-                status.statusLineHeight = 17
-            }
-            status.status = statusLine(row, provider)
-            header.group.rows = [status, nameRow]
+        // Redesign keeps the provider's health on its own Status row too, so an error never reads as part of the name
+        // field; the bare accent button gets a tooltip naming it.
+        if DesignGeometry.usesClassic(self) { accent.setTooltip(row.instance["accentColor"] == nil ? "Add accent color" : "Accent color") }
+        let status = SettingsRowView(title: "Status")
+        // RedactedSensitiveText.tsx:47 uses 11pt mono at 1.5 line height. Baseline alignment
+        // with the 12/16 status spans makes the account line 17pt tall.
+        if provider?.auth?["status"]?.stringValue == "authenticated",
+           let email = provider?.auth?["email"]?.stringValue, !email.isEmpty {
+            status.statusLineHeight = 17
         }
+        status.status = statusLine(row, provider)
+        header.group.rows = [status, nameRow]
         var sections: [NSView & SettingsGroupRow] = [header]
 
         // ProviderSettingsPanel.tsx:970-1014: a managed Codex instance gets the ChatGPT setup and its own

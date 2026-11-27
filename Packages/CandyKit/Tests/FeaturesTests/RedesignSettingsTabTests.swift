@@ -25,9 +25,11 @@ import T3Protocol
         // The theme picker turns Redesign on: the switch follows and the rows wake.
         lib.setTheme(ThemeDefinition.dither.id)
         #expect(page.master.isOn)
-        // Animate background waits for Flower; the default Background is Picture. Dim behind text works in all three.
-        #expect(page.gated.allSatisfy { [nil, RedesignSettingsView.animateReason].contains($0.inertReason) })
-        #expect(page.anchor("redesign-text-dim").flatMap { $0 as? SettingsRowView }?.inertReason == nil)
+        // Every row wakes. The default Background is Picture, so Flower's Animate background hides and Picture's rows show.
+        #expect(page.gated.allSatisfy { $0.inertReason == nil })
+        func hidden(_ id: String) -> Bool? { page.anchor(id)?.isHidden }
+        #expect(hidden("redesign-gradient-animate") == true && hidden("redesign-ink") == false && hidden("redesign-dot-size") == false)
+        #expect(hidden("redesign-text-dim") == false && !page.useIn.isHidden)
         // The switch turns it off, and on again: the picker follows.
         page.master.onChange?(false)
         #expect(!lib.isRedesignOn && !page.master.isOn)

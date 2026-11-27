@@ -26,10 +26,6 @@ enum RedesignPickerSettings {
 /// stay visible and inert, except Ignore Reduce Transparency.
 public final class RedesignSettingsView: SettingsPageBase {
     static let offReason = "Turn on Redesign to change this."
-    static let flowerReason = "Flower uses no picture. Choose Picture or Blur to change this."
-    static let animateReason = "Only Flower moves. Choose Flower to change this."
-    static let inkReason = "Only Picture draws in inks. Choose Picture to change this."
-    static let dotSizeReason = "Only Picture's dots change size. Choose Picture to change this."
     private let library: ThemeLibrary
     private var themeObserver: Int?
     /// The master switch, bound to the theme picker's setting.
@@ -52,7 +48,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         useIn.setAccessibilityLabel("Use Redesign in")
         useIn.onChange = { index in library.setRedesignUseIn(Self.useInChoices[index].1) }
         let masterRow = row("redesign", title: "Redesign",
-                            detail: "CandyWrapper's own look, with a picture behind the chat. Off goes back to the theme you had before.",
+                            detail: "CandyWrapper's own look, which hands back your previous theme when you turn it off.",
                             control: SettingsControlGroup([useIn, master], gap: 12))
         binder.add { [weak self, weak master] in
             master?.isOn = library.isRedesignOn
@@ -62,51 +58,52 @@ public final class RedesignSettingsView: SettingsPageBase {
 
         let picture = pictureRow(), dim = textDimRow(), reading = readingWidthRow()
         // Capy's no-picture dither moves (the user, 2026-11-21: "capys plain dither isnt just static").
-        let animate = clientSwitch("redesign-gradient-animate", "Let Flower's lotus bloom when a thread opens, and turn slowly over its drifting dots on the new-thread page. It stops while the window is in the background and under Reduce Motion.",
+        let animate = clientSwitch("redesign-gradient-animate", "Let Flower's lotus bloom and its dots drift, except while the window is in the background or Reduce Motion is on.",
                                    key: "redesignGradientAnimate", reset: "animate background", title: "Animate background")
         let tint = clientSwitch("redesign-tint", "Lean the window's surfaces a little toward the picture's color.",
                                 key: "redesignTintFromPicture", reset: "tint from picture", title: "Tint from picture")
         let ink = inkRow(), dots = dotSizeRow()
-        let look: [SettingsRowView] = [picture, backgroundRow(), ink, dots, tint, animate, dim, reading, accentRow(), avatarsRow()]
+        // Background first, then only the rows the chosen background uses; the binder below hides the rest.
+        let background: [SettingsRowView] = [backgroundRow(), picture, ink, dots, tint, animate, dim]
+        let look: [SettingsRowView] = [accentRow(), avatarsRow(), reading]
         let transparency = clientSwitch("ignore-reduce-transparency", "Show the picture and blur as if Reduce Transparency were off in macOS.",
                                         key: "ignoreReduceTransparency", reset: "ignore reduce transparency", title: "Ignore Reduce Transparency")
-        let stacked = clientSwitch("redesign-stacked-picker", "One column with six models at a time over Reasoning and the footer. Off shows the models with a details pane beside them.",
+        let stacked = clientSwitch("redesign-stacked-picker", "Show the models in one column instead of beside a details pane.",
                                    key: "redesignStackedPicker", reset: "stacked model picker", title: "Stacked model picker")
-        let account = clientSwitch("redesign-picker-account", "The provider's account and usage bar at the top of the details pane, or above the models when stacked.",
+        let account = clientSwitch("redesign-picker-account", "Show the provider's account and usage bar in the model picker.",
                                    key: "redesignPickerAccount", reset: "account and limits", title: "Account and limits in the model picker")
         let rows = sidebarRowsRow()
         // Capy's layout (the user, 2026-11-21: "also make it a toggle").
-        let inset = clientSwitch("redesign-inset-panel", "Show the thread as one rounded card inset from the window, with its title and controls in a row at its top. Off runs the thread to the window's edges under floating pills.",
+        let inset = clientSwitch("redesign-inset-panel", "Show the thread as a rounded card inset from the window instead of running it to the window's edges.",
                                  key: "redesignInsetPanel", reset: "inset panel", title: "Inset panel")
         // The user, 2026-11-26: the quiet Compact toggle by default, the old split button kept under Legacy.
         let legacyCompact = clientSwitch("redesign-legacy-compact-send", "Brings back the wide Compact and send button, with a menu to send with full history, in place of the Compact toggle.",
                                          key: "redesignLegacyCompactSend", reset: "compact and send button", title: "Compact and send button")
-        gated = [inset] + look + [stacked, account, rows, legacyCompact]
+        gated = background + look + [inset, rows, stacked, account, legacyCompact]
         binder.add { [weak self] in
             guard let self else { return }
             let off = library.isRedesignOn ? nil : Self.offReason
             for r in self.gated where r.inertReason != off { r.inertReason = off }
-            // Flower shows no picture, so the picture's own settings do nothing.
-            let background = self.client.string("redesignBackground")
-            let pictureOff = off ?? (background == "flower" ? Self.flowerReason : nil)
-            for r in [picture, tint] where r.inertReason != pictureOff { r.inertReason = pictureOff }
-            // Dim behind text works in every background; Picture's inks only draw Picture.
-            if dim.inertReason != off { dim.inertReason = off }
-            let inkOff = off ?? (background == "dither" ? nil : Self.inkReason)
-            if ink.inertReason != inkOff { ink.inertReason = inkOff }
-            let dotsOff = off ?? (background == "dither" ? nil : Self.dotSizeReason)
-            if dots.inertReason != dotsOff { dots.inertReason = dotsOff }
-            let animateOff = off ?? (background == "flower" ? nil : Self.animateReason)
-            if animate.inertReason != animateOff { animate.inertReason = animateOff }
+            // "Use in" means nothing until Redesign is on.
+            if self.useIn.isHidden == library.isRedesignOn { self.useIn.isHidden = !library.isRedesignOn; masterRow.needsLayout = true }
+            // Each background shows only its own rows: Picture's inks and dots, Flower's motion, and the picture and
+            // its tint for the two that draw it.
+            let mode = self.client.string("redesignBackground") == "gradient" ? "flower" : self.client.string("redesignBackground")
+            let shown: [(SettingsRowView, Bool)] = [(picture, mode != "flower"), (tint, mode != "flower"), (ink, mode == "dither"),
+                                                     (dots, mode == "dither"), (animate, mode == "flower")]
+            var changed = false
+            for (r, show) in shown where r.isHidden == show { r.isHidden = !show; changed = true }
             let readingOff = off ?? Self.readingWidthReason(self.client.string("chatWidth"))
             if reading.inertReason != readingOff { reading.inertReason = readingOff }
+            if changed { self.needsLayout = true; self.onHeightChange?() }
         }
+        // Most used first: the switch, the background, the colors, the layout, then the model picker's options.
         items = [
             section(nil, "Theme", [masterRow]),
-            section("redesign-layout", "Layout", [inset]),
-            section("redesign-look", "Look", look + [transparency]),
+            section("redesign-background-section", "Background", background + [transparency]),
+            section("redesign-look", "Look", look),
+            section("redesign-layout", "Layout", [inset, rows]),
             section("redesign-model-picker", "Model picker", [stacked, account]),
-            section("redesign-sidebar", "Sidebar", [rows]),
             section("redesign-legacy", "Legacy", [legacyCompact]),
         ]
         themeObserver = library.observe { [weak self] in self?.refresh() }
@@ -125,7 +122,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         choose.action = { [weak self] in self?.choosePicture() }
         desktop.action = { [weak self] in DitherPicture.clear(); ThemeLibrary.shared.apply(); self?.refresh() }
         let group = SettingsControlGroup([desktop, choose], gap: 6)
-        let r = row("redesign-picture", title: "Picture", detail: "The picture behind the chat. Without one it uses the desktop picture.", control: group)
+        let r = row("redesign-picture", title: "Picture", detail: "The picture behind the chat, or your desktop picture until you choose one.", control: group)
         binder.add { [weak group] in
             desktop.isHidden = DitherPicture.path == nil
             group?.invalidateIntrinsicContentSize()
@@ -140,8 +137,9 @@ public final class RedesignSettingsView: SettingsPageBase {
         let key = "redesignBackground", values = ["dither", "blur", "flower"]
         let toggle = ToggleGroupView(variant: .segmented, items: [("Picture", nil), ("Blur", nil), ("Flower", nil)], selected: 0)
         toggle.setAccessibilityLabel("Background")
-        let r = row("redesign-background", title: "Background",
-                    detail: "Picture draws your picture in dots behind the chat. Blur softens it behind the whole window. Flower uses no picture: a dotted lotus over drifting accent dots.",
+        // "Style": the section above is titled Background.
+        let r = row("redesign-background", title: "Style",
+                    detail: "Draw your picture in dots behind the chat, blur it behind the whole window, or show a dotted lotus instead.",
                     control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
@@ -163,7 +161,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         let toggle = ToggleGroupView(variant: .segmented, items: [("Two lines", nil), ("One line", nil)], selected: 0)
         toggle.setAccessibilityLabel("Sidebar rows")
         let r = row("redesign-sidebar-rows", title: "Sidebar rows",
-                    detail: "Two lines shows the environment and provider under each thread's title. One line shows the title, status and age.",
+                    detail: "Show each thread's environment and provider on a second line, or keep each thread to one line.",
                     control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
@@ -216,7 +214,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         objc_setAssociatedObject(well, &InkWellTarget.key, target, .OBJC_ASSOCIATION_RETAIN)
         let group = SettingsControlGroup([well, toggle], gap: 8)
         let r = row("redesign-ink", title: "Ink",
-                    detail: "The two colors Picture draws in. Auto takes them from the picture. Accent and Custom use that color for the light ink and a deeper shade of it for the dark one.",
+                    detail: "Where Picture's two colors come from: the picture itself, the accent, or a color you pick.",
                     control: group)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
@@ -245,7 +243,7 @@ public final class RedesignSettingsView: SettingsPageBase {
         let toggle = ToggleGroupView(variant: .segmented, items: [("Fine", nil), ("Medium", nil), ("Coarse", nil)], selected: 1)
         toggle.setAccessibilityLabel("Dot size")
         let r = row("redesign-dot-size", title: "Dot size",
-                    detail: "How big Picture's dots are. Fine keeps the most detail. On a screen that isn't Retina, Fine draws the same dots as Medium.",
+                    detail: "How big Picture's dots are, with Fine keeping the most detail on a Retina screen.",
                     control: toggle)
         toggle.onChange = { [weak self, weak toggle] i in
             guard let self else { return }
