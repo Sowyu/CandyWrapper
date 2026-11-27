@@ -130,5 +130,11 @@ struct ThreadMinimapHoverTests {
                     "\(theme) dark \(dark): the resting strip is fainter than T3's")
             #expect(dark ? on > rest : on < rest)
         }
+        // Over light Redesign's worst dot the resting strip stands clearly further out than T3's, so it never reads as a
+        // stray mark. Dark has no room for that: the on-screen strip already keeps T3's ratio to it only up to white.
+        if theme == .redesign, !dark, let worst = BackdropMarks.worstBackground(dark: dark) {
+            let rest = try strip(0, over: SIMD3(repeating: worst))
+            #expect(BackdropMarks.contrast(rest, lum(SIMD3(repeating: worst))) >= BackdropMarks.contrast(t3.states[0], t3.background) * 1.3)
+        }
     }
 }

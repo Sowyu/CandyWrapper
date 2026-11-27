@@ -308,7 +308,11 @@ extension ThreadMinimapView {
         [.init(\.mutedForeground, 0.25)], [.init(\.mutedForeground, 0.6)],
         [.init(\.mutedForeground, 0.25), .init(\.foreground, 0.55)], [.init(\.mutedForeground, 0.6), .init(\.foreground, 0.55)],
     ]
-    static func backdropColors(dark: Bool) -> [NSColor]? { BackdropMarks.colors(strips, keep: 3, dark: dark) }
+    /// At T3's resting contrast the strips read as stray marks over Redesign's picture (round-0 review, T10), so the
+    /// resting strip stands 1.6 times as far from the worst dot; the other states keep T3's ratios to it. In dark the
+    /// on-screen strip reaching white caps it, so the boost shows in light.
+    static let restingBoost = 1.6
+    static func backdropColors(dark: Bool) -> [NSColor]? { BackdropMarks.colors(strips, keep: 3, dark: dark, restingBoost: restingBoost) }
 }
 
 /// Holds the rail's hover area where HoverSync can find it. It draws nothing and lets every click through.
