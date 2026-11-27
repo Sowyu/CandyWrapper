@@ -965,6 +965,16 @@ public final class SettingsHeaderView: TopbarDragView {
     public var section: SettingsSection? = .connections {
         didSet { current.text = plainTitle ?? section?.label ?? "Settings"; needsLayout = true }
     }
+    /// "Pull Requests" as "Pull requests": every word after the first that is a capital and then lowercase letters
+    /// loses its capital, so names in capitals or with inner capitals ("PR", "GitHub") stay.
+    nonisolated static func sentenceCase(_ title: String) -> String {
+        let words = title.split(separator: " ", omittingEmptySubsequences: false)
+        return words.enumerated().map { i, w in
+            guard i > 0, let first = w.first, first.isUppercase, w.dropFirst().allSatisfy({ $0.isLowercase }) else { return String(w) }
+            return first.lowercased() + w.dropFirst()
+        }.joined(separator: " ")
+    }
+
     /// A one-crumb page such as "Pull Requests" (`WorkspaceBreadcrumbItem current`).
     public var plainTitle: String? {
         didSet { if plainTitle != nil { section = nil }; current.text = plainTitle ?? section?.label ?? "Settings"; needsLayout = true }
@@ -1013,6 +1023,10 @@ public final class SettingsHeaderView: TopbarDragView {
         // Dither: Capy's settings have no breadcrumb, the page shows its own title (`SettingsPageView.ditherTitle`).
         let crumbless = section != nil && ThemeRuntime.isDither(dark: effectiveAppearance.isDark)
         current.isHidden = crumbless
+        // Redesign titles its pills in the sidebar's sentence case ("Pull requests"); T3's own casing stays elsewhere.
+        let title = plainTitle ?? section?.label ?? "Settings"
+        let shown = ThemeRuntime.isDither(dark: effectiveAppearance.isDark) ? Self.sentenceCase(title) : title
+        if current.text != shown { current.text = shown }
         root.isHidden = section == nil || crumbless
         slash.isHidden = section == nil || crumbless
         if section != nil {
