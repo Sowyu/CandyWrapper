@@ -1423,7 +1423,8 @@ public final class MarkdownView: DSView {
         var contextIndex = range.context - 1
         var findOccurrence = 0
         var selectionOffset = range.selection
-        var tableFade: (CGRect, CGFloat, CGFloat)?
+        // One entry per open `.clip` or `.scroll`, so a formula scrolling inside a scrolling table closes only its own fade.
+        var fades: [(CGRect, CGFloat, CGFloat, CGFloat)?] = []
         for item in layout.items[range.items] {
             switch item {
             case .text(let box, let origin):
@@ -1542,12 +1543,17 @@ public final class MarkdownView: DSView {
                     ctx.restoreGState()
                 }
             case .clip(let rect):
+                fades.append(nil)
                 ctx.saveGState()
                 ctx.clip(to: rect)
             case .scroll(let index, let viewport, let width):
-                if index < 0, width > viewport.width {
+                // Redesign fades a too-wide inline formula's edges too, so the part past the line reads as scrolled off.
+                let inlineFormula = MarkdownMathStyle.isInlineScroll(index) && ThreadDesign.redesign
+                if index < 0 || inlineFormula, width > viewport.width {
                     ctx.beginTransparencyLayer(auxiliaryInfo: nil)
-                    tableFade = (viewport, codeOffset(index, viewport, width), width)
+                    fades.append((viewport, codeOffset(index, viewport, width), width, inlineFormula ? 0 : MarkdownStyle.codeScrollbar))
+                } else {
+                    fades.append(nil)
                 }
                 ctx.saveGState()
                 if !MarkdownMathStyle.isInlineScroll(index), let thumb = Self.codeThumb(viewport, width, codeOffset(index, viewport, width)) {
@@ -1565,10 +1571,16 @@ public final class MarkdownView: DSView {
                 ctx.translateBy(x: -codeOffset(index, viewport, width), y: 0)
             case .endClip:
                 ctx.restoreGState()
-                if let (viewport, offset, width) = tableFade {
-                    Self.drawTableFade(viewport, offset: offset, contentWidth: width, in: ctx)
+                if let (viewport, offset, width, lane) = fades.popLast() ?? nil {
+                    Self.drawTableFade(viewport, offset: offset, contentWidth: width, lane: lane, in: ctx)
+                    // Redesign's Copy stays in the header row over a scrolling table: the header text fades out under it.
+                    if offset < width - viewport.width, let copy = layout.controls.first(where: {
+                        if case .copyTable = $0.action { return viewport.contains(CGPoint(x: $0.frame.midX, y: $0.frame.midY)) }
+                        return false
+                    }) {
+                        Self.clearHeader(under: copy.frame, viewport: viewport, in: ctx)
+                    }
                     ctx.endTransparencyLayer()
-                    tableFade = nil
                 }
             case .image(let image, let rect):
                 // The view is flipped; CGImage draws bottom up.
@@ -1583,16 +1595,29 @@ public final class MarkdownView: DSView {
     }
 
     /// ScrollArea's 1.5rem mask, shortened to the remaining overflow at either edge.
-    private static func drawTableFade(_ viewport: CGRect, offset: CGFloat, contentWidth: CGFloat, in ctx: CGContext) {
+    private static func drawTableFade(_ viewport: CGRect, offset: CGFloat, contentWidth: CGFloat, lane: CGFloat, in ctx: CGContext) {
         let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(), colors: [CGColor(gray: 0, alpha: 0), CGColor(gray: 0, alpha: 1)] as CFArray, locations: [0, 1])!
         let edges: [(CGFloat, CGFloat)] = [(viewport.minX, min(24, offset)), (viewport.maxX, -min(24, contentWidth - viewport.width - offset))]
         for (x, length) in edges where length != 0 {
             ctx.saveGState()
-            ctx.clip(to: CGRect(x: min(x, x + length), y: viewport.minY, width: abs(length), height: viewport.height - MarkdownStyle.codeScrollbar))
+            ctx.clip(to: CGRect(x: min(x, x + length), y: viewport.minY, width: abs(length), height: viewport.height - lane))
             ctx.setBlendMode(.destinationIn)
             ctx.drawLinearGradient(gradient, start: CGPoint(x: x, y: 0), end: CGPoint(x: x + length, y: 0), options: [])
             ctx.restoreGState()
         }
+    }
+
+    /// Clears the header row from `Space.m` before the Copy control to the card's edge, with a fade over that space.
+    /// The header row is as tall as the control is centred in it.
+    private static func clearHeader(under control: CGRect, viewport: CGRect, in ctx: CGContext) {
+        let fade = RedesignTokens.Space.m, start = control.minX - fade
+        let row = CGRect(x: start, y: viewport.minY, width: viewport.maxX - start, height: control.maxY + (control.minY - viewport.minY) - viewport.minY)
+        let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceGray(), colors: [CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 0)] as CFArray, locations: [0, 1])!
+        ctx.saveGState()
+        ctx.clip(to: row)
+        ctx.setBlendMode(.destinationIn)
+        ctx.drawLinearGradient(gradient, start: CGPoint(x: start, y: 0), end: CGPoint(x: control.minX, y: 0), options: [.drawsAfterEndLocation])
+        ctx.restoreGState()
     }
 
     /// CSS box: the border is drawn inside the rect, the fill inside the border.
