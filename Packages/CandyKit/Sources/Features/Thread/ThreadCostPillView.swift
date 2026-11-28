@@ -58,8 +58,8 @@ public final class ThreadCostPillView: ControlView {
         tip.show(instant: true)
     }
 
-    /// `ToggleView` ghost `.sm`: 28 tall, 10 round; 8 either side of the digits.
-    public override var intrinsicContentSize: NSSize { NSSize(width: max(28, digits.textWidth + 16), height: 28) }
+    /// 6 either side of the digits, so with the pill's 2pt inset the figure sits as far in as the last icon's glyph.
+    public override var intrinsicContentSize: NSSize { NSSize(width: max(28, digits.textWidth + 12), height: 28) }
 
     public override func stateDidChange(from old: State) {
         super.stateDidChange(from: old)

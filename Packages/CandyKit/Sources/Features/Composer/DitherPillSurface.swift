@@ -59,6 +59,9 @@ public final class DitherPillSurface: DSView {
     /// A quiet control (the new-thread page's project, machine and notices): the panel's own ground as a solid fill, so
     /// it stays readable over a picture and vanishes into a plain page, with no rim and no shadow.
     public var quiet = false { didSet { if quiet != oldValue { needsDisplay = true; needsLayout = true } } }
+    /// The sidebar's color instead of the raised surface: the header pills (the user, 2026-11-27: "raise the colour of
+    /// these pills to the colour of the sidebar").
+    public var sidebarFill = false { didSet { if sidebarFill != oldValue { needsDisplay = true } } }
     private let shade = DSView()
     private let face = DSView()
 
@@ -80,7 +83,8 @@ public final class DitherPillSurface: DSView {
 
     public override func updateLayer() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        face.layer?.backgroundColor = ground || quiet ? Themed.color(\.background).cgColor(in: self) : DitherPill.fill(in: self)
+        face.layer?.backgroundColor = ground || quiet ? Themed.color(\.background).cgColor(in: self)
+            : sidebarFill ? Themed.color(\.sidebar, 1, sidebar: true).cgColor(in: self) : DitherPill.fill(in: self)
         shade.isHidden = quiet
         face.layer?.borderWidth = quiet ? 0 : 1
         face.layer?.borderColor = DitherChrome.rim(dark: effectiveAppearance.isDark).cgColor

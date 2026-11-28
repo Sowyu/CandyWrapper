@@ -78,6 +78,7 @@ public final class DitherHeaderPillView: DSView {
         super.init(frame: frameRect)
         layer?.masksToBounds = false
         frost.radius = RedesignTokens.Radius.control
+        frost.sidebarFill = true
         addSubview(frost)
         changes.accessory = totals
         totals.glyphOffset = 1
@@ -131,21 +132,32 @@ public final class DitherHeaderPillView: DSView {
         return views.filter { $0.0.superview === self }
     }
 
+    /// The next control starts this far inside the cost's box. The ellipsis glyph is narrow, so edge to edge the gap
+    /// after the figure read 13pt against 9pt between the icons (the user, 2026-11-27: "fix the spacing").
+    static let costOverlap: CGFloat = 4
+
+    /// Each shown view's width as laid out: the cost gives `costOverlap` to the control after it.
+    private var widths: [(NSView, CGFloat)] {
+        let shown = arranged.filter(\.1).map(\.0)
+        return shown.enumerated().map { i, view in
+            let w = view.intrinsicContentSize.width
+            return (view, view is ThreadCostPillView && i < shown.count - 1 ? w - Self.costOverlap : w)
+        }
+    }
+
     public override var intrinsicContentSize: NSSize {
-        let shown = arranged.filter(\.1).map { $0.0.intrinsicContentSize.width }
+        let shown = widths.map(\.1)
         guard !shown.isEmpty else { return NSSize(width: 0, height: DitherTabStripView.tabHeight) }
         return NSSize(width: shown.reduce(0, +) + 2 * Self.inset, height: DitherTabStripView.tabHeight)
     }
 
     public override func layout() {
         super.layout()
+        for (view, shown) in arranged { view.isHidden = !shown }
         var x = Self.inset
-        for (view, shown) in arranged {
-            view.isHidden = !shown
-            guard shown else { continue }
-            let size = view.intrinsicContentSize
-            view.frame = NSRect(x: x, y: ((bounds.height - Self.control) / 2).rounded(), width: size.width, height: Self.control)
-            x += size.width
+        for (view, advance) in widths {
+            view.frame = NSRect(x: x, y: ((bounds.height - Self.control) / 2).rounded(), width: view.intrinsicContentSize.width, height: Self.control)
+            x += advance
         }
         // The cost appearing or a toggle hiding changes the width the tab strip gives the pill.
         if abs(intrinsicContentSize.width - bounds.width) > 0.5 { superview?.needsLayout = true; reportWidth() }
